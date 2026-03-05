@@ -162,6 +162,25 @@ export default function TradeDetailPage({
               </p>
             </>
           )}
+          {trade.cosmoNickname && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between gap-4 rounded-md bg-muted/50 px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  Always verify the trader actually owns the listed objekts before trading.
+                </p>
+                <a
+                  href={`https://objekt.top/@${trade.cosmoNickname}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" size="sm">
+                    Verify @{trade.cosmoNickname}
+                  </Button>
+                </a>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

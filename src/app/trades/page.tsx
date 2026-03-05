@@ -29,6 +29,19 @@ export default function TradesPage() {
         </p>
       </div>
 
+      <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+        Traders self-report what they have. Always verify ownership on{" "}
+        <a
+          href="https://objekt.top"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
+          objekt.top
+        </a>{" "}
+        before trading.
+      </p>
+
       <div className="flex gap-2">
         <Input
           placeholder="Filter by member name..."

@@ -83,10 +83,21 @@ export function TradeCard({ trade }: TradeCardProps) {
             </p>
           )}
         </CardContent>
-        <CardFooter className="pt-0">
+        <CardFooter className="pt-0 flex justify-between items-center">
           <p className="text-[10px] text-muted-foreground">
             {new Date(trade.createdAt).toLocaleDateString()}
           </p>
+          {trade.cosmoNickname && (
+            <a
+              href={`https://objekt.top/@${trade.cosmoNickname}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Verify inventory
+            </a>
+          )}
         </CardFooter>
       </Card>
     </Link>
