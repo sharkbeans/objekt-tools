@@ -31,10 +31,11 @@ export async function GET(request: NextRequest) {
   try {
     const result = await fetchUserObjekts(linked.address, page, size);
     return NextResponse.json(result);
-  } catch (error) {
-    console.error("Failed to fetch inventory:", error);
+  } catch (error: any) {
+    console.error("Failed to fetch inventory:", error?.data ?? error?.message ?? error);
+    console.error("Status:", error?.status ?? error?.statusCode);
     return NextResponse.json(
-      { error: "Failed to fetch inventory from Cosmo" },
+      { error: "Failed to fetch inventory from Cosmo", details: error?.data ?? error?.message },
       { status: 502 }
     );
   }
