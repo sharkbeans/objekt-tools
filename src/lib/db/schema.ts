@@ -115,7 +115,8 @@ export const tradePostWant = pgTable("trade_post_want", {
 
 export const cosmoToken = pgTable("cosmo_token", {
   id: serial("id").primaryKey(),
-  userSession: text("user_session").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
