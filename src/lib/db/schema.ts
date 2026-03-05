@@ -113,6 +113,12 @@ export const tradePostWant = pgTable("trade_post_want", {
   thumbnailUrl: text("thumbnail_url"),
 });
 
+export const cosmoToken = pgTable("cosmo_token", {
+  id: serial("id").primaryKey(),
+  userSession: text("user_session").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ============================================================
 // Relations
 // ============================================================

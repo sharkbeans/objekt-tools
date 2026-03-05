@@ -1,4 +1,7 @@
 import { ofetch } from "ofetch";
+import { db } from "@/lib/db";
+import { cosmoToken } from "@/lib/db/schema";
+import { desc } from "drizzle-orm";
 import type {
   CosmoSearchResult,
   CosmoUserProfile,
@@ -13,18 +16,37 @@ const cosmoFetch = ofetch.create({
   retry: 2,
   retryDelay: 500,
   timeout: 10000,
+  headers: {
+    "User-Agent": "objekt-trade",
+  },
 });
 
-function getAuthHeaders() {
-  const token = process.env.COSMO_ACCESS_TOKEN;
-  if (!token) throw new Error("COSMO_ACCESS_TOKEN not configured");
-  return { Authorization: `Bearer ${token}` };
+async function getUserSession(): Promise<string> {
+  const latest = await db
+    .select()
+    .from(cosmoToken)
+    .orderBy(desc(cosmoToken.id))
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  if (!latest) {
+    throw new Error("No Cosmo session found in database. Seed one first.");
+  }
+
+  return latest.userSession;
 }
 
-export async function searchUsers(query: string): Promise<CosmoSearchResult> {
+async function getAuthHeaders() {
+  const session = await getUserSession();
+  return { Cookie: `user-session=${session}` };
+}
+
+export async function searchUsers(
+  query: string
+): Promise<CosmoSearchResult> {
   return cosmoFetch("/bff/v3/users/search", {
-    params: { query },
-    headers: getAuthHeaders(),
+    params: { nickname: query, skip: 0, take: 100 },
+    headers: await getAuthHeaders(),
   });
 }
 
@@ -32,9 +54,9 @@ export async function fetchUserProfile(
   cosmoId: number,
   artistId: ValidArtist
 ): Promise<CosmoUserProfile> {
-  return cosmoFetch(`/bff/v3/user/${cosmoId}/profile`, {
+  return cosmoFetch(`/bff/v3/users/${cosmoId}`, {
     params: { artistId },
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(),
   });
 }
 
@@ -50,6 +72,6 @@ export async function fetchUserObjekts(
       size: String(size),
       order: "newest",
     },
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(),
   });
 }
