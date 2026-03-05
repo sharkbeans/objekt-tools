@@ -62,13 +62,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Link the account
-    await db.insert(cosmoAccount).values({
-      userId: session.user.id,
-      address: address.toLowerCase(),
-      nickname,
-      cosmoId,
-    });
+    // Link the account (upsert if already linked)
+    await db
+      .insert(cosmoAccount)
+      .values({
+        userId: session.user.id,
+        address: address.toLowerCase(),
+        nickname,
+        cosmoId,
+      })
+      .onConflictDoUpdate({
+        target: cosmoAccount.userId,
+        set: {
+          address: address.toLowerCase(),
+          nickname,
+          cosmoId,
+        },
+      });
 
     // Clean up Redis
     await redis.del(redisKey);
