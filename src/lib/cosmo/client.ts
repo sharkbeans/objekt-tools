@@ -5,7 +5,6 @@ import { desc } from "drizzle-orm";
 import type {
   CosmoSearchResult,
   CosmoUserProfile,
-  CosmoObjektResponse,
   ValidArtist,
 } from "./types";
 
@@ -64,14 +63,35 @@ export async function fetchUserObjekts(
   _address: string,
   page = 1,
   size = 30
-): Promise<CosmoObjektResponse> {
-  // Ownership is determined by the user-session cookie, not address param
-  return cosmoFetch("/bff/v3/objekt-summaries", {
-    params: {
-      page: String(page),
-      size: String(size),
-      order: "newest",
-    },
-    headers: await getAuthHeaders(),
-  });
+): Promise<any> {
+  // Fetch from all three artists in parallel and merge results
+  const artists = ["tripleS", "artms", "idntt"];
+  const headers = await getAuthHeaders();
+
+  const results = await Promise.allSettled(
+    artists.map((artistId) =>
+      cosmoFetch("/bff/v3/objekt-summaries", {
+        params: {
+          artistId,
+          page: String(page),
+          size: String(size),
+          order: "newest",
+        },
+        headers,
+      })
+    )
+  );
+
+  const collections: any[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value?.collections) {
+      collections.push(...result.value.collections);
+    }
+  }
+
+  return {
+    objekts: collections,
+    hasNext: false,
+    total: collections.length,
+  };
 }
