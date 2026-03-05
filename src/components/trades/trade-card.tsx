@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -23,11 +24,22 @@ interface TradeCardProps {
     description?: string | null;
     status: string;
     createdAt: string;
+    expiresAt?: string | null;
     user: { id: string; name: string; image?: string | null };
     cosmoNickname?: string | null;
     haves: TradeItem[];
     wants: TradeItem[];
   };
+  onRenew?: (id: number) => void;
+}
+
+function formatTimeRemaining(expiresAt: string): string {
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return "Expired";
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  if (days > 0) return `Expires in ${days}d`;
+  return `Expires in ${hours}h`;
 }
 
 function ObjektLabels({ items }: { items: TradeItem[] }) {
@@ -42,7 +54,7 @@ function ObjektLabels({ items }: { items: TradeItem[] }) {
   );
 }
 
-export function TradeCard({ trade }: TradeCardProps) {
+export function TradeCard({ trade, onRenew }: TradeCardProps) {
   return (
     <Link href={`/trades/${trade.id}`}>
       <Card className="hover:border-primary/50 transition-colors h-full">
@@ -84,20 +96,42 @@ export function TradeCard({ trade }: TradeCardProps) {
           )}
         </CardContent>
         <CardFooter className="pt-0 flex justify-between items-center">
-          <p className="text-[10px] text-muted-foreground">
-            {new Date(trade.createdAt).toLocaleDateString()}
-          </p>
-          {trade.cosmoNickname && (
-            <a
-              href={`https://objekt.top/@${trade.cosmoNickname}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] text-primary hover:underline"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Verify inventory
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] text-muted-foreground">
+              {new Date(trade.createdAt).toLocaleDateString()}
+            </p>
+            {trade.expiresAt && (
+              <p className="text-[10px] text-muted-foreground">
+                {formatTimeRemaining(trade.expiresAt)}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {onRenew && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 px-2 text-[10px]"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onRenew(trade.id);
+                }}
+              >
+                Renew
+              </Button>
+            )}
+            {trade.cosmoNickname && (
+              <a
+                href={`https://objekt.top/@${trade.cosmoNickname}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Verify inventory
+              </a>
+            )}
+          </div>
         </CardFooter>
       </Card>
     </Link>

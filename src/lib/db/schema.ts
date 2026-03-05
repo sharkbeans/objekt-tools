@@ -87,6 +87,11 @@ export const tradePost = pgTable("trade_post", {
   status: text("status").notNull().default("open"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull().$defaultFn(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d;
+  }),
 });
 
 export const tradePostHave = pgTable("trade_post_have", {

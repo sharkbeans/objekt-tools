@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { TradeCard } from "@/components/trades/trade-card";
 export default function ProfilePage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (session === null) router.push("/sign-in");
@@ -33,6 +34,11 @@ export default function ProfilePage() {
     },
     enabled: !!session,
   });
+
+  const handleRenew = async (tradeId: number) => {
+    await fetch(`/api/trades/${tradeId}/renew`, { method: "PATCH" });
+    queryClient.invalidateQueries({ queryKey: ["my-trades"] });
+  };
 
   if (!session) return null;
 
@@ -65,7 +71,7 @@ export default function ProfilePage() {
         {trades?.trades?.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {trades.trades.map((trade: any) => (
-              <TradeCard key={trade.id} trade={trade} />
+              <TradeCard key={trade.id} trade={trade} onRenew={handleRenew} />
             ))}
           </div>
         ) : (

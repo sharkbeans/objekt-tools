@@ -8,7 +8,7 @@ import {
   cosmoAccount,
   user,
 } from "@/lib/db/schema";
-import { eq, desc, and, like, inArray } from "drizzle-orm";
+import { eq, desc, and, like, inArray, gt } from "drizzle-orm";
 
 interface TradeItemInput {
   collectionId: string;
@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
   const offset = (page - 1) * limit;
 
   const trades = await db.query.tradePost.findMany({
-    where: eq(tradePost.status, status),
+    where: and(
+      eq(tradePost.status, status),
+      gt(tradePost.expiresAt, new Date())
+    ),
     with: {
       haves: true,
       wants: true,

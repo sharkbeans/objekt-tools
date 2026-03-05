@@ -6,7 +6,7 @@ import {
   tradePostWant,
   cosmoAccount,
 } from "@/lib/db/schema";
-import { eq, and, ne, inArray } from "drizzle-orm";
+import { eq, and, ne, inArray, gt } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 // GET /api/trades/[id]/matches — find matching trades
@@ -64,7 +64,8 @@ export async function GET(
     where: and(
       inArray(tradePost.id, matchingIds),
       eq(tradePost.status, "open"),
-      ne(tradePost.userId, sourceTrade.userId)
+      ne(tradePost.userId, sourceTrade.userId),
+      gt(tradePost.expiresAt, new Date())
     ),
     with: {
       haves: true,
