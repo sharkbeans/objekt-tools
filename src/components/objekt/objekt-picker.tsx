@@ -1,10 +1,48 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import type { ObjektEntry, ObjektListResponse } from "@/lib/cosmo/types";
+import type { ObjektEntry } from "@/lib/cosmo/types";
+
+const TYPESENSE_URL = "https://search.apollo.cafe";
+const TYPESENSE_KEY = "64oQs36OCM8O6sbVbGGf52FMwzoYDOve";
+
+interface TypesenseHit {
+  document: {
+    collectionId: string;
+    artist: string;
+    member: string;
+    collectionNo: string;
+    season: string;
+    class: string;
+  };
+}
+
+async function searchCollections(query: string): Promise<ObjektEntry[]> {
+  const params = new URLSearchParams({
+    q: query || "*",
+    query_by: "member,collectionId,season,collectionNo",
+    per_page: "20",
+    sort_by: "createdAt:desc",
+  });
+
+  const res = await fetch(
+    `${TYPESENSE_URL}/collections/collections/documents/search?${params}`,
+    { headers: { "X-TYPESENSE-API-KEY": TYPESENSE_KEY } }
+  );
+
+  if (!res.ok) return [];
+  const data = await res.json();
+
+  return (data.hits ?? []).map((hit: TypesenseHit) => ({
+    collectionId: hit.document.collectionId,
+    artist: hit.document.artist,
+    member: hit.document.member,
+    collectionNo: hit.document.collectionNo,
+    season: hit.document.season,
+    class: hit.document.class,
+  }));
+}
 
 interface ObjektPickerProps {
   selected: ObjektEntry[];
@@ -19,114 +57,122 @@ export function ObjektPicker({
   onDeselect,
   maxSelections = 10,
 }: ObjektPickerProps) {
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ObjektEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, error } = useQuery<ObjektListResponse>({
-    queryKey: ["objekts", page],
-    queryFn: async () => {
-      const res = await fetch(`/api/cosmo/inventory?page=${page}&size=30`);
-      if (!res.ok) throw new Error("Failed to fetch objekts");
-      return res.json();
-    },
-  });
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-  const filteredObjekts =
-    data?.objekts.filter((o) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        o.member?.toLowerCase().includes(q) ||
-        o.collectionId.toLowerCase().includes(q) ||
-        o.artist?.toLowerCase().includes(q) ||
-        o.collectionNo?.toLowerCase().includes(q) ||
-        o.season?.toLowerCase().includes(q) ||
-        o.class?.toLowerCase().includes(q)
-      );
-    }) ?? [];
-
-  const isSelected = (objekt: ObjektEntry) =>
-    selected.some((s) => s.collectionId === objekt.collectionId);
-
-  function handleClick(objekt: ObjektEntry) {
-    if (isSelected(objekt)) {
-      onDeselect(objekt);
-    } else if (selected.length < maxSelections) {
-      onSelect(objekt);
+    if (!query.trim()) {
+      setResults([]);
+      setShowResults(false);
+      return;
     }
-  }
 
-  if (error) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        <p>Failed to load objekts. Make sure your Cosmo account is linked.</p>
-      </div>
-    );
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      const hits = await searchCollections(query);
+      setResults(hits);
+      setShowResults(true);
+      setLoading(false);
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowResults(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const isSelected = (entry: ObjektEntry) =>
+    selected.some((s) => s.collectionId === entry.collectionId);
+
+  function handleSelect(entry: ObjektEntry) {
+    if (isSelected(entry) || selected.length >= maxSelections) return;
+    onSelect(entry);
+    setQuery("");
+    setShowResults(false);
   }
 
   return (
-    <div className="space-y-4">
-      <Input
-        placeholder="Filter by artist, member, collection..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+    <div className="space-y-3">
+      <div ref={containerRef} className="relative">
+        <Input
+          placeholder="Search objekts... e.g. JiWoo, Atom02, 108Z"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => results.length > 0 && setShowResults(true)}
+        />
 
-      {isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">
-          Loading objekts...
-        </div>
-      ) : (
-        <>
-          <div className="border rounded-md divide-y max-h-80 overflow-y-auto">
-            {filteredObjekts.map((objekt) => (
+        {showResults && (
+          <div className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-md bg-background shadow-lg max-h-60 overflow-y-auto">
+            {loading ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                Searching...
+              </div>
+            ) : results.length > 0 ? (
+              results.map((entry) => (
+                <button
+                  key={entry.collectionId}
+                  type="button"
+                  disabled={isSelected(entry)}
+                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
+                    isSelected(entry) ? "opacity-40" : ""
+                  }`}
+                  onClick={() => handleSelect(entry)}
+                >
+                  <span>
+                    <span className="text-muted-foreground">{entry.artist}</span>
+                    {" "}
+                    {entry.member}
+                    {" "}
+                    <span className="font-mono">{entry.collectionNo}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {entry.season} · {entry.class}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                No results found
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {selected.length > 0 && (
+        <div className="border rounded-md divide-y">
+          {selected.map((objekt) => (
+            <div
+              key={objekt.collectionId}
+              className="flex items-center justify-between px-3 py-2 text-sm"
+            >
+              <span>{objekt.collectionId}</span>
               <button
-                key={objekt.collectionId}
                 type="button"
-                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
-                  isSelected(objekt) ? "bg-primary/10 font-medium" : ""
-                }`}
-                onClick={() => handleClick(objekt)}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                onClick={() => onDeselect(objekt)}
               >
-                <span>
-                  <span className="text-muted-foreground">{objekt.artist}</span>
-                  {" "}
-                  {objekt.member}
-                  {" "}
-                  <span className="font-mono">{objekt.collectionNo}</span>
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {objekt.season} · {objekt.class}
-                </span>
+                Remove
               </button>
-            ))}
-          </div>
-
-          {filteredObjekts.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-4">
-              No objekts found
-            </p>
-          )}
-
-          <div className="flex justify-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!data?.hasNext}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </>
+            </div>
+          ))}
+        </div>
       )}
 
       {selected.length > 0 && (

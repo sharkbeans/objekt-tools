@@ -26,9 +26,3 @@ export interface ObjektEntry {
   season: string;
   class: string;
 }
-
-export interface ObjektListResponse {
-  objekts: ObjektEntry[];
-  hasNext: boolean;
-  total: number;
-}

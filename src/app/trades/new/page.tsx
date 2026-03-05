@@ -102,27 +102,6 @@ export default function NewTradePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {haves.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm text-muted-foreground mb-2">Selected:</p>
-                  <div className="flex flex-col gap-1">
-                    {haves.map((o) => (
-                      <button
-                        key={o.collectionId}
-                        type="button"
-                        className="text-left text-sm px-2 py-1 rounded bg-primary/10 hover:bg-destructive/10 transition-colors"
-                        onClick={() =>
-                          setHaves((prev) =>
-                            prev.filter((h) => h.collectionId !== o.collectionId)
-                          )
-                        }
-                      >
-                        {o.artist} {o.member} {o.collectionNo}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               <ObjektPicker
                 selected={haves}
                 onSelect={(o) => setHaves((prev) => [...prev, o])}
@@ -143,27 +122,6 @@ export default function NewTradePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {wants.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm text-muted-foreground mb-2">Selected:</p>
-                  <div className="flex flex-col gap-1">
-                    {wants.map((o) => (
-                      <button
-                        key={o.collectionId}
-                        type="button"
-                        className="text-left text-sm px-2 py-1 rounded bg-primary/10 hover:bg-destructive/10 transition-colors"
-                        onClick={() =>
-                          setWants((prev) =>
-                            prev.filter((w) => w.collectionId !== o.collectionId)
-                          )
-                        }
-                      >
-                        {o.artist} {o.member} {o.collectionNo}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               <ObjektPicker
                 selected={wants}
                 onSelect={(o) => setWants((prev) => [...prev, o])}
