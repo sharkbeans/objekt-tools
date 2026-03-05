@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
-import { fetchUserObjekts } from "@/lib/cosmo/client";
+import { fetchObjektCatalog } from "@/lib/cosmo/client";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await fetchUserObjekts(linked.address, page, size);
+    const result = await fetchObjektCatalog(page, size);
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("Failed to fetch inventory:", error?.data ?? error?.message ?? error);

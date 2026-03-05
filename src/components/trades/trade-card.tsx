@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -16,7 +15,6 @@ interface TradeItem {
   member?: string | null;
   season?: string | null;
   class?: string | null;
-  thumbnailUrl?: string | null;
 }
 
 interface TradeCardProps {
@@ -32,29 +30,13 @@ interface TradeCardProps {
   };
 }
 
-function ObjektThumbnails({ items }: { items: TradeItem[] }) {
+function ObjektLabels({ items }: { items: TradeItem[] }) {
   return (
-    <div className="flex gap-1 flex-wrap">
+    <div className="flex flex-col gap-0.5">
       {items.map((item) => (
-        <div
-          key={item.id}
-          className="relative w-12 h-16 rounded border border-border overflow-hidden bg-muted"
-          title={`${item.member} - ${item.collectionId}`}
-        >
-          {item.thumbnailUrl ? (
-            <Image
-              src={item.thumbnailUrl}
-              alt={item.collectionId}
-              fill
-              className="object-cover"
-              sizes="48px"
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-[8px] text-muted-foreground p-0.5 text-center leading-tight">
-              {item.member ?? item.collectionId}
-            </div>
-          )}
-        </div>
+        <span key={item.id} className="text-xs">
+          {item.collectionId}
+        </span>
       ))}
     </div>
   );
@@ -87,13 +69,13 @@ export function TradeCard({ trade }: TradeCardProps) {
             <p className="text-xs text-muted-foreground mb-1 font-medium">
               HAVE
             </p>
-            <ObjektThumbnails items={trade.haves} />
+            <ObjektLabels items={trade.haves} />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1 font-medium">
               WANT
             </p>
-            <ObjektThumbnails items={trade.wants} />
+            <ObjektLabels items={trade.wants} />
           </div>
           {trade.description && (
             <p className="text-xs text-muted-foreground line-clamp-2">

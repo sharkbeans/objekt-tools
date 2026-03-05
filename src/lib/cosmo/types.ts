@@ -18,31 +18,17 @@ export interface CosmoUserProfile {
   statusMessage?: string;
 }
 
-export interface CosmoObjekt {
+export interface ObjektEntry {
   collectionId: string;
-  season: string;
+  artist: string;
   member: string;
   collectionNo: string;
+  season: string;
   class: string;
-  artists: ValidArtist[];
-  thumbnailImage: string;
-  frontImage: string;
-  backImage: string;
-  accentColor: string;
-  backgroundColor: string;
-  textColor: string;
-  comoAmount: number;
-  transferablebyDefault: boolean;
-  tokenId: string;
-  tokenAddress: string;
-  objektNo: number;
-  transferable: boolean;
-  status: "minted" | "pending";
-  nonTransferableReason?: string;
 }
 
-export interface CosmoObjektResponse {
-  objekts: CosmoObjekt[];
+export interface ObjektListResponse {
+  objekts: ObjektEntry[];
   hasNext: boolean;
   total: number;
 }

@@ -15,15 +15,14 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
-import { ObjektCard } from "@/components/objekt/objekt-card";
 import { toast } from "sonner";
-import type { CosmoObjekt } from "@/lib/cosmo/types";
+import type { ObjektEntry } from "@/lib/cosmo/types";
 
 export default function NewTradePage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [haves, setHaves] = useState<CosmoObjekt[]>([]);
-  const [wants, setWants] = useState<CosmoObjekt[]>([]);
+  const [haves, setHaves] = useState<ObjektEntry[]>([]);
+  const [wants, setWants] = useState<ObjektEntry[]>([]);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -53,14 +52,12 @@ export default function NewTradePage() {
             member: o.member,
             season: o.season,
             class: o.class,
-            thumbnailUrl: o.thumbnailImage,
           })),
           wants: wants.map((o) => ({
             collectionId: o.collectionId,
             member: o.member,
             season: o.season,
             class: o.class,
-            thumbnailUrl: o.thumbnailImage,
           })),
         }),
       });
@@ -101,26 +98,27 @@ export default function NewTradePage() {
             <CardHeader>
               <CardTitle className="text-lg">What do you have?</CardTitle>
               <CardDescription>
-                Select objekts from your inventory that you want to trade away
+                Select objekts you want to trade away
               </CardDescription>
             </CardHeader>
             <CardContent>
               {haves.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm text-muted-foreground mb-2">Selected:</p>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex flex-col gap-1">
                     {haves.map((o) => (
-                      <div key={o.tokenId} className="w-20">
-                        <ObjektCard
-                          objekt={o}
-                          selected
-                          onClick={() =>
-                            setHaves((prev) =>
-                              prev.filter((h) => h.tokenId !== o.tokenId)
-                            )
-                          }
-                        />
-                      </div>
+                      <button
+                        key={o.collectionId}
+                        type="button"
+                        className="text-left text-sm px-2 py-1 rounded bg-primary/10 hover:bg-destructive/10 transition-colors"
+                        onClick={() =>
+                          setHaves((prev) =>
+                            prev.filter((h) => h.collectionId !== o.collectionId)
+                          )
+                        }
+                      >
+                        {o.artist} {o.member} {o.collectionNo}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -129,7 +127,7 @@ export default function NewTradePage() {
                 selected={haves}
                 onSelect={(o) => setHaves((prev) => [...prev, o])}
                 onDeselect={(o) =>
-                  setHaves((prev) => prev.filter((h) => h.tokenId !== o.tokenId))
+                  setHaves((prev) => prev.filter((h) => h.collectionId !== o.collectionId))
                 }
               />
             </CardContent>
@@ -141,27 +139,27 @@ export default function NewTradePage() {
             <CardHeader>
               <CardTitle className="text-lg">What do you want?</CardTitle>
               <CardDescription>
-                Select objekts you&apos;re looking for. These come from your
-                inventory too — pick ones similar to what you want.
+                Select objekts you&apos;re looking for
               </CardDescription>
             </CardHeader>
             <CardContent>
               {wants.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm text-muted-foreground mb-2">Selected:</p>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex flex-col gap-1">
                     {wants.map((o) => (
-                      <div key={o.tokenId} className="w-20">
-                        <ObjektCard
-                          objekt={o}
-                          selected
-                          onClick={() =>
-                            setWants((prev) =>
-                              prev.filter((w) => w.tokenId !== o.tokenId)
-                            )
-                          }
-                        />
-                      </div>
+                      <button
+                        key={o.collectionId}
+                        type="button"
+                        className="text-left text-sm px-2 py-1 rounded bg-primary/10 hover:bg-destructive/10 transition-colors"
+                        onClick={() =>
+                          setWants((prev) =>
+                            prev.filter((w) => w.collectionId !== o.collectionId)
+                          )
+                        }
+                      >
+                        {o.artist} {o.member} {o.collectionNo}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -170,7 +168,7 @@ export default function NewTradePage() {
                 selected={wants}
                 onSelect={(o) => setWants((prev) => [...prev, o])}
                 onDeselect={(o) =>
-                  setWants((prev) => prev.filter((w) => w.tokenId !== o.tokenId))
+                  setWants((prev) => prev.filter((w) => w.collectionId !== o.collectionId))
                 }
               />
             </CardContent>

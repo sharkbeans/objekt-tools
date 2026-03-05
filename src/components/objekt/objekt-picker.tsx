@@ -4,13 +4,12 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ObjektCard } from "./objekt-card";
-import type { CosmoObjekt, CosmoObjektResponse } from "@/lib/cosmo/types";
+import type { ObjektEntry, ObjektListResponse } from "@/lib/cosmo/types";
 
 interface ObjektPickerProps {
-  selected: CosmoObjekt[];
-  onSelect: (objekt: CosmoObjekt) => void;
-  onDeselect: (objekt: CosmoObjekt) => void;
+  selected: ObjektEntry[];
+  onSelect: (objekt: ObjektEntry) => void;
+  onDeselect: (objekt: ObjektEntry) => void;
   maxSelections?: number;
 }
 
@@ -23,11 +22,11 @@ export function ObjektPicker({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const { data, isLoading, error } = useQuery<CosmoObjektResponse>({
-    queryKey: ["inventory", page],
+  const { data, isLoading, error } = useQuery<ObjektListResponse>({
+    queryKey: ["objekts", page],
     queryFn: async () => {
       const res = await fetch(`/api/cosmo/inventory?page=${page}&size=30`);
-      if (!res.ok) throw new Error("Failed to fetch inventory");
+      if (!res.ok) throw new Error("Failed to fetch objekts");
       return res.json();
     },
   });
@@ -39,15 +38,17 @@ export function ObjektPicker({
       return (
         o.member?.toLowerCase().includes(q) ||
         o.collectionId.toLowerCase().includes(q) ||
+        o.artist?.toLowerCase().includes(q) ||
+        o.collectionNo?.toLowerCase().includes(q) ||
         o.season?.toLowerCase().includes(q) ||
         o.class?.toLowerCase().includes(q)
       );
     }) ?? [];
 
-  const isSelected = (objekt: CosmoObjekt) =>
-    selected.some((s) => s.tokenId === objekt.tokenId);
+  const isSelected = (objekt: ObjektEntry) =>
+    selected.some((s) => s.collectionId === objekt.collectionId);
 
-  function handleClick(objekt: CosmoObjekt) {
+  function handleClick(objekt: ObjektEntry) {
     if (isSelected(objekt)) {
       onDeselect(objekt);
     } else if (selected.length < maxSelections) {
@@ -58,7 +59,7 @@ export function ObjektPicker({
   if (error) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        <p>Failed to load inventory. Make sure your Cosmo account is linked.</p>
+        <p>Failed to load objekts. Make sure your Cosmo account is linked.</p>
       </div>
     );
   }
@@ -66,25 +67,38 @@ export function ObjektPicker({
   return (
     <div className="space-y-4">
       <Input
-        placeholder="Filter by member, collection, season..."
+        placeholder="Filter by artist, member, collection..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
 
       {isLoading ? (
         <div className="text-center py-8 text-muted-foreground">
-          Loading inventory...
+          Loading objekts...
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+          <div className="border rounded-md divide-y max-h-80 overflow-y-auto">
             {filteredObjekts.map((objekt) => (
-              <ObjektCard
-                key={objekt.tokenId}
-                objekt={objekt}
-                selected={isSelected(objekt)}
+              <button
+                key={objekt.collectionId}
+                type="button"
+                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
+                  isSelected(objekt) ? "bg-primary/10 font-medium" : ""
+                }`}
                 onClick={() => handleClick(objekt)}
-              />
+              >
+                <span>
+                  <span className="text-muted-foreground">{objekt.artist}</span>
+                  {" "}
+                  {objekt.member}
+                  {" "}
+                  <span className="font-mono">{objekt.collectionNo}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {objekt.season} · {objekt.class}
+                </span>
+              </button>
             ))}
           </div>
 

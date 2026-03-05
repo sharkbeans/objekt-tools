@@ -5,6 +5,8 @@ import { desc } from "drizzle-orm";
 import type {
   CosmoSearchResult,
   CosmoUserProfile,
+  ObjektEntry,
+  ObjektListResponse,
   ValidArtist,
 } from "./types";
 
@@ -59,11 +61,10 @@ export async function fetchUserProfile(
   });
 }
 
-export async function fetchUserObjekts(
-  _address: string,
+export async function fetchObjektCatalog(
   page = 1,
   size = 30
-): Promise<any> {
+): Promise<ObjektListResponse> {
   // Fetch from all three artists in parallel and merge results
   const artists = ["tripleS", "artms", "idntt"];
   const headers = await getAuthHeaders();
@@ -82,16 +83,26 @@ export async function fetchUserObjekts(
     )
   );
 
-  const collections: any[] = [];
+  const objekts: ObjektEntry[] = [];
   for (const result of results) {
     if (result.status === "fulfilled" && result.value?.collections) {
-      collections.push(...result.value.collections);
+      for (const item of result.value.collections) {
+        const col = item.collection;
+        objekts.push({
+          collectionId: col.collectionId,
+          artist: col.artistName,
+          member: col.member,
+          collectionNo: col.collectionNo,
+          season: col.season,
+          class: col.class,
+        });
+      }
     }
   }
 
   return {
-    objekts: collections,
+    objekts,
     hasNext: false,
-    total: collections.length,
+    total: objekts.length,
   };
 }

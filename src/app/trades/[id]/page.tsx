@@ -16,7 +16,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { TradeCard } from "@/components/trades/trade-card";
 import { toast } from "sonner";
-import Image from "next/image";
 
 interface TradeItem {
   id: number;
@@ -24,52 +23,19 @@ interface TradeItem {
   member?: string | null;
   season?: string | null;
   class?: string | null;
-  thumbnailUrl?: string | null;
 }
 
 function ObjektList({ items, label }: { items: TradeItem[]; label: string }) {
   return (
     <div>
       <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
-      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+      <div className="flex flex-col gap-1">
         {items.map((item) => (
           <div
             key={item.id}
-            className="rounded-lg border border-border overflow-hidden"
+            className="text-sm px-2 py-1 rounded border border-border"
           >
-            <div className="relative aspect-photocard bg-muted">
-              {item.thumbnailUrl ? (
-                <Image
-                  src={item.thumbnailUrl}
-                  alt={item.collectionId}
-                  fill
-                  className="object-cover"
-                  sizes="120px"
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full text-xs text-muted-foreground p-1 text-center">
-                  {item.member ?? item.collectionId}
-                </div>
-              )}
-            </div>
-            <div className="p-1.5">
-              <p className="text-xs font-medium truncate">{item.member}</p>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {item.collectionId}
-              </p>
-              <div className="flex gap-1 mt-0.5">
-                {item.season && (
-                  <Badge variant="secondary" className="text-[9px] px-1 py-0">
-                    {item.season}
-                  </Badge>
-                )}
-                {item.class && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0">
-                    {item.class}
-                  </Badge>
-                )}
-              </div>
-            </div>
+            {item.collectionId}
           </div>
         ))}
       </div>
