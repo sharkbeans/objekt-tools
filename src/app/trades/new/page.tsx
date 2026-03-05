@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth-client";
+import { useState } from "react";
+import { toast } from "sonner";
+import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
+import { ObjektPicker } from "@/components/objekt/objekt-picker";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -13,9 +13,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ObjektPicker } from "@/components/objekt/objekt-picker";
-import { toast } from "sonner";
+import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 
 export default function NewTradePage() {
@@ -29,7 +30,9 @@ export default function NewTradePage() {
   if (!session) {
     return (
       <div className="text-center py-12">
-        <p className="text-muted-foreground">Please sign in to create a trade.</p>
+        <p className="text-muted-foreground">
+          Please sign in to create a trade.
+        </p>
       </div>
     );
   }
@@ -68,7 +71,9 @@ export default function NewTradePage() {
       toast.success("Trade posted!");
       router.push(`/trades/${data.id}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create trade");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create trade",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -85,12 +90,8 @@ export default function NewTradePage() {
 
       <Tabs defaultValue="have">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="have">
-            Have ({haves.length})
-          </TabsTrigger>
-          <TabsTrigger value="want">
-            Want ({wants.length})
-          </TabsTrigger>
+          <TabsTrigger value="have">Have ({haves.length})</TabsTrigger>
+          <TabsTrigger value="want">Want ({wants.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="have">
@@ -102,11 +103,13 @@ export default function NewTradePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ObjektPicker
+              <ObjektOwnedPicker
                 selected={haves}
                 onSelect={(o) => setHaves((prev) => [...prev, o])}
                 onDeselect={(o) =>
-                  setHaves((prev) => prev.filter((h) => h.collectionId !== o.collectionId))
+                  setHaves((prev) =>
+                    prev.filter((h) => h.collectionId !== o.collectionId),
+                  )
                 }
               />
             </CardContent>
@@ -126,7 +129,9 @@ export default function NewTradePage() {
                 selected={wants}
                 onSelect={(o) => setWants((prev) => [...prev, o])}
                 onDeselect={(o) =>
-                  setWants((prev) => prev.filter((w) => w.collectionId !== o.collectionId))
+                  setWants((prev) =>
+                    prev.filter((w) => w.collectionId !== o.collectionId),
+                  )
                 }
               />
             </CardContent>
