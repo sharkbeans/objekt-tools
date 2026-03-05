@@ -8,7 +8,7 @@ import {
   cosmoAccount,
   user,
 } from "@/lib/db/schema";
-import { eq, desc, and, like, inArray, gt } from "drizzle-orm";
+import { eq, desc, asc, and, like, inArray, gt } from "drizzle-orm";
 
 interface TradeItemInput {
   collectionId: string;
@@ -21,8 +21,12 @@ interface TradeItemInput {
 // GET /api/trades — list trades with optional filters
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const member = params.get("member");
-  const season = params.get("season");
+  const member = params.getAll("member");
+  const season = params.getAll("season");
+  const className = params.getAll("class");
+  const artist = params.getAll("artist");
+  const onOffline = params.get("onOffline");
+  const sort = params.get("sort") ?? "newest";
   const status = params.get("status") ?? "open";
   const page = Number(params.get("page") ?? "1");
   const limit = Math.min(Number(params.get("limit") ?? "20"), 50);
@@ -40,27 +44,64 @@ export async function GET(request: NextRequest) {
         columns: { id: true, name: true, image: true },
       },
     },
-    orderBy: [desc(tradePost.createdAt)],
+    orderBy: [sort === "oldest" ? asc(tradePost.createdAt) : desc(tradePost.createdAt)],
     limit,
     offset,
   });
 
-  // Filter by member/season if specified (post-query filter for simplicity)
+  // Post-query filtering for item-level fields
   let filtered = trades;
-  if (member) {
-    const m = member.toLowerCase();
+
+  if (member.length > 0) {
+    const members = member.map((m) => m.toLowerCase());
     filtered = filtered.filter(
       (t) =>
-        t.haves.some((h) => h.member?.toLowerCase().includes(m)) ||
-        t.wants.some((w) => w.member?.toLowerCase().includes(m))
+        t.haves.some((h) => h.member && members.some((m) => h.member!.toLowerCase().includes(m))) ||
+        t.wants.some((w) => w.member && members.some((m) => w.member!.toLowerCase().includes(m)))
     );
   }
-  if (season) {
-    const s = season.toLowerCase();
+  if (season.length > 0) {
+    const seasons = season.map((s) => s.toLowerCase());
     filtered = filtered.filter(
       (t) =>
-        t.haves.some((h) => h.season?.toLowerCase().includes(s)) ||
-        t.wants.some((w) => w.season?.toLowerCase().includes(s))
+        t.haves.some((h) => h.season && seasons.includes(h.season.toLowerCase())) ||
+        t.wants.some((w) => w.season && seasons.includes(w.season.toLowerCase()))
+    );
+  }
+  if (className.length > 0) {
+    const classes = className.map((c) => c.toLowerCase());
+    filtered = filtered.filter(
+      (t) =>
+        t.haves.some((h) => h.class && classes.includes(h.class.toLowerCase())) ||
+        t.wants.some((w) => w.class && classes.includes(w.class.toLowerCase()))
+    );
+  }
+  if (artist.length > 0) {
+    const artists = artist.map((a) => a.toLowerCase());
+    filtered = filtered.filter(
+      (t) =>
+        t.haves.some((h) => {
+          const id = h.collectionId.toLowerCase();
+          return artists.some((a) => id.includes(a));
+        }) ||
+        t.wants.some((w) => {
+          const id = w.collectionId.toLowerCase();
+          return artists.some((a) => id.includes(a));
+        })
+    );
+  }
+  if (onOffline) {
+    const isOnline = onOffline === "online";
+    filtered = filtered.filter(
+      (t) =>
+        t.haves.some((h) => {
+          const id = h.collectionId.toLowerCase();
+          return isOnline ? !id.endsWith("z") : id.endsWith("z");
+        }) ||
+        t.wants.some((w) => {
+          const id = w.collectionId.toLowerCase();
+          return isOnline ? !id.endsWith("z") : id.endsWith("z");
+        })
     );
   }
 
