@@ -61,13 +61,13 @@ export async function fetchUserProfile(
 }
 
 export async function fetchUserObjekts(
-  address: string,
+  _address: string,
   page = 1,
   size = 30
 ): Promise<CosmoObjektResponse> {
+  // Ownership is determined by the user-session cookie, not address param
   return cosmoFetch("/bff/v3/objekt-summaries", {
     params: {
-      address,
       page: String(page),
       size: String(size),
       order: "newest",
