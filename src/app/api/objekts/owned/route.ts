@@ -42,7 +42,7 @@ export async function GET() {
 
   const data = await res.json();
 
-  // Deduplicate by collectionId, keeping unique collections with counts
+  // Deduplicate by collectionId, only counting transferable copies
   const collectionMap = new Map<
     string,
     {
@@ -57,6 +57,8 @@ export async function GET() {
   >();
 
   for (const objekt of data.objekts ?? []) {
+    if (!objekt.transferable) continue;
+
     const key = objekt.collectionId;
     const existing = collectionMap.get(key);
     if (existing) {
