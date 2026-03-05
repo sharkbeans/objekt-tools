@@ -4,44 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 
-const TYPESENSE_URL = "https://search.apollo.cafe";
-const TYPESENSE_KEY = "64oQs36OCM8O6sbVbGGf52FMwzoYDOve";
-
-interface TypesenseHit {
-  document: {
-    collectionId: string;
-    artist: string;
-    member: string;
-    collectionNo: string;
-    season: string;
-    class: string;
-  };
-}
-
 async function searchCollections(query: string): Promise<ObjektEntry[]> {
-  const params = new URLSearchParams({
-    q: query || "*",
-    query_by: "member,collectionId,season,collectionNo",
-    per_page: "20",
-    sort_by: "createdAt:desc",
-  });
-
-  const res = await fetch(
-    `${TYPESENSE_URL}/collections/collections/documents/search?${params}`,
-    { headers: { "X-TYPESENSE-API-KEY": TYPESENSE_KEY } }
-  );
-
+  const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) return [];
   const data = await res.json();
-
-  return (data.hits ?? []).map((hit: TypesenseHit) => ({
-    collectionId: hit.document.collectionId,
-    artist: hit.document.artist,
-    member: hit.document.member,
-    collectionNo: hit.document.collectionNo,
-    season: hit.document.season,
-    class: hit.document.class,
-  }));
+  return data.results ?? [];
 }
 
 interface ObjektPickerProps {
