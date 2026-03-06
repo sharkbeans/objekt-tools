@@ -52,11 +52,13 @@ export async function GET() {
       collectionNo: string;
       season: string;
       class: string;
+      thumbnailImage?: string;
       count: number;
     }
   >();
 
   for (const objekt of data.objekts ?? []) {
+    if (!objekt.transferable) continue;
     const key = objekt.collectionId;
     const existing = collectionMap.get(key);
     if (existing) {
@@ -69,6 +71,7 @@ export async function GET() {
         collectionNo: objekt.collectionNo,
         season: objekt.season,
         class: objekt.class,
+        thumbnailImage: objekt.thumbnailImage,
         count: 1,
       });
     }

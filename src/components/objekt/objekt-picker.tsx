@@ -96,7 +96,7 @@ export function ObjektPicker({
                   key={entry.collectionId}
                   type="button"
                   disabled={isSelected(entry)}
-                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
+                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors relative group ${
                     isSelected(entry) ? "opacity-40" : ""
                   }`}
                   onClick={() => handleSelect(entry)}
@@ -111,6 +111,15 @@ export function ObjektPicker({
                   <span className="text-xs text-muted-foreground">
                     {entry.season} · {entry.class}
                   </span>
+                  {entry.thumbnailImage && (
+                    <span className="absolute right-0 top-full mt-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background hidden group-hover:block">
+                      <img
+                        src={entry.thumbnailImage}
+                        alt={entry.collectionId}
+                        className="w-24 h-auto block"
+                      />
+                    </span>
+                  )}
                 </button>
               ))
             ) : (

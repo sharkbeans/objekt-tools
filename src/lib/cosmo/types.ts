@@ -25,4 +25,5 @@ export interface ObjektEntry {
   collectionNo: string;
   season: string;
   class: string;
+  thumbnailImage?: string;
 }
