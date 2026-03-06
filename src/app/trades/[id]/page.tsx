@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -23,6 +23,71 @@ interface TradeItem {
   member?: string | null;
   season?: string | null;
   class?: string | null;
+}
+
+function useObjektImages(items: TradeItem[]) {
+  const [images, setImages] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!items.length) return;
+
+    const ids = items.map((i) => i.collectionId);
+    const unique = [...new Set(ids)];
+
+    unique.forEach((collectionId) => {
+      fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const match = data.results?.find(
+            (r: any) => r.collectionId === collectionId
+          );
+          const url = match?.thumbnailImage ?? match?.frontImage;
+          if (url) {
+            setImages((prev) => new Map(prev).set(collectionId, url));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [items]);
+
+  return images;
+}
+
+function ObjektImages({
+  items,
+  images,
+  label,
+}: {
+  items: TradeItem[];
+  images: Map<string, string>;
+  label: string;
+}) {
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => {
+          const url = images.get(item.collectionId);
+          return (
+            <div key={item.id} className="flex flex-col items-center gap-1">
+              {url ? (
+                <img
+                  src={url}
+                  alt={item.collectionId}
+                  className="w-20 h-auto rounded-md border"
+                />
+              ) : (
+                <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+              )}
+              <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
+                {item.collectionId}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function ObjektList({ items, label }: { items: TradeItem[]; label: string }) {
@@ -69,6 +134,9 @@ export default function TradeDetailPage({
     },
     enabled: !!trade,
   });
+
+  const haveImages = useObjektImages(trade?.haves ?? []);
+  const wantImages = useObjektImages(trade?.wants ?? []);
 
   async function handleClose() {
     try {
@@ -150,6 +218,13 @@ export default function TradeDetailPage({
             )}
           </div>
         </CardHeader>
+        {trade.haves?.length > 0 && trade.wants?.length > 0 && (
+          <div className="px-6 pb-4 flex gap-6">
+            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" />
+            <Separator orientation="vertical" className="h-auto" />
+            <ObjektImages items={trade.wants} images={wantImages} label="WANT" />
+          </div>
+        )}
         <CardContent className="space-y-4">
           <ObjektList items={trade.haves} label="HAVE" />
           <Separator />
