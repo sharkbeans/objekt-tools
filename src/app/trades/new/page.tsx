@@ -55,6 +55,7 @@ export default function NewTradePage() {
             member: o.member,
             season: o.season,
             class: o.class,
+            serial: o.serial,
           })),
           wants: wants.map((o) => ({
             collectionId: o.collectionId,
@@ -108,7 +109,9 @@ export default function NewTradePage() {
                 onSelect={(o) => setHaves((prev) => [...prev, o])}
                 onDeselect={(o) =>
                   setHaves((prev) =>
-                    prev.filter((h) => h.collectionId !== o.collectionId),
+                    prev.filter((h) =>
+                      o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId,
+                    ),
                   )
                 }
               />

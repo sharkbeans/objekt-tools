@@ -99,6 +99,7 @@ export const tradePostHave = pgTable("trade_post_have", {
   season: text("season"),
   class: text("class"),
   thumbnailUrl: text("thumbnail_url"),
+  serial: integer("serial"),
 });
 
 export const tradePostWant = pgTable("trade_post_want", {

@@ -16,6 +16,7 @@ interface TradeItem {
   member?: string | null;
   season?: string | null;
   class?: string | null;
+  serial?: number | null;
 }
 
 interface TradeCardProps {
@@ -34,7 +35,7 @@ interface TradeCardProps {
 
 const imageCache = new Map<string, string | null>();
 
-function ObjektLabel({ item }: { item: TradeItem }) {
+function ObjektLabel({ item, showSerial }: { item: TradeItem; showSerial?: boolean }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [show, setShow] = useState(false);
   const fetchedRef = useRef(false);
@@ -72,6 +73,9 @@ function ObjektLabel({ item }: { item: TradeItem }) {
       onMouseLeave={() => setShow(false)}
     >
       {item.collectionId}
+      {showSerial && item.serial != null && (
+        <span className="text-muted-foreground ml-1">#{item.serial}</span>
+      )}
       {show && imageUrl && (
         <span className="absolute left-0 bottom-full mb-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background">
           <img
@@ -85,11 +89,11 @@ function ObjektLabel({ item }: { item: TradeItem }) {
   );
 }
 
-function ObjektLabels({ items }: { items: TradeItem[] }) {
+function ObjektLabels({ items, showSerial }: { items: TradeItem[]; showSerial?: boolean }) {
   return (
     <div className="flex flex-col gap-0.5">
       {items.map((item) => (
-        <ObjektLabel key={item.id} item={item} />
+        <ObjektLabel key={item.id} item={item} showSerial={showSerial} />
       ))}
     </div>
   );
@@ -127,7 +131,7 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
             <p className="text-xs text-muted-foreground mb-1 font-medium">
               HAVE
             </p>
-            <ObjektLabels items={trade.haves} />
+            <ObjektLabels items={trade.haves} showSerial />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1 font-medium">

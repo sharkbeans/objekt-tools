@@ -42,42 +42,18 @@ export async function GET() {
 
   const data = await res.json();
 
-  // Deduplicate by collectionId, keeping unique collections with counts
-  const collectionMap = new Map<
-    string,
-    {
-      collectionId: string;
-      artist: string;
-      member: string;
-      collectionNo: string;
-      season: string;
-      class: string;
-      thumbnailImage?: string;
-      count: number;
-    }
-  >();
+  const results = (data.objekts ?? [])
+    .filter((o: any) => o.transferable)
+    .map((o: any) => ({
+      collectionId: o.collectionId,
+      artist: o.artist,
+      member: o.member,
+      collectionNo: o.collectionNo,
+      season: o.season,
+      class: o.class,
+      thumbnailImage: o.thumbnailImage,
+      serial: o.serialNo,
+    }));
 
-  for (const objekt of data.objekts ?? []) {
-    if (!objekt.transferable) continue;
-    const key = objekt.collectionId;
-    const existing = collectionMap.get(key);
-    if (existing) {
-      existing.count++;
-    } else {
-      collectionMap.set(key, {
-        collectionId: objekt.collectionId,
-        artist: objekt.artist,
-        member: objekt.member,
-        collectionNo: objekt.collectionNo,
-        season: objekt.season,
-        class: objekt.class,
-        thumbnailImage: objekt.thumbnailImage,
-        count: 1,
-      });
-    }
-  }
-
-  return NextResponse.json({
-    results: Array.from(collectionMap.values()),
-  });
+  return NextResponse.json({ results });
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 
-type OwnedEntry = ObjektEntry & { count: number };
+type OwnedEntry = ObjektEntry & { serial: number };
 
 const thumbnailCache = new Map<string, string | null>();
 
@@ -80,8 +80,8 @@ export function ObjektOwnedPicker({
     );
   }, [owned, query]);
 
-  const isSelected = (entry: ObjektEntry) =>
-    selected.some((s) => s.collectionId === entry.collectionId);
+  const isSelected = (entry: OwnedEntry) =>
+    selected.some((s) => s.serial === entry.serial);
 
   function handleSelect(entry: OwnedEntry) {
     if (isSelected(entry) || selected.length >= maxSelections) return;
@@ -92,6 +92,7 @@ export function ObjektOwnedPicker({
       collectionNo: entry.collectionNo,
       season: entry.season,
       class: entry.class,
+      serial: entry.serial,
     });
   }
 
@@ -136,7 +137,7 @@ export function ObjektOwnedPicker({
           {filtered.length > 0 ? (
             filtered.map((entry) => (
               <button
-                key={entry.collectionId}
+                key={entry.serial}
                 type="button"
                 disabled={isSelected(entry)}
                 className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
@@ -152,8 +153,7 @@ export function ObjektOwnedPicker({
                   <span className="font-mono">{entry.collectionNo}</span>
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {entry.season} · {entry.class}
-                  {entry.count > 1 && ` · x${entry.count}`}
+                  {entry.season} · {entry.class} · #{entry.serial}
                 </span>
               </button>
             ))
@@ -178,10 +178,15 @@ export function ObjektOwnedPicker({
         <div className="border rounded-md divide-y">
           {selected.map((objekt) => (
             <div
-              key={objekt.collectionId}
+              key={objekt.serial ?? objekt.collectionId}
               className="flex items-center justify-between px-3 py-2 text-sm"
             >
-              <span>{objekt.collectionId}</span>
+              <span>
+                {objekt.collectionId}
+                {objekt.serial != null && (
+                  <span className="text-xs text-muted-foreground ml-1">#{objekt.serial}</span>
+                )}
+              </span>
               <button
                 type="button"
                 className="text-xs text-muted-foreground hover:text-destructive transition-colors"

@@ -23,6 +23,7 @@ interface TradeItem {
   member?: string | null;
   season?: string | null;
   class?: string | null;
+  serial?: number | null;
 }
 
 function useObjektImages(items: TradeItem[]) {
@@ -57,10 +58,12 @@ function ObjektImages({
   items,
   images,
   label,
+  showSerial,
 }: {
   items: TradeItem[];
   images: Map<string, string>;
   label: string;
+  showSerial?: boolean;
 }) {
   return (
     <div className="flex-1 min-w-0">
@@ -82,6 +85,9 @@ function ObjektImages({
               <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
                 {item.collectionId}
               </span>
+              {showSerial && item.serial != null && (
+                <span className="text-[10px] text-muted-foreground">#{item.serial}</span>
+              )}
             </div>
           );
         })}
@@ -90,7 +96,7 @@ function ObjektImages({
   );
 }
 
-function ObjektList({ items, label }: { items: TradeItem[]; label: string }) {
+function ObjektList({ items, label, showSerial }: { items: TradeItem[]; label: string; showSerial?: boolean }) {
   return (
     <div>
       <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
@@ -98,9 +104,12 @@ function ObjektList({ items, label }: { items: TradeItem[]; label: string }) {
         {items.map((item) => (
           <div
             key={item.id}
-            className="text-sm px-2 py-1 rounded border border-border"
+            className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
           >
-            {item.collectionId}
+            <span>{item.collectionId}</span>
+            {showSerial && item.serial != null && (
+              <span className="text-xs text-muted-foreground">#{item.serial}</span>
+            )}
           </div>
         ))}
       </div>
@@ -220,13 +229,13 @@ export default function TradeDetailPage({
         </CardHeader>
         {trade.haves?.length > 0 && trade.wants?.length > 0 && (
           <div className="px-6 pb-4 flex gap-6">
-            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" />
+            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" showSerial />
             <Separator orientation="vertical" className="h-auto" />
             <ObjektImages items={trade.wants} images={wantImages} label="WANT" />
           </div>
         )}
         <CardContent className="space-y-4">
-          <ObjektList items={trade.haves} label="HAVE" />
+          <ObjektList items={trade.haves} label="HAVE" showSerial />
           <Separator />
           <ObjektList items={trade.wants} label="WANT" />
           {trade.description && (

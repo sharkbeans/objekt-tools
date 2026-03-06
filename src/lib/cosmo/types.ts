@@ -26,4 +26,5 @@ export interface ObjektEntry {
   season: string;
   class: string;
   thumbnailImage?: string;
+  serial?: number;
 }
