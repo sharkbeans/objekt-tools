@@ -81,7 +81,7 @@ export function ObjektOwnedPicker({
   }, [owned, query]);
 
   const isSelected = (entry: OwnedEntry) =>
-    selected.some((s) => s.serial === entry.serial);
+    selected.some((s) => s.serial != null && s.serial === entry.serial);
 
   function handleSelect(entry: OwnedEntry) {
     if (isSelected(entry) || selected.length >= maxSelections) return;
