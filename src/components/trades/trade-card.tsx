@@ -29,6 +29,7 @@ interface TradeCardProps {
     haves: TradeItem[];
     wants: TradeItem[];
   };
+  matchCount?: number;
 }
 
 const imageCache = new Map<string, string | null>();
@@ -94,9 +95,14 @@ function ObjektLabels({ items }: { items: TradeItem[] }) {
   );
 }
 
-export function TradeCard({ trade }: TradeCardProps) {
+export function TradeCard({ trade, matchCount }: TradeCardProps) {
   return (
-    <Link href={`/trades/${trade.id}`}>
+    <Link href={`/trades/${trade.id}`} className="relative">
+      {matchCount != null && matchCount > 0 && (
+        <span className="absolute -top-2 -right-2 z-10 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+          {matchCount > 99 ? "99+" : matchCount}
+        </span>
+      )}
       <Card className="hover:border-primary/50 transition-colors h-full">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">

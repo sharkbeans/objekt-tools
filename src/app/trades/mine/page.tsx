@@ -26,6 +26,23 @@ export default function MyTradesPage() {
     enabled: !!session,
   });
 
+  const tradeIds: number[] = data?.trades?.map((t: any) => t.id) ?? [];
+
+  const { data: matchCounts } = useQuery({
+    queryKey: ["my-trades-match-counts", tradeIds],
+    queryFn: async () => {
+      const results = await Promise.all(
+        tradeIds.map(async (id) => {
+          const res = await fetch(`/api/trades/${id}/matches`);
+          const json = await res.json();
+          return { id, count: json.matches?.length ?? 0 };
+        })
+      );
+      return Object.fromEntries(results.map((r) => [r.id, r.count]));
+    },
+    enabled: tradeIds.length > 0,
+  });
+
   if (!session) return null;
 
   return (
@@ -49,7 +66,7 @@ export default function MyTradesPage() {
       ) : data?.trades?.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {data.trades.map((trade: any) => (
-            <TradeCard key={trade.id} trade={trade} />
+            <TradeCard key={trade.id} trade={trade} matchCount={matchCounts?.[trade.id]} />
           ))}
         </div>
       ) : (
