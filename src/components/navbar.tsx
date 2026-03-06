@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSession, signOut } from "@/lib/auth-client";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +15,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export function Navbar() {
   const { data: session } = useSession();
+
+  const { data: matchData } = useQuery({
+    queryKey: ["matches-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/trades/mine/matches-count");
+      return res.json();
+    },
+    enabled: !!session,
+    refetchInterval: 60000,
+  });
+
+  const matchCount = matchData?.count ?? 0;
 
   return (
     <header className="border-b border-border">
@@ -29,6 +42,19 @@ export function Navbar() {
             >
               Browse Trades
             </Link>
+            {session && (
+              <Link
+                href="/trades/mine"
+                className="relative text-muted-foreground hover:text-foreground transition-colors"
+              >
+                My Trades
+                {matchCount > 0 && (
+                  <span className="absolute -top-2 -right-4 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {matchCount > 99 ? "99+" : matchCount}
+                  </span>
+                )}
+              </Link>
+            )}
             {session && (
               <Link
                 href="/trades/new"
