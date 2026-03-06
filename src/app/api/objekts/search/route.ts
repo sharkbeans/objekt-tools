@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
     collectionNo: hit.document.collectionNo,
     season: hit.document.season,
     class: hit.document.class,
+    frontImage: hit.document.frontImage,
+    thumbnailImage: hit.document.thumbnailImage,
   }));
 
   return NextResponse.json({ results });

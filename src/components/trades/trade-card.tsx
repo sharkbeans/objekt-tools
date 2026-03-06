@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState, useRef, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -30,13 +31,64 @@ interface TradeCardProps {
   };
 }
 
+const imageCache = new Map<string, string | null>();
+
+function ObjektLabel({ item }: { item: TradeItem }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [show, setShow] = useState(false);
+  const fetchedRef = useRef(false);
+
+  const handleMouseEnter = useCallback(() => {
+    setShow(true);
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const cached = imageCache.get(item.collectionId);
+    if (cached !== undefined) {
+      setImageUrl(cached);
+      return;
+    }
+
+    fetch(`/api/objekts/search?q=${encodeURIComponent(item.collectionId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const match = data.results?.find(
+          (r: any) => r.collectionId === item.collectionId
+        );
+        const url = match?.thumbnailImage ?? match?.frontImage ?? null;
+        imageCache.set(item.collectionId, url);
+        setImageUrl(url);
+      })
+      .catch(() => {
+        imageCache.set(item.collectionId, null);
+      });
+  }, [item.collectionId]);
+
+  return (
+    <span
+      className="text-xs relative cursor-default"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setShow(false)}
+    >
+      {item.collectionId}
+      {show && imageUrl && (
+        <span className="absolute left-0 bottom-full mb-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background">
+          <img
+            src={imageUrl}
+            alt={item.collectionId}
+            className="w-24 h-auto block"
+          />
+        </span>
+      )}
+    </span>
+  );
+}
+
 function ObjektLabels({ items }: { items: TradeItem[] }) {
   return (
     <div className="flex flex-col gap-0.5">
       {items.map((item) => (
-        <span key={item.id} className="text-xs">
-          {item.collectionId}
-        </span>
+        <ObjektLabel key={item.id} item={item} />
       ))}
     </div>
   );
