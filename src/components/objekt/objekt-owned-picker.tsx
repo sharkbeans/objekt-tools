@@ -1,10 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 
 type OwnedEntry = ObjektEntry & { count: number };
+
+const thumbnailCache = new Map<string, string | null>();
+
+function fetchThumbnail(collectionId: string): Promise<string | null> {
+  const cached = thumbnailCache.get(collectionId);
+  if (cached !== undefined) return Promise.resolve(cached);
+
+  return fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
+    .then((res) => res.json())
+    .then((data) => {
+      const match = data.results?.find(
+        (r: any) => r.collectionId === collectionId,
+      );
+      const url = match?.thumbnailImage ?? match?.frontImage ?? null;
+      thumbnailCache.set(collectionId, url);
+      return url;
+    })
+    .catch(() => {
+      thumbnailCache.set(collectionId, null);
+      return null;
+    });
+}
 
 async function fetchOwned(): Promise<OwnedEntry[]> {
   const res = await fetch("/api/objekts/owned");
@@ -30,6 +52,9 @@ export function ObjektOwnedPicker({
   const [owned, setOwned] = useState<OwnedEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hoverImage, setHoverImage] = useState<string | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchOwned()
@@ -70,6 +95,24 @@ export function ObjektOwnedPicker({
     });
   }
 
+  const handleMouseEnter = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>, collectionId: string) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setHoverPos({ top: rect.top, left: rect.right + 8 });
+      setHoverImage(thumbnailCache.get(collectionId) ?? null);
+
+      fetchThumbnail(collectionId).then((url) => {
+        setHoverImage(url);
+      });
+    },
+    [],
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverImage(null);
+    setHoverPos(null);
+  }, []);
+
   return (
     <div className="space-y-3">
       <Input
@@ -89,17 +132,19 @@ export function ObjektOwnedPicker({
           No objekts found. Make sure your Cosmo account is linked.
         </div>
       ) : (
-        <div className="border rounded-md max-h-60 overflow-y-auto">
+        <div ref={containerRef} className="border rounded-md max-h-60 overflow-y-auto">
           {filtered.length > 0 ? (
             filtered.map((entry) => (
               <button
                 key={entry.collectionId}
                 type="button"
                 disabled={isSelected(entry)}
-                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors relative group ${
+                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
                   isSelected(entry) ? "opacity-40" : ""
                 }`}
                 onClick={() => handleSelect(entry)}
+                onMouseEnter={(e) => handleMouseEnter(e, entry.collectionId)}
+                onMouseLeave={handleMouseLeave}
               >
                 <span>
                   <span className="text-muted-foreground">{entry.artist}</span>{" "}
@@ -110,15 +155,6 @@ export function ObjektOwnedPicker({
                   {entry.season} · {entry.class}
                   {entry.count > 1 && ` · x${entry.count}`}
                 </span>
-                {entry.thumbnailImage && (
-                  <span className="absolute right-0 top-full mt-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background hidden group-hover:block">
-                    <img
-                      src={entry.thumbnailImage}
-                      alt={entry.collectionId}
-                      className="w-24 h-auto block"
-                    />
-                  </span>
-                )}
               </button>
             ))
           ) : (
@@ -126,6 +162,15 @@ export function ObjektOwnedPicker({
               No matching objekts
             </div>
           )}
+        </div>
+      )}
+
+      {hoverImage && hoverPos && (
+        <div
+          className="fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+          style={{ top: hoverPos.top, left: hoverPos.left }}
+        >
+          <img src={hoverImage} alt="" className="w-24 h-auto block" />
         </div>
       )}
 

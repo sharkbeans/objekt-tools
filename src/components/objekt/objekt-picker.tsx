@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 
@@ -28,6 +28,8 @@ export function ObjektPicker({
   const [results, setResults] = useState<ObjektEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [hoverImage, setHoverImage] = useState<string | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +76,20 @@ export function ObjektPicker({
     setShowResults(false);
   }
 
+  const handleMouseEnter = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>, entry: ObjektEntry) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setHoverPos({ top: rect.top, left: rect.right + 8 });
+      setHoverImage(entry.thumbnailImage ?? null);
+    },
+    [],
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverImage(null);
+    setHoverPos(null);
+  }, []);
+
   return (
     <div className="space-y-3">
       <div ref={containerRef} className="relative">
@@ -96,10 +112,12 @@ export function ObjektPicker({
                   key={entry.collectionId}
                   type="button"
                   disabled={isSelected(entry)}
-                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors relative group ${
+                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
                     isSelected(entry) ? "opacity-40" : ""
                   }`}
                   onClick={() => handleSelect(entry)}
+                  onMouseEnter={(e) => handleMouseEnter(e, entry)}
+                  onMouseLeave={handleMouseLeave}
                 >
                   <span>
                     <span className="text-muted-foreground">{entry.artist}</span>
@@ -111,15 +129,6 @@ export function ObjektPicker({
                   <span className="text-xs text-muted-foreground">
                     {entry.season} · {entry.class}
                   </span>
-                  {entry.thumbnailImage && (
-                    <span className="absolute right-0 top-full mt-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background hidden group-hover:block">
-                      <img
-                        src={entry.thumbnailImage}
-                        alt={entry.collectionId}
-                        className="w-24 h-auto block"
-                      />
-                    </span>
-                  )}
                 </button>
               ))
             ) : (
@@ -130,6 +139,15 @@ export function ObjektPicker({
           </div>
         )}
       </div>
+
+      {hoverImage && hoverPos && (
+        <div
+          className="fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+          style={{ top: hoverPos.top, left: hoverPos.left }}
+        >
+          <img src={hoverImage} alt="" className="w-24 h-auto block" />
+        </div>
+      )}
 
       {selected.length > 0 && (
         <div className="border rounded-md divide-y">
