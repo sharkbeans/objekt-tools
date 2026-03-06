@@ -153,7 +153,7 @@ export function ObjektOwnedPicker({
                   <span className="font-mono">{entry.collectionNo}</span>
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {entry.season} · {entry.class} · #{entry.serial}
+                  {entry.season} · {entry.class} · #{String(entry.serial).padStart(5, "0")}
                 </span>
               </button>
             ))
@@ -182,9 +182,9 @@ export function ObjektOwnedPicker({
               className="flex items-center justify-between px-3 py-2 text-sm"
             >
               <span>
-                {objekt.collectionId}
+                {objekt.member} {objekt.collectionNo}
                 {objekt.serial != null && (
-                  <span className="text-xs text-muted-foreground ml-1">#{objekt.serial}</span>
+                  <span className="text-xs text-muted-foreground ml-1">#{String(objekt.serial).padStart(5, "0")}</span>
                 )}
               </span>
               <button

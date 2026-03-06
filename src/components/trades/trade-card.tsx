@@ -13,10 +13,21 @@ import {
 interface TradeItem {
   id: number;
   collectionId: string;
+  collectionNo?: string | null;
   member?: string | null;
   season?: string | null;
   class?: string | null;
   serial?: number | null;
+}
+
+function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; serial?: number | null }, showSerial?: boolean) {
+  const name = item.collectionNo && item.member
+    ? `${item.member} ${item.collectionNo}`
+    : item.collectionId;
+  const serial = showSerial && item.serial != null
+    ? ` #${String(item.serial).padStart(5, "0")}`
+    : "";
+  return { name, serial };
 }
 
 interface TradeCardProps {
@@ -66,15 +77,17 @@ function ObjektLabel({ item, showSerial }: { item: TradeItem; showSerial?: boole
       });
   }, [item.collectionId]);
 
+  const label = formatObjektLabel(item, showSerial);
+
   return (
     <span
       className="text-xs relative cursor-default"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
     >
-      {item.collectionId}
-      {showSerial && item.serial != null && (
-        <span className="text-muted-foreground ml-1">#{item.serial}</span>
+      {label.name}
+      {label.serial && (
+        <span className="text-muted-foreground ml-1">{label.serial}</span>
       )}
       {show && imageUrl && (
         <span className="absolute left-0 bottom-full mb-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background">

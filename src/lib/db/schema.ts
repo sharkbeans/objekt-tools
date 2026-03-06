@@ -95,6 +95,7 @@ export const tradePostHave = pgTable("trade_post_have", {
     .notNull()
     .references(() => tradePost.id, { onDelete: "cascade" }),
   collectionId: text("collection_id").notNull(),
+  collectionNo: text("collection_no"),
   member: text("member"),
   season: text("season"),
   class: text("class"),
@@ -108,6 +109,7 @@ export const tradePostWant = pgTable("trade_post_want", {
     .notNull()
     .references(() => tradePost.id, { onDelete: "cascade" }),
   collectionId: text("collection_id").notNull(),
+  collectionNo: text("collection_no"),
   member: text("member"),
   season: text("season"),
   class: text("class"),

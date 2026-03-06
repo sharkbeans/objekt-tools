@@ -52,6 +52,7 @@ export default function NewTradePage() {
           description: description || undefined,
           haves: haves.map((o) => ({
             collectionId: o.collectionId,
+            collectionNo: o.collectionNo,
             member: o.member,
             season: o.season,
             class: o.class,
@@ -59,6 +60,7 @@ export default function NewTradePage() {
           })),
           wants: wants.map((o) => ({
             collectionId: o.collectionId,
+            collectionNo: o.collectionNo,
             member: o.member,
             season: o.season,
             class: o.class,

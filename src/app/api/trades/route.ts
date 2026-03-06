@@ -12,6 +12,7 @@ import { eq, desc, and, like, inArray } from "drizzle-orm";
 
 interface TradeItemInput {
   collectionId: string;
+  collectionNo?: string;
   member?: string;
   season?: string;
   class?: string;
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest) {
     haves.map((h) => ({
       tradePostId: post.id,
       collectionId: h.collectionId,
+      collectionNo: h.collectionNo ?? null,
       member: h.member ?? null,
       season: h.season ?? null,
       class: h.class ?? null,
@@ -140,6 +142,7 @@ export async function POST(request: NextRequest) {
     wants.map((w) => ({
       tradePostId: post.id,
       collectionId: w.collectionId,
+      collectionNo: w.collectionNo ?? null,
       member: w.member ?? null,
       season: w.season ?? null,
       class: w.class ?? null,

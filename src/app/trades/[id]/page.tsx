@@ -20,10 +20,21 @@ import { toast } from "sonner";
 interface TradeItem {
   id: number;
   collectionId: string;
+  collectionNo?: string | null;
   member?: string | null;
   season?: string | null;
   class?: string | null;
   serial?: number | null;
+}
+
+function formatLabel(item: TradeItem) {
+  return item.collectionNo && item.member
+    ? `${item.member} ${item.collectionNo}`
+    : item.collectionId;
+}
+
+function formatSerial(serial: number) {
+  return `#${String(serial).padStart(5, "0")}`;
 }
 
 function useObjektImages(items: TradeItem[]) {
@@ -83,10 +94,10 @@ function ObjektImages({
                 <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
               )}
               <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
-                {item.collectionId}
+                {formatLabel(item)}
               </span>
               {showSerial && item.serial != null && (
-                <span className="text-[10px] text-muted-foreground">#{item.serial}</span>
+                <span className="text-[10px] text-muted-foreground">{formatSerial(item.serial)}</span>
               )}
             </div>
           );
@@ -106,9 +117,9 @@ function ObjektList({ items, label, showSerial }: { items: TradeItem[]; label: s
             key={item.id}
             className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
           >
-            <span>{item.collectionId}</span>
+            <span>{formatLabel(item)}</span>
             {showSerial && item.serial != null && (
-              <span className="text-xs text-muted-foreground">#{item.serial}</span>
+              <span className="text-xs text-muted-foreground">{formatSerial(item.serial)}</span>
             )}
           </div>
         ))}
