@@ -1,42 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const TYPESENSE_URL = "https://search.apollo.cafe";
-const TYPESENSE_KEY = "64oQs36OCM8O6sbVbGGf52FMwzoYDOve";
+import { ilike, or } from "drizzle-orm";
+import { indexer } from "@/lib/db/indexer";
+import { collections } from "@/lib/db/indexer-schema";
 
 export async function GET(request: NextRequest) {
-  const q = request.nextUrl.searchParams.get("q") || "*";
+  const q = request.nextUrl.searchParams.get("q") || "";
 
-  const params = new URLSearchParams({
-    q,
-    query_by: "member,collectionId,season,collectionNo",
-    per_page: "20",
-    sort_by: "createdAt:desc",
-  });
-
-  const res = await fetch(
-    `${TYPESENSE_URL}/collections/collections/documents/search?${params}`,
-    {
-      headers: { "X-TYPESENSE-API-KEY": TYPESENSE_KEY },
-      next: { revalidate: 60 },
-    }
-  );
-
-  if (!res.ok) {
-    return NextResponse.json({ hits: [] }, { status: 502 });
+  if (!q.trim()) {
+    return NextResponse.json({ results: [] });
   }
 
-  const data = await res.json();
+  const pattern = `%${q}%`;
 
-  const results = (data.hits ?? []).map((hit: any) => ({
-    collectionId: hit.document.collectionId,
-    artist: hit.document.artist,
-    member: hit.document.member,
-    collectionNo: hit.document.collectionNo,
-    season: hit.document.season,
-    class: hit.document.class,
-    frontImage: hit.document.frontImage,
-    thumbnailImage: hit.document.thumbnailImage,
-  }));
+  const rows = await indexer
+    .select({
+      collectionId: collections.collectionId,
+      artist: collections.artist,
+      member: collections.member,
+      collectionNo: collections.collectionNo,
+      season: collections.season,
+      class: collections.class,
+      frontImage: collections.frontImage,
+      thumbnailImage: collections.thumbnailImage,
+    })
+    .from(collections)
+    .where(
+      or(
+        ilike(collections.member, pattern),
+        ilike(collections.collectionId, pattern),
+        ilike(collections.season, pattern),
+        ilike(collections.collectionNo, pattern),
+      ),
+    )
+    .limit(20);
 
-  return NextResponse.json({ results });
+  return NextResponse.json({ results: rows });
 }
