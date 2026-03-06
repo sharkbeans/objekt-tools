@@ -52,7 +52,7 @@ export async function GET() {
       season: o.season,
       class: o.class,
       thumbnailImage: o.thumbnailImage,
-      serial: o.serialNo,
+      serial: o.serial,
     }));
 
   return NextResponse.json({ results });
