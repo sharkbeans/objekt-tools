@@ -44,3 +44,6 @@ next-env.d.ts
 # reference repos
 /cosmo-web
 /objekt-explorer
+
+# markdowns
+INFRASTRUCTURE.md
