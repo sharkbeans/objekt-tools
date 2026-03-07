@@ -126,6 +126,19 @@ export const tradePostWant = pgTable("trade_post_want", {
   index("trade_post_want_collection_id_idx").on(t.collectionId),
 ]);
 
+export const tradeNotification = pgTable("trade_notification", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  tradePostId: integer("trade_post_id"),
+  message: text("message").notNull(),
+  dismissed: boolean("dismissed").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("trade_notification_user_id_idx").on(t.userId),
+]);
+
 export const cosmoToken = pgTable("cosmo_token", {
   id: serial("id").primaryKey(),
   accessToken: text("access_token").notNull(),
@@ -143,6 +156,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
     references: [cosmoAccount.userId],
   }),
   tradePosts: many(tradePost),
+  tradeNotifications: many(tradeNotification),
 }));
 
 export const cosmoAccountRelations = relations(cosmoAccount, ({ one }) => ({
@@ -172,5 +186,12 @@ export const tradePostWantRelations = relations(tradePostWant, ({ one }) => ({
   tradePost: one(tradePost, {
     fields: [tradePostWant.tradePostId],
     references: [tradePost.id],
+  }),
+}));
+
+export const tradeNotificationRelations = relations(tradeNotification, ({ one }) => ({
+  user: one(user, {
+    fields: [tradeNotification.userId],
+    references: [user.id],
   }),
 }));
