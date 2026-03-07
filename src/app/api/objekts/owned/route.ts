@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";1
@@ -41,7 +41,9 @@ export async function GET() {
         eq(objekts.owner, linked.address),
         eq(objekts.transferable, true),
       ),
-    );
+    )
+    .orderBy(asc(collections.member), asc(collections.collectionNo))
+    .limit(500);
 
   const results = rows.map((r) => ({
     collectionId: r.collectionId,

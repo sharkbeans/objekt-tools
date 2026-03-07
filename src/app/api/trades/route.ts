@@ -6,9 +6,8 @@ import {
   tradePostHave,
   tradePostWant,
   cosmoAccount,
-  user,
 } from "@/lib/db/schema";
-import { eq, desc, and, like, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 
 interface TradeItemInput {
   collectionId: string;
@@ -37,6 +36,11 @@ export async function GET(request: NextRequest) {
       wants: true,
       user: {
         columns: { id: true, name: true, image: true },
+        with: {
+          cosmoAccount: {
+            columns: { nickname: true },
+          },
+        },
       },
     },
     orderBy: [desc(tradePost.createdAt)],
@@ -63,20 +67,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Enrich with cosmo nickname
-  const userIds = [...new Set(filtered.map((t) => t.userId))];
-  const cosmoAccounts =
-    userIds.length > 0
-      ? await db.query.cosmoAccount.findMany({
-          where: inArray(cosmoAccount.userId, userIds),
-        })
-      : [];
-
-  const cosmoMap = new Map(cosmoAccounts.map((a) => [a.userId, a.nickname]));
-
   const enriched = filtered.map((t) => ({
     ...t,
-    cosmoNickname: cosmoMap.get(t.userId) ?? null,
+    cosmoNickname: t.user.cosmoAccount?.nickname ?? null,
   }));
 
   return NextResponse.json({ trades: enriched, page, limit });

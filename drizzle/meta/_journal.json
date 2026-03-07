@@ -8,6 +8,13 @@
       "when": 1772687997408,
       "tag": "0000_workable_terrax",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1741344000000,
+      "tag": "0001_add_indexes",
+      "breakpoints": true
     }
   ]
 }

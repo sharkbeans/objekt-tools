@@ -4,10 +4,8 @@ import {
   tradePost,
   tradePostHave,
   tradePostWant,
-  cosmoAccount,
 } from "@/lib/db/schema";
 import { eq, and, ne, inArray } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 
 // GET /api/trades/[id]/matches — find matching trades
 // A match is a trade where:
@@ -71,23 +69,18 @@ export async function GET(
       wants: true,
       user: {
         columns: { id: true, name: true, image: true },
+        with: {
+          cosmoAccount: {
+            columns: { nickname: true },
+          },
+        },
       },
     },
   });
 
-  // Enrich with cosmo nicknames
-  const userIds = [...new Set(matches.map((m) => m.userId))];
-  const cosmoAccounts =
-    userIds.length > 0
-      ? await db.query.cosmoAccount.findMany({
-          where: inArray(cosmoAccount.userId, userIds),
-        })
-      : [];
-  const cosmoMap = new Map(cosmoAccounts.map((a) => [a.userId, a.nickname]));
-
   const enriched = matches.map((m) => ({
     ...m,
-    cosmoNickname: cosmoMap.get(m.userId) ?? null,
+    cosmoNickname: m.user.cosmoAccount?.nickname ?? null,
   }));
 
   return NextResponse.json({ matches: enriched });

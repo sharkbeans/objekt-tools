@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   serial,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -87,7 +88,10 @@ export const tradePost = pgTable("trade_post", {
   status: text("status").notNull().default("open"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (t) => [
+  index("trade_post_user_id_idx").on(t.userId),
+  index("trade_post_status_created_idx").on(t.status, t.createdAt),
+]);
 
 export const tradePostHave = pgTable("trade_post_have", {
   id: serial("id").primaryKey(),
@@ -101,7 +105,10 @@ export const tradePostHave = pgTable("trade_post_have", {
   class: text("class"),
   thumbnailUrl: text("thumbnail_url"),
   serial: integer("serial"),
-});
+}, (t) => [
+  index("trade_post_have_trade_post_id_idx").on(t.tradePostId),
+  index("trade_post_have_collection_id_idx").on(t.collectionId),
+]);
 
 export const tradePostWant = pgTable("trade_post_want", {
   id: serial("id").primaryKey(),
@@ -114,7 +121,10 @@ export const tradePostWant = pgTable("trade_post_want", {
   season: text("season"),
   class: text("class"),
   thumbnailUrl: text("thumbnail_url"),
-});
+}, (t) => [
+  index("trade_post_want_trade_post_id_idx").on(t.tradePostId),
+  index("trade_post_want_collection_id_idx").on(t.collectionId),
+]);
 
 export const cosmoToken = pgTable("cosmo_token", {
   id: serial("id").primaryKey(),

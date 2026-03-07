@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { tradePost, cosmoAccount } from "@/lib/db/schema";
+import { tradePost } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 
 // GET /api/trades/[id] — get single trade with full details
@@ -19,6 +19,11 @@ export async function GET(
       wants: true,
       user: {
         columns: { id: true, name: true, image: true },
+        with: {
+          cosmoAccount: {
+            columns: { nickname: true },
+          },
+        },
       },
     },
   });
@@ -27,14 +32,9 @@ export async function GET(
     return NextResponse.json({ error: "Trade not found" }, { status: 404 });
   }
 
-  // Get cosmo nickname
-  const cosmo = await db.query.cosmoAccount.findFirst({
-    where: eq(cosmoAccount.userId, trade.userId),
-  });
-
   return NextResponse.json({
     ...trade,
-    cosmoNickname: cosmo?.nickname ?? null,
+    cosmoNickname: trade.user.cosmoAccount?.nickname ?? null,
   });
 }
 
