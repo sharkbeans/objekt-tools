@@ -16,7 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { TradeCard } from "@/components/trades/trade-card";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface TradeItem {
   id: number;
@@ -186,31 +186,36 @@ export default function TradeDetailPage({
     }
   }
 
-  const checkAvailability = useMutation({
-    mutationFn: async () => {
+  const { data: availabilityData } = useQuery({
+    queryKey: ["trade-availability", id],
+    queryFn: async () => {
       const res = await fetch(`/api/trades/${id}/check-availability`, {
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to check availability");
       return res.json();
     },
-    onSuccess: (data) => {
-      if (data.deleted) {
-        toast.error("Trade removed — all offered objekts are no longer available.");
-        router.push("/trades");
-      } else if (data.removed > 0) {
-        toast.warning(`${data.removed} objekt(s) removed — no longer in trader's inventory.`);
-        queryClient.invalidateQueries({ queryKey: ["trade", id] });
-      } else if (data.unverifiable) {
-        toast.info("Cannot verify — trader has no linked Cosmo account.");
-      } else {
-        toast.success("All offered objekts verified in trader's inventory.");
-      }
-    },
-    onError: () => {
-      toast.error("Failed to check availability.");
-    },
+    enabled: !!trade && trade.status === "open",
+    staleTime: Number.POSITIVE_INFINITY, // only run once per page load
+    refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!availabilityData) return;
+    if (availabilityData.deleted) {
+      toast.error("Trade removed — all offered objekts are no longer available.");
+      queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["my-trades"] });
+      queryClient.invalidateQueries({ queryKey: ["check-availability"] });
+      router.push("/trades");
+    } else if (availabilityData.removed > 0) {
+      toast.warning(`${availabilityData.removed} objekt(s) removed — no longer in trader's inventory.`);
+      queryClient.invalidateQueries({ queryKey: ["trade", id] });
+      queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["my-trades"] });
+      queryClient.invalidateQueries({ queryKey: ["check-availability"] });
+    }
+  }, [availabilityData]);
 
   if (tradeLoading) {
     return (
@@ -285,37 +290,22 @@ export default function TradeDetailPage({
               </p>
             </>
           )}
-          {trade.status === "open" && (
+          {trade.status === "open" && trade.cosmoNickname && (
             <>
               <Separator />
               <div className="flex items-center justify-between gap-4 rounded-md bg-muted/50 px-3 py-2">
                 <p className="text-xs text-muted-foreground">
-                  Verify the trader still owns the listed objekts.
+                  Always verify the trader actually owns the listed objekts before trading.
                 </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      checkAvailability.mutate();
-                    }}
-                    disabled={checkAvailability.isPending}
-                  >
-                    {checkAvailability.isPending ? "Checking..." : "Check Availability"}
+                <a
+                  href={`https://objekt.top/@${trade.cosmoNickname}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" size="sm">
+                    View @{trade.cosmoNickname}
                   </Button>
-                  {trade.cosmoNickname && (
-                    <a
-                      href={`https://objekt.top/@${trade.cosmoNickname}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button variant="outline" size="sm">
-                        View @{trade.cosmoNickname}
-                      </Button>
-                    </a>
-                  )}
-                </div>
+                </a>
               </div>
             </>
           )}
