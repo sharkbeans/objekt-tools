@@ -16,6 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { TradeCard } from "@/components/trades/trade-card";
 import { toast } from "sonner";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface TradeItem {
   id: number;
@@ -136,6 +137,7 @@ export default function TradeDetailPage({
   const { id } = use(params);
   const { data: session } = useSession();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data: trade, isLoading: tradeLoading } = useQuery({
     queryKey: ["trade", id],
@@ -183,6 +185,32 @@ export default function TradeDetailPage({
       toast.error("Failed to delete trade");
     }
   }
+
+  const checkAvailability = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/trades/${id}/check-availability`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to check availability");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.deleted) {
+        toast.error("Trade removed — all offered objekts are no longer available.");
+        router.push("/trades");
+      } else if (data.removed > 0) {
+        toast.warning(`${data.removed} objekt(s) removed — no longer in trader's inventory.`);
+        queryClient.invalidateQueries({ queryKey: ["trade", id] });
+      } else if (data.unverifiable) {
+        toast.info("Cannot verify — trader has no linked Cosmo account.");
+      } else {
+        toast.success("All offered objekts verified in trader's inventory.");
+      }
+    },
+    onError: () => {
+      toast.error("Failed to check availability.");
+    },
+  });
 
   if (tradeLoading) {
     return (
@@ -257,22 +285,37 @@ export default function TradeDetailPage({
               </p>
             </>
           )}
-          {trade.cosmoNickname && (
+          {trade.status === "open" && (
             <>
               <Separator />
               <div className="flex items-center justify-between gap-4 rounded-md bg-muted/50 px-3 py-2">
                 <p className="text-xs text-muted-foreground">
-                  Always verify the trader actually owns the listed objekts before trading.
+                  Verify the trader still owns the listed objekts.
                 </p>
-                <a
-                  href={`https://objekt.top/@${trade.cosmoNickname}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline" size="sm">
-                    Verify @{trade.cosmoNickname}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      checkAvailability.mutate();
+                    }}
+                    disabled={checkAvailability.isPending}
+                  >
+                    {checkAvailability.isPending ? "Checking..." : "Check Availability"}
                   </Button>
-                </a>
+                  {trade.cosmoNickname && (
+                    <a
+                      href={`https://objekt.top/@${trade.cosmoNickname}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm">
+                        View @{trade.cosmoNickname}
+                      </Button>
+                    </a>
+                  )}
+                </div>
               </div>
             </>
           )}

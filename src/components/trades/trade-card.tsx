@@ -19,14 +19,14 @@ interface TradeItem {
   class?: string | null;
   serial?: number | null;
 }
-
+``
 function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; serial?: number | null }, showSerial?: boolean) {
   const name = item.collectionNo && item.member
     ? `${item.member} ${item.collectionNo}`
     : item.collectionId;
   const serial = showSerial && item.serial != null
     ? ` #${String(item.serial).padStart(5, "0")}`
-    : "";
+    : "";``
   return { name, serial };
 }
 

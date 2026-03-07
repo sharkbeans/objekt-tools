@@ -1,0 +1,123 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { indexer } from "@/lib/db/indexer";
+import {
+  tradePost,
+  tradePostHave,
+  cosmoAccount,
+  tradeNotification,
+} from "@/lib/db/schema";
+import { objekts, collections } from "@/lib/db/indexer-schema";
+import { eq, and, inArray } from "drizzle-orm";
+
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const tradeId = Number(id);
+
+  // Get the trade with haves and owner info
+  const trade = await db.query.tradePost.findFirst({
+    where: and(eq(tradePost.id, tradeId), eq(tradePost.status, "open")),
+    with: { haves: true },
+  });
+
+  if (!trade) {
+    return NextResponse.json({ error: "Trade not found or not open" }, { status: 404 });
+  }
+
+  if (trade.haves.length === 0) {
+    return NextResponse.json({ available: true, haves: [] });
+  }
+
+  // Get the trade owner's cosmo address
+  const linked = await db.query.cosmoAccount.findFirst({
+    where: eq(cosmoAccount.userId, trade.userId),
+  });
+
+  if (!linked) {
+    // Can't verify without a linked cosmo account
+    return NextResponse.json({ available: true, unverifiable: true });
+  }
+
+  const allCollectionIds = [
+    ...new Set(trade.haves.map((h) => h.collectionId)),
+  ];
+
+  // Query indexer for owned objekts
+  const ownedRows = await indexer
+    .select({
+      collectionId: collections.collectionId,
+      serial: objekts.serial,
+    })
+    .from(objekts)
+    .innerJoin(collections, eq(objekts.collectionId, collections.id))
+    .where(
+      and(
+        eq(objekts.owner, linked.address),
+        inArray(collections.collectionId, allCollectionIds),
+      ),
+    );
+
+  const ownedSet = new Set(
+    ownedRows.map((r) => `${r.collectionId}:${r.serial}`),
+  );
+  const ownedCollections = new Set(ownedRows.map((r) => r.collectionId));
+
+  const availableHaves: typeof trade.haves = [];
+  const unavailableHaves: typeof trade.haves = [];
+
+  for (const have of trade.haves) {
+    const isOwned =
+      have.serial != null
+        ? ownedSet.has(`${have.collectionId}:${have.serial}`)
+        : ownedCollections.has(have.collectionId);
+
+    if (isOwned) {
+      availableHaves.push(have);
+    } else {
+      unavailableHaves.push(have);
+    }
+  }
+
+  // Clean up if items are missing
+  if (unavailableHaves.length > 0) {
+    if (availableHaves.length === 0) {
+      // All haves gone — delete the trade
+      await db.delete(tradePost).where(eq(tradePost.id, tradeId));
+      await db.insert(tradeNotification).values({
+        userId: trade.userId,
+        tradePostId: tradeId,
+        message: `Your trade #${tradeId} was removed because all offered objekts are no longer in your inventory.`,
+      });
+    } else {
+      // Some haves gone — remove unavailable ones
+      const removedLabels = unavailableHaves
+        .map((h) => {
+          const name =
+            h.member && h.collectionNo
+              ? `${h.member} ${h.collectionNo}`
+              : h.collectionId;
+          return h.serial != null ? `${name} #${h.serial}` : name;
+        })
+        .join(", ");
+
+      await db
+        .delete(tradePostHave)
+        .where(inArray(tradePostHave.id, unavailableHaves.map((h) => h.id)));
+      await db.insert(tradeNotification).values({
+        userId: trade.userId,
+        tradePostId: tradeId,
+        message: `Removed unavailable objekts from trade #${tradeId}: ${removedLabels}. If you have duplicates with different serials, you can update the trade.`,
+      });
+    }
+  }
+
+  return NextResponse.json({
+    available: unavailableHaves.length === 0,
+    removed: unavailableHaves.length,
+    remaining: availableHaves.length,
+    deleted: availableHaves.length === 0 && unavailableHaves.length > 0,
+  });
+}
