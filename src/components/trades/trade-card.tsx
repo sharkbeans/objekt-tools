@@ -164,7 +164,7 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
           </p>
           {trade.cosmoNickname && (
             <a
-              href={`https://objekt.top/@${trade.cosmoNickname}`}
+              href={`https://objekt.top/@${trade.cosmoNickname}?transferable=true`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[10px] text-primary hover:underline"
