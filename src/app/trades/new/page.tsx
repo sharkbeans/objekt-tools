@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 
 export default function NewTradePage() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function NewTradePage() {
   const [wants, setWants] = useState<ObjektEntry[]>([]);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
 
   if (!session) {
     return (
@@ -91,6 +93,8 @@ export default function NewTradePage() {
         </p>
       </div>
 
+      <TradeFilters filters={filters} onChange={setFilters} showSort={false} />
+
       <Tabs defaultValue="have">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="have">Have ({haves.length})</TabsTrigger>
@@ -116,6 +120,7 @@ export default function NewTradePage() {
                     ),
                   )
                 }
+                filters={filters}
               />
             </CardContent>
           </Card>
@@ -138,6 +143,7 @@ export default function NewTradePage() {
                     prev.filter((w) => w.collectionId !== o.collectionId),
                   )
                 }
+                filters={filters}
               />
             </CardContent>
           </Card>

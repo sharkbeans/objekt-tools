@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import type { ObjektStructuralFilters } from "./objekt-owned-picker";
 
 async function searchCollections(query: string): Promise<ObjektEntry[]> {
   const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(query)}`);
@@ -16,6 +17,7 @@ interface ObjektPickerProps {
   onSelect: (objekt: ObjektEntry) => void;
   onDeselect: (objekt: ObjektEntry) => void;
   maxSelections?: number;
+  filters?: ObjektStructuralFilters;
 }
 
 export function ObjektPicker({
@@ -23,6 +25,7 @@ export function ObjektPicker({
   onSelect,
   onDeselect,
   maxSelections = 10,
+  filters,
 }: ObjektPickerProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ObjektEntry[]>([]);
@@ -66,6 +69,22 @@ export function ObjektPicker({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  const filteredResults = useMemo(() => {
+    if (!filters) return results;
+    let r = results;
+    if (filters.artist.length) r = r.filter((o) => filters.artist.includes(o.artist));
+    if (filters.member.length) r = r.filter((o) => filters.member.includes(o.member));
+    if (filters.season.length) r = r.filter((o) => filters.season.includes(o.season));
+    if (filters.class.length) r = r.filter((o) => filters.class.includes(o.class));
+    if (filters.on_offline.length) {
+      r = r.filter((o) => {
+        const type = o.collectionNo?.toLowerCase().endsWith("z") ? "offline" : "online";
+        return filters.on_offline.includes(type);
+      });
+    }
+    return r;
+  }, [results, filters]);
+
   const isSelected = (entry: ObjektEntry) =>
     selected.some((s) => s.collectionId === entry.collectionId);
 
@@ -106,8 +125,8 @@ export function ObjektPicker({
               <div className="px-3 py-2 text-sm text-muted-foreground">
                 Searching...
               </div>
-            ) : results.length > 0 ? (
-              results.map((entry) => (
+            ) : filteredResults.length > 0 ? (
+              filteredResults.map((entry) => (
                 <button
                   key={entry.collectionId}
                   type="button"

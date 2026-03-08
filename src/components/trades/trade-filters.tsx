@@ -39,6 +39,8 @@ export const defaultFilters: TradeFilterState = {
 interface TradeFiltersProps {
   filters: TradeFilterState;
   onChange: (filters: TradeFilterState) => void;
+  showSearch?: boolean;
+  showSort?: boolean;
 }
 
 function getAvailableSeasons(selectedArtists: string[]): string[] {
@@ -79,7 +81,7 @@ function hasActiveFilters(filters: TradeFilterState): boolean {
   );
 }
 
-export function TradeFilters({ filters, onChange }: TradeFiltersProps) {
+export function TradeFilters({ filters, onChange, showSearch = true, showSort = true }: TradeFiltersProps) {
   function update(partial: Partial<TradeFilterState>) {
     onChange({ ...filters, ...partial });
   }
@@ -106,24 +108,26 @@ export function TradeFilters({ filters, onChange }: TradeFiltersProps) {
   return (
     <div className="space-y-3">
       {/* Quick Search */}
-      <div className="relative">
-        <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        <Input
-          className="pl-8 pr-8"
-          placeholder="Quick Search: jw a201z, sy divine, !dco #1-100…"
-          value={filters.search}
-          onChange={(e) => update({ search: e.target.value })}
-        />
-        {filters.search && (
-          <button
-            type="button"
-            onClick={() => update({ search: "" })}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <XIcon className="h-4 w-4" />
-          </button>
-        )}
-      </div>
+      {showSearch && (
+        <div className="relative">
+          <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-8 pr-8"
+            placeholder="Quick Search: jw a201z, sy divine, !dco #1-100…"
+            value={filters.search}
+            onChange={(e) => update({ search: e.target.value })}
+          />
+          {filters.search && (
+            <button
+              type="button"
+              onClick={() => update({ search: "" })}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <XIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filter row */}
       <div className="flex flex-wrap gap-2 items-center">
@@ -170,24 +174,26 @@ export function TradeFilters({ filters, onChange }: TradeFiltersProps) {
           className="min-w-24"
         />
 
-        <div className="flex gap-1 ml-auto">
-          <Button
-            variant={filters.sort === "newest" ? "default" : "outline"}
-            size="sm"
-            onClick={() => update({ sort: "newest" })}
-            className="h-9 text-xs"
-          >
-            Newest
-          </Button>
-          <Button
-            variant={filters.sort === "oldest" ? "default" : "outline"}
-            size="sm"
-            onClick={() => update({ sort: "oldest" })}
-            className="h-9 text-xs"
-          >
-            Oldest
-          </Button>
-        </div>
+        {showSort && (
+          <div className="flex gap-1 ml-auto">
+            <Button
+              variant={filters.sort === "newest" ? "default" : "outline"}
+              size="sm"
+              onClick={() => update({ sort: "newest" })}
+              className="h-9 text-xs"
+            >
+              Newest
+            </Button>
+            <Button
+              variant={filters.sort === "oldest" ? "default" : "outline"}
+              size="sm"
+              onClick={() => update({ sort: "oldest" })}
+              className="h-9 text-xs"
+            >
+              Oldest
+            </Button>
+          </div>
+        )}
 
         {active && (
           <Button

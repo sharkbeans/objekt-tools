@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +8,21 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TradeCard } from "@/components/trades/trade-card";
+import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import { XIcon, AlertTriangleIcon } from "lucide-react";
+
+function buildParams(filters: TradeFilterState, page: number) {
+  const p = new URLSearchParams();
+  p.set("page", String(page));
+  for (const a of filters.artist) p.append("artist", a);
+  for (const m of filters.member) p.append("member", m);
+  for (const s of filters.season) p.append("season", s);
+  for (const c of filters.class) p.append("class", c);
+  for (const o of filters.on_offline) p.append("on_offline", o);
+  if (filters.search) p.set("search", filters.search);
+  if (filters.sort) p.set("sort", filters.sort);
+  return p;
+}
 
 function TradeNotifications() {
   const queryClient = useQueryClient();
@@ -72,6 +86,13 @@ export default function MyTradesPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
+  const [page, setPage] = useState(1);
+
+  const handleFiltersChange = useCallback((next: TradeFilterState) => {
+    setFilters(next);
+    setPage(1);
+  }, []);
 
   useEffect(() => {
     if (session === null) router.push("/sign-in");
@@ -97,15 +118,20 @@ export default function MyTradesPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["my-trades"],
+    queryKey: ["my-trades", filters, page],
     queryFn: async () => {
-      const res = await fetch("/api/trades/mine");
+      const res = await fetch(`/api/trades/mine?${buildParams(filters, page)}`);
       return res.json();
     },
     enabled: !!session,
   });
 
-  const tradeIds: number[] = data?.trades?.map((t: any) => t.id) ?? [];
+  const trades = data?.trades ?? [];
+  const total: number = data?.total ?? 0;
+  const limit: number = data?.limit ?? 20;
+  const totalPages = Math.ceil(total / limit);
+
+  const tradeIds: number[] = trades.map((t: any) => t.id);
 
   const { data: matchCounts } = useQuery({
     queryKey: ["my-trades-match-counts", tradeIds],
@@ -144,16 +170,43 @@ export default function MyTradesPage() {
 
       <TradeNotifications />
 
+      <TradeFilters filters={filters} onChange={handleFiltersChange} />
+
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">
           Loading your trades...
         </div>
-      ) : data?.trades?.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {data.trades.map((trade: any) => (
-            <TradeCard key={trade.id} trade={trade} matchCount={matchCounts?.[trade.id]} />
-          ))}
-        </div>
+      ) : trades.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {trades.map((trade: any) => (
+              <TradeCard key={trade.id} trade={trade} matchCount={matchCounts?.[trade.id]} />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex justify-center gap-2 pt-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-accent"
+              >
+                Previous
+              </button>
+              <span className="px-3 py-1.5 text-sm text-muted-foreground">
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-accent"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">

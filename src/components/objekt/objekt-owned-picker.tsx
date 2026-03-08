@@ -35,11 +35,20 @@ async function fetchOwned(): Promise<OwnedEntry[]> {
   return data.results ?? [];
 }
 
+export type ObjektStructuralFilters = {
+  artist: string[];
+  member: string[];
+  season: string[];
+  class: string[];
+  on_offline: string[];
+};
+
 interface ObjektOwnedPickerProps {
   selected: ObjektEntry[];
   onSelect: (objekt: ObjektEntry) => void;
   onDeselect: (objekt: ObjektEntry) => void;
   maxSelections?: number;
+  filters?: ObjektStructuralFilters;
 }
 
 export function ObjektOwnedPicker({
@@ -47,6 +56,7 @@ export function ObjektOwnedPicker({
   onSelect,
   onDeselect,
   maxSelections = 10,
+  filters,
 }: ObjektOwnedPickerProps) {
   const [query, setQuery] = useState("");
   const [owned, setOwned] = useState<OwnedEntry[]>([]);
@@ -67,18 +77,36 @@ export function ObjektOwnedPicker({
   }, []);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return owned;
-    const q = query.toLowerCase();
-    return owned.filter(
-      (o) =>
-        o.member.toLowerCase().includes(q) ||
-        o.collectionId.toLowerCase().includes(q) ||
-        o.collectionNo.toLowerCase().includes(q) ||
-        o.season.toLowerCase().includes(q) ||
-        o.class.toLowerCase().includes(q) ||
-        o.artist.toLowerCase().includes(q),
-    );
-  }, [owned, query]);
+    let result = owned;
+
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      result = result.filter(
+        (o) =>
+          o.member.toLowerCase().includes(q) ||
+          o.collectionId.toLowerCase().includes(q) ||
+          o.collectionNo.toLowerCase().includes(q) ||
+          o.season.toLowerCase().includes(q) ||
+          o.class.toLowerCase().includes(q) ||
+          o.artist.toLowerCase().includes(q),
+      );
+    }
+
+    if (filters) {
+      if (filters.artist.length) result = result.filter((o) => filters.artist.includes(o.artist));
+      if (filters.member.length) result = result.filter((o) => filters.member.includes(o.member));
+      if (filters.season.length) result = result.filter((o) => filters.season.includes(o.season));
+      if (filters.class.length) result = result.filter((o) => filters.class.includes(o.class));
+      if (filters.on_offline.length) {
+        result = result.filter((o) => {
+          const type = o.collectionNo.toLowerCase().endsWith("z") ? "offline" : "online";
+          return filters.on_offline.includes(type);
+        });
+      }
+    }
+
+    return result;
+  }, [owned, query, filters]);
 
   const isSelected = (entry: OwnedEntry) =>
     selected.some((s) => s.serial != null && s.serial === entry.serial);
