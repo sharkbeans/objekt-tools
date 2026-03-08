@@ -15,6 +15,7 @@ function filtersFromSearchParams(params: URLSearchParams): TradeFilterState {
     class: params.getAll("class").filter(Boolean),
     on_offline: params.getAll("on_offline").filter(Boolean),
     sort: params.get("sort") ?? "newest",
+    filterMode: (params.get("filter_mode") as "haves" | "wants") ?? "haves",
   };
 }
 
@@ -28,6 +29,7 @@ function buildParams(filters: TradeFilterState, page: number) {
   for (const o of filters.on_offline) p.append("on_offline", o);
   if (filters.search) p.set("search", filters.search);
   if (filters.sort) p.set("sort", filters.sort);
+  p.set("filter_mode", filters.filterMode);
   return p;
 }
 

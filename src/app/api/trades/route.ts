@@ -54,8 +54,10 @@ export async function GET(request: NextRequest) {
     offset: 0,
   });
 
+  const filterMode = (params.get("filter_mode") ?? "haves") as "haves" | "wants" | "both";
+
   const filtered = hasAnyFilter(filters)
-    ? trades.filter((t) => tradeMatchesFilters(t, filters))
+    ? trades.filter((t) => tradeMatchesFilters(t, filters, filterMode))
     : trades;
 
   // Apply pagination after filtering

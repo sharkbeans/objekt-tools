@@ -21,6 +21,7 @@ function buildParams(filters: TradeFilterState, page: number) {
   for (const o of filters.on_offline) p.append("on_offline", o);
   if (filters.search) p.set("search", filters.search);
   if (filters.sort) p.set("sort", filters.sort);
+  p.set("filter_mode", filters.filterMode);
   return p;
 }
 

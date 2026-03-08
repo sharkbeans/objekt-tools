@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   const sort = params.get("sort") ?? "newest";
 
   const filters = parseFiltersFromParams(params);
+  const filterMode = (params.get("filter_mode") ?? "haves") as "haves" | "wants" | "both";
 
   const trades = await db.query.tradePost.findMany({
     where: eq(tradePost.userId, session.user.id),
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
   });
 
   const filtered = hasAnyFilter(filters)
-    ? trades.filter((t) => tradeMatchesFilters(t, filters))
+    ? trades.filter((t) => tradeMatchesFilters(t, filters, filterMode))
     : trades;
 
   const paginated = filtered.slice(offset, offset + limit);

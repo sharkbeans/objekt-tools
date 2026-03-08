@@ -24,6 +24,7 @@ export type TradeFilterState = {
   class: string[];
   on_offline: string[];
   sort: string;
+  filterMode: "haves" | "wants";
 };
 
 export const defaultFilters: TradeFilterState = {
@@ -34,6 +35,7 @@ export const defaultFilters: TradeFilterState = {
   class: [],
   on_offline: [],
   sort: "newest",
+  filterMode: "haves",
 };
 
 interface TradeFiltersProps {
@@ -131,6 +133,24 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
 
       {/* Filter row */}
       <div className="flex flex-wrap gap-2 items-center">
+        {/* Have/Want toggle */}
+        <div className="flex gap-0.5 rounded-md border p-0.5">
+          <button
+            type="button"
+            onClick={() => update({ filterMode: "haves" })}
+            className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Haves
+          </button>
+          <button
+            type="button"
+            onClick={() => update({ filterMode: "wants" })}
+            className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Wants
+          </button>
+        </div>
+
         <MultiSelect
           options={validArtists.map((a) => ({ label: a, value: a }))}
           value={filters.artist}

@@ -259,8 +259,17 @@ type TradePost = {
   wants: TradeFilterItem[];
 };
 
-export function tradeMatchesFilters(trade: TradePost, filters: TradeFilters): boolean {
-  const allItems = [...trade.haves, ...trade.wants];
+export function tradeMatchesFilters(
+  trade: TradePost,
+  filters: TradeFilters,
+  filterMode: "haves" | "wants" | "both" = "both",
+): boolean {
+  const allItems =
+    filterMode === "haves"
+      ? trade.haves
+      : filterMode === "wants"
+        ? trade.wants
+        : [...trade.haves, ...trade.wants];
 
   // Quick-search: parse with the same OR/AND/NOT grammar as objekt-explorer
   const queries = (filters.search ?? "")
