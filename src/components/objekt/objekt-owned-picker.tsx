@@ -41,6 +41,7 @@ export type ObjektStructuralFilters = {
   season: string[];
   class: string[];
   on_offline: string[];
+  search?: string;
 };
 
 interface ObjektOwnedPickerProps {
@@ -79,16 +80,21 @@ export function ObjektOwnedPicker({
   const filtered = useMemo(() => {
     let result = owned;
 
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      result = result.filter(
-        (o) =>
-          o.member.toLowerCase().includes(q) ||
-          o.collectionId.toLowerCase().includes(q) ||
-          o.collectionNo.toLowerCase().includes(q) ||
-          o.season.toLowerCase().includes(q) ||
-          o.class.toLowerCase().includes(q) ||
-          o.artist.toLowerCase().includes(q),
+    const qs = [query.trim(), filters?.search?.trim()]
+      .filter(Boolean)
+      .map((s) => s!.toLowerCase());
+
+    if (qs.length) {
+      result = result.filter((o) =>
+        qs.every(
+          (q) =>
+            o.member.toLowerCase().includes(q) ||
+            o.collectionId.toLowerCase().includes(q) ||
+            o.collectionNo.toLowerCase().includes(q) ||
+            o.season.toLowerCase().includes(q) ||
+            o.class.toLowerCase().includes(q) ||
+            o.artist.toLowerCase().includes(q),
+        ),
       );
     }
 

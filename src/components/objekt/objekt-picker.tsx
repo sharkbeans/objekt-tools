@@ -80,28 +80,30 @@ export function ObjektPicker({
     filtersActive,
   ]);
 
+  const effectiveQuery = query.trim() || (filters?.search?.trim() ?? "");
+
   // Debounced text search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!query.trim()) {
+    if (!effectiveQuery) {
       setQueryResults([]);
       return;
     }
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
-      const hits = await searchByQuery(query);
+      const hits = await searchByQuery(effectiveQuery);
       setQueryResults(hits);
       setLoading(false);
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [effectiveQuery]);
 
   // Display: query takes priority over filter results; filter client-side if both active
   const displayResults = useMemo(() => {
-    const base = query.trim() ? queryResults : filterResults;
-    if (!filters || !query.trim()) return base;
+    const base = effectiveQuery ? queryResults : filterResults;
+    if (!filters || !effectiveQuery) return base;
     // When text searching, also apply structural filters client-side
     let r = base;
     if (filters.artist.length) r = r.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
@@ -140,7 +142,7 @@ export function ObjektPicker({
     setHoverPos(null);
   }, []);
 
-  const showList = filtersActive || query.trim().length > 0;
+  const showList = filtersActive || effectiveQuery.length > 0;
 
   return (
     <div className="space-y-3">
