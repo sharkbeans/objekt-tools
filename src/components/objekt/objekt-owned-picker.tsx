@@ -163,7 +163,7 @@ export function ObjektOwnedPicker({
       ) : (
         <div ref={containerRef} className="border rounded-md max-h-60 overflow-y-auto">
           {filtered.length > 0 ? (
-            filtered.map((entry) => (
+            filtered.slice(0, 24).map((entry) => (
               <button
                 key={entry.serial}
                 type="button"
@@ -188,6 +188,11 @@ export function ObjektOwnedPicker({
           ) : (
             <div className="px-3 py-2 text-sm text-muted-foreground">
               No matching objekts
+            </div>
+          )}
+          {filtered.length > 24 && (
+            <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t">
+              Showing 24 of {filtered.length} — use filters or search to narrow down
             </div>
           )}
         </div>

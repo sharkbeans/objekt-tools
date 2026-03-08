@@ -5,7 +5,31 @@ import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "./objekt-owned-picker";
 
-async function searchCollections(query: string): Promise<ObjektEntry[]> {
+function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
+  if (!filters) return false;
+  return (
+    filters.artist.length > 0 ||
+    filters.member.length > 0 ||
+    filters.season.length > 0 ||
+    filters.class.length > 0 ||
+    filters.on_offline.length > 0
+  );
+}
+
+async function fetchByFilters(filters: ObjektStructuralFilters): Promise<ObjektEntry[]> {
+  const params = new URLSearchParams();
+  for (const a of filters.artist) params.append("artist", a);
+  for (const m of filters.member) params.append("member", m);
+  for (const s of filters.season) params.append("season", s);
+  for (const c of filters.class) params.append("class", c);
+  for (const o of filters.on_offline) params.append("on_offline", o);
+  const res = await fetch(`/api/objekts/search?${params.toString()}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results ?? [];
+}
+
+async function searchByQuery(query: string): Promise<ObjektEntry[]> {
   const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) return [];
   const data = await res.json();
@@ -28,50 +52,58 @@ export function ObjektPicker({
   filters,
 }: ObjektPickerProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ObjektEntry[]>([]);
+  const [filterResults, setFilterResults] = useState<ObjektEntry[]>([]);
+  const [queryResults, setQueryResults] = useState<ObjektEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showResults, setShowResults] = useState(false);
   const [hoverImage, setHoverImage] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const containerRef = useRef<HTMLDivElement>(null);
 
+  const filtersActive = hasActiveFilters(filters);
+
+  // Fetch when filters change
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (!query.trim()) {
-      setResults([]);
-      setShowResults(false);
+    if (!filtersActive || !filters) {
+      setFilterResults([]);
       return;
     }
+    setLoading(true);
+    fetchByFilters(filters)
+      .then(setFilterResults)
+      .finally(() => setLoading(false));
+  }, [
+    filters?.artist.join(","),
+    filters?.member.join(","),
+    filters?.season.join(","),
+    filters?.class.join(","),
+    filters?.on_offline.join(","),
+    filtersActive,
+  ]);
 
+  // Debounced text search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!query.trim()) {
+      setQueryResults([]);
+      return;
+    }
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
-      const hits = await searchCollections(query);
-      setResults(hits);
-      setShowResults(true);
+      const hits = await searchByQuery(query);
+      setQueryResults(hits);
       setLoading(false);
     }, 300);
-
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [query]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowResults(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const filteredResults = useMemo(() => {
-    if (!filters) return results;
-    let r = results;
+  // Display: query takes priority over filter results; filter client-side if both active
+  const displayResults = useMemo(() => {
+    const base = query.trim() ? queryResults : filterResults;
+    if (!filters || !query.trim()) return base;
+    // When text searching, also apply structural filters client-side
+    let r = base;
     if (filters.artist.length) r = r.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
     if (filters.member.length) r = r.filter((o) => filters.member.includes(o.member));
     if (filters.season.length) r = r.filter((o) => filters.season.includes(o.season));
@@ -83,7 +115,7 @@ export function ObjektPicker({
       });
     }
     return r;
-  }, [results, filters]);
+  }, [query, queryResults, filterResults, filters]);
 
   const isSelected = (entry: ObjektEntry) =>
     selected.some((s) => s.collectionId === entry.collectionId);
@@ -92,7 +124,6 @@ export function ObjektPicker({
     if (isSelected(entry) || selected.length >= maxSelections) return;
     onSelect(entry);
     setQuery("");
-    setShowResults(false);
   }
 
   const handleMouseEnter = useCallback(
@@ -109,55 +140,54 @@ export function ObjektPicker({
     setHoverPos(null);
   }, []);
 
+  const showList = filtersActive || query.trim().length > 0;
+
   return (
     <div className="space-y-3">
-      <div ref={containerRef} className="relative">
-        <Input
-          placeholder="Search objekts... e.g. JiWoo, Atom02, 108Z"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setShowResults(true)}
-        />
+      <Input
+        placeholder="Search objekts... e.g. JiWoo, Atom02, 108Z"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
 
-        {showResults && (
-          <div className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-md bg-background shadow-lg max-h-60 overflow-y-auto">
-            {loading ? (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                Searching...
-              </div>
-            ) : filteredResults.length > 0 ? (
-              filteredResults.map((entry) => (
-                <button
-                  key={entry.collectionId}
-                  type="button"
-                  disabled={isSelected(entry)}
-                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
-                    isSelected(entry) ? "opacity-40" : ""
-                  }`}
-                  onClick={() => handleSelect(entry)}
-                  onMouseEnter={(e) => handleMouseEnter(e, entry)}
-                  onMouseLeave={handleMouseLeave}
-                >
-                  <span>
-                    <span className="text-muted-foreground">{entry.artist}</span>
-                    {" "}
-                    {entry.member}
-                    {" "}
-                    <span className="font-mono">{entry.collectionNo}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {entry.season} · {entry.class}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                No results found
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {!showList ? (
+        <div className="border rounded-md px-3 py-8 text-sm text-muted-foreground text-center">
+          Use the filters above to browse objekts
+        </div>
+      ) : (
+        <div className="border rounded-md max-h-60 overflow-y-auto">
+          {loading ? (
+            <div className="px-3 py-2 text-sm text-muted-foreground">Searching...</div>
+          ) : displayResults.length > 0 ? (
+            displayResults.map((entry) => (
+              <button
+                key={entry.collectionId}
+                type="button"
+                disabled={isSelected(entry)}
+                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
+                  isSelected(entry) ? "opacity-40" : ""
+                }`}
+                onClick={() => handleSelect(entry)}
+                onMouseEnter={(e) => handleMouseEnter(e, entry)}
+                onMouseLeave={handleMouseLeave}
+              >
+                <span>
+                  <span className="text-muted-foreground">{entry.artist}</span>
+                  {" "}
+                  {entry.member}
+                  {" "}
+                  <span className="font-mono">{entry.collectionNo}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {entry.season} · {entry.class}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-sm text-muted-foreground">No results found</div>
+          )}
+        </div>
+      )}
 
       {hoverImage && hoverPos && (
         <div
