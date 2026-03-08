@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession, getSession } from "@/lib/auth-server";
+import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import {
   tradePost,
@@ -7,7 +7,8 @@ import {
   tradePostWant,
   cosmoAccount,
 } from "@/lib/db/schema";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
+import { tradeMatchesFilters, type TradeFilters } from "@/lib/filter-utils";
 
 interface TradeItemInput {
   collectionId: string;
@@ -19,15 +20,27 @@ interface TradeItemInput {
   serial?: number;
 }
 
-// GET /api/trades — list trades with optional filters
+// GET /api/trades — list trades with filters
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const member = params.get("member");
-  const season = params.get("season");
-  const status = params.get("status") ?? "open";
+
+  // Pagination
   const page = Number(params.get("page") ?? "1");
   const limit = Math.min(Number(params.get("limit") ?? "20"), 50);
   const offset = (page - 1) * limit;
+
+  // Filters — mirroring objekt-explorer filter params
+  const filters: TradeFilters = {
+    artist: params.getAll("artist").filter(Boolean),
+    member: params.getAll("member").filter(Boolean),
+    season: params.getAll("season").filter(Boolean),
+    class: params.getAll("class").filter(Boolean),
+    on_offline: params.getAll("on_offline").filter(Boolean),
+    search: params.get("search") ?? "",
+  };
+
+  const sort = params.get("sort") ?? "newest";
+  const status = params.get("status") ?? "open";
 
   const trades = await db.query.tradePost.findMany({
     where: eq(tradePost.status, status),
@@ -43,36 +56,35 @@ export async function GET(request: NextRequest) {
         },
       },
     },
-    orderBy: [desc(tradePost.createdAt)],
-    limit,
-    offset,
+    orderBy: sort === "oldest" ? [asc(tradePost.createdAt)] : [desc(tradePost.createdAt)],
+    // Over-fetch to allow post-filter pagination
+    limit: 500,
+    offset: 0,
   });
 
-  // Filter by member/season if specified (post-query filter for simplicity)
-  let filtered = trades;
-  if (member) {
-    const m = member.toLowerCase();
-    filtered = filtered.filter(
-      (t) =>
-        t.haves.some((h) => h.member?.toLowerCase().includes(m)) ||
-        t.wants.some((w) => w.member?.toLowerCase().includes(m))
-    );
-  }
-  if (season) {
-    const s = season.toLowerCase();
-    filtered = filtered.filter(
-      (t) =>
-        t.haves.some((h) => h.season?.toLowerCase().includes(s)) ||
-        t.wants.some((w) => w.season?.toLowerCase().includes(s))
-    );
-  }
+  // Apply filters using objekt-explorer-identical logic
+  const hasAnyFilter =
+    (filters.artist?.length ?? 0) > 0 ||
+    (filters.member?.length ?? 0) > 0 ||
+    (filters.season?.length ?? 0) > 0 ||
+    (filters.class?.length ?? 0) > 0 ||
+    (filters.on_offline?.length ?? 0) > 0 ||
+    !!filters.search;
 
-  const enriched = filtered.map((t) => ({
+  const filtered = hasAnyFilter
+    ? trades.filter((t) => tradeMatchesFilters(t, filters))
+    : trades;
+
+  // Apply pagination after filtering
+  const paginated = filtered.slice(offset, offset + limit);
+  const total = filtered.length;
+
+  const enriched = paginated.map((t) => ({
     ...t,
     cosmoNickname: t.user.cosmoAccount?.nickname ?? null,
   }));
 
-  return NextResponse.json({ trades: enriched, page, limit });
+  return NextResponse.json({ trades: enriched, page, limit, total });
 }
 
 // POST /api/trades — create a new trade post

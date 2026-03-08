@@ -298,7 +298,7 @@ export default function TradeDetailPage({
                   Always verify the trader actually owns the listed objekts before trading.
                 </p>
                 <a
-                  href={`https://objekt.top/@${trade.cosmoNickname}`}
+                  href={`https://objekt.top/@${trade.cosmoNickname}?transferable=true`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
