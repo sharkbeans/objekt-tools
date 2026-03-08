@@ -93,7 +93,7 @@ export function ObjektOwnedPicker({
     }
 
     if (filters) {
-      if (filters.artist.length) result = result.filter((o) => filters.artist.includes(o.artist));
+      if (filters.artist.length) result = result.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
       if (filters.member.length) result = result.filter((o) => filters.member.includes(o.member));
       if (filters.season.length) result = result.filter((o) => filters.season.includes(o.season));
       if (filters.class.length) result = result.filter((o) => filters.class.includes(o.class));

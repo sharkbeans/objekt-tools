@@ -72,7 +72,7 @@ export function ObjektPicker({
   const filteredResults = useMemo(() => {
     if (!filters) return results;
     let r = results;
-    if (filters.artist.length) r = r.filter((o) => filters.artist.includes(o.artist));
+    if (filters.artist.length) r = r.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
     if (filters.member.length) r = r.filter((o) => filters.member.includes(o.member));
     if (filters.season.length) r = r.filter((o) => filters.season.includes(o.season));
     if (filters.class.length) r = r.filter((o) => filters.class.includes(o.class));
