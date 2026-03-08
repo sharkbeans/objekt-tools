@@ -186,6 +186,32 @@ export function getArtistForMember(member: string): ValidArtist | null {
 }
 
 // ============================================================
+// URL param parsing + filter helpers
+// ============================================================
+
+export function parseFiltersFromParams(params: URLSearchParams): TradeFilters {
+  return {
+    artist: params.getAll("artist").filter(Boolean),
+    member: params.getAll("member").filter(Boolean),
+    season: params.getAll("season").filter(Boolean),
+    class: params.getAll("class").filter(Boolean),
+    on_offline: params.getAll("on_offline").filter(Boolean),
+    search: params.get("search") ?? "",
+  };
+}
+
+export function hasAnyFilter(filters: TradeFilters): boolean {
+  return (
+    (filters.artist?.length ?? 0) > 0 ||
+    (filters.member?.length ?? 0) > 0 ||
+    (filters.season?.length ?? 0) > 0 ||
+    (filters.class?.length ?? 0) > 0 ||
+    (filters.on_offline?.length ?? 0) > 0 ||
+    !!filters.search
+  );
+}
+
+// ============================================================
 // Item-level filter
 // ============================================================
 

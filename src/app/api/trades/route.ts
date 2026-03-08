@@ -8,7 +8,7 @@ import {
   cosmoAccount,
 } from "@/lib/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
-import { tradeMatchesFilters, type TradeFilters } from "@/lib/filter-utils";
+import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
 
 interface TradeItemInput {
   collectionId: string;
@@ -29,15 +29,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Number(params.get("limit") ?? "20"), 50);
   const offset = (page - 1) * limit;
 
-  // Filters — mirroring objekt-explorer filter params
-  const filters: TradeFilters = {
-    artist: params.getAll("artist").filter(Boolean),
-    member: params.getAll("member").filter(Boolean),
-    season: params.getAll("season").filter(Boolean),
-    class: params.getAll("class").filter(Boolean),
-    on_offline: params.getAll("on_offline").filter(Boolean),
-    search: params.get("search") ?? "",
-  };
+  const filters = parseFiltersFromParams(params);
 
   const sort = params.get("sort") ?? "newest";
   const status = params.get("status") ?? "open";
@@ -62,16 +54,7 @@ export async function GET(request: NextRequest) {
     offset: 0,
   });
 
-  // Apply filters using objekt-explorer-identical logic
-  const hasAnyFilter =
-    (filters.artist?.length ?? 0) > 0 ||
-    (filters.member?.length ?? 0) > 0 ||
-    (filters.season?.length ?? 0) > 0 ||
-    (filters.class?.length ?? 0) > 0 ||
-    (filters.on_offline?.length ?? 0) > 0 ||
-    !!filters.search;
-
-  const filtered = hasAnyFilter
+  const filtered = hasAnyFilter(filters)
     ? trades.filter((t) => tradeMatchesFilters(t, filters))
     : trades;
 

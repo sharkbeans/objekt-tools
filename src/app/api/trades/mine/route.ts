@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { tradePost } from "@/lib/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
-import { tradeMatchesFilters, type TradeFilters } from "@/lib/filter-utils";
+import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
 
 export async function GET(request: NextRequest) {
   let session;
@@ -19,14 +19,7 @@ export async function GET(request: NextRequest) {
   const offset = (page - 1) * limit;
   const sort = params.get("sort") ?? "newest";
 
-  const filters: TradeFilters = {
-    artist: params.getAll("artist").filter(Boolean),
-    member: params.getAll("member").filter(Boolean),
-    season: params.getAll("season").filter(Boolean),
-    class: params.getAll("class").filter(Boolean),
-    on_offline: params.getAll("on_offline").filter(Boolean),
-    search: params.get("search") ?? "",
-  };
+  const filters = parseFiltersFromParams(params);
 
   const trades = await db.query.tradePost.findMany({
     where: eq(tradePost.userId, session.user.id),
@@ -45,15 +38,7 @@ export async function GET(request: NextRequest) {
     orderBy: sort === "oldest" ? [asc(tradePost.createdAt)] : [desc(tradePost.createdAt)],
   });
 
-  const hasAnyFilter =
-    (filters.artist?.length ?? 0) > 0 ||
-    (filters.member?.length ?? 0) > 0 ||
-    (filters.season?.length ?? 0) > 0 ||
-    (filters.class?.length ?? 0) > 0 ||
-    (filters.on_offline?.length ?? 0) > 0 ||
-    !!filters.search;
-
-  const filtered = hasAnyFilter
+  const filtered = hasAnyFilter(filters)
     ? trades.filter((t) => tradeMatchesFilters(t, filters))
     : trades;
 
