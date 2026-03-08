@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
@@ -92,51 +93,62 @@ export default function NewTradePage() {
         </p>
       </div>
 
-      <TradeFilters filters={filters} onChange={setFilters} showSort={false} />
+      <TradeFilters filters={filters} onChange={setFilters} showSort={false} showFilterMode={false} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">What do you have? ({haves.length})</CardTitle>
-          <CardDescription>
-            Select objekts you want to trade away
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ObjektOwnedPicker
-            selected={haves}
-            onSelect={(o) => setHaves((prev) => [...prev, o])}
-            onDeselect={(o) =>
-              setHaves((prev) =>
-                prev.filter((h) =>
-                  o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId,
-                ),
-              )
-            }
-            filters={filters}
-          />
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="have">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="have">Have ({haves.length})</TabsTrigger>
+          <TabsTrigger value="want">Want ({wants.length})</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">What do you want? ({wants.length})</CardTitle>
-          <CardDescription>
-            Select objekts you&apos;re looking for
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ObjektPicker
-            selected={wants}
-            onSelect={(o) => setWants((prev) => [...prev, o])}
-            onDeselect={(o) =>
-              setWants((prev) =>
-                prev.filter((w) => w.collectionId !== o.collectionId),
-              )
-            }
-            filters={filters}
-          />
-        </CardContent>
-      </Card>
+        <TabsContent value="have">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">What do you have?</CardTitle>
+              <CardDescription>
+                Select objekts you want to trade away
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ObjektOwnedPicker
+                selected={haves}
+                onSelect={(o) => setHaves((prev) => [...prev, o])}
+                onDeselect={(o) =>
+                  setHaves((prev) =>
+                    prev.filter((h) =>
+                      o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId,
+                    ),
+                  )
+                }
+                filters={filters}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="want">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">What do you want?</CardTitle>
+              <CardDescription>
+                Select objekts you&apos;re looking for
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ObjektPicker
+                selected={wants}
+                onSelect={(o) => setWants((prev) => [...prev, o])}
+                onDeselect={(o) =>
+                  setWants((prev) =>
+                    prev.filter((w) => w.collectionId !== o.collectionId),
+                  )
+                }
+                filters={filters}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Card>
         <CardContent className="pt-6 space-y-4">
