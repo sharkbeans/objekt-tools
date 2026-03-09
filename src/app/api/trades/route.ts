@@ -7,7 +7,7 @@ import {
   tradePostWant,
   cosmoAccount,
 } from "@/lib/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, count } from "drizzle-orm";
 import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
 
 interface TradeItemInput {
@@ -26,13 +26,16 @@ export async function GET(request: NextRequest) {
 
   // Pagination
   const page = Number(params.get("page") ?? "1");
-  const limit = Math.min(Number(params.get("limit") ?? "20"), 50);
+  const limit = Math.min(Number(params.get("limit") ?? "12"), 50);
   const offset = (page - 1) * limit;
 
   const filters = parseFiltersFromParams(params);
 
   const sort = params.get("sort") ?? "newest";
   const status = params.get("status") ?? "open";
+
+  const filterMode = (params.get("filter_mode") ?? "haves") as "haves" | "wants" | "both";
+  const hasFilters = hasAnyFilter(filters);
 
   const trades = await db.query.tradePost.findMany({
     where: eq(tradePost.status, status),
@@ -49,20 +52,23 @@ export async function GET(request: NextRequest) {
       },
     },
     orderBy: sort === "oldest" ? [asc(tradePost.createdAt)] : [desc(tradePost.createdAt)],
-    // Over-fetch to allow post-filter pagination
-    limit: 500,
-    offset: 0,
+    // When no filters, use DB-level pagination; otherwise over-fetch for post-filter pagination
+    ...(hasFilters ? { limit: 500, offset: 0 } : { limit, offset }),
   });
 
-  const filterMode = (params.get("filter_mode") ?? "haves") as "haves" | "wants" | "both";
+  let paginated: typeof trades;
+  let total: number;
 
-  const filtered = hasAnyFilter(filters)
-    ? trades.filter((t) => tradeMatchesFilters(t, filters, filterMode))
-    : trades;
-
-  // Apply pagination after filtering
-  const paginated = filtered.slice(offset, offset + limit);
-  const total = filtered.length;
+  if (hasFilters) {
+    const filtered = trades.filter((t) => tradeMatchesFilters(t, filters, filterMode));
+    paginated = filtered.slice(offset, offset + limit);
+    total = filtered.length;
+  } else {
+    paginated = trades;
+    // For unfiltered queries, get count with a lightweight SQL count
+    const [{ value }] = await db.select({ value: count() }).from(tradePost).where(eq(tradePost.status, status));
+    total = value;
+  }
 
   const enriched = paginated.map((t) => ({
     ...t,

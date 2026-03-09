@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TradeCard } from "@/components/trades/trade-card";
+import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import { XIcon, AlertTriangleIcon } from "lucide-react";
 
@@ -129,7 +130,7 @@ export default function MyTradesPage() {
 
   const trades = data?.trades ?? [];
   const total: number = data?.total ?? 0;
-  const limit: number = data?.limit ?? 20;
+  const limit: number = data?.limit ?? 12;
   const totalPages = Math.ceil(total / limit);
 
   const tradeIds: number[] = trades.map((t: any) => t.id);
@@ -184,29 +185,13 @@ export default function MyTradesPage() {
               <TradeCard key={trade.id} trade={trade} matchCount={matchCounts?.[trade.id]} />
             ))}
           </div>
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2 pt-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-accent"
-              >
-                Previous
-              </button>
-              <span className="px-3 py-1.5 text-sm text-muted-foreground">
-                {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-accent"
-              >
-                Next
-              </button>
-            </div>
-          )}
+          <TradePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            limit={limit}
+            onPageChange={setPage}
+          />
         </>
       ) : (
         <Card>

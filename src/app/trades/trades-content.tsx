@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { TradeCard } from "@/components/trades/trade-card";
+import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 
 function filtersFromSearchParams(params: URLSearchParams): TradeFilterState {
@@ -55,7 +56,7 @@ export function TradesContent() {
 
   const trades = data?.trades ?? [];
   const total: number = data?.total ?? 0;
-  const limit: number = data?.limit ?? 20;
+  const limit: number = data?.limit ?? 12;
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -71,29 +72,13 @@ export function TradesContent() {
               <TradeCard key={trade.id} trade={trade} />
             ))}
           </div>
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2 pt-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-accent"
-              >
-                Previous
-              </button>
-              <span className="px-3 py-1.5 text-sm text-muted-foreground">
-                {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-accent"
-              >
-                Next
-              </button>
-            </div>
-          )}
+          <TradePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            limit={limit}
+            onPageChange={setPage}
+          />
         </>
       ) : (
         <div className="text-center py-12 text-muted-foreground">
