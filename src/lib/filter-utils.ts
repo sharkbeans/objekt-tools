@@ -118,7 +118,7 @@ function toSeasonKey(seasonCode: string, seasonNumber: number) {
   return String(seasonNumber).padStart(2, "0") + seasonCode;
 }
 
-function searchFilter(keyword: string, item: TradeFilterItem, tags: string[]): boolean {
+export function searchFilter(keyword: string, item: TradeFilterItem, tags: string[]): boolean {
   // Serial search (#1-20) — only applies to have items that have a serial
   if (keyword.startsWith("#")) {
     if (item.serial == null) return false;

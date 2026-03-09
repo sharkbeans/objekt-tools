@@ -4,6 +4,7 @@ import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "./objekt-owned-picker";
+import { shortformMembers } from "@/lib/filters";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   if (!filters) return false;
@@ -29,8 +30,14 @@ async function fetchByFilters(filters: ObjektStructuralFilters): Promise<ObjektE
   return data.results ?? [];
 }
 
+function resolveShortform(query: string): string {
+  const resolved = shortformMembers[query.toLowerCase()];
+  return resolved ?? query;
+}
+
 async function searchByQuery(query: string): Promise<ObjektEntry[]> {
-  const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(query)}`);
+  const resolved = resolveShortform(query.trim());
+  const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(resolved)}`);
   if (!res.ok) return [];
   const data = await res.json();
   return data.results ?? [];

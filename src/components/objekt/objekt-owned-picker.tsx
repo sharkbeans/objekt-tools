@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { makeTradeItemTags, searchFilter } from "@/lib/filter-utils";
 
 type OwnedEntry = ObjektEntry & { serial: number };
 
@@ -80,22 +81,30 @@ export function ObjektOwnedPicker({
   const filtered = useMemo(() => {
     let result = owned;
 
-    const qs = [query.trim(), filters?.search?.trim()]
+    const searchText = [query.trim(), filters?.search?.trim()]
       .filter(Boolean)
-      .map((s) => s!.toLowerCase());
+      .join(" ")
+      .toLowerCase();
 
-    if (qs.length) {
-      result = result.filter((o) =>
-        qs.every(
-          (q) =>
-            o.member.toLowerCase().includes(q) ||
-            o.collectionId.toLowerCase().includes(q) ||
-            o.collectionNo.toLowerCase().includes(q) ||
-            o.season.toLowerCase().includes(q) ||
-            o.class.toLowerCase().includes(q) ||
-            o.artist.toLowerCase().includes(q),
-        ),
-      );
+    if (searchText) {
+      // Parse with the same OR (comma) / AND (space) / NOT (!) grammar as the trades page
+      const queries = searchText
+        .split(",")
+        .map((group) =>
+          group.trim().split(" ").map((t) => t.trim()).filter(Boolean),
+        )
+        .filter((group) => group.length > 0);
+
+      result = result.filter((o) => {
+        const tags = makeTradeItemTags(o);
+        return queries.some((group) =>
+          group.every((term) =>
+            term.startsWith("!")
+              ? !searchFilter(term.slice(1), o, tags)
+              : searchFilter(term, o, tags),
+          ),
+        );
+      });
     }
 
     if (filters) {
