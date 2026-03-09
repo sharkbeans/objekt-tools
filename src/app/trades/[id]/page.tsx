@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { TradeCard } from "@/components/trades/trade-card";
+import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -138,6 +139,10 @@ export default function TradeDetailPage({
   const { data: session } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [initiateTarget, setInitiateTarget] = useState<{
+    matchedTradePostId: number;
+    theirHaves: TradeItem[];
+  } | null>(null);
 
   const { data: trade, isLoading: tradeLoading } = useQuery({
     queryKey: ["trade", id],
@@ -328,7 +333,23 @@ export default function TradeDetailPage({
         ) : matchData?.matches?.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {matchData.matches.map((match: any) => (
-              <TradeCard key={match.id} trade={match} />
+              <div key={match.id} className="flex flex-col gap-2">
+                <TradeCard trade={match} />
+                {isOwner && trade.status === "open" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setInitiateTarget({
+                        matchedTradePostId: match.id,
+                        theirHaves: match.haves,
+                      })
+                    }
+                  >
+                    Initiate Trade
+                  </Button>
+                )}
+              </div>
             ))}
           </div>
         ) : (
@@ -339,6 +360,17 @@ export default function TradeDetailPage({
           </Card>
         )}
       </div>
+
+      {initiateTarget && (
+        <InitiateTradeDialog
+          open={!!initiateTarget}
+          onOpenChange={(open) => { if (!open) setInitiateTarget(null); }}
+          myTradePostId={Number(id)}
+          myHaves={trade?.haves ?? []}
+          matchedTradePostId={initiateTarget.matchedTradePostId}
+          theirHaves={initiateTarget.theirHaves}
+        />
+      )}
     </div>
   );
 }

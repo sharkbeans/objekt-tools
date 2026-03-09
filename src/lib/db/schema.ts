@@ -147,6 +147,55 @@ export const cosmoToken = pgTable("cosmo_token", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const activeTrade = pgTable("active_trade", {
+  id: serial("id").primaryKey(),
+  tradePostId: integer("trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
+  // The trade post of the other party (the match)
+  matchedTradePostId: integer("matched_trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
+  // initiator = user who clicked "Initiate Trade"; recipient = user who owns the matched trade post
+  initiatorUserId: text("initiator_user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  recipientUserId: text("recipient_user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending").$type<
+    "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed"
+  >(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"),
+}, (t) => [
+  index("active_trade_initiator_idx").on(t.initiatorUserId),
+  index("active_trade_recipient_idx").on(t.recipientUserId),
+  index("active_trade_status_idx").on(t.status),
+]);
+
+// One row per side of the trade (initiator side + recipient side)
+export const activeTradeSide = pgTable("active_trade_side", {
+  id: serial("id").primaryKey(),
+  activeTradeId: integer("active_trade_id")
+    .notNull()
+    .references(() => activeTrade.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  address: text("address").notNull(),
+  recipientAddress: text("recipient_address").notNull(),
+  objektId: text("objekt_id").notNull(),
+  collectionId: text("collection_id").notNull(),
+  collectionNo: text("collection_no"),
+  member: text("member"),
+  serial: integer("serial"),
+  thumbnailUrl: text("thumbnail_url"),
+  status: text("status").notNull().default("pending").$type<"pending" | "sent" | "confirmed">(),
+  transferHash: text("transfer_hash"),
+  detectedAt: timestamp("detected_at"),
+}, (t) => [
+  index("active_trade_side_trade_idx").on(t.activeTradeId),
+  index("active_trade_side_user_idx").on(t.userId),
+]);
+
 // ============================================================
 // Relations
 // ============================================================
@@ -193,6 +242,41 @@ export const tradePostWantRelations = relations(tradePostWant, ({ one }) => ({
 export const tradeNotificationRelations = relations(tradeNotification, ({ one }) => ({
   user: one(user, {
     fields: [tradeNotification.userId],
+    references: [user.id],
+  }),
+}));
+
+export const activeTradeRelations = relations(activeTrade, ({ one, many }) => ({
+  tradePost: one(tradePost, {
+    fields: [activeTrade.tradePostId],
+    references: [tradePost.id],
+    relationName: "initiatorPost",
+  }),
+  matchedTradePost: one(tradePost, {
+    fields: [activeTrade.matchedTradePostId],
+    references: [tradePost.id],
+    relationName: "matchedPost",
+  }),
+  initiator: one(user, {
+    fields: [activeTrade.initiatorUserId],
+    references: [user.id],
+    relationName: "initiator",
+  }),
+  recipient: one(user, {
+    fields: [activeTrade.recipientUserId],
+    references: [user.id],
+    relationName: "recipient",
+  }),
+  sides: many(activeTradeSide),
+}));
+
+export const activeTradeSideRelations = relations(activeTradeSide, ({ one }) => ({
+  activeTrade: one(activeTrade, {
+    fields: [activeTradeSide.activeTradeId],
+    references: [activeTrade.id],
+  }),
+  user: one(user, {
+    fields: [activeTradeSide.userId],
     references: [user.id],
   }),
 }));
