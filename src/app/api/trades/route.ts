@@ -18,6 +18,7 @@ interface TradeItemInput {
   class?: string;
   thumbnailUrl?: string;
   serial?: number;
+  objektId?: string;
 }
 
 // GET /api/trades — list trades with filters
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
       class: h.class ?? null,
       thumbnailUrl: h.thumbnailUrl ?? null,
       serial: h.serial ?? null,
+      objektId: h.objektId ?? null,
     }))
   );
 

@@ -33,6 +33,7 @@ export async function GET() {
       class: collections.class,
       thumbnailImage: collections.thumbnailImage,
       serial: objekts.serial,
+      objektId: objekts.id,
     })
     .from(objekts)
     .innerJoin(collections, eq(objekts.collectionId, collections.id))
@@ -54,6 +55,7 @@ export async function GET() {
     class: r.class,
     thumbnailImage: r.thumbnailImage,
     serial: r.serial,
+    objektId: r.objektId,
   }));
 
   return NextResponse.json({ results });

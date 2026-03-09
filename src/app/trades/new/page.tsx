@@ -59,6 +59,7 @@ export default function NewTradePage() {
             season: o.season,
             class: o.class,
             serial: o.serial,
+            objektId: o.objektId,
           })),
           wants: wants.map((o) => ({
             collectionId: o.collectionId,

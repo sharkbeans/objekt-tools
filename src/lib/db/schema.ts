@@ -105,6 +105,7 @@ export const tradePostHave = pgTable("trade_post_have", {
   class: text("class"),
   thumbnailUrl: text("thumbnail_url"),
   serial: integer("serial"),
+  objektId: text("objekt_id"),
 }, (t) => [
   index("trade_post_have_trade_post_id_idx").on(t.tradePostId),
   index("trade_post_have_collection_id_idx").on(t.collectionId),

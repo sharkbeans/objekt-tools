@@ -27,4 +27,5 @@ export interface ObjektEntry {
   class: string;
   thumbnailImage?: string;
   serial?: number;
+  objektId?: string;
 }

@@ -15,6 +15,20 @@
       "when": 1741344000000,
       "tag": "0001_add_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1741344000001,
+      "tag": "0002_add_trade_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1741344000002,
+      "tag": "0003_add_objekt_id_to_have",
+      "breakpoints": true
     }
   ]
 }

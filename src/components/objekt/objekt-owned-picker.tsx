@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { makeTradeItemTags, searchFilter } from "@/lib/filter-utils";
 
-type OwnedEntry = ObjektEntry & { serial: number };
+type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
 
 const thumbnailCache = new Map<string, string | null>();
 
@@ -136,6 +136,7 @@ export function ObjektOwnedPicker({
       season: entry.season,
       class: entry.class,
       serial: entry.serial,
+      objektId: entry.objektId,
     });
   }
 
