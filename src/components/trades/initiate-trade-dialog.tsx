@@ -143,11 +143,7 @@ export function InitiateTradeDialog({
         return;
       }
 
-      if (data.autoAccepted) {
-        toast.success("The other user already initiated this trade — auto-accepted! You can now send your objekt.");
-      } else {
-        toast.success("Trade initiated! Waiting for the other user to accept.");
-      }
+      toast.success("Trade initiated! Waiting for the other user to accept.");
       onOpenChange(false);
       router.push(`/active-trades/${data.id}`);
     } finally {

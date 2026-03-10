@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
+import { Badge } from "@/components/ui/badge";
 import { XIcon, AlertTriangleIcon } from "lucide-react";
 
 function buildParams(filters: TradeFilterState, page: number) {
@@ -80,6 +81,66 @@ function TradeNotifications() {
           Dismiss all
         </button>
       )}
+    </div>
+  );
+}
+
+type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed";
+
+const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  pending: "secondary",
+  accepted: "default",
+  partial: "default",
+  completed: "default",
+  cancelled: "destructive",
+  disputed: "destructive",
+};
+
+function ActiveTrades({ userId }: { userId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["my-active-trades"],
+    queryFn: async () => {
+      const res = await fetch("/api/active-trades");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+  });
+
+  const trades = data?.trades ?? [];
+  if (isLoading || trades.length === 0) return null;
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold mb-3">Active Trades</h2>
+      <div className="flex flex-col gap-2">
+        {trades.map((trade: any) => {
+          const isRecipient = trade.recipientUserId === userId;
+          const otherUser = isRecipient ? trade.initiator : trade.recipient;
+          const needsAccept = isRecipient && trade.status === "pending";
+
+          return (
+            <Link
+              key={trade.id}
+              href={`/active-trades/${trade.id}`}
+              className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Badge variant={statusVariant[trade.status as TradeStatus]} className="capitalize shrink-0">
+                  {trade.status}
+                </Badge>
+                <span className="text-sm truncate">
+                  Trade #{trade.id} with {otherUser.name}
+                </span>
+              </div>
+              {needsAccept && (
+                <Badge variant="default" className="shrink-0">
+                  Action Required
+                </Badge>
+              )}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -171,6 +232,8 @@ export default function MyTradesPage() {
       )}
 
       <TradeNotifications />
+
+      {session?.user?.id && <ActiveTrades userId={session.user.id} />}
 
       <TradeFilters filters={filters} onChange={handleFiltersChange} />
 
