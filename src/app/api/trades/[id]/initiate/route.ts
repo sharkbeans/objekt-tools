@@ -111,6 +111,27 @@ export async function POST(
     );
   }
 
+  // Check if the other user already initiated a trade in the reverse direction.
+  // If so, auto-accept it instead of creating a duplicate.
+  const reverseExisting = await db.query.activeTrade.findFirst({
+    where: and(
+      eq(activeTrade.tradePostId, matchedTradePostId),
+      eq(activeTrade.matchedTradePostId, tradePostId),
+      eq(activeTrade.initiatorUserId, matchedPost.userId),
+      eq(activeTrade.recipientUserId, session.user.id),
+      eq(activeTrade.status, "pending"),
+    ),
+  });
+
+  if (reverseExisting) {
+    await db
+      .update(activeTrade)
+      .set({ status: "accepted", updatedAt: new Date() })
+      .where(eq(activeTrade.id, reverseExisting.id));
+
+    return NextResponse.json({ id: reverseExisting.id, autoAccepted: true }, { status: 200 });
+  }
+
   // Create the active trade and both sides in one transaction
   const result = await db.transaction(async (tx) => {
     const [trade] = await tx
