@@ -127,33 +127,48 @@ const sideStatusVariant: Record<SideStatus, "default" | "secondary" | "outline">
 };
 
 function SideCard({ side, label }: { side: TradeSide; label: string }) {
+  const profileUrl = side.user.cosmoNickname
+    ? `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`
+    : null;
   return (
     <div className="flex-1 min-w-0 space-y-2">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <div className="rounded-md border p-3 space-y-2">
         <div className="flex items-center gap-2">
           {side.thumbnailUrl && (
-            <a
-              href={`https://objekt.top/objekts/${side.objektId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            profileUrl ? (
+              <a
+                href={profileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img
+                  src={side.thumbnailUrl}
+                  alt={side.collectionId}
+                  className="w-14 h-auto rounded hover:opacity-80 transition-opacity"
+                />
+              </a>
+            ) : (
               <img
                 src={side.thumbnailUrl}
                 alt={side.collectionId}
-                className="w-14 h-auto rounded hover:opacity-80 transition-opacity"
+                className="w-14 h-auto rounded"
               />
-            </a>
+            )
           )}
           <div>
-            <a
-              href={`https://objekt.top/objekts/${side.objektId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium hover:underline"
-            >
-              {formatLabel(side)}
-            </a>
+            {profileUrl ? (
+              <a
+                href={profileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium hover:underline"
+              >
+                {formatLabel(side)}
+              </a>
+            ) : (
+              <span className="text-sm font-medium">{formatLabel(side)}</span>
+            )}
             <p className="text-xs text-muted-foreground">
               From: {side.user.cosmoNickname ?? side.user.name}
             </p>
@@ -289,7 +304,10 @@ export default function ActiveTradePage({
               <CardDescription className="mt-1">
                 {trade.initiator.cosmoNickname ?? trade.initiator.name} ↔ {trade.recipient.cosmoNickname ?? trade.recipient.name}
                 {" · "}
-                {new Date(trade.createdAt).toLocaleDateString()}
+                {new Date(trade.createdAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
+                {" "}
+                {new Date(trade.createdAt).toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit" })}
+                {" GMT"}
               </CardDescription>
             </div>
             {isParticipant && (

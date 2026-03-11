@@ -6,7 +6,6 @@ import { useSession } from "@/lib/auth-client";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,8 +13,37 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { TradeCard } from "@/components/trades/trade-card";
+
+type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed";
+
+const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  pending: "secondary",
+  accepted: "default",
+  partial: "default",
+  completed: "default",
+  cancelled: "destructive",
+  disputed: "destructive",
+};
+
+interface TradeHistoryEntry {
+  id: number;
+  status: TradeStatus;
+  createdAt: string;
+  updatedAt: string;
+  initiatorUserId: string;
+  recipientUserId: string;
+  initiator: { id: string; name: string; cosmoNickname?: string | null };
+  recipient: { id: string; name: string; cosmoNickname?: string | null };
+  sides: {
+    id: number;
+    userId: string;
+    thumbnailUrl?: string | null;
+    collectionNo?: string | null;
+    member?: string | null;
+    collectionId: string;
+    serial?: number | null;
+  }[];
+}
 
 export default function ProfilePage() {
   const { data: session } = useSession();
@@ -25,16 +53,33 @@ export default function ProfilePage() {
     if (session === null) router.push("/sign-in");
   }, [session, router]);
 
-  const { data: trades } = useQuery({
-    queryKey: ["my-trades"],
+  const { data: activeData } = useQuery({
+    queryKey: ["my-active-trades"],
     queryFn: async () => {
-      const res = await fetch("/api/trades/mine");
+      const res = await fetch("/api/active-trades");
+      return res.json();
+    },
+    enabled: !!session,
+  });
+
+  const { data: historyData } = useQuery({
+    queryKey: ["active-trades-history"],
+    queryFn: async () => {
+      const res = await fetch("/api/active-trades/history");
       return res.json();
     },
     enabled: !!session,
   });
 
   if (!session) return null;
+
+  const activeTrades: TradeHistoryEntry[] = activeData?.trades ?? [];
+  const historyTrades: TradeHistoryEntry[] = historyData?.trades ?? [];
+  const allTrades = [...activeTrades, ...historyTrades].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+
+  const userId = session.user?.id;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -48,32 +93,66 @@ export default function ProfilePage() {
             <p className="text-sm font-medium text-muted-foreground mb-1">
               Cosmo Account
             </p>
-            {/* We'll fetch this from a dedicated endpoint */}
             <CosmoStatus />
           </div>
         </CardContent>
       </Card>
 
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">My Trades</h2>
-          <Button asChild size="sm">
-            <Link href="/trades/new">New Trade</Link>
-          </Button>
-        </div>
-
-        {trades?.trades?.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {trades.trades.map((trade: any) => (
-              <TradeCard key={trade.id} trade={trade} />
-            ))}
-          </div>
-        ) : (
+        <h2 className="text-xl font-bold mb-4">Trade History</h2>
+        {allTrades.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              You haven&apos;t posted any trades yet.
+              No trades yet.
             </CardContent>
           </Card>
+        ) : (
+          <div className="rounded-md border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Trade</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">With</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allTrades.map((trade) => {
+                  const isRecipient = trade.recipientUserId === userId;
+                  const otherUser = isRecipient ? trade.initiator : trade.recipient;
+                  const thumbnails = trade.sides.filter((s) => s.thumbnailUrl).slice(0, 2);
+                  return (
+                    <tr key={trade.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2">
+                        <Link href={`/active-trades/${trade.id}`} className="hover:underline font-medium">
+                          #{trade.id}
+                        </Link>
+                        {thumbnails.length > 0 && (
+                          <span className="inline-flex gap-1 ml-2 align-middle">
+                            {thumbnails.map((s) => (
+                              <img key={s.id} src={s.thumbnailUrl!} alt={s.collectionId} className="w-6 h-auto rounded inline-block" />
+                            ))}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {otherUser.cosmoNickname ?? otherUser.name}
+                      </td>
+                      <td className="px-4 py-2">
+                        <Badge variant={statusVariant[trade.status]} className="capitalize text-xs">
+                          {trade.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">
+                        {new Date(trade.updatedAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

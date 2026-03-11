@@ -57,6 +57,14 @@ export function Navbar() {
             )}
             {session && (
               <Link
+                href="/trades/history"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Trade History
+              </Link>
+            )}
+            {session && (
+              <Link
                 href="/trades/new"
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
