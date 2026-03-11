@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +15,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+function maskEmail(email: string): string {
+  const atIndex = email.indexOf("@");
+  if (atIndex < 2) return email;
+  const local = email.slice(0, atIndex);
+  const domain = email.slice(atIndex + 1);
+  const dotIndex = domain.lastIndexOf(".");
+  const tld = dotIndex !== -1 ? domain.slice(dotIndex) : "";
+  return local[0] + "*".repeat(local.length - 1) + tld;
+}
 
 type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed";
 
@@ -49,6 +60,7 @@ interface TradeHistoryEntry {
 export default function ProfilePage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const [emailVisible, setEmailVisible] = useState(false);
 
   useEffect(() => {
     if (session === null) router.push("/sign-in");
@@ -87,7 +99,12 @@ export default function ProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>{session.user.name}</CardTitle>
-          <CardDescription>{session.user.email}</CardDescription>
+          <CardDescription className="flex items-center gap-1.5">
+            {emailVisible ? session.user.email : maskEmail(session.user.email)}
+            <button onClick={() => setEmailVisible((v) => !v)} className="text-muted-foreground hover:text-foreground transition-colors">
+              {emailVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
