@@ -9,6 +9,7 @@ import {
   CardFooter,
   CardHeader,
 } from "@/components/ui/card";
+import { membersByArtist } from "@/lib/filters";
 
 interface TradeItem {
   id: number;
@@ -20,14 +21,29 @@ interface TradeItem {
   serial?: number | null;
 }
 ``
-function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; serial?: number | null }, showSerial?: boolean) {
+function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; season?: string | null; serial?: number | null }, showSerial?: boolean) {
   const name = item.collectionNo && item.member
-    ? `${item.member} ${item.collectionNo}`
+    ? [item.season, item.member, item.collectionNo].filter(Boolean).join(" ")
     : item.collectionId;
   const serial = showSerial && item.serial != null
     ? ` #${String(item.serial).padStart(5, "0")}`
-    : "";``
+    : "";
   return { name, serial };
+}
+
+function buildObjektTopUrl(item: TradeItem, cosmoNickname: string | null | undefined, showSerial?: boolean): string {
+  const parts: string[] = [];
+  if (item.member) {
+    const artist = Object.entries(membersByArtist).find(([, members]) => members.includes(item.member!))?.[0];
+    if (artist) parts.push(artist);
+  }
+  if (item.season) parts.push(item.season);
+  if (item.member) parts.push(item.member);
+  if (item.collectionNo) parts.push(item.collectionNo);
+  if (showSerial && item.serial != null) parts.push(`#${item.serial}`);
+  const search = parts.join(" ");
+  const basePath = cosmoNickname ? `/@${cosmoNickname}` : "";
+  return `https://objekt.top${basePath}?${new URLSearchParams({ search }).toString()}`;
 }
 
 interface TradeCardProps {
@@ -46,7 +62,7 @@ interface TradeCardProps {
 
 const imageCache = new Map<string, string | null>();
 
-function ObjektLabel({ item, showSerial }: { item: TradeItem; showSerial?: boolean }) {
+function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; showSerial?: boolean; cosmoNickname?: string | null }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [show, setShow] = useState(false);
   const fetchedRef = useRef(false);
@@ -90,7 +106,7 @@ function ObjektLabel({ item, showSerial }: { item: TradeItem; showSerial?: boole
         <span className="text-muted-foreground ml-1">{label.serial}</span>
       )}
       <a
-        href={`https://objekt.top/objekts/${item.collectionId}`}
+        href={buildObjektTopUrl(item, cosmoNickname, showSerial)}
         target="_blank"
         rel="noopener noreferrer"
         className="text-muted-foreground hover:text-foreground"
@@ -114,11 +130,11 @@ function ObjektLabel({ item, showSerial }: { item: TradeItem; showSerial?: boole
   );
 }
 
-function ObjektLabels({ items, showSerial }: { items: TradeItem[]; showSerial?: boolean }) {
+function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]; showSerial?: boolean; cosmoNickname?: string | null }) {
   return (
     <div className="flex flex-col gap-0.5">
       {items.map((item) => (
-        <ObjektLabel key={item.id} item={item} showSerial={showSerial} />
+        <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />
       ))}
     </div>
   );
@@ -156,7 +172,7 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
             <p className="text-xs text-muted-foreground mb-1 font-medium">
               HAVE
             </p>
-            <ObjektLabels items={trade.haves} showSerial />
+            <ObjektLabels items={trade.haves} showSerial cosmoNickname={trade.cosmoNickname} />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1 font-medium">
