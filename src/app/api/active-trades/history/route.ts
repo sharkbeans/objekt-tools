@@ -1,14 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { or, eq, and, desc, inArray } from "drizzle-orm";
 
-// GET /api/active-trades/[id]
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// GET /api/active-trades/history — list completed/cancelled/disputed trades for current user
+export async function GET() {
   let session;
   try {
     session = await requireSession();
@@ -16,11 +13,14 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const tradeId = Number(id);
-
-  const trade = await db.query.activeTrade.findFirst({
-    where: eq(activeTrade.id, tradeId),
+  const trades = await db.query.activeTrade.findMany({
+    where: and(
+      or(
+        eq(activeTrade.initiatorUserId, session.user.id),
+        eq(activeTrade.recipientUserId, session.user.id),
+      ),
+      inArray(activeTrade.status, ["completed", "cancelled", "disputed"]),
+    ),
     with: {
       sides: {
         with: {
@@ -39,33 +39,22 @@ export async function GET(
         with: { cosmoAccount: { columns: { nickname: true } } },
       },
     },
+    orderBy: [desc(activeTrade.updatedAt)],
   });
 
-  if (!trade) {
-    return NextResponse.json({ error: "Trade not found" }, { status: 404 });
-  }
-
-  // Only participants can view
-  if (
-    trade.initiatorUserId !== session.user.id &&
-    trade.recipientUserId !== session.user.id
-  ) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const mapped = {
-    ...trade,
+  const mapped = trades.map((t) => ({
+    ...t,
     initiator: {
-      ...trade.initiator,
-      cosmoNickname: trade.initiator.cosmoAccount?.nickname ?? null,
+      ...t.initiator,
+      cosmoNickname: t.initiator.cosmoAccount?.nickname ?? null,
       cosmoAccount: undefined,
     },
     recipient: {
-      ...trade.recipient,
-      cosmoNickname: trade.recipient.cosmoAccount?.nickname ?? null,
+      ...t.recipient,
+      cosmoNickname: t.recipient.cosmoAccount?.nickname ?? null,
       cosmoAccount: undefined,
     },
-    sides: trade.sides.map((s) => ({
+    sides: t.sides.map((s) => ({
       ...s,
       user: {
         ...s.user,
@@ -73,7 +62,7 @@ export async function GET(
         cosmoAccount: undefined,
       },
     })),
-  };
+  }));
 
-  return NextResponse.json(mapped);
+  return NextResponse.json({ trades: mapped });
 }

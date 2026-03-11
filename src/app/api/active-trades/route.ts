@@ -23,13 +23,47 @@ export async function GET() {
     ),
     with: {
       sides: {
-        with: { user: { columns: { id: true, name: true, image: true } } },
+        with: {
+          user: {
+            columns: { id: true, name: true, image: true },
+            with: { cosmoAccount: { columns: { nickname: true } } },
+          },
+        },
       },
-      initiator: { columns: { id: true, name: true, image: true } },
-      recipient: { columns: { id: true, name: true, image: true } },
+      initiator: {
+        columns: { id: true, name: true, image: true },
+        with: { cosmoAccount: { columns: { nickname: true } } },
+      },
+      recipient: {
+        columns: { id: true, name: true, image: true },
+        with: { cosmoAccount: { columns: { nickname: true } } },
+      },
     },
     orderBy: [desc(activeTrade.updatedAt)],
   });
 
-  return NextResponse.json({ trades });
+  // Flatten cosmo nicknames into user objects for convenience
+  const mapped = trades.map((t) => ({
+    ...t,
+    initiator: {
+      ...t.initiator,
+      cosmoNickname: t.initiator.cosmoAccount?.nickname ?? null,
+      cosmoAccount: undefined,
+    },
+    recipient: {
+      ...t.recipient,
+      cosmoNickname: t.recipient.cosmoAccount?.nickname ?? null,
+      cosmoAccount: undefined,
+    },
+    sides: t.sides.map((s) => ({
+      ...s,
+      user: {
+        ...s.user,
+        cosmoNickname: s.user.cosmoAccount?.nickname ?? null,
+        cosmoAccount: undefined,
+      },
+    })),
+  }));
+
+  return NextResponse.json({ trades: mapped });
 }

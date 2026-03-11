@@ -39,7 +39,7 @@ interface TradeSide {
   thumbnailUrl?: string | null;
   status: SideStatus;
   detectedAt?: string | null;
-  user: { id: string; name: string; image?: string | null };
+  user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
 }
 
 interface ActiveTrade {
@@ -51,8 +51,8 @@ interface ActiveTrade {
   matchedTradePostId?: number | null;
   initiatorUserId: string;
   recipientUserId: string;
-  initiator: { id: string; name: string; image?: string | null };
-  recipient: { id: string; name: string; image?: string | null };
+  initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
+  recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
   sides: TradeSide[];
 }
 
@@ -133,16 +133,29 @@ function SideCard({ side, label }: { side: TradeSide; label: string }) {
       <div className="rounded-md border p-3 space-y-2">
         <div className="flex items-center gap-2">
           {side.thumbnailUrl && (
-            <img
-              src={side.thumbnailUrl}
-              alt={side.collectionId}
-              className="w-14 h-auto rounded"
-            />
+            <a
+              href={`https://objekt.top/objekts/${side.objektId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                src={side.thumbnailUrl}
+                alt={side.collectionId}
+                className="w-14 h-auto rounded hover:opacity-80 transition-opacity"
+              />
+            </a>
           )}
           <div>
-            <p className="text-sm font-medium">{formatLabel(side)}</p>
+            <a
+              href={`https://objekt.top/objekts/${side.objektId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium hover:underline"
+            >
+              {formatLabel(side)}
+            </a>
             <p className="text-xs text-muted-foreground">
-              From: {side.user.name}
+              From: {side.user.cosmoNickname ?? side.user.name}
             </p>
             <p className="text-xs text-muted-foreground truncate" title={side.address}>
               {side.address.slice(0, 8)}…{side.address.slice(-6)}
@@ -187,6 +200,13 @@ export default function ActiveTradePage({
       return 30_000;
     },
   });
+
+  const terminalStatuses = ["completed", "cancelled", "disputed"];
+  useEffect(() => {
+    if (trade && terminalStatuses.includes(trade.status)) {
+      queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
+    }
+  }, [trade?.status]);
 
   async function handleAccept() {
     const res = await fetch(`/api/active-trades/${id}/accept`, { method: "POST" });
@@ -267,7 +287,7 @@ export default function ActiveTradePage({
                 </Badge>
               </CardTitle>
               <CardDescription className="mt-1">
-                {trade.initiator.name} ↔ {trade.recipient.name}
+                {trade.initiator.cosmoNickname ?? trade.initiator.name} ↔ {trade.recipient.cosmoNickname ?? trade.recipient.name}
                 {" · "}
                 {new Date(trade.createdAt).toLocaleDateString()}
               </CardDescription>
@@ -296,10 +316,10 @@ export default function ActiveTradePage({
 
           <div className="flex gap-4">
             {initiatorSide && (
-              <SideCard side={initiatorSide} label={`${trade.initiator.name} sends`} />
+              <SideCard side={initiatorSide} label={`${trade.initiator.cosmoNickname ?? trade.initiator.name} sends`} />
             )}
             {recipientSide && (
-              <SideCard side={recipientSide} label={`${trade.recipient.name} sends`} />
+              <SideCard side={recipientSide} label={`${trade.recipient.cosmoNickname ?? trade.recipient.name} sends`} />
             )}
           </div>
 

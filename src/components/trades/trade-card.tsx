@@ -81,7 +81,7 @@ function ObjektLabel({ item, showSerial }: { item: TradeItem; showSerial?: boole
 
   return (
     <span
-      className="text-xs relative cursor-default"
+      className="text-xs relative cursor-default inline-flex items-center gap-1"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
     >
@@ -89,6 +89,18 @@ function ObjektLabel({ item, showSerial }: { item: TradeItem; showSerial?: boole
       {label.serial && (
         <span className="text-muted-foreground ml-1">{label.serial}</span>
       )}
+      <a
+        href={`https://objekt.top/objekts/${item.collectionId}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={(e) => e.stopPropagation()}
+        title="View on Objekt.top"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+        </svg>
+      </a>
       {show && imageUrl && (
         <span className="absolute left-0 bottom-full mb-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background">
           <img

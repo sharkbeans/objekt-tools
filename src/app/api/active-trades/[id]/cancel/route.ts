@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade } from "@/lib/db/schema";
+import { activeTrade, tradeNotification } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 // POST /api/active-trades/[id]/cancel — either participant cancels
@@ -42,6 +42,23 @@ export async function POST(
     .update(activeTrade)
     .set({ status: "cancelled", updatedAt: new Date() })
     .where(eq(activeTrade.id, tradeId));
+
+  const cancellerName = session.user.name;
+  const otherUserId =
+    trade.initiatorUserId === session.user.id
+      ? trade.recipientUserId
+      : trade.initiatorUserId;
+
+  await db.insert(tradeNotification).values([
+    {
+      userId: session.user.id,
+      message: `You cancelled Active Trade #${tradeId}.`,
+    },
+    {
+      userId: otherUserId,
+      message: `${cancellerName} cancelled Active Trade #${tradeId}.`,
+    },
+  ]);
 
   return NextResponse.json({ status: "cancelled" });
 }

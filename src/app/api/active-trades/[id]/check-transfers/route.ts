@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { activeTrade, activeTradeSide } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, tradeNotification } from "@/lib/db/schema";
 import { objekts } from "@/lib/db/indexer-schema";
 import { eq, inArray } from "drizzle-orm";
 
@@ -102,6 +102,19 @@ export async function POST(
       .update(activeTrade)
       .set({ status: newTradeStatus, updatedAt: new Date() })
       .where(eq(activeTrade.id, tradeId));
+
+    if (newTradeStatus === "completed") {
+      await db.insert(tradeNotification).values([
+        {
+          userId: trade.initiatorUserId,
+          message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+        },
+        {
+          userId: trade.recipientUserId,
+          message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+        },
+      ]);
+    }
   }
 
   return NextResponse.json({

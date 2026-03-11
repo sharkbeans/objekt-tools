@@ -36,6 +36,7 @@ function TradeNotifications() {
       const res = await fetch("/api/trades/mine/notifications");
       return res.json();
     },
+    refetchInterval: 30_000,
   });
 
   const dismiss = useMutation({
@@ -111,7 +112,12 @@ function ActiveTrades({ userId }: { userId: string }) {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-3">Active Trades</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">Active Trades</h2>
+        <Link href="/trades/history" className="text-xs text-muted-foreground hover:text-foreground">
+          View history
+        </Link>
+      </div>
       <div className="flex flex-col gap-2">
         {trades.map((trade: any) => {
           const isRecipient = trade.recipientUserId === userId;
@@ -129,7 +135,7 @@ function ActiveTrades({ userId }: { userId: string }) {
                   {trade.status}
                 </Badge>
                 <span className="text-sm truncate">
-                  Trade #{trade.id} with {otherUser.name}
+                  Trade #{trade.id} with {otherUser.cosmoNickname ?? otherUser.name}
                 </span>
               </div>
               {needsAccept && (
