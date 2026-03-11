@@ -138,6 +138,8 @@ export function ObjektOwnedPicker({
       serial: entry.serial,
       objektId: entry.objektId,
     });
+    setHoverImage(null);
+    setHoverPos(null);
   }
 
   const handleMouseEnter = useCallback(

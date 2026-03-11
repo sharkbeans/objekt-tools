@@ -133,6 +133,8 @@ export function ObjektPicker({
     if (isSelected(entry) || selected.length >= maxSelections) return;
     onSelect(entry);
     setQuery("");
+    setHoverImage(null);
+    setHoverPos(null);
   }
 
   const handleMouseEnter = useCallback(
