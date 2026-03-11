@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth-client";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
