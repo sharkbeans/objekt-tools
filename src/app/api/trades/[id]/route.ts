@@ -54,15 +54,24 @@ export async function PATCH(
   const tradeId = Number(id);
   const body = await request.json();
 
+  const existing = await db.query.tradePost.findFirst({
+    where: and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
+    columns: { id: true, status: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Trade not found or not yours" }, { status: 404 });
+  }
+
+  if (existing.status === "in_trade") {
+    return NextResponse.json({ error: "Cannot modify a trade post while it is part of an active trade" }, { status: 400 });
+  }
+
   const [updated] = await db
     .update(tradePost)
     .set({ status: body.status, updatedAt: new Date() })
     .where(and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)))
     .returning();
-
-  if (!updated) {
-    return NextResponse.json({ error: "Trade not found or not yours" }, { status: 404 });
-  }
 
   return NextResponse.json(updated);
 }
@@ -82,14 +91,22 @@ export async function DELETE(
   const { id } = await params;
   const tradeId = Number(id);
 
-  const [deleted] = await db
-    .delete(tradePost)
-    .where(and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)))
-    .returning();
+  const existing = await db.query.tradePost.findFirst({
+    where: and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
+    columns: { id: true, status: true },
+  });
 
-  if (!deleted) {
+  if (!existing) {
     return NextResponse.json({ error: "Trade not found or not yours" }, { status: 404 });
   }
+
+  if (existing.status === "in_trade") {
+    return NextResponse.json({ error: "Cannot delete a trade post while it is part of an active trade" }, { status: 400 });
+  }
+
+  await db
+    .delete(tradePost)
+    .where(and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)));
 
   return NextResponse.json({ success: true });
 }

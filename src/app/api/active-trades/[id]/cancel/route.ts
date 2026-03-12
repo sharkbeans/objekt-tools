@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeNotification, tradePost } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, tradeNotification, tradePost } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
 // POST /api/active-trades/[id]/cancel — either participant cancels
@@ -21,6 +21,7 @@ export async function POST(
 
   const trade = await db.query.activeTrade.findFirst({
     where: eq(activeTrade.id, tradeId),
+    with: { sides: true },
   });
 
   if (!trade) {
@@ -36,6 +37,15 @@ export async function POST(
 
   if (trade.status === "completed" || trade.status === "cancelled") {
     return NextResponse.json({ error: "Trade already finalised" }, { status: 400 });
+  }
+
+  // Block cancellation once any objekt has already been confirmed as received —
+  // at that point an on-chain transfer has occurred and cannot be undone.
+  if (trade.sides.some((s) => s.status === "confirmed")) {
+    return NextResponse.json(
+      { error: "Cannot cancel: at least one objekt has already been transferred. Contact support if there is a dispute." },
+      { status: 400 }
+    );
   }
 
   await db.transaction(async (tx) => {

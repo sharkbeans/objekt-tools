@@ -264,6 +264,8 @@ export default function ActiveTradePage({
     trade.initiatorUserId === userId || trade.recipientUserId === userId;
   const isRecipient = trade.recipientUserId === userId;
   const isActive = !["completed", "cancelled", "disputed"].includes(trade.status);
+  const anyConfirmed = trade.sides.some((s) => s.status === "confirmed");
+  const canCancel = isActive && !anyConfirmed;
 
   // Split sides into initiator's and recipient's (may be multiple per user for multi-objekt trades)
   const initiatorSides = trade.sides.filter((s) => s.userId === trade.initiatorUserId);
@@ -306,7 +308,7 @@ export default function ActiveTradePage({
                     Accept
                   </Button>
                 )}
-                {isActive && (
+                {canCancel && (
                   <Button size="sm" variant="outline" onClick={handleCancel}>
                     Cancel
                   </Button>
