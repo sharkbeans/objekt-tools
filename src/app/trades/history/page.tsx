@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 
 type TradeStatus = "completed" | "cancelled" | "disputed";
 
@@ -24,15 +25,6 @@ interface HistoryTrade {
   recipientUserId: string;
   initiator: { id: string; name: string; cosmoNickname?: string | null };
   recipient: { id: string; name: string; cosmoNickname?: string | null };
-  sides: {
-    id: number;
-    userId: string;
-    thumbnailUrl?: string | null;
-    collectionNo?: string | null;
-    member?: string | null;
-    collectionId: string;
-    serial?: number | null;
-  }[];
 }
 
 export default function TradeHistoryPage() {
@@ -68,6 +60,8 @@ export default function TradeHistoryPage() {
         </Link>
       </div>
 
+      <ActiveTradesBanner />
+
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Loading...</div>
       ) : trades.length === 0 ? (
@@ -82,10 +76,6 @@ export default function TradeHistoryPage() {
             const userId = session.user?.id;
             const isRecipient = trade.recipientUserId === userId;
             const otherUser = isRecipient ? trade.initiator : trade.recipient;
-            const thumbnails = trade.sides
-              .filter((s) => s.thumbnailUrl)
-              .slice(0, 2);
-
             return (
               <Link
                 key={trade.id}
@@ -99,16 +89,6 @@ export default function TradeHistoryPage() {
                   >
                     {trade.status}
                   </Badge>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {thumbnails.map((s) => (
-                      <img
-                        key={s.id}
-                        src={s.thumbnailUrl!}
-                        alt={s.collectionId}
-                        className="w-8 h-auto rounded"
-                      />
-                    ))}
-                  </div>
                   <span className="text-sm truncate">
                     Trade #{trade.id} with {otherUser.cosmoNickname ?? otherUser.name}
                   </span>

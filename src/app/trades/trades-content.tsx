@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
+import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 
 function filtersFromSearchParams(params: URLSearchParams): TradeFilterState {
   return {
@@ -61,6 +62,8 @@ export function TradesContent() {
 
   return (
     <>
+      <ActiveTradesBanner />
+
       <TradeFilters filters={filters} onChange={handleFiltersChange} />
 
       {isLoading ? (

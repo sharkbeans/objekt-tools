@@ -145,27 +145,6 @@ function SideCard({ side, label }: { side: TradeSide; label: string }) {
       {label && <p className="text-xs font-medium text-muted-foreground">{label}</p>}
       <div className="rounded-md border p-3 space-y-2">
         <div className="flex items-center gap-2">
-          {side.thumbnailUrl && (
-            profileUrl ? (
-              <a
-                href={profileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <img
-                  src={side.thumbnailUrl}
-                  alt={side.collectionId}
-                  className="w-14 h-auto rounded hover:opacity-80 transition-opacity"
-                />
-              </a>
-            ) : (
-              <img
-                src={side.thumbnailUrl}
-                alt={side.collectionId}
-                className="w-14 h-auto rounded"
-              />
-            )
-          )}
           <div>
             {profileUrl ? (
               <a
