@@ -35,14 +35,13 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const tradePostId = Number(id);
+  const { id: tradePostId } = await params;
 
   const body = await request.json();
   const { myObjekts, theirObjekts, matchedTradePostId } = body as {
     myObjekts: SideInput[];
     theirObjekts: SideInput[];
-    matchedTradePostId: number;
+    matchedTradePostId: string;
   };
 
   if (!myObjekts?.length || !theirObjekts?.length || !matchedTradePostId) {

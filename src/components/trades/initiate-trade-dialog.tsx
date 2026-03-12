@@ -28,11 +28,11 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   // The initiator's own trade post id
-  myTradePostId: number;
+  myTradePostId: string;
   // Items the initiator can send (their haves)
   myHaves: TradeItem[];
   // The matched (recipient) trade post id
-  matchedTradePostId: number;
+  matchedTradePostId: string;
   // Items the initiator wants to receive (match's haves)
   theirHaves: TradeItem[];
 }

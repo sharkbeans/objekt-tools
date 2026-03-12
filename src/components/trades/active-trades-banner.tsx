@@ -20,7 +20,7 @@ const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "
 
 const DISMISSED_KEY = "dismissed-active-trades";
 
-function getDismissed(): Set<number> {
+function getDismissed(): Set<string> {
   try {
     const raw = localStorage.getItem(DISMISSED_KEY);
     return new Set(raw ? JSON.parse(raw) : []);
@@ -29,7 +29,7 @@ function getDismissed(): Set<number> {
   }
 }
 
-function saveDismissed(ids: Set<number>) {
+function saveDismissed(ids: Set<string>) {
   localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]));
 }
 
@@ -37,7 +37,7 @@ const terminalStatuses: TradeStatus[] = ["completed", "cancelled", "disputed"];
 
 export function ActiveTradesBanner() {
   const { data: session } = useSession();
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setDismissed(getDismissed());
@@ -68,7 +68,7 @@ export function ActiveTradesBanner() {
 
   const userId = session.user?.id;
 
-  function dismissOne(id: number) {
+  function dismissOne(id: string) {
     const next = new Set(dismissed);
     next.add(id);
     saveDismissed(next);

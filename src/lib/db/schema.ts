@@ -8,6 +8,10 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { customAlphabet } from "nanoid";
+
+const nanoid = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 6);
+export const generateId = () => nanoid();
 
 // ============================================================
 // Better Auth tables
@@ -80,7 +84,7 @@ export const cosmoAccount = pgTable("cosmo_account", {
 });
 
 export const tradePost = pgTable("trade_post", {
-  id: serial("id").primaryKey(),
+  id: text("id").primaryKey().$defaultFn(generateId),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -95,7 +99,7 @@ export const tradePost = pgTable("trade_post", {
 
 export const tradePostHave = pgTable("trade_post_have", {
   id: serial("id").primaryKey(),
-  tradePostId: integer("trade_post_id")
+  tradePostId: text("trade_post_id")
     .notNull()
     .references(() => tradePost.id, { onDelete: "cascade" }),
   collectionId: text("collection_id").notNull(),
@@ -113,7 +117,7 @@ export const tradePostHave = pgTable("trade_post_have", {
 
 export const tradePostWant = pgTable("trade_post_want", {
   id: serial("id").primaryKey(),
-  tradePostId: integer("trade_post_id")
+  tradePostId: text("trade_post_id")
     .notNull()
     .references(() => tradePost.id, { onDelete: "cascade" }),
   collectionId: text("collection_id").notNull(),
@@ -135,7 +139,7 @@ export const tradeNotification = pgTable("trade_notification", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  tradePostId: integer("trade_post_id"),
+  tradePostId: text("trade_post_id"),
   message: text("message").notNull(),
   dismissed: boolean("dismissed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -151,10 +155,10 @@ export const cosmoToken = pgTable("cosmo_token", {
 });
 
 export const activeTrade = pgTable("active_trade", {
-  id: serial("id").primaryKey(),
-  tradePostId: integer("trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
+  id: text("id").primaryKey().$defaultFn(generateId),
+  tradePostId: text("trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
   // The trade post of the other party (the match)
-  matchedTradePostId: integer("matched_trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
+  matchedTradePostId: text("matched_trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
   // initiator = user who clicked "Initiate Trade"; recipient = user who owns the matched trade post
   initiatorUserId: text("initiator_user_id")
     .notNull()
@@ -177,7 +181,7 @@ export const activeTrade = pgTable("active_trade", {
 // One row per side of the trade (initiator side + recipient side)
 export const activeTradeSide = pgTable("active_trade_side", {
   id: serial("id").primaryKey(),
-  activeTradeId: integer("active_trade_id")
+  activeTradeId: text("active_trade_id")
     .notNull()
     .references(() => activeTrade.id, { onDelete: "cascade" }),
   userId: text("user_id")

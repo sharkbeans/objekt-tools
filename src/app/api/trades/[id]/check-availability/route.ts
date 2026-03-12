@@ -14,8 +14,7 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
-  const tradeId = Number(id);
+  const { id: tradeId } = await params;
 
   // Get the trade with haves and owner info
   const trade = await db.query.tradePost.findFirst({

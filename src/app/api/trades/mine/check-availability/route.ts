@@ -71,8 +71,8 @@ export async function POST() {
   // Also track which collectionIds the user owns any of (for haves without serial)
   const ownedCollections = new Set(ownedRows.map((r) => r.collectionId));
 
-  const notifications: { tradePostId: number; message: string }[] = [];
-  const tradesToDelete: number[] = [];
+  const notifications: { tradePostId: string; message: string }[] = [];
+  const tradesToDelete: string[] = [];
   const havesToRemove: number[] = [];
 
   for (const trade of trades) {

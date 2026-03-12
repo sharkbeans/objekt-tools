@@ -9,8 +9,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const tradeId = Number(id);
+  const { id: tradeId } = await params;
 
   const trade = await db.query.tradePost.findFirst({
     where: eq(tradePost.id, tradeId),
@@ -50,8 +49,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const tradeId = Number(id);
+  const { id: tradeId } = await params;
   const body = await request.json();
 
   const existing = await db.query.tradePost.findFirst({
@@ -88,8 +86,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const tradeId = Number(id);
+  const { id: tradeId } = await params;
 
   const existing = await db.query.tradePost.findFirst({
     where: and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),

@@ -29,6 +29,27 @@
       "when": 1741344000002,
       "tag": "0003_add_objekt_id_to_have",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1741344000003,
+      "tag": "0004_active_trades",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1741344000004,
+      "tag": "0005_any_want_filters",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1741344000005,
+      "tag": "0006_short_ids",
+      "breakpoints": true
     }
   ]
 }

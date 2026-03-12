@@ -16,8 +16,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const tradeId = Number(id);
+  const { id: tradeId } = await params;
 
   const trade = await db.query.activeTrade.findFirst({
     where: eq(activeTrade.id, tradeId),

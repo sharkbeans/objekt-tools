@@ -35,8 +35,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const matchedTradePostId = Number(id);
+  const { id: matchedTradePostId } = await params;
 
   const body = await request.json();
   const { myObjekts, theirObjekts } = body as {

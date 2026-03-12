@@ -15,8 +15,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const tradeId = Number(id);
+  const { id: tradeId } = await params;
 
   // Get the source trade
   const sourceTrade = await db.query.tradePost.findFirst({

@@ -44,12 +44,12 @@ interface TradeSide {
 }
 
 interface ActiveTrade {
-  id: number;
+  id: string;
   status: TradeStatus;
   createdAt: string;
   updatedAt: string;
-  tradePostId?: number | null;
-  matchedTradePostId?: number | null;
+  tradePostId?: string | null;
+  matchedTradePostId?: string | null;
   initiatorUserId: string;
   recipientUserId: string;
   initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };

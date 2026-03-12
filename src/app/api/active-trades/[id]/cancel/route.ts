@@ -16,8 +16,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const tradeId = Number(id);
+  const { id: tradeId } = await params;
 
   const trade = await db.query.activeTrade.findFirst({
     where: eq(activeTrade.id, tradeId),
@@ -56,7 +55,7 @@ export async function POST(
 
     // If the trade had been accepted (posts were hidden), restore them to open
     if (["accepted", "partial"].includes(trade.status)) {
-      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is number => id !== null);
+      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
       if (postIds.length > 0) {
         await tx
           .update(tradePost)

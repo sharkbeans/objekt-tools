@@ -31,7 +31,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   // The trade post the initiator is responding to
-  tradePostId: number;
+  tradePostId: string;
   // Items the post owner has (initiator picks what they want to receive)
   theirHaves: TradeItem[];
 }

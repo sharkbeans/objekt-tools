@@ -61,14 +61,14 @@ export async function GET() {
   ]);
 
   // Build lookup: tradePostId -> Set<collectionId>
-  const theyHaveMap = new Map<number, Set<string>>();
+  const theyHaveMap = new Map<string, Set<string>>();
   for (const r of theyHaveRows) {
     if (!theyHaveMap.has(r.tradePostId))
       theyHaveMap.set(r.tradePostId, new Set());
     theyHaveMap.get(r.tradePostId)!.add(r.collectionId);
   }
 
-  const theyWantMap = new Map<number, Set<string>>();
+  const theyWantMap = new Map<string, Set<string>>();
   for (const r of theyWantRows) {
     if (!theyWantMap.has(r.tradePostId))
       theyWantMap.set(r.tradePostId, new Set());
@@ -77,7 +77,7 @@ export async function GET() {
 
   // Find matching trade IDs across all my trades
   const myTradeIds = new Set(myTrades.map((t) => t.id));
-  const candidateIds = new Set<number>();
+  const candidateIds = new Set<string>();
 
   for (const trade of myTrades) {
     const myWants = new Set(trade.wants.map((w) => w.collectionId));

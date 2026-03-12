@@ -194,7 +194,7 @@ export default function TradeDetailPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [initiateTarget, setInitiateTarget] = useState<{
-    matchedTradePostId: number;
+    matchedTradePostId: string;
     theirHaves: TradeItem[];
   } | null>(null);
   // For non-owners: direct initiation (no own trade post required)
@@ -439,7 +439,7 @@ export default function TradeDetailPage({
         <InitiateTradeDialog
           open={!!initiateTarget}
           onOpenChange={(open) => { if (!open) setInitiateTarget(null); }}
-          myTradePostId={Number(id)}
+          myTradePostId={id}
           myHaves={trade?.haves ?? []}
           matchedTradePostId={initiateTarget.matchedTradePostId}
           theirHaves={initiateTarget.theirHaves}
@@ -451,7 +451,7 @@ export default function TradeDetailPage({
         <InitiateDirectDialog
           open={directInitiateOpen}
           onOpenChange={setDirectInitiateOpen}
-          tradePostId={Number(id)}
+          tradePostId={id}
           theirHaves={trade?.haves ?? []}
         />
       )}
