@@ -122,6 +122,7 @@ export default function NewTradePage() {
   const availableAnySeasons = getAvailableSeasons(anyArtist);
   const availableAnyClasses = getAvailableClasses(anyArtist);
 
+  const haveImages = useObjektImages(haves);
   const wantImages = useObjektImages(wants);
 
   // Build a want from a single filter value and add/remove it automatically
@@ -177,7 +178,6 @@ export default function NewTradePage() {
     const added = next.filter((v) => !prev.includes(v));
     const removed = prev.filter((v) => !next.includes(v));
     setAnySeason(next);
-    if (anyMember.length) return; // members take precedence
     setAnyWants((w) => {
       let result = syncAnyWant(w, added, removed, (s) => ({ isAny: true, season: s, artist: anyArtist[0] }));
       if (added.length && !prev.length) {
@@ -195,7 +195,6 @@ export default function NewTradePage() {
     const added = next.filter((v) => !prev.includes(v));
     const removed = prev.filter((v) => !next.includes(v));
     setAnyClass(next);
-    if (anyMember.length || anySeason.length) return;
     setAnyWants((w) => {
       let result = syncAnyWant(w, added, removed, (c) => ({ isAny: true, class: c }));
       if (added.length && !prev.length) {
@@ -439,11 +438,13 @@ export default function NewTradePage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-muted-foreground mb-2">HAVE</p>
                   <div className="flex flex-wrap gap-2 items-start">
-                    {haves.map((item, i) => (
+                    {haves.map((item, i) => {
+                      const haveUrl = haveImages.get(item.collectionId) ?? item.thumbnailImage;
+                      return (
                       <div key={i} className="flex flex-col items-center gap-1">
-                        {item.thumbnailImage ? (
+                        {haveUrl ? (
                           <img
-                            src={item.thumbnailImage}
+                            src={haveUrl}
                             alt={item.collectionId}
                             className="w-20 h-auto rounded-md border"
                           />
@@ -457,7 +458,8 @@ export default function NewTradePage() {
                           <span className="text-[10px] text-muted-foreground">#{String(item.serial).padStart(5, "0")}</span>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

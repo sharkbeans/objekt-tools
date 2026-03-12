@@ -137,6 +137,7 @@ export function ObjektOwnedPicker({
       class: entry.class,
       serial: entry.serial,
       objektId: entry.objektId,
+      thumbnailImage: thumbnailCache.get(entry.collectionId) ?? undefined,
     });
     setHoverImage(null);
     setHoverPos(null);
