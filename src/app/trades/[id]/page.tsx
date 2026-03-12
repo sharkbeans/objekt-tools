@@ -119,7 +119,7 @@ function ObjektImages({
           if (item.isAny) {
             return (
               <div key={item.id} className="flex flex-col items-center gap-1">
-                <div className="w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
+                <div className="w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
                   {anyWantLabel(item)}
                 </div>
               </div>

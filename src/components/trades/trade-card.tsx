@@ -147,9 +147,8 @@ function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]
     <div className="flex flex-col gap-0.5">
       {items.map((item) =>
         item.isAny ? (
-          <span key={item.id} className="text-sm text-muted-foreground italic leading-tight flex flex-col">
-            <span className="text-xs">Any</span>
-            <span>{anyWantLabel(item).replace(/^Any\s*/, "")}</span>
+          <span key={item.id} className="text-xs text-muted-foreground italic">
+            {anyWantLabel(item)}
           </span>
         ) : (
           <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />
