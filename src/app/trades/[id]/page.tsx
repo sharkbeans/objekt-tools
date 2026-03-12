@@ -16,15 +16,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { TradeCard } from "@/components/trades/trade-card";
 import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
+import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 interface TradeItem {
   id: number;
@@ -34,6 +28,17 @@ interface TradeItem {
   season?: string | null;
   class?: string | null;
   serial?: number | null;
+  isAny?: boolean;
+  artist?: string | null;
+}
+
+function anyWantLabel(item: TradeItem): string {
+  if (item.member) return `Any ${item.member}`;
+  if (item.season && item.artist) return `Any ${item.artist} ${item.season}`;
+  if (item.season) return `Any ${item.season}`;
+  if (item.artist) return `Any ${item.artist}`;
+  if (item.class) return `Any ${item.class}`;
+  return "Any";
 }
 
 function formatLabel(item: TradeItem) {
@@ -88,8 +93,17 @@ function ObjektImages({
   return (
     <div className="flex-1 min-w-0">
       <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-start">
         {items.map((item) => {
+          if (item.isAny) {
+            return (
+              <div key={item.id} className="flex flex-col items-center gap-1">
+                <div className="w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
+                  {anyWantLabel(item)}
+                </div>
+              </div>
+            );
+          }
           const url = images.get(item.collectionId);
           return (
             <div key={item.id} className="flex flex-col items-center gap-1">
@@ -126,7 +140,7 @@ function ObjektList({ items, label, showSerial }: { items: TradeItem[]; label: s
             key={item.id}
             className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
           >
-            <span>{formatLabel(item)}</span>
+            <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
             {showSerial && item.serial != null && (
               <span className="text-xs text-muted-foreground">{formatSerial(item.serial)}</span>
             )}
@@ -150,10 +164,8 @@ export default function TradeDetailPage({
     matchedTradePostId: number;
     theirHaves: TradeItem[];
   } | null>(null);
-  // For non-owners: pick one of their own trade posts to initiate against this trade
-  const [myPostPickerOpen, setMyPostPickerOpen] = useState(false);
-  const [myInitiatePostId, setMyInitiatePostId] = useState<number | null>(null);
-  const [myInitiateHaves, setMyInitiateHaves] = useState<TradeItem[]>([]);
+  // For non-owners: direct initiation (no own trade post required)
+  const [directInitiateOpen, setDirectInitiateOpen] = useState(false);
 
   const { data: trade, isLoading: tradeLoading } = useQuery({
     queryKey: ["trade", id],
@@ -173,16 +185,6 @@ export default function TradeDetailPage({
     enabled: !!trade,
   });
 
-  // Fetch the current user's open trades so they can initiate against this trade post
-  const { data: myTradesData } = useQuery({
-    queryKey: ["my-open-trades-for-initiate"],
-    queryFn: async () => {
-      const res = await fetch("/api/trades/mine?limit=50");
-      return res.json();
-    },
-    enabled: !!session && !!trade && trade.status === "open",
-  });
-  const myOpenTrades: any[] = (myTradesData?.trades ?? []).filter((t: any) => t.status === "open");
 
   const haveImages = useObjektImages(trade?.haves ?? []);
   const wantImages = useObjektImages(trade?.wants ?? []);
@@ -339,15 +341,15 @@ export default function TradeDetailPage({
         </CardContent>
       </Card>
 
-      {/* Non-owner: initiate trade against this post using one of their own matching trades */}
-      {!isOwner && session && trade.status === "open" && myOpenTrades.length > 0 && (
+      {/* Non-owner: initiate trade directly against this post (no own trade post required) */}
+      {!isOwner && session && trade.status === "open" && (
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                You have {myOpenTrades.length} open trade{myOpenTrades.length !== 1 ? "s" : ""} — initiate a trade with this poster.
+                Interested? Initiate a trade with this poster.
               </p>
-              <Button size="sm" onClick={() => setMyPostPickerOpen(true)}>
+              <Button size="sm" onClick={() => setDirectInitiateOpen(true)}>
                 Initiate Trade
               </Button>
             </div>
@@ -411,45 +413,12 @@ export default function TradeDetailPage({
         />
       )}
 
-      {/* Non-owner: pick which of their own trade posts to use */}
-      <Dialog open={myPostPickerOpen} onOpenChange={setMyPostPickerOpen}>
-        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Select your trade post</DialogTitle>
-            <DialogDescription>
-              Choose one of your open trades to initiate against this post.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 mt-2">
-            {myOpenTrades.map((myTrade: any) => (
-              <button
-                key={myTrade.id}
-                type="button"
-                className="text-left rounded-md border px-3 py-2 text-sm hover:bg-accent transition-colors"
-                onClick={() => {
-                  setMyInitiatePostId(myTrade.id);
-                  setMyInitiateHaves(myTrade.haves ?? []);
-                  setMyPostPickerOpen(false);
-                }}
-              >
-                <span className="font-medium">Trade #{myTrade.id}</span>
-                <span className="text-muted-foreground ml-2 text-xs">
-                  {myTrade.haves?.length ?? 0} have · {myTrade.wants?.length ?? 0} want
-                </span>
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Non-owner: initiate dialog (their post vs this trade) */}
-      {myInitiatePostId && (
-        <InitiateTradeDialog
-          open={!!myInitiatePostId}
-          onOpenChange={(open) => { if (!open) { setMyInitiatePostId(null); setMyInitiateHaves([]); } }}
-          myTradePostId={myInitiatePostId}
-          myHaves={myInitiateHaves}
-          matchedTradePostId={Number(id)}
+      {/* Non-owner: direct initiate dialog (no own trade post needed) */}
+      {directInitiateOpen && (
+        <InitiateDirectDialog
+          open={directInitiateOpen}
+          onOpenChange={setDirectInitiateOpen}
+          tradePostId={Number(id)}
           theirHaves={trade?.haves ?? []}
         />
       )}

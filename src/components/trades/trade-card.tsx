@@ -19,8 +19,19 @@ interface TradeItem {
   season?: string | null;
   class?: string | null;
   serial?: number | null;
+  isAny?: boolean;
+  artist?: string | null;
 }
-``
+
+function anyWantLabel(item: TradeItem): string {
+  if (item.member) return `Any ${item.member}`;
+  if (item.season && item.artist) return `Any ${item.artist} ${item.season}`;
+  if (item.season) return `Any ${item.season}`;
+  if (item.artist) return `Any ${item.artist}`;
+  if (item.class) return `Any ${item.class}`;
+  return "Any";
+}
+
 function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; season?: string | null; serial?: number | null }, showSerial?: boolean) {
   const name = item.collectionNo && item.member
     ? [item.season, item.member, item.collectionNo].filter(Boolean).join(" ")
@@ -133,9 +144,15 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
 function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]; showSerial?: boolean; cosmoNickname?: string | null }) {
   return (
     <div className="flex flex-col gap-0.5">
-      {items.map((item) => (
-        <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />
-      ))}
+      {items.map((item) =>
+        item.isAny ? (
+          <span key={item.id} className="text-xs text-muted-foreground italic">
+            {anyWantLabel(item)}
+          </span>
+        ) : (
+          <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />
+        )
+      )}
     </div>
   );
 }

@@ -381,25 +381,36 @@ export default function ActiveTradePage({
             </div>
           )}
 
-          {trade.tradePostId && (
+          {(trade.tradePostId || trade.matchedTradePostId) && (
             <p className="text-xs text-muted-foreground">
               Based on{" "}
-              <a
-                href={`/trades/${trade.tradePostId}`}
-                className="underline hover:text-foreground"
-              >
-                Trade #{trade.tradePostId}
-              </a>
-              {trade.matchedTradePostId && (
+              {trade.tradePostId ? (
                 <>
-                  {" ↔ "}
                   <a
-                    href={`/trades/${trade.matchedTradePostId}`}
+                    href={`/trades/${trade.tradePostId}`}
                     className="underline hover:text-foreground"
                   >
-                    Trade #{trade.matchedTradePostId}
+                    Trade #{trade.tradePostId}
                   </a>
+                  {trade.matchedTradePostId && (
+                    <>
+                      {" ↔ "}
+                      <a
+                        href={`/trades/${trade.matchedTradePostId}`}
+                        className="underline hover:text-foreground"
+                      >
+                        Trade #{trade.matchedTradePostId}
+                      </a>
+                    </>
+                  )}
                 </>
+              ) : (
+                <a
+                  href={`/trades/${trade.matchedTradePostId}`}
+                  className="underline hover:text-foreground"
+                >
+                  Trade #{trade.matchedTradePostId}
+                </a>
               )}
             </p>
           )}

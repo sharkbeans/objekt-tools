@@ -122,6 +122,9 @@ export const tradePostWant = pgTable("trade_post_want", {
   season: text("season"),
   class: text("class"),
   thumbnailUrl: text("thumbnail_url"),
+  // ANY-filter wants: no specific objekt, just filter criteria
+  isAny: boolean("is_any").notNull().default(false),
+  artist: text("artist"),
 }, (t) => [
   index("trade_post_want_trade_post_id_idx").on(t.tradePostId),
   index("trade_post_want_collection_id_idx").on(t.collectionId),

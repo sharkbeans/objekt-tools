@@ -19,6 +19,9 @@ interface TradeItemInput {
   thumbnailUrl?: string;
   serial?: number;
   objektId?: string;
+  // ANY-filter wants
+  isAny?: boolean;
+  artist?: string;
 }
 
 // GET /api/trades — list trades with filters
@@ -102,6 +105,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // ANY wants must have at least one filter set (artist, member, season, or class)
+  for (const w of wants) {
+    if (w.isAny && !w.artist && !w.member && !w.season && !w.class) {
+      return NextResponse.json(
+        { error: "ANY want items must specify at least one filter (artist, member, season, or class)" },
+        { status: 400 }
+      );
+    }
+  }
+
   // Check user has linked Cosmo account
   const linked = await db.query.cosmoAccount.findFirst({
     where: eq(cosmoAccount.userId, session.user.id),
@@ -139,12 +152,14 @@ export async function POST(request: NextRequest) {
   await db.insert(tradePostWant).values(
     wants.map((w) => ({
       tradePostId: post.id,
-      collectionId: w.collectionId,
+      collectionId: w.isAny ? "" : w.collectionId,
       collectionNo: w.collectionNo ?? null,
       member: w.member ?? null,
       season: w.season ?? null,
       class: w.class ?? null,
       thumbnailUrl: w.thumbnailUrl ?? null,
+      isAny: w.isAny ?? false,
+      artist: w.artist ?? null,
     }))
   );
 
