@@ -115,7 +115,7 @@ export function InitiateDirectDialog({
             collectionNo: o.collectionNo,
             member: o.member,
             serial: o.serial,
-            thumbnailUrl: o.thumbnailUrl,
+            thumbnailUrl: o.thumbnailImage,
           })),
           theirObjekts: theirItems.map((i) => ({
             objektId: i.objektId ?? "",
