@@ -128,7 +128,17 @@ const sideStatusVariant: Record<SideStatus, "default" | "secondary" | "outline">
 
 function SideCard({ side, label }: { side: TradeSide; label: string }) {
   const profileUrl = side.user.cosmoNickname
-    ? `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`
+    ? (() => {
+        const base = `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`;
+        const parts = [
+          side.member,
+          side.collectionNo,
+          side.serial != null ? `#${side.serial}` : null,
+        ].filter(Boolean);
+        return parts.length > 0
+          ? `${base}&search=${encodeURIComponent(parts.join(" "))}`
+          : base;
+      })()
     : null;
   return (
     <div className="space-y-1">

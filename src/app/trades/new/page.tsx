@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { PlusIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
@@ -47,6 +48,31 @@ function anyWantLabel(w: AnyWant): string {
   if (w.artist) return `Any ${w.artist}`;
   if (w.class) return `Any ${w.class}`;
   return "Any";
+}
+
+function anyWantKey(w: AnyWant): string {
+  return [w.artist, w.member, w.season, w.class].join("|");
+}
+
+function useObjektImages(items: { collectionId: string }[]) {
+  const [images, setImages] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!items.length) return;
+    const unique = [...new Set(items.map((i) => i.collectionId).filter(Boolean))];
+    unique.forEach((collectionId) => {
+      fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const match = data.results?.find((r: any) => r.collectionId === collectionId);
+          const url = match?.thumbnailImage ?? match?.frontImage;
+          if (url) setImages((prev) => new Map(prev).set(collectionId, url));
+        })
+        .catch(() => {});
+    });
+  }, [items.map((i) => i.collectionId).join(",")]);
+
+  return images;
 }
 
 function getAvailableSeasons(artists: string[]): string[] {
@@ -86,7 +112,7 @@ export default function NewTradePage() {
   const [submitting, setSubmitting] = useState(false);
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
 
-  // State for the "Add ANY want" builder
+  // State for the "Add ANY want" dropdowns
   const [anyArtist, setAnyArtist] = useState<string[]>([]);
   const [anyMember, setAnyMember] = useState<string[]>([]);
   const [anySeason, setAnySeason] = useState<string[]>([]);
@@ -96,25 +122,90 @@ export default function NewTradePage() {
   const availableAnySeasons = getAvailableSeasons(anyArtist);
   const availableAnyClasses = getAvailableClasses(anyArtist);
 
-  function handleAddAnyWant() {
-    // Each selected value becomes its own ANY want chip
-    const entries: AnyWant[] = [];
-    for (const m of anyMember) entries.push({ isAny: true, member: m });
-    for (const s of anySeason) {
-      if (!anyMember.length) entries.push({ isAny: true, season: s, artist: anyArtist[0] });
-    }
-    for (const c of anyClass) {
-      if (!anyMember.length && !anySeason.length) entries.push({ isAny: true, class: c });
-    }
-    if (!anyMember.length && !anySeason.length && !anyClass.length) {
-      for (const a of anyArtist) entries.push({ isAny: true, artist: a });
-    }
-    if (entries.length === 0) return;
-    setAnyWants((prev) => [...prev, ...entries]);
-    setAnyArtist([]);
-    setAnyMember([]);
-    setAnySeason([]);
-    setAnyClass([]);
+  const wantImages = useObjektImages(wants);
+
+  // Build a want from a single filter value and add/remove it automatically
+  function syncAnyWant(
+    prev: AnyWant[],
+    added: string[],
+    removed: string[],
+    makeWant: (v: string) => AnyWant,
+  ): AnyWant[] {
+    const key = (w: AnyWant) => anyWantKey(w);
+    const removedKeys = new Set(removed.map((v) => key(makeWant(v))));
+    return [
+      ...prev.filter((w) => !removedKeys.has(key(w))),
+      ...added.filter((v) => !prev.some((w) => key(w) === key(makeWant(v)))).map(makeWant),
+    ];
+  }
+
+  function handleArtistChange(next: string[]) {
+    const prev = anyArtist;
+    const added = next.filter((v) => !prev.includes(v));
+    const removed = prev.filter((v) => !next.includes(v));
+    setAnyArtist(next);
+    setAnyMember((m) => m.filter((v) => getAvailableMembers(next).includes(v)));
+    setAnySeason((s) => s.filter((v) => getAvailableSeasons(next).includes(v)));
+    setAnyClass((c) => c.filter((v) => getAvailableClasses(next).includes(v)));
+    // Only add/remove artist-level chips when no sub-filters are active
+    setAnyWants((w) => {
+      if (anyMember.length || anySeason.length || anyClass.length) return w;
+      return syncAnyWant(w, added, removed, (a) => ({ isAny: true, artist: a }));
+    });
+  }
+
+  function handleMemberChange(next: string[]) {
+    const prev = anyMember;
+    const added = next.filter((v) => !prev.includes(v));
+    const removed = prev.filter((v) => !next.includes(v));
+    setAnyMember(next);
+    // When adding first member, remove bare artist chips
+    setAnyWants((w) => {
+      let result = syncAnyWant(w, added, removed, (m) => ({ isAny: true, member: m }));
+      if (added.length && !prev.length) {
+        result = result.filter((x) => !anyArtist.some((a) => anyWantKey(x) === anyWantKey({ isAny: true, artist: a })));
+      }
+      if (next.length === 0 && anyArtist.length) {
+        result = syncAnyWant(result, anyArtist, [], (a) => ({ isAny: true, artist: a }));
+      }
+      return result;
+    });
+  }
+
+  function handleSeasonChange(next: string[]) {
+    const prev = anySeason;
+    const added = next.filter((v) => !prev.includes(v));
+    const removed = prev.filter((v) => !next.includes(v));
+    setAnySeason(next);
+    if (anyMember.length) return; // members take precedence
+    setAnyWants((w) => {
+      let result = syncAnyWant(w, added, removed, (s) => ({ isAny: true, season: s, artist: anyArtist[0] }));
+      if (added.length && !prev.length) {
+        result = result.filter((x) => !anyArtist.some((a) => anyWantKey(x) === anyWantKey({ isAny: true, artist: a })));
+      }
+      if (next.length === 0 && anyArtist.length && !anyMember.length) {
+        result = syncAnyWant(result, anyArtist, [], (a) => ({ isAny: true, artist: a }));
+      }
+      return result;
+    });
+  }
+
+  function handleClassChange(next: string[]) {
+    const prev = anyClass;
+    const added = next.filter((v) => !prev.includes(v));
+    const removed = prev.filter((v) => !next.includes(v));
+    setAnyClass(next);
+    if (anyMember.length || anySeason.length) return;
+    setAnyWants((w) => {
+      let result = syncAnyWant(w, added, removed, (c) => ({ isAny: true, class: c }));
+      if (added.length && !prev.length) {
+        result = result.filter((x) => !anyArtist.some((a) => anyWantKey(x) === anyWantKey({ isAny: true, artist: a })));
+      }
+      if (next.length === 0 && anyArtist.length && !anyMember.length && !anySeason.length) {
+        result = syncAnyWant(result, anyArtist, [], (a) => ({ isAny: true, artist: a }));
+      }
+      return result;
+    });
   }
 
   if (!session) {
@@ -239,47 +330,31 @@ export default function NewTradePage() {
                 <MultiSelect
                   options={validArtists.map((a) => ({ label: a, value: a }))}
                   value={anyArtist}
-                  onChange={(v) => {
-                    setAnyArtist(v);
-                    setAnyMember((prev) => prev.filter((m) => getAvailableMembers(v).includes(m)));
-                    setAnySeason((prev) => prev.filter((s) => getAvailableSeasons(v).includes(s)));
-                    setAnyClass((prev) => prev.filter((c) => getAvailableClasses(v).includes(c)));
-                  }}
+                  onChange={handleArtistChange}
                   placeholder="Artist"
                   className="min-w-28"
                 />
                 <MultiSelect
                   options={availableAnyMembers.map((m) => ({ label: m, value: m }))}
                   value={anyMember}
-                  onChange={setAnyMember}
+                  onChange={handleMemberChange}
                   placeholder="Member"
                   className="min-w-32"
                 />
                 <MultiSelect
                   options={availableAnySeasons.map((s) => ({ label: s, value: s }))}
                   value={anySeason}
-                  onChange={setAnySeason}
+                  onChange={handleSeasonChange}
                   placeholder="Season"
                   className="min-w-32"
                 />
                 <MultiSelect
                   options={availableAnyClasses.map((c) => ({ label: c, value: c }))}
                   value={anyClass}
-                  onChange={setAnyClass}
+                  onChange={handleClassChange}
                   placeholder="Class"
                   className="min-w-28"
                 />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddAnyWant}
-                  disabled={!anyArtist.length && !anyMember.length && !anySeason.length && !anyClass.length}
-                  className="h-9"
-                >
-                  <PlusIcon className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
               </div>
               {anyWants.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -349,6 +424,128 @@ export default function NewTradePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Trade Preview */}
+      {(haves.length > 0 || wants.length > 0 || anyWants.length > 0) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Preview</CardTitle>
+            <CardDescription>How your trade post will appear</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Image row */}
+            <div className="flex gap-6">
+              {haves.length > 0 && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">HAVE</p>
+                  <div className="flex flex-wrap gap-2 items-start">
+                    {haves.map((item, i) => (
+                      <div key={i} className="flex flex-col items-center gap-1">
+                        {item.thumbnailImage ? (
+                          <img
+                            src={item.thumbnailImage}
+                            alt={item.collectionId}
+                            className="w-20 h-auto rounded-md border"
+                          />
+                        ) : (
+                          <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+                        )}
+                        <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
+                          {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
+                        </span>
+                        {item.serial != null && (
+                          <span className="text-[10px] text-muted-foreground">#{String(item.serial).padStart(5, "0")}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(wants.length > 0 || anyWants.length > 0) && (
+                <>
+                  <Separator orientation="vertical" className="h-auto" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">WANT</p>
+                    <div className="flex flex-wrap gap-2 items-start">
+                      {anyWants.map((w, i) => (
+                        <div key={`any-${i}`} className="flex flex-col items-center gap-1">
+                          <div className="w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
+                            {anyWantLabel(w)}
+                          </div>
+                        </div>
+                      ))}
+                      {wants.map((item, i) => {
+                        const url = wantImages.get(item.collectionId) ?? item.thumbnailImage;
+                        return (
+                          <div key={i} className="flex flex-col items-center gap-1">
+                            {url ? (
+                              <img
+                                src={url}
+                                alt={item.collectionId}
+                                className="w-20 h-auto rounded-md border"
+                              />
+                            ) : (
+                              <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+                            )}
+                            <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
+                              {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Text list row */}
+            <div className="flex gap-6">
+              {haves.length > 0 && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">HAVE</p>
+                  <div className="flex flex-col gap-1">
+                    {haves.map((item, i) => (
+                      <div key={i} className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between">
+                        <span>{item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}</span>
+                        {item.serial != null && (
+                          <span className="text-xs text-muted-foreground">#{String(item.serial).padStart(5, "0")}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(wants.length > 0 || anyWants.length > 0) && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">WANT</p>
+                  <div className="flex flex-col gap-1">
+                    {anyWants.map((w, i) => (
+                      <div key={`any-${i}`} className="text-sm px-2 py-1 rounded border border-border">
+                        {anyWantLabel(w)}
+                      </div>
+                    ))}
+                    {wants.map((item, i) => (
+                      <div key={i} className="text-sm px-2 py-1 rounded border border-border">
+                        {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {description && (
+              <>
+                <Separator />
+                <p className="text-sm text-muted-foreground">{description}</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
