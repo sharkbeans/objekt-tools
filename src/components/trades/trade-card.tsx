@@ -36,9 +36,10 @@ function formatObjektLabel(item: { collectionId: string; collectionNo?: string |
   const name = item.collectionNo && item.member
     ? [item.artist, item.season, item.member, item.collectionNo].filter(Boolean).join(" ")
     : item.collectionId;
-  const right = showSerial
-    ? [item.class, item.serial != null ? `#${String(item.serial).padStart(5, "0")}` : null].filter(Boolean).join(" ")
-    : "";
+  const right = [
+    item.class,
+    showSerial && item.serial != null ? `#${String(item.serial).padStart(5, "0")}` : null,
+  ].filter(Boolean).join(" ");
   return { name, right };
 }
 
@@ -146,8 +147,9 @@ function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]
     <div className="flex flex-col gap-0.5">
       {items.map((item) =>
         item.isAny ? (
-          <span key={item.id} className="text-xs text-muted-foreground italic">
-            {anyWantLabel(item)}
+          <span key={item.id} className="text-sm text-muted-foreground italic leading-tight flex flex-col">
+            <span className="text-xs">Any</span>
+            <span>{anyWantLabel(item).replace(/^Any\s*/, "")}</span>
           </span>
         ) : (
           <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />

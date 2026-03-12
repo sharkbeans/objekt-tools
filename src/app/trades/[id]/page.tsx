@@ -162,19 +162,23 @@ function ObjektList({ items, label, showSerial }: { items: TradeItem[]; label: s
     <div>
       <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
       <div className="flex flex-col gap-1">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
-          >
-            <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
-            {!item.isAny && showSerial && (
-              <span className="text-xs text-muted-foreground ml-4 shrink-0">
-                {[item.class, item.serial != null ? formatSerial(item.serial) : null].filter(Boolean).join(" ")}
-              </span>
-            )}
-          </div>
-        ))}
+        {items.map((item) => {
+          const right = item.isAny ? null : [
+            item.class,
+            showSerial && item.serial != null ? formatSerial(item.serial) : null,
+          ].filter(Boolean).join(" ") || null;
+          return (
+            <div
+              key={item.id}
+              className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
+            >
+              <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
+              {right && (
+                <span className="text-xs text-muted-foreground ml-4 shrink-0">{right}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
