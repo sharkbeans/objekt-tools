@@ -51,6 +51,14 @@ function formatSerial(serial: number) {
   return `#${String(serial).padStart(5, "0")}`;
 }
 
+function objektTopUrl(item: TradeItem, cosmoNickname?: string | null): string | null {
+  if (!cosmoNickname || item.isAny) return null;
+  const parts = [item.artist, item.season, item.member, item.collectionNo].filter(Boolean);
+  if (item.serial != null) parts.push(`#${item.serial}`);
+  if (!parts.length) return null;
+  return `https://objekt.top/@${cosmoNickname}?search=${encodeURIComponent(parts.join(" "))}`;
+}
+
 function useObjektImages(items: TradeItem[]) {
   const [images, setImages] = useState<Map<string, string>>(new Map());
 
@@ -84,11 +92,13 @@ function ObjektImages({
   images,
   label,
   showSerial,
+  cosmoNickname,
 }: {
   items: TradeItem[];
   images: Map<string, string>;
   label: string;
   showSerial?: boolean;
+  cosmoNickname?: string | null;
 }) {
   return (
     <div className="flex-1 min-w-0">
@@ -105,17 +115,23 @@ function ObjektImages({
             );
           }
           const url = images.get(item.collectionId);
+          const link = objektTopUrl(item, cosmoNickname);
+          const imgEl = url ? (
+            <img
+              src={url}
+              alt={item.collectionId}
+              className="w-20 h-auto rounded-md border"
+            />
+          ) : (
+            <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+          );
           return (
             <div key={item.id} className="flex flex-col items-center gap-1">
-              {url ? (
-                <img
-                  src={url}
-                  alt={item.collectionId}
-                  className="w-20 h-auto rounded-md border"
-                />
-              ) : (
-                <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
-              )}
+              {link ? (
+                <a href={link} target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
+                  {imgEl}
+                </a>
+              ) : imgEl}
               <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
                 {formatLabel(item)}
               </span>
@@ -302,9 +318,9 @@ export default function TradeDetailPage({
         </CardHeader>
         {trade.haves?.length > 0 && trade.wants?.length > 0 && (
           <div className="px-6 pb-4 flex gap-6">
-            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" showSerial />
+            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" showSerial cosmoNickname={trade.cosmoNickname} />
             <Separator orientation="vertical" className="h-auto" />
-            <ObjektImages items={trade.wants} images={wantImages} label="WANT" />
+            <ObjektImages items={trade.wants} images={wantImages} label="WANT" cosmoNickname={trade.cosmoNickname} />
           </div>
         )}
         <CardContent className="space-y-4">
