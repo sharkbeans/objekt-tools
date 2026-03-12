@@ -42,10 +42,12 @@ function anyWantLabel(item: TradeItem): string {
 }
 
 function formatLabel(item: TradeItem) {
-  return item.collectionNo && item.member
-    ? `${item.member} ${item.collectionNo}`
-    : item.collectionId;
+  if (item.collectionNo && item.member) {
+    return [item.artist, item.season, item.member, item.collectionNo].filter(Boolean).join(" ");
+  }
+  return item.collectionId;
 }
+
 
 function formatSerial(serial: number) {
   return `#${String(serial).padStart(5, "0")}`;
@@ -166,8 +168,10 @@ function ObjektList({ items, label, showSerial }: { items: TradeItem[]; label: s
             className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
           >
             <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
-            {showSerial && item.serial != null && (
-              <span className="text-xs text-muted-foreground">{formatSerial(item.serial)}</span>
+            {!item.isAny && showSerial && (
+              <span className="text-xs text-muted-foreground ml-4 shrink-0">
+                {[item.class, item.serial != null ? formatSerial(item.serial) : null].filter(Boolean).join(" ")}
+              </span>
             )}
           </div>
         ))}

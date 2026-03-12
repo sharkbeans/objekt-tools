@@ -32,14 +32,14 @@ function anyWantLabel(item: TradeItem): string {
   return "Any";
 }
 
-function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; season?: string | null; serial?: number | null }, showSerial?: boolean) {
+function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; season?: string | null; artist?: string | null; class?: string | null; serial?: number | null }, showSerial?: boolean) {
   const name = item.collectionNo && item.member
-    ? [item.season, item.member, item.collectionNo].filter(Boolean).join(" ")
+    ? [item.artist, item.season, item.member, item.collectionNo].filter(Boolean).join(" ")
     : item.collectionId;
-  const serial = showSerial && item.serial != null
-    ? ` #${String(item.serial).padStart(5, "0")}`
+  const right = showSerial
+    ? [item.class, item.serial != null ? `#${String(item.serial).padStart(5, "0")}` : null].filter(Boolean).join(" ")
     : "";
-  return { name, serial };
+  return { name, right };
 }
 
 function buildObjektTopUrl(item: TradeItem, cosmoNickname: string | null | undefined, showSerial?: boolean): string {
@@ -113,8 +113,8 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
       onMouseLeave={() => setShow(false)}
     >
       {label.name}
-      {label.serial && (
-        <span className="text-muted-foreground ml-1">{label.serial}</span>
+      {label.right && (
+        <span className="text-muted-foreground ml-1">{label.right}</span>
       )}
       <a
         href={buildObjektTopUrl(item, cosmoNickname, showSerial)}

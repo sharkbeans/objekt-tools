@@ -62,8 +62,8 @@ function formatLabel(side: TradeSide) {
       ? `${side.member} ${side.collectionNo}`
       : side.collectionId;
   const serial =
-    side.serial != null ? ` #${String(side.serial).padStart(5, "0")}` : "";
-  return name + serial;
+    side.serial != null ? `#${String(side.serial).padStart(5, "0")}` : null;
+  return { name, serial };
 }
 
 const STEPS: { label: string; statuses: TradeStatus[] }[] = [
@@ -127,6 +127,7 @@ const sideStatusVariant: Record<SideStatus, "default" | "secondary" | "outline">
 };
 
 function SideCard({ side, label }: { side: TradeSide; label: string }) {
+  const { name: sideName, serial: sideSerial } = formatLabel(side);
   const profileUrl = side.user.cosmoNickname
     ? (() => {
         const base = `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`;
@@ -151,12 +152,16 @@ function SideCard({ side, label }: { side: TradeSide; label: string }) {
                 href={profileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium hover:underline"
+                className="text-sm font-medium hover:underline flex items-center gap-2"
               >
-                {formatLabel(side)}
+                <span>{sideName}</span>
+                {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
               </a>
             ) : (
-              <span className="text-sm font-medium">{formatLabel(side)}</span>
+              <span className="text-sm font-medium flex items-center gap-2">
+                <span>{sideName}</span>
+                {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
+              </span>
             )}
             <p className="text-xs text-muted-foreground">
               From: {side.user.cosmoNickname ?? side.user.name}
