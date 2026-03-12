@@ -35,7 +35,6 @@ import {
 
 export type AnyWant = {
   isAny: true;
-  artist?: string;
   member?: string;
   season?: string;
   class?: string;
@@ -43,15 +42,13 @@ export type AnyWant = {
 
 function anyWantLabel(w: AnyWant): string {
   if (w.member) return `Any ${w.member}`;
-  if (w.season && w.artist) return `Any ${w.artist} ${w.season}`;
   if (w.season) return `Any ${w.season}`;
-  if (w.artist) return `Any ${w.artist}`;
   if (w.class) return `Any ${w.class}`;
   return "Any";
 }
 
 function anyWantKey(w: AnyWant): string {
-  return [w.artist, w.member, w.season, w.class].join("|");
+  return [w.member, w.season, w.class].join("|");
 }
 
 function useObjektImages(items: { collectionId: string }[]) {
@@ -112,11 +109,8 @@ export default function NewTradePage() {
   const [submitting, setSubmitting] = useState(false);
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
 
-  // State for the "Add ANY want" dropdowns
+  // Artist is only used to narrow the member dropdown, never stored as a want chip
   const [anyArtist, setAnyArtist] = useState<string[]>([]);
-  const [anyMember, setAnyMember] = useState<string[]>([]);
-  const [anySeason, setAnySeason] = useState<string[]>([]);
-  const [anyClass, setAnyClass] = useState<string[]>([]);
 
   const availableAnyMembers = getAvailableMembers(anyArtist);
   const availableAnySeasons = getAvailableSeasons(anyArtist);
@@ -125,87 +119,10 @@ export default function NewTradePage() {
   const haveImages = useObjektImages(haves);
   const wantImages = useObjektImages(wants);
 
-  // Build a want from a single filter value and add/remove it automatically
-  function syncAnyWant(
-    prev: AnyWant[],
-    added: string[],
-    removed: string[],
-    makeWant: (v: string) => AnyWant,
-  ): AnyWant[] {
-    const key = (w: AnyWant) => anyWantKey(w);
-    const removedKeys = new Set(removed.map((v) => key(makeWant(v))));
-    return [
-      ...prev.filter((w) => !removedKeys.has(key(w))),
-      ...added.filter((v) => !prev.some((w) => key(w) === key(makeWant(v)))).map(makeWant),
-    ];
-  }
-
   function handleArtistChange(next: string[]) {
-    const prev = anyArtist;
-    const added = next.filter((v) => !prev.includes(v));
-    const removed = prev.filter((v) => !next.includes(v));
     setAnyArtist(next);
-    setAnyMember((m) => m.filter((v) => getAvailableMembers(next).includes(v)));
-    setAnySeason((s) => s.filter((v) => getAvailableSeasons(next).includes(v)));
-    setAnyClass((c) => c.filter((v) => getAvailableClasses(next).includes(v)));
-    // Only add/remove artist-level chips when no sub-filters are active
-    setAnyWants((w) => {
-      if (anyMember.length || anySeason.length || anyClass.length) return w;
-      return syncAnyWant(w, added, removed, (a) => ({ isAny: true, artist: a }));
-    });
   }
 
-  function handleMemberChange(next: string[]) {
-    const prev = anyMember;
-    const added = next.filter((v) => !prev.includes(v));
-    const removed = prev.filter((v) => !next.includes(v));
-    setAnyMember(next);
-    // When adding first member, remove bare artist chips
-    setAnyWants((w) => {
-      let result = syncAnyWant(w, added, removed, (m) => ({ isAny: true, member: m }));
-      if (added.length && !prev.length) {
-        result = result.filter((x) => !anyArtist.some((a) => anyWantKey(x) === anyWantKey({ isAny: true, artist: a })));
-      }
-      if (next.length === 0 && anyArtist.length) {
-        result = syncAnyWant(result, anyArtist, [], (a) => ({ isAny: true, artist: a }));
-      }
-      return result;
-    });
-  }
-
-  function handleSeasonChange(next: string[]) {
-    const prev = anySeason;
-    const added = next.filter((v) => !prev.includes(v));
-    const removed = prev.filter((v) => !next.includes(v));
-    setAnySeason(next);
-    setAnyWants((w) => {
-      let result = syncAnyWant(w, added, removed, (s) => ({ isAny: true, season: s, artist: anyArtist[0] }));
-      if (added.length && !prev.length) {
-        result = result.filter((x) => !anyArtist.some((a) => anyWantKey(x) === anyWantKey({ isAny: true, artist: a })));
-      }
-      if (next.length === 0 && anyArtist.length && !anyMember.length) {
-        result = syncAnyWant(result, anyArtist, [], (a) => ({ isAny: true, artist: a }));
-      }
-      return result;
-    });
-  }
-
-  function handleClassChange(next: string[]) {
-    const prev = anyClass;
-    const added = next.filter((v) => !prev.includes(v));
-    const removed = prev.filter((v) => !next.includes(v));
-    setAnyClass(next);
-    setAnyWants((w) => {
-      let result = syncAnyWant(w, added, removed, (c) => ({ isAny: true, class: c }));
-      if (added.length && !prev.length) {
-        result = result.filter((x) => !anyArtist.some((a) => anyWantKey(x) === anyWantKey({ isAny: true, artist: a })));
-      }
-      if (next.length === 0 && anyArtist.length && !anyMember.length && !anySeason.length) {
-        result = syncAnyWant(result, anyArtist, [], (a) => ({ isAny: true, artist: a }));
-      }
-      return result;
-    });
-  }
 
   if (!session) {
     return (
@@ -250,7 +167,6 @@ export default function NewTradePage() {
             ...anyWants.map((w) => ({
               collectionId: "",
               isAny: true,
-              artist: w.artist,
               member: w.member,
               season: w.season,
               class: w.class,
@@ -321,7 +237,7 @@ export default function NewTradePage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Add ANY want</CardTitle>
               <CardDescription>
-                Accept any objekt matching a filter — e.g. &quot;Any HeeJin&quot; or &quot;Any artms Atom01&quot;
+                Accept any objekt matching a filter — e.g. &quot;Any HeeJin&quot; or &quot;Any Atom01&quot;
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -335,22 +251,49 @@ export default function NewTradePage() {
                 />
                 <MultiSelect
                   options={availableAnyMembers.map((m) => ({ label: m, value: m }))}
-                  value={anyMember}
-                  onChange={handleMemberChange}
+                  value={anyWants.filter((w) => w.member).map((w) => w.member!)}
+                  onChange={(next) => {
+                    const prev = anyWants.filter((w) => w.member).map((w) => w.member!);
+                    const added = next.filter((v) => !prev.includes(v));
+                    const removed = prev.filter((v) => !next.includes(v));
+                    const removedKeys = new Set(removed.map((m) => anyWantKey({ isAny: true, member: m })));
+                    setAnyWants((ws) => [
+                      ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
+                      ...added.map((m) => ({ isAny: true as const, member: m })),
+                    ]);
+                  }}
                   placeholder="Member"
                   className="min-w-32"
                 />
                 <MultiSelect
                   options={availableAnySeasons.map((s) => ({ label: s, value: s }))}
-                  value={anySeason}
-                  onChange={handleSeasonChange}
+                  value={anyWants.filter((w) => w.season).map((w) => w.season!)}
+                  onChange={(next) => {
+                    const prev = anyWants.filter((w) => w.season).map((w) => w.season!);
+                    const added = next.filter((v) => !prev.includes(v));
+                    const removed = prev.filter((v) => !next.includes(v));
+                    const removedKeys = new Set(removed.map((s) => anyWantKey({ isAny: true, season: s })));
+                    setAnyWants((ws) => [
+                      ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
+                      ...added.map((s) => ({ isAny: true as const, season: s })),
+                    ]);
+                  }}
                   placeholder="Season"
                   className="min-w-32"
                 />
                 <MultiSelect
                   options={availableAnyClasses.map((c) => ({ label: c, value: c }))}
-                  value={anyClass}
-                  onChange={handleClassChange}
+                  value={anyWants.filter((w) => w.class).map((w) => w.class!)}
+                  onChange={(next) => {
+                    const prev = anyWants.filter((w) => w.class).map((w) => w.class!);
+                    const added = next.filter((v) => !prev.includes(v));
+                    const removed = prev.filter((v) => !next.includes(v));
+                    const removedKeys = new Set(removed.map((c) => anyWantKey({ isAny: true, class: c })));
+                    setAnyWants((ws) => [
+                      ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
+                      ...added.map((c) => ({ isAny: true as const, class: c })),
+                    ]);
+                  }}
                   placeholder="Class"
                   className="min-w-28"
                 />
