@@ -11,7 +11,7 @@ import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
-import { AlertTriangleIcon } from "lucide-react";
+import { XIcon, AlertTriangleIcon } from "lucide-react";
 
 function buildParams(filters: TradeFilterState, page: number) {
   const p = new URLSearchParams();
