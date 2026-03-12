@@ -59,6 +59,13 @@ function objektTopUrl(item: TradeItem, cosmoNickname?: string | null): string | 
   return `https://objekt.top/@${cosmoNickname}?search=${encodeURIComponent(parts.join(" "))}`;
 }
 
+function objektTopUrlWant(item: TradeItem): string | null {
+  if (item.isAny) return null;
+  const parts = [item.artist, item.season, item.member, item.collectionNo].filter(Boolean);
+  if (!parts.length) return null;
+  return `https://objekt.top/?search=${encodeURIComponent(parts.join(" "))}`;
+}
+
 function useObjektImages(items: TradeItem[]) {
   const [images, setImages] = useState<Map<string, string>>(new Map());
 
@@ -93,12 +100,14 @@ function ObjektImages({
   label,
   showSerial,
   cosmoNickname,
+  isWant,
 }: {
   items: TradeItem[];
   images: Map<string, string>;
   label: string;
   showSerial?: boolean;
   cosmoNickname?: string | null;
+  isWant?: boolean;
 }) {
   return (
     <div className="flex-1 min-w-0">
@@ -115,7 +124,7 @@ function ObjektImages({
             );
           }
           const url = images.get(item.collectionId);
-          const link = objektTopUrl(item, cosmoNickname);
+          const link = isWant ? objektTopUrlWant(item) : objektTopUrl(item, cosmoNickname);
           const imgEl = url ? (
             <img
               src={url}
@@ -320,7 +329,7 @@ export default function TradeDetailPage({
           <div className="px-6 pb-4 flex gap-6">
             <ObjektImages items={trade.haves} images={haveImages} label="HAVE" showSerial cosmoNickname={trade.cosmoNickname} />
             <Separator orientation="vertical" className="h-auto" />
-            <ObjektImages items={trade.wants} images={wantImages} label="WANT" cosmoNickname={trade.cosmoNickname} />
+            <ObjektImages items={trade.wants} images={wantImages} label="WANT" isWant />
           </div>
         )}
         <CardContent className="space-y-4">

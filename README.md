@@ -27,24 +27,98 @@ Cosmo only supports one-way transfers, requiring trust between traders. This pla
 - `src/lib`: Core logic (auth, database, Cosmo API, trade matching, Redis)
 - `drizzle`: Database migrations
 
-## Requirements
+## Local Development Setup
+
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) 20+
-- [PostgreSQL](https://www.postgresql.org/)
-- [Redis](https://redis.io/)
-- Cosmo account for testing
+- PostgreSQL and Redis running locally
 
-## Setup
+**On Debian/Ubuntu/Mint:**
 
 ```bash
-git clone <repository-url>
-cd objekt-trade
+sudo apt install postgresql redis-server
+sudo systemctl start postgresql redis-server
+sudo systemctl enable postgresql redis-server  # auto-start on boot
+
+# Create the database
+sudo -u postgres createdb objekt_trade
+```
+
+**On macOS:**
+
+```bash
+brew install postgresql redis
+brew services start postgresql redis
+createdb objekt_trade
+```
+
+### 1. Install dependencies
+
+```bash
 npm install
-cp .env.example .env.local
-# Configure DATABASE_URL, REDIS_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
+```
+
+### 2. Configure environment variables
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` and fill in at minimum:
+
+| Variable               | Description                     |
+| ---------------------- | ------------------------------- |
+| `DATABASE_URL`       | Postgres connection string      |
+| `REDIS_URL`          | Redis connection string         |
+| `BETTER_AUTH_SECRET` | Any random 32+ character string |
+| `BETTER_AUTH_URL`    | `http://localhost:3000`       |
+
+`INDEXER_DATABASE_URL` powers objekt ownership lookups. Leave it blank locally — features that depend on it will fail gracefully.
+
+Social login (`DISCORD_*`, `TWITTER_*`) is optional. Leave blank to disable those providers.
+
+### 3. Push the database schema
+
+```bash
 npx drizzle-kit push
+```
+
+### 4. Start the dev server
+
+```bash
 npm run dev
 ```
+
+The app is now running at [http://localhost:3000](http://localhost:3000).
+
+### 5. Seed a local test user
+
+The seed script creates a pre-linked test account so you can skip the real Cosmo verification flow:
+
+```bash
+npx tsx scripts/seed-local.ts
+```
+
+> The dev server must be running before you run this — the script calls the `/api/auth/sign-up/email` endpoint internally.
+
+After seeding, log in with:
+
+- **Email:** `seoyeon@local.wav`
+- **Password:** `yooyeon5`
+
+The account comes with a fake Cosmo identity (`localtest`) already linked, so trade creation and other authenticated flows work immediately.
+
+### Cosmo API features
+
+Cosmo user search and objekt lookups require a valid token. Open [scripts/seed-local.ts](scripts/seed-local.ts) and fill in your tokens at the top before running the script:
+
+```ts
+const COSMO_ACCESS_TOKEN = "your-access-token";
+const COSMO_REFRESH_TOKEN = "your-refresh-token";
+```
+
+The client auto-refreshes the token on 401/403 responses. If you leave the tokens blank, trade posts and active trades still work — only Cosmo search and objekt lookup will be unavailable.
 
 ## Tooling
 
@@ -112,7 +186,7 @@ npm run dev
 - `GET /api/objekts/owned` - Get user's objekt inventory
 - `GET /api/objekts/search` - Search objekts by collection ID
 
-## Development
+## Commands
 
 ```bash
 npm run dev      # Start development server
@@ -122,12 +196,11 @@ npm run lint     # Run Biome linter
 npm run format   # Format code with Biome
 ```
 
-### Database Migrations
-
 ```bash
-npx drizzle-kit generate  # Generate migration
-npx drizzle-kit push      # Apply migration
-npx drizzle-kit studio    # Open Drizzle Studio
+npx drizzle-kit generate  # Generate migration file
+npx drizzle-kit push      # Apply schema to database
+npx drizzle-kit studio    # Open Drizzle Studio (DB browser)
+npx tsx scripts/seed-local.ts  # Seed local test user
 ```
 
 ## Roadmap
