@@ -216,7 +216,7 @@ export function ObjektPicker({
               key={objekt.collectionId}
               className="flex items-center justify-between px-3 py-2 text-sm"
             >
-              <span>{objekt.member} {objekt.collectionNo}</span>
+              <span>{objekt.member} <span className="text-muted-foreground">{objekt.collectionId}</span> {objekt.collectionNo}</span>
               <button
                 type="button"
                 className="text-xs text-muted-foreground hover:text-destructive transition-colors"

@@ -70,7 +70,7 @@ function getAvailableMembers(selectedArtists: string[]): string[] {
   const source = selectedArtists.length
     ? selectedArtists.flatMap((a) => membersByArtist[a as ValidArtist] ?? [])
     : Object.values(membersByArtist).flat();
-  return [...new Set(source)].sort();
+  return [...new Set(source)];
 }
 
 function hasActiveFilters(filters: TradeFilterState): boolean {

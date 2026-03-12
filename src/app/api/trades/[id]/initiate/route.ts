@@ -21,8 +21,8 @@ interface SideInput {
 // POST /api/trades/[id]/initiate
 // Initiates an active trade between the current user and the owner of the trade post [id].
 // Body:
-//   myObjekt: the specific objekt the initiator will send
-//   theirObjekt: the specific objekt the initiator is requesting from the matched post
+//   myObjekts: array of objekts the initiator will send (1–10)
+//   theirObjekts: array of objekts the initiator is requesting from the matched post (1–10)
 //   matchedTradePostId: the matched trade post id that belongs to the recipient
 export async function POST(
   request: NextRequest,
@@ -39,14 +39,24 @@ export async function POST(
   const tradePostId = Number(id);
 
   const body = await request.json();
-  const { myObjekt, theirObjekt, matchedTradePostId } = body as {
-    myObjekt: SideInput;
-    theirObjekt: SideInput;
+  const { myObjekts, theirObjekts, matchedTradePostId } = body as {
+    myObjekts: SideInput[];
+    theirObjekts: SideInput[];
     matchedTradePostId: number;
   };
 
-  if (!myObjekt || !theirObjekt || !matchedTradePostId) {
+  if (!myObjekts?.length || !theirObjekts?.length || !matchedTradePostId) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  if (myObjekts.length > 10 || theirObjekts.length > 10) {
+    return NextResponse.json({ error: "Maximum 10 objekts per side" }, { status: 400 });
+  }
+
+  for (const o of myObjekts) {
+    if (!o.objektId) {
+      return NextResponse.json({ error: "All your objekts must have an objektId" }, { status: 400 });
+    }
   }
 
   // Load the initiator's own trade post (the one they're offering from)
@@ -128,7 +138,7 @@ export async function POST(
     );
   }
 
-  // Create the active trade and both sides in one transaction
+  // Create the active trade and all sides in one transaction
   const result = await db.transaction(async (tx) => {
     const [trade] = await tx
       .insert(activeTrade)
@@ -141,35 +151,39 @@ export async function POST(
       })
       .returning();
 
-    // Initiator side: they will send myObjekt to recipient
-    await tx.insert(activeTradeSide).values({
-      activeTradeId: trade.id,
-      userId: session.user.id,
-      address: initiatorCosmo.address,
-      recipientAddress: recipientCosmo.address,
-      objektId: myObjekt.objektId,
-      collectionId: myObjekt.collectionId,
-      collectionNo: myObjekt.collectionNo ?? null,
-      member: myObjekt.member ?? null,
-      serial: myObjekt.serial ?? null,
-      thumbnailUrl: myObjekt.thumbnailUrl ?? null,
-      status: "pending",
-    });
+    // Initiator sides: they will send myObjekts to recipient
+    await tx.insert(activeTradeSide).values(
+      myObjekts.map((o) => ({
+        activeTradeId: trade.id,
+        userId: session.user.id,
+        address: initiatorCosmo.address,
+        recipientAddress: recipientCosmo.address,
+        objektId: o.objektId,
+        collectionId: o.collectionId,
+        collectionNo: o.collectionNo ?? null,
+        member: o.member ?? null,
+        serial: o.serial ?? null,
+        thumbnailUrl: o.thumbnailUrl ?? null,
+        status: "pending" as const,
+      }))
+    );
 
-    // Recipient side: they will send theirObjekt to initiator
-    await tx.insert(activeTradeSide).values({
-      activeTradeId: trade.id,
-      userId: matchedPost.userId,
-      address: recipientCosmo.address,
-      recipientAddress: initiatorCosmo.address,
-      objektId: theirObjekt.objektId,
-      collectionId: theirObjekt.collectionId,
-      collectionNo: theirObjekt.collectionNo ?? null,
-      member: theirObjekt.member ?? null,
-      serial: theirObjekt.serial ?? null,
-      thumbnailUrl: theirObjekt.thumbnailUrl ?? null,
-      status: "pending",
-    });
+    // Recipient sides: they will send theirObjekts to initiator
+    await tx.insert(activeTradeSide).values(
+      theirObjekts.map((o) => ({
+        activeTradeId: trade.id,
+        userId: matchedPost.userId,
+        address: recipientCosmo.address,
+        recipientAddress: initiatorCosmo.address,
+        objektId: o.objektId ?? "",
+        collectionId: o.collectionId,
+        collectionNo: o.collectionNo ?? null,
+        member: o.member ?? null,
+        serial: o.serial ?? null,
+        thumbnailUrl: o.thumbnailUrl ?? null,
+        status: "pending" as const,
+      }))
+    );
 
     return trade;
   });

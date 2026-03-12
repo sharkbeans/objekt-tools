@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     })
     .from(collections)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .limit(24);
+    .limit(200);
 
   return NextResponse.json({ results: rows });
 }

@@ -18,6 +18,13 @@ import { TradeCard } from "@/components/trades/trade-card";
 import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface TradeItem {
   id: number;
@@ -143,6 +150,10 @@ export default function TradeDetailPage({
     matchedTradePostId: number;
     theirHaves: TradeItem[];
   } | null>(null);
+  // For non-owners: pick one of their own trade posts to initiate against this trade
+  const [myPostPickerOpen, setMyPostPickerOpen] = useState(false);
+  const [myInitiatePostId, setMyInitiatePostId] = useState<number | null>(null);
+  const [myInitiateHaves, setMyInitiateHaves] = useState<TradeItem[]>([]);
 
   const { data: trade, isLoading: tradeLoading } = useQuery({
     queryKey: ["trade", id],
@@ -161,6 +172,17 @@ export default function TradeDetailPage({
     },
     enabled: !!trade,
   });
+
+  // Fetch the current user's open trades so they can initiate against this trade post
+  const { data: myTradesData } = useQuery({
+    queryKey: ["my-open-trades-for-initiate"],
+    queryFn: async () => {
+      const res = await fetch("/api/trades/mine?limit=50");
+      return res.json();
+    },
+    enabled: !!session && !!trade && trade.status === "open",
+  });
+  const myOpenTrades: any[] = (myTradesData?.trades ?? []).filter((t: any) => t.status === "open");
 
   const haveImages = useObjektImages(trade?.haves ?? []);
   const wantImages = useObjektImages(trade?.wants ?? []);
@@ -317,6 +339,22 @@ export default function TradeDetailPage({
         </CardContent>
       </Card>
 
+      {/* Non-owner: initiate trade against this post using one of their own matching trades */}
+      {!isOwner && session && trade.status === "open" && myOpenTrades.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">
+                You have {myOpenTrades.length} open trade{myOpenTrades.length !== 1 ? "s" : ""} — initiate a trade with this poster.
+              </p>
+              <Button size="sm" onClick={() => setMyPostPickerOpen(true)}>
+                Initiate Trade
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Matches */}
       <div>
         <h2 className="text-xl font-bold mb-4">
@@ -361,6 +399,7 @@ export default function TradeDetailPage({
         )}
       </div>
 
+      {/* Owner-side: initiate dialog (owner picking from their matches) */}
       {initiateTarget && (
         <InitiateTradeDialog
           open={!!initiateTarget}
@@ -369,6 +408,49 @@ export default function TradeDetailPage({
           myHaves={trade?.haves ?? []}
           matchedTradePostId={initiateTarget.matchedTradePostId}
           theirHaves={initiateTarget.theirHaves}
+        />
+      )}
+
+      {/* Non-owner: pick which of their own trade posts to use */}
+      <Dialog open={myPostPickerOpen} onOpenChange={setMyPostPickerOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select your trade post</DialogTitle>
+            <DialogDescription>
+              Choose one of your open trades to initiate against this post.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 mt-2">
+            {myOpenTrades.map((myTrade: any) => (
+              <button
+                key={myTrade.id}
+                type="button"
+                className="text-left rounded-md border px-3 py-2 text-sm hover:bg-accent transition-colors"
+                onClick={() => {
+                  setMyInitiatePostId(myTrade.id);
+                  setMyInitiateHaves(myTrade.haves ?? []);
+                  setMyPostPickerOpen(false);
+                }}
+              >
+                <span className="font-medium">Trade #{myTrade.id}</span>
+                <span className="text-muted-foreground ml-2 text-xs">
+                  {myTrade.haves?.length ?? 0} have · {myTrade.wants?.length ?? 0} want
+                </span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Non-owner: initiate dialog (their post vs this trade) */}
+      {myInitiatePostId && (
+        <InitiateTradeDialog
+          open={!!myInitiatePostId}
+          onOpenChange={(open) => { if (!open) { setMyInitiatePostId(null); setMyInitiateHaves([]); } }}
+          myTradePostId={myInitiatePostId}
+          myHaves={myInitiateHaves}
+          matchedTradePostId={Number(id)}
+          theirHaves={trade?.haves ?? []}
         />
       )}
     </div>

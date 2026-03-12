@@ -131,8 +131,8 @@ function SideCard({ side, label }: { side: TradeSide; label: string }) {
     ? `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`
     : null;
   return (
-    <div className="flex-1 min-w-0 space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+    <div className="space-y-1">
+      {label && <p className="text-xs font-medium text-muted-foreground">{label}</p>}
       <div className="rounded-md border p-3 space-y-2">
         <div className="flex items-center gap-2">
           {side.thumbnailUrl && (
@@ -276,9 +276,9 @@ export default function ActiveTradePage({
   const isRecipient = trade.recipientUserId === userId;
   const isActive = !["completed", "cancelled", "disputed"].includes(trade.status);
 
-  // Split sides into initiator's and recipient's
-  const initiatorSide = trade.sides.find((s) => s.userId === trade.initiatorUserId);
-  const recipientSide = trade.sides.find((s) => s.userId === trade.recipientUserId);
+  // Split sides into initiator's and recipient's (may be multiple per user for multi-objekt trades)
+  const initiatorSides = trade.sides.filter((s) => s.userId === trade.initiatorUserId);
+  const recipientSides = trade.sides.filter((s) => s.userId === trade.recipientUserId);
 
   const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
     pending: "secondary",
@@ -333,11 +333,27 @@ export default function ActiveTradePage({
           <Separator />
 
           <div className="flex gap-4">
-            {initiatorSide && (
-              <SideCard side={initiatorSide} label={`${trade.initiator.cosmoNickname ?? trade.initiator.name} sends`} />
+            {initiatorSides.length > 0 && (
+              <div className="flex-1 min-w-0 space-y-2">
+                {initiatorSides.map((side, i) => (
+                  <SideCard
+                    key={side.id}
+                    side={side}
+                    label={i === 0 ? `${trade.initiator.cosmoNickname ?? trade.initiator.name} sends` : ""}
+                  />
+                ))}
+              </div>
             )}
-            {recipientSide && (
-              <SideCard side={recipientSide} label={`${trade.recipient.cosmoNickname ?? trade.recipient.name} sends`} />
+            {recipientSides.length > 0 && (
+              <div className="flex-1 min-w-0 space-y-2">
+                {recipientSides.map((side, i) => (
+                  <SideCard
+                    key={side.id}
+                    side={side}
+                    label={i === 0 ? `${trade.recipient.cosmoNickname ?? trade.recipient.name} sends` : ""}
+                  />
+                ))}
+              </div>
             )}
           </div>
 

@@ -88,20 +88,37 @@ export function InitiateTradeDialog({
   theirHaves,
 }: Props) {
   const router = useRouter();
-  const [mySelected, setMySelected] = useState<TradeItem | null>(null);
-  const [theirSelected, setTheirSelected] = useState<TradeItem | null>(null);
+  const [mySelected, setMySelected] = useState<Set<number>>(new Set());
+  const [theirSelected, setTheirSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit() {
-    if (!mySelected || !theirSelected) return;
+  function toggleMy(item: TradeItem) {
+    setMySelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else if (next.size < 10) next.add(item.id);
+      return next;
+    });
+  }
 
-    // Both sides must have an objektId (serial-specific objekt)
-    if (!mySelected.objektId) {
-      toast.error("Your selected objekt has no objekt ID. Please use a serial-specific have item.");
-      return;
-    }
-    if (!theirSelected.objektId) {
-      toast.error("Their selected objekt has no objekt ID.");
+  function toggleTheir(item: TradeItem) {
+    setTheirSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else if (next.size < 10) next.add(item.id);
+      return next;
+    });
+  }
+
+  async function handleSubmit() {
+    if (mySelected.size === 0 || theirSelected.size === 0) return;
+
+    const myItems = myHaves.filter((i) => mySelected.has(i.id));
+    const theirItems = theirHaves.filter((i) => theirSelected.has(i.id));
+
+    const missingObjektId = myItems.find((i) => !i.objektId);
+    if (missingObjektId) {
+      toast.error(`"${formatLabel(missingObjektId)}" has no objekt ID. Please use serial-specific have items.`);
       return;
     }
 
@@ -112,29 +129,28 @@ export function InitiateTradeDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           matchedTradePostId,
-          myObjekt: {
-            objektId: mySelected.objektId,
-            collectionId: mySelected.collectionId,
-            collectionNo: mySelected.collectionNo,
-            member: mySelected.member,
-            serial: mySelected.serial,
-            thumbnailUrl: mySelected.thumbnailUrl,
-          },
-          theirObjekt: {
-            objektId: theirSelected.objektId,
-            collectionId: theirSelected.collectionId,
-            collectionNo: theirSelected.collectionNo,
-            member: theirSelected.member,
-            serial: theirSelected.serial,
-            thumbnailUrl: theirSelected.thumbnailUrl,
-          },
+          myObjekts: myItems.map((i) => ({
+            objektId: i.objektId,
+            collectionId: i.collectionId,
+            collectionNo: i.collectionNo,
+            member: i.member,
+            serial: i.serial,
+            thumbnailUrl: i.thumbnailUrl,
+          })),
+          theirObjekts: theirItems.map((i) => ({
+            objektId: i.objektId,
+            collectionId: i.collectionId,
+            collectionNo: i.collectionNo,
+            member: i.member,
+            serial: i.serial,
+            thumbnailUrl: i.thumbnailUrl,
+          })),
         }),
       });
 
       const data = await res.json();
 
       if (res.status === 409) {
-        // Existing trade — redirect to it
         router.push(`/active-trades/${data.id}`);
         return;
       }
@@ -151,19 +167,25 @@ export function InitiateTradeDialog({
     }
   }
 
+  const myRatio = mySelected.size;
+  const theirRatio = theirSelected.size;
+  const ratioLabel = myRatio > 0 && theirRatio > 0 ? ` (${myRatio}:${theirRatio})` : "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Initiate Trade</DialogTitle>
+          <DialogTitle>Initiate Trade{ratioLabel}</DialogTitle>
           <DialogDescription>
-            Select which objekt you will send and which one you want to receive.
+            Select the objekts you will send and those you want to receive. Up to 10 per side.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
-            <p className="text-sm font-medium mb-2">You will send</p>
+            <p className="text-sm font-medium mb-2">
+              You will send{mySelected.size > 0 ? ` (${mySelected.size} selected)` : ""}
+            </p>
             <div className="flex flex-col gap-2">
               {myHaves.length === 0 && (
                 <p className="text-sm text-muted-foreground">No have items available.</p>
@@ -172,15 +194,17 @@ export function InitiateTradeDialog({
                 <ObjektOption
                   key={item.id}
                   item={item}
-                  selected={mySelected?.id === item.id}
-                  onClick={() => setMySelected(item)}
+                  selected={mySelected.has(item.id)}
+                  onClick={() => toggleMy(item)}
                 />
               ))}
             </div>
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-2">You will receive</p>
+            <p className="text-sm font-medium mb-2">
+              You will receive{theirSelected.size > 0 ? ` (${theirSelected.size} selected)` : ""}
+            </p>
             <div className="flex flex-col gap-2">
               {theirHaves.length === 0 && (
                 <p className="text-sm text-muted-foreground">No have items available.</p>
@@ -189,8 +213,8 @@ export function InitiateTradeDialog({
                 <ObjektOption
                   key={item.id}
                   item={item}
-                  selected={theirSelected?.id === item.id}
-                  onClick={() => setTheirSelected(item)}
+                  selected={theirSelected.has(item.id)}
+                  onClick={() => toggleTheir(item)}
                 />
               ))}
             </div>
@@ -203,7 +227,7 @@ export function InitiateTradeDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!mySelected || !theirSelected || loading}
+            disabled={mySelected.size === 0 || theirSelected.size === 0 || loading}
           >
             {loading ? "Initiating..." : "Initiate Trade"}
           </Button>
