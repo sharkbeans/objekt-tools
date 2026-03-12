@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeNotification } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { activeTrade, tradeNotification, tradePost } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
 
 // POST /api/active-trades/[id]/cancel — either participant cancels
 export async function POST(
@@ -38,10 +38,23 @@ export async function POST(
     return NextResponse.json({ error: "Trade already finalised" }, { status: 400 });
   }
 
-  await db
-    .update(activeTrade)
-    .set({ status: "cancelled", updatedAt: new Date() })
-    .where(eq(activeTrade.id, tradeId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(activeTrade)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(eq(activeTrade.id, tradeId));
+
+    // If the trade had been accepted (posts were hidden), restore them to open
+    if (["accepted", "partial"].includes(trade.status)) {
+      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is number => id !== null);
+      if (postIds.length > 0) {
+        await tx
+          .update(tradePost)
+          .set({ status: "open", updatedAt: new Date() })
+          .where(inArray(tradePost.id, postIds));
+      }
+    }
+  });
 
   const cancellerName = session.user.name;
   const otherUserId =

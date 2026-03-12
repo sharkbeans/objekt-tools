@@ -105,7 +105,7 @@ export async function POST(
     return NextResponse.json({ error: "Recipient has no linked Cosmo account" }, { status: 422 });
   }
 
-  // Check there's no existing active trade between these two posts already
+  // Only block the same user from sending a duplicate request for the same pair of posts
   const existing = await db.query.activeTrade.findFirst({
     where: and(
       eq(activeTrade.tradePostId, tradePostId),
@@ -116,24 +116,7 @@ export async function POST(
 
   if (existing && ["pending", "accepted", "partial"].includes(existing.status)) {
     return NextResponse.json(
-      { error: "An active trade already exists for these posts", id: existing.id },
-      { status: 409 }
-    );
-  }
-
-  // Check if the other user already initiated a trade in the reverse direction
-  const reverseExisting = await db.query.activeTrade.findFirst({
-    where: and(
-      eq(activeTrade.tradePostId, matchedTradePostId),
-      eq(activeTrade.matchedTradePostId, tradePostId),
-      eq(activeTrade.initiatorUserId, matchedPost.userId),
-      eq(activeTrade.recipientUserId, session.user.id),
-    ),
-  });
-
-  if (reverseExisting && ["pending", "accepted", "partial"].includes(reverseExisting.status)) {
-    return NextResponse.json(
-      { error: "The other user already initiated a trade for these posts", id: reverseExisting.id },
+      { error: "You already have an active trade request for these posts", id: existing.id },
       { status: 409 }
     );
   }

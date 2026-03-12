@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { activeTrade, tradePost } from "@/lib/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
 export async function POST(
@@ -35,10 +35,21 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await db
-    .update(activeTrade)
-    .set({ status: "accepted", updatedAt: new Date() })
-    .where(eq(activeTrade.id, tradeId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(activeTrade)
+      .set({ status: "accepted", updatedAt: new Date() })
+      .where(eq(activeTrade.id, tradeId));
+
+    // Temporarily hide both trade posts from the browse listing while trade is in progress
+    const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is number => id !== null);
+    if (postIds.length > 0) {
+      await tx
+        .update(tradePost)
+        .set({ status: "in_trade", updatedAt: new Date() })
+        .where(inArray(tradePost.id, postIds));
+    }
+  });
 
   return NextResponse.json({ status: "accepted" });
 }

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { activeTrade, activeTradeSide, tradeNotification } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, tradeNotification, tradePost } from "@/lib/db/schema";
 import { objekts } from "@/lib/db/indexer-schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and, or, ne } from "drizzle-orm";
 
 // POST /api/active-trades/[id]/check-transfers
 // Queries the indexer for current objekt ownership and updates side statuses.
@@ -114,6 +114,53 @@ export async function POST(
           message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
         },
       ]);
+
+      // Close both trade posts permanently
+      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is number => id !== null);
+      if (postIds.length > 0) {
+        await db
+          .update(tradePost)
+          .set({ status: "closed", updatedAt: new Date() })
+          .where(inArray(tradePost.id, postIds));
+      }
+
+      // Cancel all other pending/accepted active trades that involve either of these posts
+      if (postIds.length > 0) {
+        const siblingTrades = await db.query.activeTrade.findMany({
+          where: and(
+            ne(activeTrade.id, tradeId),
+            inArray(activeTrade.status, ["pending", "accepted", "partial"]),
+            or(
+              ...postIds.flatMap((pid) => [
+                eq(activeTrade.tradePostId, pid),
+                eq(activeTrade.matchedTradePostId, pid),
+              ])
+            ),
+          ),
+          columns: { id: true, initiatorUserId: true, recipientUserId: true },
+        });
+
+        if (siblingTrades.length > 0) {
+          const siblingIds = siblingTrades.map((t) => t.id);
+          await db
+            .update(activeTrade)
+            .set({ status: "cancelled", updatedAt: new Date() })
+            .where(inArray(activeTrade.id, siblingIds));
+
+          // Notify all parties of the sibling cancellations
+          const notifications = siblingTrades.flatMap((t) => [
+            {
+              userId: t.initiatorUserId,
+              message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+            },
+            {
+              userId: t.recipientUserId,
+              message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+            },
+          ]);
+          await db.insert(tradeNotification).values(notifications);
+        }
+      }
     }
   }
 
