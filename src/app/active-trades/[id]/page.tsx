@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { CopyIcon, CheckIcon, ExternalLinkIcon } from "lucide-react";
 
 type SideStatus = "pending" | "sent" | "confirmed";
 type TradeStatus =
@@ -126,6 +127,28 @@ const sideStatusVariant: Record<SideStatus, "default" | "secondary" | "outline">
   confirmed: "default",
 };
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="text-muted-foreground hover:text-foreground transition-colors"
+      aria-label="Copy username"
+    >
+      {copied ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
+    </button>
+  );
+}
+
 function SideCard({ side, label }: { side: TradeSide; label: string }) {
   const { name: sideName, serial: sideSerial } = formatLabel(side);
   const profileUrl = side.user.cosmoNickname
@@ -141,50 +164,82 @@ function SideCard({ side, label }: { side: TradeSide; label: string }) {
           : base;
       })()
     : null;
+  const displayName = side.user.cosmoNickname ?? side.user.name;
   return (
     <div className="space-y-1">
       {label && <p className="text-xs font-medium text-muted-foreground">{label}</p>}
-      <div className="rounded-md border p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <div>
-            {profileUrl ? (
-              <a
-                href={profileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium hover:underline flex items-center gap-2"
-              >
+      {profileUrl ? (
+        <a
+          href={profileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block rounded-md border p-3 space-y-2 hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <div>
+              <span className="text-sm font-medium flex items-center gap-2">
                 <span>{sideName}</span>
                 {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
-              </a>
-            ) : (
+                <ExternalLinkIcon className="h-3 w-3 text-muted-foreground" />
+              </span>
+              <div className="flex items-center gap-1 mt-0.5">
+                <p className="text-xs text-muted-foreground">
+                  {displayName}
+                </p>
+                <CopyButton text={displayName} />
+              </div>
+              <p className="text-xs text-muted-foreground truncate" title={side.address}>
+                {side.address.slice(0, 8)}…{side.address.slice(-6)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={sideStatusVariant[side.status]} className="text-xs capitalize">
+              {side.status}
+            </Badge>
+            {side.detectedAt && (
+              <span className="text-xs text-muted-foreground">
+                {new Date(side.detectedAt).toLocaleString()}
+              </span>
+            )}
+          </div>
+        </a>
+      ) : (
+        <div className="rounded-md border p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <div>
               <span className="text-sm font-medium flex items-center gap-2">
                 <span>{sideName}</span>
                 {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
               </span>
+              <div className="flex items-center gap-1 mt-0.5">
+                <p className="text-xs text-muted-foreground">
+                  {displayName}
+                </p>
+                <CopyButton text={displayName} />
+              </div>
+              <p className="text-xs text-muted-foreground truncate" title={side.address}>
+                {side.address.slice(0, 8)}…{side.address.slice(-6)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={sideStatusVariant[side.status]} className="text-xs capitalize">
+              {side.status}
+            </Badge>
+            {side.detectedAt && (
+              <span className="text-xs text-muted-foreground">
+                {new Date(side.detectedAt).toLocaleString()}
+              </span>
             )}
-            <p className="text-xs text-muted-foreground">
-              From: {side.user.cosmoNickname ?? side.user.name}
-            </p>
-            <p className="text-xs text-muted-foreground truncate" title={side.address}>
-              {side.address.slice(0, 8)}…{side.address.slice(-6)}
-            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={sideStatusVariant[side.status]} className="text-xs capitalize">
-            {side.status}
-          </Badge>
-          {side.detectedAt && (
-            <span className="text-xs text-muted-foreground">
-              {new Date(side.detectedAt).toLocaleString()}
-            </span>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
+
+const CHECK_TRANSFERS_COOLDOWN_MS = 10_000;
 
 export default function ActiveTradePage({
   params,
@@ -195,6 +250,9 @@ export default function ActiveTradePage({
   const { data: session } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const lastCheckRef = useRef<number>(0);
+  const [checkCooldown, setCheckCooldown] = useState(0);
+  const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: trade, isLoading } = useQuery<ActiveTrade>({
     queryKey: ["active-trade", id],
@@ -217,6 +275,56 @@ export default function ActiveTradePage({
     }
   }, [trade?.status]);
 
+  // On page focus/visibility restore, trigger a check-transfers if trade is active
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      const status = queryClient.getQueryData<ActiveTrade>(["active-trade", id])?.status;
+      if (!status || !["accepted", "partial"].includes(status)) return;
+      runCheckTransfers(true);
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [id]);
+
+  function startCooldownDisplay() {
+    if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    const end = Date.now() + CHECK_TRANSFERS_COOLDOWN_MS;
+    setCheckCooldown(Math.ceil((end - Date.now()) / 1000));
+    cooldownTimerRef.current = setInterval(() => {
+      const remaining = Math.ceil((end - Date.now()) / 1000);
+      if (remaining <= 0) {
+        clearInterval(cooldownTimerRef.current!);
+        cooldownTimerRef.current = null;
+        setCheckCooldown(0);
+      } else {
+        setCheckCooldown(remaining);
+      }
+    }, 500);
+  }
+
+  async function runCheckTransfers(silent = false) {
+    const now = Date.now();
+    if (now - lastCheckRef.current < CHECK_TRANSFERS_COOLDOWN_MS) return;
+    lastCheckRef.current = now;
+    startCooldownDisplay();
+
+    const res = await fetch(`/api/active-trades/${id}/check-transfers`, { method: "POST" });
+    if (!res.ok) {
+      if (!silent) toast.error("Failed to check transfers");
+      return;
+    }
+    const data = await res.json();
+    if (!silent) {
+      if (data.updated > 0) {
+        toast.success(`${data.updated} transfer(s) detected.`);
+      } else {
+        toast.info("No new transfers detected yet.");
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
+  }
+
   async function handleAccept() {
     const res = await fetch(`/api/active-trades/${id}/accept`, { method: "POST" });
     if (!res.ok) {
@@ -238,18 +346,9 @@ export default function ActiveTradePage({
   }
 
   async function handleCheckTransfers() {
-    const res = await fetch(`/api/active-trades/${id}/check-transfers`, { method: "POST" });
-    if (!res.ok) {
-      toast.error("Failed to check transfers");
-      return;
-    }
-    const data = await res.json();
-    if (data.updated > 0) {
-      toast.success(`${data.updated} transfer(s) detected.`);
-    } else {
-      toast.info("No new transfers detected yet.");
-    }
-    queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
+    const now = Date.now();
+    if (now - lastCheckRef.current < CHECK_TRANSFERS_COOLDOWN_MS) return;
+    await runCheckTransfers(false);
   }
 
   if (isLoading) {
@@ -275,6 +374,11 @@ export default function ActiveTradePage({
   // Split sides into initiator's and recipient's (may be multiple per user for multi-objekt trades)
   const initiatorSides = trade.sides.filter((s) => s.userId === trade.initiatorUserId);
   const recipientSides = trade.sides.filter((s) => s.userId === trade.recipientUserId);
+
+  const initiatorName = trade.initiator.cosmoNickname ?? trade.initiator.name;
+  const recipientName = trade.recipient.cosmoNickname ?? trade.recipient.name;
+  const myInitiatorSideLabel = trade.initiatorUserId === userId ? "You send" : `${initiatorName} sends`;
+  const myRecipientSideLabel = trade.recipientUserId === userId ? "You send" : `${recipientName} sends`;
 
   const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
     pending: "secondary",
@@ -335,7 +439,7 @@ export default function ActiveTradePage({
                   <SideCard
                     key={side.id}
                     side={side}
-                    label={i === 0 ? `${trade.initiator.cosmoNickname ?? trade.initiator.name} sends` : ""}
+                    label={i === 0 ? myInitiatorSideLabel : ""}
                   />
                 ))}
               </div>
@@ -346,7 +450,7 @@ export default function ActiveTradePage({
                   <SideCard
                     key={side.id}
                     side={side}
-                    label={i === 0 ? `${trade.recipient.cosmoNickname ?? trade.recipient.name} sends` : ""}
+                    label={i === 0 ? myRecipientSideLabel : ""}
                   />
                 ))}
               </div>
@@ -366,8 +470,14 @@ export default function ActiveTradePage({
           )}
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && (
-            <Button variant="outline" size="sm" onClick={handleCheckTransfers} className="w-full">
-              Check Transfers
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCheckTransfers}
+              disabled={checkCooldown > 0}
+              className="w-full"
+            >
+              {checkCooldown > 0 ? `Check Transfers (${checkCooldown}s)` : "Check Transfers"}
             </Button>
           )}
 
