@@ -397,33 +397,6 @@ export default function NewTradePage() {
         </TabsContent>
       </Tabs>
 
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="description">Note (optional)</Label>
-            <Input
-              id="description"
-              placeholder="Any additional details about this trade..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="flex gap-4 items-center">
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting || haves.length === 0 || (wants.length === 0 && anyWants.length === 0)}
-              className="flex-1"
-            >
-              {submitting ? "Posting..." : "Post Trade"}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              {haves.length} have, {wants.length + anyWants.length} want
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Trade Preview */}
       {(haves.length > 0 || wants.length > 0 || anyWants.length > 0) && (
         <Card>
@@ -548,6 +521,33 @@ export default function NewTradePage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="description">Note (optional)</Label>
+            <Input
+              id="description"
+              placeholder="Any additional details about this trade..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-4 items-center">
+            <Button
+              onClick={handleSubmit}
+              disabled={submitting || haves.length === 0 || (wants.length === 0 && anyWants.length === 0)}
+              className="flex-1"
+            >
+              {submitting ? "Posting..." : "Post Trade"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              {haves.length} have, {wants.length + anyWants.length} want
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
