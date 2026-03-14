@@ -136,9 +136,9 @@ whether each side has sent their objekt.
 
 # Trade Flow
 
-### Step 1 --- Initiate Trade
+### Step 1 --- Send a Trade Offer
 
-User A views a matching trade and clicks **"Initiate Trade"**.
+User A views a matching trade and clicks **"Send a Trade Offer"**.
 
 User A selects specific objekts to exchange.
 

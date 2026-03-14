@@ -155,7 +155,7 @@ export function InitiateTradeDialog({
         return;
       }
       if (!res.ok) {
-        toast.error(data.error ?? "Failed to initiate trade");
+        toast.error(data.error ?? "Failed to Send a Trade Offer");
         return;
       }
 
@@ -175,7 +175,7 @@ export function InitiateTradeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Initiate Trade{ratioLabel}</DialogTitle>
+          <DialogTitle>Send a Trade Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
             Select the objekts you will send and those you want to receive. Up to 10 per side.
           </DialogDescription>
@@ -229,7 +229,7 @@ export function InitiateTradeDialog({
             onClick={handleSubmit}
             disabled={mySelected.size === 0 || theirSelected.size === 0 || loading}
           >
-            {loading ? "Initiating..." : "Initiate Trade"}
+            {loading ? "Initiating..." : "Send a Trade Offer"}
           </Button>
         </DialogFooter>
       </DialogContent>

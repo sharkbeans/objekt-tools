@@ -159,7 +159,7 @@ export const activeTrade = pgTable("active_trade", {
   tradePostId: text("trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
   // The trade post of the other party (the match)
   matchedTradePostId: text("matched_trade_post_id").references(() => tradePost.id, { onDelete: "set null" }),
-  // initiator = user who clicked "Initiate Trade"; recipient = user who owns the matched trade post
+  // initiator = user who clicked "Send a Trade Offer"; recipient = user who owns the matched trade post
   initiatorUserId: text("initiator_user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),

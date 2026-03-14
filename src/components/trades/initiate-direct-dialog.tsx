@@ -135,7 +135,7 @@ export function InitiateDirectDialog({
         return;
       }
       if (!res.ok) {
-        toast.error(data.error ?? "Failed to initiate trade");
+        toast.error(data.error ?? "Failed to Send a Trade Offer");
         return;
       }
 
@@ -156,7 +156,7 @@ export function InitiateDirectDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Initiate Trade{ratioLabel}</DialogTitle>
+          <DialogTitle>Send a Trade Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
             Select objekts from your inventory to send, then pick what you want to receive. Up to 10 per side.
           </DialogDescription>
@@ -211,7 +211,7 @@ export function InitiateDirectDialog({
             onClick={handleSubmit}
             disabled={mySelected.length === 0 || theirSelected.size === 0 || loading}
           >
-            {loading ? "Initiating..." : "Initiate Trade"}
+            {loading ? "Initiating..." : "Send a Trade Offer"}
           </Button>
         </DialogFooter>
       </DialogContent>

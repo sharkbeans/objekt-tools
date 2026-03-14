@@ -374,7 +374,7 @@ export default function TradeDetailPage({
         </CardContent>
       </Card>
 
-      {/* Non-owner: initiate trade directly against this post (no own trade post required) */}
+      {/* Non-owner: Send a Trade Offer directly against this post (no own trade post required) */}
       {!isOwner && session && trade.status === "open" && (
         <Card>
           <CardContent className="py-4">
@@ -383,7 +383,7 @@ export default function TradeDetailPage({
                 Interested? Initiate a trade with this poster.
               </p>
               <Button size="sm" onClick={() => setDirectInitiateOpen(true)}>
-                Initiate Trade
+                Send a Trade Offer
               </Button>
             </div>
           </CardContent>
@@ -419,7 +419,7 @@ export default function TradeDetailPage({
                       })
                     }
                   >
-                    Initiate Trade
+                    Send a Trade Offer
                   </Button>
                 )}
               </div>

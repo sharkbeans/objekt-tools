@@ -148,7 +148,7 @@ The client auto-refreshes the token on 401/403 responses. If you leave the token
 1. Link Cosmo account by setting verification code in status message
 2. Create trade post with specific objekts to offer and request
 3. System finds users who have what you want and want what you have
-4. Initiate trade with matched party
+4. Send a Trade Offer with matched party
 5. Counterparty accepts trade
 6. Both parties transfer objekts via Cosmo app
 7. System detects and verifies transfers

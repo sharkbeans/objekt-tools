@@ -85,7 +85,7 @@ export async function POST(
 
   // Don't allow trading with yourself
   if (matchedPost.userId === session.user.id) {
-    return NextResponse.json({ error: "Cannot initiate trade with yourself" }, { status: 400 });
+    return NextResponse.json({ error: "Cannot Send a Trade Offer with yourself" }, { status: 400 });
   }
 
   // Get initiator's cosmo address
