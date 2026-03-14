@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { CopyIcon, CheckIcon, ExternalLinkIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon } from "lucide-react";
 
 type SideStatus = "pending" | "sent" | "confirmed";
 type TradeStatus =
@@ -235,6 +236,118 @@ function SideCard({ side, label }: { side: TradeSide; label: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface TradeMessage {
+  id: number;
+  userId: string;
+  content: string;
+  createdAt: string;
+  user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
+}
+
+function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: messages = [] } = useQuery<TradeMessage[]>({
+    queryKey: ["trade-messages", tradeId],
+    queryFn: async () => {
+      const res = await fetch(`/api/active-trades/${tradeId}/messages`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    refetchInterval: 10_000,
+  });
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  async function handleSend(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const content = message.trim();
+    if (!content || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch(`/api/active-trades/${tradeId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to send message");
+        return;
+      }
+      setMessage("");
+      queryClient.invalidateQueries({ queryKey: ["trade-messages", tradeId] });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-medium">Chat</h3>
+      <p className="text-xs text-muted-foreground">
+        Only you and your trade partner can see these messages. Only the last 10 messages are kept.
+      </p>
+      <div
+        ref={scrollRef}
+        className="h-64 overflow-y-auto rounded-md border p-3 space-y-2 bg-muted/20"
+      >
+        {messages.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-8">
+            No messages yet. Say hi!
+          </p>
+        )}
+        {messages.map((msg) => {
+          const isMe = msg.userId === userId;
+          const displayName = msg.user.cosmoNickname ?? msg.user.name;
+          return (
+            <div
+              key={msg.id}
+              className={cn("flex flex-col gap-0.5", isMe ? "items-end" : "items-start")}
+            >
+              <span className="text-[10px] text-muted-foreground">{displayName}</span>
+              <div
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-sm max-w-[80%] break-words",
+                  isMe
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                )}
+              >
+                {msg.content}
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                {new Date(msg.createdAt).toLocaleTimeString("en-GB", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <form onSubmit={handleSend} className="flex gap-2">
+        <Input
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Type a message..."
+          maxLength={500}
+          className="flex-1"
+        />
+        <Button type="submit" size="icon" disabled={!message.trim() || sending}>
+          <SendIcon className="h-4 w-4" />
+        </Button>
+      </form>
     </div>
   );
 }
@@ -485,6 +598,13 @@ export default function ActiveTradePage({
             <div className="rounded-md bg-primary/10 border border-primary/20 px-4 py-3 text-sm text-center">
               Trade complete! Both objekts have been successfully transferred.
             </div>
+          )}
+
+          {isParticipant && userId && (
+            <>
+              <Separator />
+              <TradeChat tradeId={trade.id} userId={userId} />
+            </>
           )}
 
           {(trade.tradePostId || trade.matchedTradePostId) && (

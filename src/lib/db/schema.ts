@@ -203,6 +203,20 @@ export const activeTradeSide = pgTable("active_trade_side", {
   index("active_trade_side_user_idx").on(t.userId),
 ]);
 
+export const tradeMessage = pgTable("trade_message", {
+  id: serial("id").primaryKey(),
+  activeTradeId: text("active_trade_id")
+    .notNull()
+    .references(() => activeTrade.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("trade_message_trade_idx").on(t.activeTradeId),
+]);
+
 // ============================================================
 // Relations
 // ============================================================
@@ -253,6 +267,17 @@ export const tradeNotificationRelations = relations(tradeNotification, ({ one })
   }),
 }));
 
+export const tradeMessageRelations = relations(tradeMessage, ({ one }) => ({
+  activeTrade: one(activeTrade, {
+    fields: [tradeMessage.activeTradeId],
+    references: [activeTrade.id],
+  }),
+  user: one(user, {
+    fields: [tradeMessage.userId],
+    references: [user.id],
+  }),
+}));
+
 export const activeTradeRelations = relations(activeTrade, ({ one, many }) => ({
   tradePost: one(tradePost, {
     fields: [activeTrade.tradePostId],
@@ -275,6 +300,7 @@ export const activeTradeRelations = relations(activeTrade, ({ one, many }) => ({
     relationName: "recipient",
   }),
   sides: many(activeTradeSide),
+  messages: many(tradeMessage),
 }));
 
 export const activeTradeSideRelations = relations(activeTradeSide, ({ one }) => ({
