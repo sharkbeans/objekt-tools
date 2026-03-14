@@ -570,17 +570,45 @@ export default function ActiveTradePage({
             )}
           </div>
 
-          {trade.status === "accepted" && (
-            <>
-              <Separator />
-              <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-1">
-                <p className="font-medium">Trade accepted — send your objekt now</p>
-                <p className="text-muted-foreground text-xs">
-                  Both parties should transfer their objekt on Cosmo. Click "Check Transfers" to verify.
-                </p>
-              </div>
-            </>
-          )}
+          {["accepted", "partial"].includes(trade.status) && isParticipant && (() => {
+            const isInitiator = trade.initiatorUserId === userId;
+            const myName = isInitiator ? initiatorName : recipientName;
+            const theirName = isInitiator ? recipientName : initiatorName;
+            const mySides = isInitiator ? initiatorSides : recipientSides;
+            const theirSides = isInitiator ? recipientSides : initiatorSides;
+            return (
+              <>
+                <Separator />
+                <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-4">
+                  <p className="font-medium">Send guide</p>
+                  {mySides.map((side) => {
+                    const { name, serial } = formatLabel(side);
+                    return (
+                      <div key={side.id} className="space-y-0.5">
+                        <p className="text-xs text-muted-foreground">You ({myName}) send</p>
+                        <p className="font-medium">{name}{serial && <span className="text-muted-foreground font-normal"> {serial}</span>}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs text-muted-foreground">to <span className="text-foreground font-medium">{theirName}</span></p>
+                          <CopyButton text={theirName} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {theirSides.map((side) => {
+                    const { name, serial } = formatLabel(side);
+                    return (
+                      <div key={side.id} className="space-y-0.5">
+                        <p className="text-xs text-muted-foreground">{theirName} sends</p>
+                        <p className="font-medium">{name}{serial && <span className="text-muted-foreground font-normal"> {serial}</span>}</p>
+                        <p className="text-xs text-muted-foreground">to {myName}</p>
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-muted-foreground">Transfer on Cosmo, then click "Check Transfers" below to verify.</p>
+                </div>
+              </>
+            );
+          })()}
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && (
             <Button
