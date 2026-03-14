@@ -8,6 +8,7 @@ import {
   activeTradeSide,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { getBlockingTradeId } from "@/lib/trade-guards";
 
 interface SideInput {
   objektId: string;
@@ -49,6 +50,15 @@ export async function POST(
 
   if (myObjekts.length > 10 || theirObjekts.length > 10) {
     return NextResponse.json({ error: "Maximum 10 objekts per side" }, { status: 400 });
+  }
+
+  // Block if user has unsent objekts in an accepted trade
+  const blockingTradeId = await getBlockingTradeId(session.user.id);
+  if (blockingTradeId) {
+    return NextResponse.json(
+      { error: "You must send all your objekts in your current active trade before initiating a new one", activeTradeId: blockingTradeId },
+      { status: 403 }
+    );
   }
 
   for (const o of myObjekts) {

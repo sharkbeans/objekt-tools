@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, desc, asc, count } from "drizzle-orm";
 import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
+import { getBlockingTradeId } from "@/lib/trade-guards";
 
 interface TradeItemInput {
   collectionId: string;
@@ -113,6 +114,15 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+  }
+
+  // Block if user has unsent objekts in an accepted trade
+  const blockingTradeId = await getBlockingTradeId(session.user.id);
+  if (blockingTradeId) {
+    return NextResponse.json(
+      { error: "You must send all your objekts in your current active trade before creating a new post", activeTradeId: blockingTradeId },
+      { status: 403 }
+    );
   }
 
   // Check user has linked Cosmo account

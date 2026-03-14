@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade, tradePost } from "@/lib/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import { getBlockingTradeId } from "@/lib/trade-guards";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
 export async function POST(
@@ -32,6 +33,15 @@ export async function POST(
   // Only the recipient can accept
   if (trade.recipientUserId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Block if user has unsent objekts in another accepted trade
+  const blockingTradeId = await getBlockingTradeId(session.user.id);
+  if (blockingTradeId) {
+    return NextResponse.json(
+      { error: "You must send all your objekts in your current active trade before accepting another", activeTradeId: blockingTradeId },
+      { status: 403 }
+    );
   }
 
   await db.transaction(async (tx) => {
