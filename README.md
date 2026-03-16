@@ -154,6 +154,40 @@ The client auto-refreshes the token on 401/403 responses. If you leave the token
 7. System detects and verifies transfers
 8. Trade completes when both sides confirmed
 
+## Trade Safety Measures
+
+Since Cosmo only supports one-way transfers, trading requires trust. This platform layers multiple safeguards to protect both parties throughout the trade lifecycle.
+
+### Ownership Verification
+
+- **At acceptance:** When a trade is accepted, the system snapshots current objekt ownership (`ownerAtAcceptance`) to establish a baseline for transfer detection.
+- **Availability checks:** Before trades are initiated, objekt ownership is verified against the indexer to confirm the offered objekts are still held by the trader.
+
+### Transfer Monitoring
+
+- **Real-time polling:** The active trade page polls the `check-transfers` endpoint to detect objekt movements via the on-chain indexer.
+- **Status tracking:** Each trade side progresses through `pending` → `sent` → `confirmed` as transfers are detected, giving both parties visibility into progress.
+- **Transfer logs:** Every detected transfer is recorded in a `tradeTransferLog` table with timestamps, addresses, and objekt details for full audit trails.
+
+### Pre-Accept Transfer Detection
+
+Detects when a party sends objekts before the trade has been accepted:
+
+- **Recipient warning:** Alerts that the sender has transferred an objekt before acceptance, and that they can still cancel the trade safely.
+- **Sender warning:** Alerts that the recipient hasn't accepted yet and can cancel, meaning the sent objekt could be lost.
+- **Auto-confirmation on accept:** If a recipient accepts a trade where objekts were already pre-delivered, those sides are automatically confirmed and the trade skips ahead to the appropriate status (`partial` or `completed`).
+
+### Wrong Objekt Detection
+
+- **Transfer-based detection:** Queries the indexer's transfer history for all objekts sent between the two trade parties since the trade was created.
+- **Filters out trade objekts:** Any transferred objekt that isn't part of the agreed trade is flagged as a `[WRONG OBJEKT]` in the transfer logs.
+- **Warnings for both sides:** Both the sender and recipient are warned when a wrong objekt transfer is detected.
+
+### Unsolicited Transfer Defense
+
+- **Belt-and-suspenders check:** During transfer verification, the system cross-references `ownerAtAcceptance` to prevent a pre-delivered objekt from being falsely counted as a legitimate post-acceptance transfer.
+- **UI warnings:** Prominent alerts are shown in the trade UI when any anomalous transfer activity is detected.
+
 ## API Routes
 
 ### Trade Posts
