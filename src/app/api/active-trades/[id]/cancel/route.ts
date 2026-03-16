@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, activeTradeSide, tradeNotification, tradePost } from "@/lib/db/schema";
+import { activeTrade, tradeNotification, tradePost } from "@/lib/db/schema";
 import { eq, inArray } from "drizzle-orm";
+
+const CANCEL_TIMEOUT_HOURS = 24;
 
 // POST /api/active-trades/[id]/cancel — either participant cancels
 export async function POST(
@@ -38,9 +40,43 @@ export async function POST(
     return NextResponse.json({ error: "Trade already finalised" }, { status: 400 });
   }
 
-  // Block cancellation once any objekt has already been confirmed as received —
-  // at that point an on-chain transfer has occurred and cannot be undone.
-  if (trade.sides.some((s) => s.status === "confirmed")) {
+  // Determine which sides belong to which party
+  const mySides = trade.sides.filter((s) => s.userId === session.user.id);
+  const otherSides = trade.sides.filter((s) => s.userId !== session.user.id);
+
+  const myConfirmed = mySides.every((s) => s.status === "confirmed");
+  const otherConfirmed = otherSides.every((s) => s.status === "confirmed");
+  const myAllPending = mySides.every((s) => s.status === "pending");
+  const otherAllPending = otherSides.every((s) => s.status === "pending");
+
+  // Both parties have confirmed — trade should complete, cannot cancel
+  if (myConfirmed && otherConfirmed) {
+    return NextResponse.json(
+      { error: "Cannot cancel: both parties have already transferred. The trade should complete shortly." },
+      { status: 400 }
+    );
+  }
+
+  // Path A: Neither side has sent anything — either party can cancel freely
+  const noOneSent = trade.sides.every((s) => s.status === "pending");
+
+  // Path B: I haven't sent anything, other party has confirmed — I can back out
+  const iCanBackOut = myAllPending && otherConfirmed;
+
+  // Path C: I've confirmed but other party hasn't sent — allow cancel after timeout
+  let timeoutExpired = false;
+  if (myConfirmed && otherAllPending && trade.acceptedAt) {
+    const hoursSinceAcceptance = (Date.now() - trade.acceptedAt.getTime()) / (1000 * 60 * 60);
+    timeoutExpired = hoursSinceAcceptance >= CANCEL_TIMEOUT_HOURS;
+  }
+
+  if (!noOneSent && !iCanBackOut && !timeoutExpired) {
+    if (myConfirmed && otherAllPending) {
+      return NextResponse.json(
+        { error: `Cannot cancel yet: you must wait ${CANCEL_TIMEOUT_HOURS} hours after acceptance before cancelling when you've already sent. Contact support if there is a dispute.` },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       { error: "Cannot cancel: at least one objekt has already been transferred. Contact support if there is a dispute." },
       { status: 400 }
