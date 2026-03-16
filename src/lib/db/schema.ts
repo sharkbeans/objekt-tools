@@ -211,7 +211,6 @@ export const tradeTransferLog = pgTable("trade_transfer_log", {
     .notNull()
     .references(() => activeTrade.id, { onDelete: "cascade" }),
   activeTradeSideId: integer("active_trade_side_id")
-    .notNull()
     .references(() => activeTradeSide.id, { onDelete: "cascade" }),
   fromAddress: text("from_address").notNull(),
   toAddress: text("to_address").notNull(),
@@ -226,7 +225,7 @@ export const tradeTransferLog = pgTable("trade_transfer_log", {
   recipientUserId: text("recipient_user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  event: text("event").notNull().$type<"sent" | "confirmed">(),
+  event: text("event").notNull().$type<"sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt">(),
   detectedAt: timestamp("detected_at").notNull().defaultNow(),
 }, (t) => [
   index("trade_transfer_log_trade_idx").on(t.activeTradeId),

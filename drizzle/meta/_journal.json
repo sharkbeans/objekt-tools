@@ -71,6 +71,13 @@
       "when": 1741344000008,
       "tag": "0009_trade_transfer_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1741344000009,
+      "tag": "0010_nullable_trade_side_id",
+      "breakpoints": true
     }
   ]
 }

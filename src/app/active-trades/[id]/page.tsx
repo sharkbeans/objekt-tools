@@ -352,9 +352,11 @@ function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
   );
 }
 
+type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt";
+
 interface TransferLog {
   id: number;
-  event: "sent" | "confirmed";
+  event: TransferLogEvent;
   objektId: string;
   collectionId: string;
   collectionNo?: string | null;
@@ -362,6 +364,8 @@ interface TransferLog {
   serial?: number | null;
   fromAddress: string;
   toAddress: string;
+  senderUserId: string;
+  recipientUserId: string;
   senderName: string;
   recipientName: string;
   detectedAt: string;
@@ -388,6 +392,80 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
     return `${name}${serial ? ` ${serial}` : ""}`;
   }
 
+  function formatEventDescription(log: TransferLog) {
+    const objekt = formatObjektName(log);
+    switch (log.event) {
+      case "confirmed":
+        return (
+          <>
+            <span className="font-medium">{log.senderName}</span>
+            {" sent "}
+            <span className="font-medium">{objekt}</span>
+            {" to "}
+            <span className="font-medium">{log.recipientName}</span>
+          </>
+        );
+      case "sent":
+        return (
+          <>
+            <span className="font-medium">{log.senderName}</span>
+            {" sent "}
+            <span className="font-medium">{objekt}</span>
+            {" to "}
+            <span className="font-medium">{log.recipientName}</span>
+            <span className="text-muted-foreground"> (in transit)</span>
+          </>
+        );
+      case "pre_accept_confirmed":
+        return (
+          <>
+            <span className="font-medium text-amber-600 dark:text-amber-400">[PRE-ACCEPT]</span>
+            {" "}
+            <span className="font-medium">{log.senderName}</span>
+            {" sent "}
+            <span className="font-medium">{objekt}</span>
+            {" to "}
+            <span className="font-medium">{log.recipientName}</span>
+            <span className="text-amber-600 dark:text-amber-400"> (before trade was accepted)</span>
+          </>
+        );
+      case "pre_accept_sent":
+        return (
+          <>
+            <span className="font-medium text-amber-600 dark:text-amber-400">[PRE-ACCEPT]</span>
+            {" "}
+            <span className="font-medium">{log.senderName}</span>
+            {" sent "}
+            <span className="font-medium">{objekt}</span>
+            <span className="text-amber-600 dark:text-amber-400"> (before trade was accepted, in transit)</span>
+          </>
+        );
+      case "wrong_objekt":
+        return (
+          <>
+            <span className="font-medium text-red-600 dark:text-red-400">[WRONG OBJEKT]</span>
+            {" "}
+            <span className="font-medium">{log.senderName}</span>
+            {" sent "}
+            <span className="font-medium">{objekt}</span>
+            {" to "}
+            <span className="font-medium">{log.recipientName}</span>
+            <span className="text-red-600 dark:text-red-400"> (not part of this trade)</span>
+          </>
+        );
+      default:
+        return (
+          <>
+            <span className="font-medium">{log.senderName}</span>
+            {" → "}
+            <span className="font-medium">{objekt}</span>
+            {" → "}
+            <span className="font-medium">{log.recipientName}</span>
+          </>
+        );
+    }
+  }
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium">Transfer Logs</h3>
@@ -404,7 +482,14 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
             </thead>
             <tbody>
               {logs.map((log) => (
-                <tr key={log.id} className="border-b last:border-0">
+                <tr
+                  key={log.id}
+                  className={cn(
+                    "border-b last:border-0",
+                    log.event === "wrong_objekt" && "bg-red-500/10",
+                    (log.event === "pre_accept_sent" || log.event === "pre_accept_confirmed") && "bg-amber-500/10",
+                  )}
+                >
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
                     {new Date(log.detectedAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
                     {" "}
@@ -412,14 +497,7 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
                     {" GMT"}
                   </td>
                   <td className="px-3 py-2">
-                    <span className="font-medium">{log.senderName}</span>
-                    {log.event === "confirmed" ? " sent " : " transferred "}
-                    <span className="font-medium">{formatObjektName(log)}</span>
-                    {" to "}
-                    <span className="font-medium">{log.recipientName}</span>
-                    {log.event === "sent" && (
-                      <span className="text-muted-foreground"> (in transit)</span>
-                    )}
+                    {formatEventDescription(log)}
                   </td>
                 </tr>
               ))}
@@ -460,6 +538,21 @@ export default function ActiveTradePage({
     },
   });
 
+  const { data: transferLogs = [] } = useQuery<TransferLog[]>({
+    queryKey: ["trade-transfer-logs", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/active-trades/${id}/transfer-logs`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    refetchInterval: 30_000,
+  });
+
+  const preAcceptLogs = transferLogs.filter(
+    (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed"
+  );
+  const wrongObjektLogs = transferLogs.filter((l) => l.event === "wrong_objekt");
+
   const terminalStatuses = ["completed", "cancelled", "disputed"];
   useEffect(() => {
     if (trade && terminalStatuses.includes(trade.status)) {
@@ -472,7 +565,7 @@ export default function ActiveTradePage({
     function onVisible() {
       if (document.visibilityState !== "visible") return;
       const status = queryClient.getQueryData<ActiveTrade>(["active-trade", id])?.status;
-      if (!status || !["accepted", "partial"].includes(status)) return;
+      if (!status || !["pending", "accepted", "partial"].includes(status)) return;
       runCheckTransfers(true);
     }
     document.addEventListener("visibilitychange", onVisible);
@@ -522,19 +615,20 @@ export default function ActiveTradePage({
     const res = await fetch(`/api/active-trades/${id}/accept`, { method: "POST" });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      if (res.status === 409) {
-        toast.error(
-          data?.error ||
-            "Cannot accept: objekts may have been transferred before this trade was accepted.",
-          { duration: 8000 }
-        );
-      } else {
-        toast.error(data?.error || "Failed to accept trade");
-      }
+      toast.error(data?.error || "Failed to accept trade");
       return;
     }
-    toast.success("Trade accepted! Both parties can now send their objekts.");
+    const data = await res.json().catch(() => null);
+    if (data?.preDeliveredCount > 0) {
+      toast.success(
+        `Trade accepted! ${data.preDeliveredCount} objekt(s) were already transferred and have been auto-confirmed.`,
+        { duration: 6000 }
+      );
+    } else {
+      toast.success("Trade accepted! Both parties can now send their objekts.");
+    }
     queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
+    queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", id] });
   }
 
   async function handleCancel() {
@@ -642,10 +736,66 @@ export default function ActiveTradePage({
           <Separator />
 
           {trade.status === "pending" && isParticipant && (
-            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 p-3">
-              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <p className="text-sm">Do not send any objekts until this trade has been accepted by both parties.</p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 p-3">
+                <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <p className="text-sm">Do not send any objekts until this trade has been accepted by both parties.</p>
+              </div>
+
+              {preAcceptLogs.length > 0 && (() => {
+                const partnerName = isInitiator ? recipientName : initiatorName;
+                const myPreAcceptSends = preAcceptLogs.filter((l) => l.senderUserId === userId);
+                const theirPreAcceptSends = preAcceptLogs.filter((l) => l.senderUserId !== userId);
+                return (
+                  <>
+                    {theirPreAcceptSends.length > 0 && (
+                      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-500/20 dark:border-amber-900 dark:bg-amber-500/20 p-3">
+                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                        <div className="text-sm space-y-1">
+                          <p className="font-medium text-amber-700 dark:text-amber-300">{partnerName} has sent objekt(s) before the trade was accepted.</p>
+                          {isRecipient ? (
+                            <p className="text-muted-foreground">You are still allowed to cancel this trade. If you are happy with the trade, you may accept it and the transfer will be auto-confirmed. You may also return the objekt(s) to the sender via Cosmo.</p>
+                          ) : (
+                            <p className="text-muted-foreground">{partnerName} sent objekt(s) before the trade was accepted. The recipient can still cancel this trade.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {myPreAcceptSends.length > 0 && (
+                      <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
+                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+                        <div className="text-sm space-y-1">
+                          <p className="font-medium text-red-700 dark:text-red-300">You sent objekt(s) before {partnerName} accepted.</p>
+                          <p className="text-muted-foreground">{partnerName} has not accepted this trade yet. They can cancel and your objekt may be lost. Wait for acceptance before sending.</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {wrongObjektLogs.length > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
+                  <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+                  <div className="text-sm space-y-1">
+                    <p className="font-medium text-red-700 dark:text-red-300">Wrong objekt(s) detected!</p>
+                    <p className="text-muted-foreground">One or more objekts that are not part of this trade were sent between the parties. Check the Transfer Logs below for details.</p>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+
+          {trade.status === "pending" && isParticipant && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCheckTransfers}
+              disabled={checkCooldown > 0}
+              className="w-full"
+            >
+              {checkCooldown > 0 ? `Check Transfers (${checkCooldown}s)` : "Check Transfers"}
+            </Button>
           )}
 
           <div className="flex gap-4">
@@ -711,6 +861,16 @@ export default function ActiveTradePage({
               </>
             );
           })()}
+
+          {["accepted", "partial"].includes(trade.status) && isParticipant && wrongObjektLogs.length > 0 && (
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+              <div className="text-sm space-y-1">
+                <p className="font-medium text-red-700 dark:text-red-300">Wrong objekt(s) detected!</p>
+                <p className="text-muted-foreground">One or more objekts that are not part of this trade were sent between the parties. Check the Transfer Logs below for details.</p>
+              </div>
+            </div>
+          )}
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && (
             <Button

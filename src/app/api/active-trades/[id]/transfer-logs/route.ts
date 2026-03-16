@@ -58,6 +58,8 @@ export async function GET(
     serial: log.serial,
     fromAddress: log.fromAddress,
     toAddress: log.toAddress,
+    senderUserId: log.senderUserId,
+    recipientUserId: log.recipientUserId,
     senderName: log.sender.cosmoAccount?.nickname ?? log.sender.name,
     recipientName: log.recipient.cosmoAccount?.nickname ?? log.recipient.name,
     detectedAt: log.detectedAt,

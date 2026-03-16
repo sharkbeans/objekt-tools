@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { activeTrade, activeTradeSide, tradePost } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, tradePost, tradeTransferLog, tradeNotification } from "@/lib/db/schema";
 import { objekts } from "@/lib/db/indexer-schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, ne, or } from "drizzle-orm";
 import { getBlockingTradeId } from "@/lib/trade-guards";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
@@ -59,8 +59,9 @@ export async function POST(
     .where(inArray(objekts.id, objektIds));
   const ownerMap = new Map(owned.map((o) => [o.id, o.owner]));
 
-  // Block acceptance if any objekt has already been transferred to its recipient
-  // (unsolicited transfer — the sender sent before the trade was accepted)
+  const now = new Date();
+
+  // Identify pre-delivered objekts (already at recipient's address)
   const preDelivered = sides.filter((s) => {
     const currentOwner = ownerMap.get(s.objektId);
     return (
@@ -69,24 +70,7 @@ export async function POST(
     );
   });
 
-  if (preDelivered.length > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "Cannot accept: one or more objekts appear to have already been transferred to the recipient before this trade was accepted. This may indicate an unsolicited transfer.",
-      },
-      { status: 409 }
-    );
-  }
-
-  const now = new Date();
-
   await db.transaction(async (tx) => {
-    await tx
-      .update(activeTrade)
-      .set({ status: "accepted", acceptedAt: now, updatedAt: now })
-      .where(eq(activeTrade.id, tradeId));
-
     // Snapshot each objekt's current owner at acceptance time
     for (const side of sides) {
       const currentOwner = ownerMap.get(side.objektId);
@@ -98,15 +82,123 @@ export async function POST(
       }
     }
 
+    // Auto-confirm pre-delivered sides
+    for (const side of preDelivered) {
+      await tx
+        .update(activeTradeSide)
+        .set({ status: "confirmed", detectedAt: now })
+        .where(eq(activeTradeSide.id, side.id));
+
+      const recipientUserId = side.userId === trade.initiatorUserId
+        ? trade.recipientUserId
+        : trade.initiatorUserId;
+      await tx.insert(tradeTransferLog).values({
+        activeTradeId: tradeId,
+        activeTradeSideId: side.id,
+        fromAddress: side.address,
+        toAddress: side.recipientAddress,
+        objektId: side.objektId,
+        collectionId: side.collectionId,
+        collectionNo: side.collectionNo,
+        member: side.member,
+        serial: side.serial,
+        senderUserId: side.userId,
+        recipientUserId,
+        event: "confirmed",
+      });
+    }
+
+    // Determine new status based on how many sides are now confirmed
+    const totalSides = sides.length;
+    const confirmedCount = preDelivered.length;
+    let newStatus: "accepted" | "partial" | "completed";
+    if (confirmedCount === totalSides) {
+      newStatus = "completed";
+    } else if (confirmedCount > 0) {
+      newStatus = "partial";
+    } else {
+      newStatus = "accepted";
+    }
+
+    await tx
+      .update(activeTrade)
+      .set({ status: newStatus, acceptedAt: now, updatedAt: now })
+      .where(eq(activeTrade.id, tradeId));
+
     // Temporarily hide both trade posts from the browse listing while trade is in progress
     const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
     if (postIds.length > 0) {
       await tx
         .update(tradePost)
-        .set({ status: "in_trade", updatedAt: now })
+        .set({ status: newStatus === "completed" ? "closed" : "in_trade", updatedAt: now })
         .where(inArray(tradePost.id, postIds));
+    }
+
+    // If already completed, handle post-completion tasks
+    if (newStatus === "completed") {
+      await tx.insert(tradeNotification).values([
+        {
+          userId: trade.initiatorUserId,
+          message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+        },
+        {
+          userId: trade.recipientUserId,
+          message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+        },
+      ]);
+
+      // Cancel all other pending/accepted active trades that involve either of these posts
+      if (postIds.length > 0) {
+        const siblingTrades = await db.query.activeTrade.findMany({
+          where: and(
+            ne(activeTrade.id, tradeId),
+            inArray(activeTrade.status, ["pending", "accepted", "partial"]),
+            or(
+              ...postIds.flatMap((pid) => [
+                eq(activeTrade.tradePostId, pid),
+                eq(activeTrade.matchedTradePostId, pid),
+              ])
+            ),
+          ),
+          columns: { id: true, initiatorUserId: true, recipientUserId: true },
+        });
+
+        if (siblingTrades.length > 0) {
+          const siblingIds = siblingTrades.map((t) => t.id);
+          await tx
+            .update(activeTrade)
+            .set({ status: "cancelled", updatedAt: now })
+            .where(inArray(activeTrade.id, siblingIds));
+
+          const notifications = siblingTrades.flatMap((t) => [
+            {
+              userId: t.initiatorUserId,
+              message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+            },
+            {
+              userId: t.recipientUserId,
+              message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+            },
+          ]);
+          await tx.insert(tradeNotification).values(notifications);
+        }
+      }
     }
   });
 
-  return NextResponse.json({ status: "accepted" });
+  const preDeliveredCount = preDelivered.length;
+  const totalSides = sides.length;
+  let finalStatus: string;
+  if (preDeliveredCount === totalSides) {
+    finalStatus = "completed";
+  } else if (preDeliveredCount > 0) {
+    finalStatus = "partial";
+  } else {
+    finalStatus = "accepted";
+  }
+
+  return NextResponse.json({
+    status: finalStatus,
+    preDeliveredCount,
+  });
 }
