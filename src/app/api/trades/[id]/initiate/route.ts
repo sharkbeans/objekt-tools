@@ -82,6 +82,12 @@ export async function POST(
     }
   }
 
+  for (const o of theirObjekts) {
+    if (!o.objektId) {
+      return NextResponse.json({ error: "All requested objekts must have an objektId. Please select a specific serial." }, { status: 400 });
+    }
+  }
+
   // Load the initiator's own trade post (the one they're offering from)
   const myPost = await db.query.tradePost.findFirst({
     where: and(
@@ -181,7 +187,7 @@ export async function POST(
         userId: matchedPost.userId,
         address: recipientCosmo.address,
         recipientAddress: initiatorCosmo.address,
-        objektId: o.objektId ?? "",
+        objektId: o.objektId,
         collectionId: o.collectionId,
         collectionNo: o.collectionNo ?? null,
         member: o.member ?? null,

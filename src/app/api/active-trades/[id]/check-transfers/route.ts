@@ -161,7 +161,10 @@ export async function POST(
     if (pendingSides.length > 0) {
       const pendingObjektIds = pendingSides.map((s) => s.objektId);
 
-      // Query transfer events for the pending objekts since trade creation
+      // Query transfer events for the pending objekts since trade acceptance
+      // (or creation as fallback). Using acceptedAt prevents transfers from
+      // the same moment as acceptance being mis-attributed.
+      const transferSince = trade.acceptedAt ?? trade.createdAt;
       const transferEvents = await indexer
         .select({
           objektId: transfers.objektId,
@@ -173,8 +176,8 @@ export async function POST(
         .where(
           and(
             inArray(transfers.objektId, pendingObjektIds),
-            trade.createdAt
-              ? gte(transfers.timestamp, trade.createdAt)
+            transferSince
+              ? gte(transfers.timestamp, transferSince)
               : undefined,
           )
         );

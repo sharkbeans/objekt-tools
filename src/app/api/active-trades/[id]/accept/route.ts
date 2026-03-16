@@ -120,9 +120,12 @@ export async function POST(
       newStatus = "accepted";
     }
 
+    // acceptanceBlock is null until the indexer exposes blockNumber on transfers.
+    // When available, query the indexer for the latest block and store it here
+    // to enable block-based transfer filtering in check-transfers.
     await tx
       .update(activeTrade)
-      .set({ status: newStatus, acceptedAt: now, updatedAt: now })
+      .set({ status: newStatus, acceptedAt: now, acceptanceBlock: null, updatedAt: now })
       .where(eq(activeTrade.id, tradeId));
 
     // Temporarily hide both trade posts from the browse listing while trade is in progress

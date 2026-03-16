@@ -103,6 +103,12 @@ export function InitiateDirectDialog({
 
     const theirItems = theirHaves.filter((i) => theirSelected.has(i.id));
 
+    const missingObjektId = theirItems.find((i) => !i.objektId);
+    if (missingObjektId) {
+      toast.error(`"${formatLabel(missingObjektId)}" has no objekt ID. Please select a specific serial.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`/api/trades/${tradePostId}/initiate-direct`, {
@@ -118,7 +124,7 @@ export function InitiateDirectDialog({
             thumbnailUrl: o.thumbnailImage,
           })),
           theirObjekts: theirItems.map((i) => ({
-            objektId: i.objektId ?? "",
+            objektId: i.objektId,
             collectionId: i.collectionId,
             collectionNo: i.collectionNo,
             member: i.member,

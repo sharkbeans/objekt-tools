@@ -122,6 +122,12 @@ export function InitiateTradeDialog({
       return;
     }
 
+    const missingTheirObjektId = theirItems.find((i) => !i.objektId);
+    if (missingTheirObjektId) {
+      toast.error(`"${formatLabel(missingTheirObjektId)}" has no objekt ID. Please select a specific serial.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`/api/trades/${myTradePostId}/initiate`, {

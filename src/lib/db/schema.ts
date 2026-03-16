@@ -172,6 +172,7 @@ export const activeTrade = pgTable("active_trade", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   acceptedAt: timestamp("accepted_at"),
+  acceptanceBlock: integer("acceptance_block"),
   expiresAt: timestamp("expires_at"),
 }, (t) => [
   index("active_trade_initiator_idx").on(t.initiatorUserId),
