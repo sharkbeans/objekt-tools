@@ -42,13 +42,17 @@ export async function POST(
     return NextResponse.json({ status: trade.status, sides: trade.sides });
   }
 
-  // Query indexer for current owners of the traded objekts
   const tradeObjektIds = trade.sides.map((s) => s.objektId);
-  const owned = await indexer
-    .select({ id: objekts.id, owner: objekts.owner })
-    .from(objekts)
-    .where(inArray(objekts.id, tradeObjektIds));
-  const ownerMap = new Map(owned.map((o) => [o.id, o.owner]));
+
+  // Query indexer for current owners (only needed for pending pre-accept detection)
+  let ownerMap = new Map<string, string>();
+  if (trade.status === "pending") {
+    const owned = await indexer
+      .select({ id: objekts.id, owner: objekts.owner })
+      .from(objekts)
+      .where(inArray(objekts.id, tradeObjektIds));
+    ownerMap = new Map(owned.map((o) => [o.id, o.owner]));
+  }
 
   // Build a set of objekt IDs that are part of this trade for quick lookup
   const tradeObjektIdSet = new Set(tradeObjektIds);
@@ -118,66 +122,102 @@ export async function POST(
     }
   } else {
     // ── ACCEPTED / PARTIAL: normal transfer tracking ──
+    // Use actual transfer events from the indexer to verify correct sender → recipient
     const pendingSides = trade.sides.filter((s) => s.status !== "confirmed");
 
-    for (const side of pendingSides) {
-      const currentOwner = ownerMap.get(side.objektId);
-      if (!currentOwner) continue;
+    if (pendingSides.length > 0) {
+      const pendingObjektIds = pendingSides.map((s) => s.objektId);
 
-      if (currentOwner.toLowerCase() === side.recipientAddress.toLowerCase()) {
-        // Belt-and-suspenders: skip unsolicited pre-accept transfers
-        if (
-          side.ownerAtAcceptance &&
-          side.ownerAtAcceptance.toLowerCase() === side.recipientAddress.toLowerCase()
-        ) {
-          continue;
-        }
+      // Query transfer events for the pending objekts since trade creation
+      const transferEvents = await indexer
+        .select({
+          objektId: transfers.objektId,
+          from: transfers.from,
+          to: transfers.to,
+          timestamp: transfers.timestamp,
+        })
+        .from(transfers)
+        .where(
+          and(
+            inArray(transfers.objektId, pendingObjektIds),
+            trade.createdAt
+              ? gte(transfers.timestamp, trade.createdAt)
+              : undefined,
+          )
+        );
 
+      for (const side of pendingSides) {
         const recipientUserId = side.userId === trade.initiatorUserId
           ? trade.recipientUserId
           : trade.initiatorUserId;
-        await db
-          .update(activeTradeSide)
-          .set({ status: "confirmed", detectedAt: new Date() })
-          .where(eq(activeTradeSide.id, side.id));
-        await db.insert(tradeTransferLog).values({
-          activeTradeId: tradeId,
-          activeTradeSideId: side.id,
-          fromAddress: side.address,
-          toAddress: side.recipientAddress,
-          objektId: side.objektId,
-          collectionId: side.collectionId,
-          collectionNo: side.collectionNo,
-          member: side.member,
-          serial: side.serial,
-          senderUserId: side.userId,
-          recipientUserId,
-          event: "confirmed",
-        });
-        updatedCount++;
-      } else if (currentOwner.toLowerCase() !== side.address.toLowerCase() && side.status === "pending") {
-        const recipientUserIdForSent = side.userId === trade.initiatorUserId
-          ? trade.recipientUserId
-          : trade.initiatorUserId;
-        await db
-          .update(activeTradeSide)
-          .set({ status: "sent" })
-          .where(eq(activeTradeSide.id, side.id));
-        await db.insert(tradeTransferLog).values({
-          activeTradeId: tradeId,
-          activeTradeSideId: side.id,
-          fromAddress: side.address,
-          toAddress: side.recipientAddress,
-          objektId: side.objektId,
-          collectionId: side.collectionId,
-          collectionNo: side.collectionNo,
-          member: side.member,
-          serial: side.serial,
-          senderUserId: side.userId,
-          recipientUserId: recipientUserIdForSent,
-          event: "sent",
-        });
-        updatedCount++;
+
+        // Find a transfer event where the correct objekt was sent
+        // from the correct sender to the correct recipient
+        const confirmedTransfer = transferEvents.find(
+          (t) =>
+            t.objektId === side.objektId &&
+            t.from.toLowerCase() === side.address.toLowerCase() &&
+            t.to.toLowerCase() === side.recipientAddress.toLowerCase()
+        );
+
+        if (confirmedTransfer) {
+          // Skip unsolicited pre-accept transfers
+          if (
+            side.ownerAtAcceptance &&
+            side.ownerAtAcceptance.toLowerCase() === side.recipientAddress.toLowerCase()
+          ) {
+            continue;
+          }
+
+          await db
+            .update(activeTradeSide)
+            .set({ status: "confirmed", detectedAt: new Date() })
+            .where(eq(activeTradeSide.id, side.id));
+          await db.insert(tradeTransferLog).values({
+            activeTradeId: tradeId,
+            activeTradeSideId: side.id,
+            fromAddress: side.address,
+            toAddress: side.recipientAddress,
+            objektId: side.objektId,
+            collectionId: side.collectionId,
+            collectionNo: side.collectionNo,
+            member: side.member,
+            serial: side.serial,
+            senderUserId: side.userId,
+            recipientUserId,
+            event: "confirmed",
+          });
+          updatedCount++;
+        } else if (side.status === "pending") {
+          // Check if there's a transfer from the correct sender (but to a different/intermediate address)
+          const sentTransfer = transferEvents.find(
+            (t) =>
+              t.objektId === side.objektId &&
+              t.from.toLowerCase() === side.address.toLowerCase()
+          );
+
+          if (sentTransfer) {
+            await db
+              .update(activeTradeSide)
+              .set({ status: "sent" })
+              .where(eq(activeTradeSide.id, side.id));
+            await db.insert(tradeTransferLog).values({
+              activeTradeId: tradeId,
+              activeTradeSideId: side.id,
+              fromAddress: side.address,
+              toAddress: side.recipientAddress,
+              objektId: side.objektId,
+              collectionId: side.collectionId,
+              collectionNo: side.collectionNo,
+              member: side.member,
+              serial: side.serial,
+              senderUserId: side.userId,
+              recipientUserId,
+              event: "sent",
+            });
+            updatedCount++;
+          }
+        }
       }
     }
   }
