@@ -28,3 +28,14 @@ export const objekts = pgTable("objekt", {
   transferable: boolean().notNull(),
   collectionId: uuid("collection_id").references(() => collections.id),
 });
+
+export const transfers = pgTable("transfer", {
+  id: varchar({ length: 36 }).primaryKey(),
+  from: text().notNull(),
+  to: text().notNull(),
+  timestamp: timestamp({ withTimezone: true }).notNull(),
+  tokenId: text("token_id").notNull(),
+  hash: text().notNull(),
+  objektId: varchar("objekt_id").references(() => objekts.id),
+  collectionId: uuid("collection_id").references(() => collections.id),
+});

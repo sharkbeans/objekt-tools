@@ -3,8 +3,8 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
 import { activeTrade, activeTradeSide, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
-import { objekts, collections } from "@/lib/db/indexer-schema";
-import { eq, inArray, and, or, ne } from "drizzle-orm";
+import { objekts, collections, transfers } from "@/lib/db/indexer-schema";
+import { eq, inArray, and, or, ne, gte } from "drizzle-orm";
 
 // POST /api/active-trades/[id]/check-transfers
 // Queries the indexer for current objekt ownership and updates side statuses.
@@ -42,13 +42,6 @@ export async function POST(
     return NextResponse.json({ status: trade.status, sides: trade.sides });
   }
 
-  // Gather all unique addresses involved in the trade
-  const allAddresses = new Set<string>();
-  for (const side of trade.sides) {
-    allAddresses.add(side.address.toLowerCase());
-    allAddresses.add(side.recipientAddress.toLowerCase());
-  }
-
   // Query indexer for current owners of the traded objekts
   const tradeObjektIds = trade.sides.map((s) => s.objektId);
   const owned = await indexer
@@ -56,19 +49,6 @@ export async function POST(
     .from(objekts)
     .where(inArray(objekts.id, tradeObjektIds));
   const ownerMap = new Map(owned.map((o) => [o.id, o.owner]));
-
-  // Also query indexer for ALL objekts currently owned by any trade address
-  // to detect wrong objekt transfers between the parties
-  const addressArray = Array.from(allAddresses);
-  const allOwnedByParties = await indexer
-    .select({
-      id: objekts.id,
-      owner: objekts.owner,
-      serial: objekts.serial,
-      collectionId: objekts.collectionId,
-    })
-    .from(objekts)
-    .where(inArray(objekts.owner, addressArray));
 
   // Build a set of objekt IDs that are part of this trade for quick lookup
   const tradeObjektIdSet = new Set(tradeObjektIds);
@@ -82,7 +62,6 @@ export async function POST(
   );
 
   let updatedCount = 0;
-  const warnings: { type: string; message: string }[] = [];
 
   if (trade.status === "pending") {
     // ── PENDING: detect pre-accept transfers ──
@@ -204,79 +183,110 @@ export async function POST(
   }
 
   // ── WRONG OBJEKT DETECTION ──
-  // Check if any objekt NOT in the trade was transferred between the two parties
-  // We check: for each objekt owned by address B, was it previously expected from address A?
-  // If the objekt is now owned by address B but it's not one of the trade objekts, log a wrong_objekt warning
-  const initiatorAddresses = new Set(
-    trade.sides.filter((s) => s.userId === trade.initiatorUserId).map((s) => s.address.toLowerCase())
-  );
-  const recipientAddresses = new Set(
-    trade.sides.filter((s) => s.userId === trade.recipientUserId).map((s) => s.recipientAddress.toLowerCase())
-  );
-  // Also get recipient's sending addresses and initiator's receiving addresses
-  const recipientSendingAddresses = new Set(
-    trade.sides.filter((s) => s.userId === trade.recipientUserId).map((s) => s.address.toLowerCase())
-  );
-  const initiatorReceivingAddresses = new Set(
-    trade.sides.filter((s) => s.userId === trade.recipientUserId).map((s) => s.recipientAddress.toLowerCase())
+  // Query the indexer's transfer table for actual transfers between trade parties
+  // since the trade was created, then flag any non-trade objekts
+
+  // Sending addresses for each party (side.address = sender's wallet)
+  const initiatorSendAddrs = trade.sides
+    .filter((s) => s.userId === trade.initiatorUserId)
+    .map((s) => s.address.toLowerCase());
+  const recipientSendAddrs = trade.sides
+    .filter((s) => s.userId === trade.recipientUserId)
+    .map((s) => s.address.toLowerCase());
+  // Receiving addresses for each party (side.recipientAddress = receiver's wallet)
+  const recipientRecvAddrs = trade.sides
+    .filter((s) => s.userId === trade.initiatorUserId)
+    .map((s) => s.recipientAddress.toLowerCase());
+  const initiatorRecvAddrs = trade.sides
+    .filter((s) => s.userId === trade.recipientUserId)
+    .map((s) => s.recipientAddress.toLowerCase());
+
+  // from = any sender address, to = any receiver address
+  const uniqueFromAddresses = [...new Set([...initiatorSendAddrs, ...recipientSendAddrs])];
+  const uniqueToAddresses = [...new Set([...recipientRecvAddrs, ...initiatorRecvAddrs])];
+
+  // Query actual transfers between the parties from the indexer transfer table
+  const recentTransfers = await indexer
+    .select({
+      id: transfers.id,
+      from: transfers.from,
+      to: transfers.to,
+      objektId: transfers.objektId,
+      collectionId: transfers.collectionId,
+      timestamp: transfers.timestamp,
+    })
+    .from(transfers)
+    .where(
+      and(
+        inArray(transfers.from, uniqueFromAddresses),
+        inArray(transfers.to, uniqueToAddresses),
+        // Only check transfers after the trade was created
+        trade.createdAt
+          ? gte(transfers.timestamp, trade.createdAt)
+          : undefined,
+      )
+    );
+
+  // Filter to non-trade objekts only
+  const wrongTransfers = recentTransfers.filter(
+    (t) => t.objektId && !tradeObjektIdSet.has(t.objektId)
   );
 
-  // Find objekts that are at a recipient's address but are NOT part of this trade
-  // We need to check both directions: initiator→recipient and recipient→initiator
-  // An objekt is "wrong" if it's now owned by the other party's address but isn't in the trade
-  const wrongObjektCandidates = allOwnedByParties.filter((o) => {
-    if (tradeObjektIdSet.has(o.id)) return false; // It's a trade objekt, not wrong
-    const ownerLower = o.owner.toLowerCase();
-    // Is this objekt at the recipient's address? (could be wrong objekt from initiator)
-    // Or at the initiator's receiving address? (could be wrong objekt from recipient)
-    return recipientAddresses.has(ownerLower) || initiatorReceivingAddresses.has(ownerLower);
-  });
-
-  // We can't tell who sent a wrong objekt just from current ownership. We only log if not already logged.
-  // Fetch collection details for wrong objekt candidates to show nice names
-  if (wrongObjektCandidates.length > 0) {
-    const collectionIds = wrongObjektCandidates
-      .map((o) => o.collectionId)
+  if (wrongTransfers.length > 0) {
+    // Get objekt details (serial) and collection details for display
+    const wrongObjektIds = wrongTransfers
+      .map((t) => t.objektId)
       .filter((id): id is string => id !== null);
-    const uniqueCollectionIds = [...new Set(collectionIds)];
+    const wrongCollectionIds = wrongTransfers
+      .map((t) => t.collectionId)
+      .filter((id): id is string => id !== null);
 
-    let collectionMap = new Map<string, { collectionNo: string; member: string }>();
+    let serialMap = new Map<string, number>();
+    if (wrongObjektIds.length > 0) {
+      const objs = await indexer
+        .select({ id: objekts.id, serial: objekts.serial })
+        .from(objekts)
+        .where(inArray(objekts.id, wrongObjektIds));
+      serialMap = new Map(objs.map((o) => [o.id, o.serial]));
+    }
+
+    let collectionMap = new Map<string, { collectionId: string; collectionNo: string; member: string }>();
+    const uniqueCollectionIds = [...new Set(wrongCollectionIds)];
     if (uniqueCollectionIds.length > 0) {
       const colls = await indexer
         .select({
           id: collections.id,
+          collectionId: collections.collectionId,
           collectionNo: collections.collectionNo,
           member: collections.member,
         })
         .from(collections)
         .where(inArray(collections.id, uniqueCollectionIds));
-      collectionMap = new Map(colls.map((c) => [c.id, { collectionNo: c.collectionNo, member: c.member }]));
+      collectionMap = new Map(colls.map((c) => [c.id, { collectionId: c.collectionId, collectionNo: c.collectionNo, member: c.member }]));
     }
 
-    for (const obj of wrongObjektCandidates) {
-      if (loggedEvents.has(`${obj.id}:wrong_objekt`)) continue;
+    for (const t of wrongTransfers) {
+      if (!t.objektId) continue;
+      if (loggedEvents.has(`${t.objektId}:wrong_objekt`)) continue;
 
-      const ownerLower = obj.owner.toLowerCase();
-      // Determine direction: who received this wrong objekt?
-      const isAtRecipientAddr = recipientAddresses.has(ownerLower);
-      const senderUserId = isAtRecipientAddr ? trade.initiatorUserId : trade.recipientUserId;
-      const recipientUserId = isAtRecipientAddr ? trade.recipientUserId : trade.initiatorUserId;
-      const fromAddr = isAtRecipientAddr
-        ? Array.from(initiatorAddresses)[0]
-        : Array.from(recipientSendingAddresses)[0];
+      const fromLower = t.from.toLowerCase();
+      // Determine who sent: if sender is initiator address, initiator sent it
+      const isFromInitiator = initiatorSendAddrs.includes(fromLower);
+      const senderUserId = isFromInitiator ? trade.initiatorUserId : trade.recipientUserId;
+      const recipientUserId = isFromInitiator ? trade.recipientUserId : trade.initiatorUserId;
 
-      const coll = obj.collectionId ? collectionMap.get(obj.collectionId) : null;
+      const coll = t.collectionId ? collectionMap.get(t.collectionId) : null;
 
       await db.insert(tradeTransferLog).values({
         activeTradeId: tradeId,
         activeTradeSideId: null,
-        fromAddress: fromAddr ?? "unknown",
-        toAddress: obj.owner,
-        objektId: obj.id,
-        collectionId: coll?.collectionNo ?? obj.collectionId ?? "unknown",
+        fromAddress: t.from,
+        toAddress: t.to,
+        objektId: t.objektId,
+        collectionId: coll?.collectionId ?? t.collectionId ?? "unknown",
         collectionNo: coll?.collectionNo ?? null,
         member: coll?.member ?? null,
-        serial: obj.serial,
+        serial: t.objektId ? serialMap.get(t.objektId) ?? null : null,
         senderUserId,
         recipientUserId,
         event: "wrong_objekt",
