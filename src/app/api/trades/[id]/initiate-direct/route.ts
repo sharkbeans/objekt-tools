@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
+import { redis } from "@/lib/redis";
 import {
   tradePost,
   cosmoAccount,
@@ -34,6 +35,19 @@ export async function POST(
     session = await requireSession();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 10 requests per 60 seconds
+  const rateLimitKey = `rate-limit:initiate:${session.user.id}`;
+  const attempts = await redis.incr(rateLimitKey);
+  if (attempts === 1) {
+    await redis.expire(rateLimitKey, 60);
+  }
+  if (attempts > 10) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Try again later." },
+      { status: 429 }
+    );
   }
 
   const { id: matchedTradePostId } = await params;

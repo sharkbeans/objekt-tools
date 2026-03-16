@@ -320,7 +320,20 @@ export async function POST(
     (t) => t.objektId && !tradeObjektIdSet.has(t.objektId)
   );
 
+  const MAX_WRONG_TRANSFERS_PER_TRADE = 10;
+
   if (wrongTransfers.length > 0) {
+    // Check how many wrong_objekt logs already exist for this trade
+    const existingWrongCount = existingLogs.filter(
+      (l) => l.event === "wrong_objekt"
+    ).length;
+
+    if (existingWrongCount >= MAX_WRONG_TRANSFERS_PER_TRADE) {
+      // Skip inserting any new wrong objekt logs — cap reached
+    } else {
+    // Cap how many new wrong objekt logs we can insert
+    const remainingSlots = MAX_WRONG_TRANSFERS_PER_TRADE - existingWrongCount;
+
     // Get objekt details (serial) and collection details for display
     const wrongObjektIds = wrongTransfers
       .map((t) => t.objektId)
@@ -353,7 +366,9 @@ export async function POST(
       collectionMap = new Map(colls.map((c) => [c.id, { collectionId: c.collectionId, collectionNo: c.collectionNo, member: c.member }]));
     }
 
+    let insertedWrongCount = 0;
     for (const t of wrongTransfers) {
+      if (insertedWrongCount >= remainingSlots) break;
       if (!t.objektId) continue;
       if (loggedEvents.has(`${t.objektId}:wrong_objekt`)) continue;
 
@@ -379,8 +394,10 @@ export async function POST(
         recipientUserId,
         event: "wrong_objekt",
       });
+      insertedWrongCount++;
       updatedCount++;
     }
+    } // end else (cap not reached)
   }
 
   // Reload sides after updates
