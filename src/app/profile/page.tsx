@@ -37,6 +37,15 @@ const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "
   disputed: "destructive",
 };
 
+const statusLabel: Record<TradeStatus, string> = {
+  pending: "Pending",
+  accepted: "Accepted",
+  partial: "Ongoing",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  disputed: "Disputed",
+};
+
 interface TradeHistoryEntry {
   id: number;
   status: TradeStatus;
@@ -158,8 +167,8 @@ export default function ProfilePage() {
                         {otherUser.cosmoNickname ?? otherUser.name}
                       </td>
                       <td className="px-4 py-2">
-                        <Badge variant={statusVariant[trade.status]} className="capitalize text-xs">
-                          {trade.status}
+                        <Badge variant={statusVariant[trade.status]} className="text-xs">
+                          {statusLabel[trade.status]}
                         </Badge>
                       </td>
                       <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">

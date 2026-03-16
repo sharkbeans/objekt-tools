@@ -132,6 +132,7 @@ export async function POST(
           recipientUserId,
           event: "pre_accept_sent",
         });
+        loggedEvents.add(`${side.objektId}:pre_accept_sent`);
         updatedCount++;
       }
 
@@ -150,7 +151,136 @@ export async function POST(
           recipientUserId,
           event: "pre_accept_confirmed",
         });
+        loggedEvents.add(`${side.objektId}:pre_accept_confirmed`);
         updatedCount++;
+      }
+    }
+
+    // ── AUTO-ACCEPT: if ALL sides for a party are now pre_accept_sent, promote the trade ──
+    // Group sides by user
+    const initiatorSides = trade.sides.filter((s) => s.userId === trade.initiatorUserId);
+    const recipientSidesForCheck = trade.sides.filter((s) => s.userId === trade.recipientUserId);
+
+    const initiatorAllPreSent = initiatorSides.every((s) =>
+      loggedEvents.has(`${s.objektId}:pre_accept_sent`)
+    );
+    const recipientAllPreSent = recipientSidesForCheck.every((s) =>
+      loggedEvents.has(`${s.objektId}:pre_accept_sent`)
+    );
+
+    // Use the transfer log as dedup signal for one-time notifications.
+    // We track whether we've already notified by checking for a sentinel log entry.
+    // Simpler: check if the pre_accept_sent notification message is already in notifications
+    // by loading existing notifications for these users about this trade.
+    const existingNotifs = await db.query.tradeNotification.findMany({
+      where: inArray(tradeNotification.userId, [trade.initiatorUserId, trade.recipientUserId]),
+    });
+    // Use message content to detect already-sent notifications (simpler than a new column)
+    const notifMessages = new Set(existingNotifs.map((n) => n.message));
+
+    if (initiatorAllPreSent && recipientAllPreSent) {
+      // Both parties sent everything pre-accept — promote straight to completed
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        // Snapshot ownerAtAcceptance and mark all sides confirmed
+        const objektIds2 = trade.sides.map((s) => s.objektId);
+        const owned2 = await indexer
+          .select({ id: objekts.id, owner: objekts.owner })
+          .from(objekts)
+          .where(inArray(objekts.id, objektIds2));
+        const ownerMap2 = new Map(owned2.map((o) => [o.id, o.owner]));
+
+        for (const side of trade.sides) {
+          const currentOwner = ownerMap2.get(side.objektId);
+          await tx
+            .update(activeTradeSide)
+            .set({ status: "confirmed", ownerAtAcceptance: currentOwner ?? null, detectedAt: now })
+            .where(eq(activeTradeSide.id, side.id));
+        }
+
+        await tx
+          .update(activeTrade)
+          .set({ status: "completed", acceptedAt: now, updatedAt: now })
+          .where(eq(activeTrade.id, tradeId));
+
+        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+        if (postIds.length > 0) {
+          await tx
+            .update(tradePost)
+            .set({ status: "closed", updatedAt: now })
+            .where(inArray(tradePost.id, postIds));
+        }
+
+        await tx.insert(tradeNotification).values([
+          {
+            userId: trade.initiatorUserId,
+            message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
+          },
+          {
+            userId: trade.recipientUserId,
+            message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
+          },
+        ]);
+      });
+    } else if (recipientAllPreSent) {
+      // Recipient sent all their objekts pre-accept — auto-promote to accepted
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        const objektIds2 = trade.sides.map((s) => s.objektId);
+        const owned2 = await indexer
+          .select({ id: objekts.id, owner: objekts.owner })
+          .from(objekts)
+          .where(inArray(objekts.id, objektIds2));
+        const ownerMap2 = new Map(owned2.map((o) => [o.id, o.owner]));
+
+        for (const side of trade.sides) {
+          const currentOwner = ownerMap2.get(side.objektId);
+          await tx
+            .update(activeTradeSide)
+            .set({ ownerAtAcceptance: currentOwner ?? null })
+            .where(eq(activeTradeSide.id, side.id));
+        }
+
+        // Mark recipient's sides as confirmed (they already arrived)
+        for (const side of recipientSidesForCheck) {
+          await tx
+            .update(activeTradeSide)
+            .set({ status: "confirmed", detectedAt: now })
+            .where(eq(activeTradeSide.id, side.id));
+        }
+
+        await tx
+          .update(activeTrade)
+          .set({ status: "accepted", acceptedAt: now, updatedAt: now })
+          .where(eq(activeTrade.id, tradeId));
+
+        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+        if (postIds.length > 0) {
+          await tx
+            .update(tradePost)
+            .set({ status: "in_trade", updatedAt: now })
+            .where(inArray(tradePost.id, postIds));
+        }
+
+        await tx.insert(tradeNotification).values([
+          {
+            userId: trade.initiatorUserId,
+            message: `Active Trade #${tradeId}: the other party has already sent all their objekts. Please send yours to complete the trade.`,
+          },
+          {
+            userId: trade.recipientUserId,
+            message: `Active Trade #${tradeId} has been automatically accepted because you sent all your objekts. Waiting for the other party to send theirs.`,
+          },
+        ]);
+      });
+    } else if (initiatorAllPreSent) {
+      // Initiator sent all pre-accept — notify recipient once (they can still cancel or accept)
+      const notifMsg = `Active Trade #${tradeId}: the other party has already sent all their objekts before you accepted. You can accept as normal, or cancel — if you cancel, please return the objekts to them.`;
+      if (!notifMessages.has(notifMsg)) {
+        await db.insert(tradeNotification).values({
+          userId: trade.recipientUserId,
+          message: notifMsg,
+        });
       }
     }
   } else {

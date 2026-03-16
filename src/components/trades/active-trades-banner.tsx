@@ -19,6 +19,15 @@ const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "
   disputed: "destructive",
 };
 
+const statusLabel: Record<TradeStatus, string> = {
+  pending: "Pending",
+  accepted: "Accepted",
+  partial: "Ongoing",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  disputed: "Disputed",
+};
+
 const DISMISSED_KEY = "dismissed-active-trades";
 
 function getDismissed(): Set<string> {
@@ -102,8 +111,8 @@ export function ActiveTradesBanner() {
               className="flex flex-1 items-center justify-between gap-3 min-w-0"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <Badge variant={statusVariant[trade.status as TradeStatus]} className="capitalize shrink-0">
-                  {trade.status}
+                <Badge variant={statusVariant[trade.status as TradeStatus]} className="shrink-0">
+                  {statusLabel[trade.status as TradeStatus]}
                 </Badge>
                 <span className="text-sm truncate">
                   Trade #{trade.id} with {otherUser.cosmoNickname ?? otherUser.name}

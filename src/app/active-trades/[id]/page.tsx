@@ -707,6 +707,15 @@ export default function ActiveTradePage({
     disputed: "destructive",
   };
 
+  const statusLabel: Record<TradeStatus, string> = {
+    pending: "Pending",
+    accepted: "Accepted",
+    partial: "Ongoing",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    disputed: "Disputed",
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <Card>
@@ -715,8 +724,8 @@ export default function ActiveTradePage({
             <div>
               <CardTitle className="flex items-center gap-2">
                 Active Trade #{trade.id}
-                <Badge variant={statusVariant[trade.status]} className="capitalize">
-                  {trade.status}
+                <Badge variant={statusVariant[trade.status]}>
+                  {statusLabel[trade.status]}
                 </Badge>
               </CardTitle>
               <CardDescription className="mt-1">

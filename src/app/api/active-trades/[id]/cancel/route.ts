@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeNotification, tradePost } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { activeTrade, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { eq, inArray, and } from "drizzle-orm";
 
 const CANCEL_TIMEOUT_HOURS = 24;
 
@@ -107,14 +107,35 @@ export async function POST(
       ? trade.recipientUserId
       : trade.initiatorUserId;
 
+  // Check if the other party had sent any objekts pre-accept (only relevant for pending trades)
+  let otherPartyPreSentCount = 0;
+  if (trade.status === "pending") {
+    const preAcceptLogs = await db.query.tradeTransferLog.findMany({
+      where: and(
+        eq(tradeTransferLog.activeTradeId, tradeId),
+        eq(tradeTransferLog.senderUserId, otherUserId),
+        eq(tradeTransferLog.event, "pre_accept_sent"),
+      ),
+    });
+    otherPartyPreSentCount = preAcceptLogs.length;
+  }
+
+  const cancellerMsg = otherPartyPreSentCount > 0
+    ? `You cancelled Active Trade #${tradeId}. The other party had already sent ${otherPartyPreSentCount} objekt(s) — please return them.`
+    : `You cancelled Active Trade #${tradeId}.`;
+
+  const otherMsg = otherPartyPreSentCount > 0
+    ? `${cancellerName} cancelled Active Trade #${tradeId}. They have been asked to return your ${otherPartyPreSentCount} objekt(s).`
+    : `${cancellerName} cancelled Active Trade #${tradeId}.`;
+
   await db.insert(tradeNotification).values([
     {
       userId: session.user.id,
-      message: `You cancelled Active Trade #${tradeId}.`,
+      message: cancellerMsg,
     },
     {
       userId: otherUserId,
-      message: `${cancellerName} cancelled Active Trade #${tradeId}.`,
+      message: otherMsg,
     },
   ]);
 
