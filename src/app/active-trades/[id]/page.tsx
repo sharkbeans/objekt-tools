@@ -352,7 +352,7 @@ function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
   );
 }
 
-type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt";
+type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient";
 
 interface TransferLog {
   id: number;
@@ -453,6 +453,19 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
             <span className="text-red-600 dark:text-red-400"> (not part of this trade)</span>
           </>
         );
+      case "wrong_recipient":
+        return (
+          <>
+            <span className="font-medium text-red-600 dark:text-red-400">[WRONG RECIPIENT]</span>
+            {" "}
+            <span className="font-medium">{log.senderName}</span>
+            {" sent "}
+            <span className="font-medium">{objekt}</span>
+            {" to "}
+            <span className="font-mono text-[11px]">{log.toAddress}</span>
+            <span className="text-red-600 dark:text-red-400"> (not the intended recipient)</span>
+          </>
+        );
       default:
         return (
           <>
@@ -486,7 +499,7 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
                   key={log.id}
                   className={cn(
                     "border-b last:border-0",
-                    log.event === "wrong_objekt" && "bg-red-500/10",
+                    (log.event === "wrong_objekt" || log.event === "wrong_recipient") && "bg-red-500/10",
                     (log.event === "pre_accept_sent" || log.event === "pre_accept_confirmed") && "bg-amber-500/10",
                   )}
                 >
@@ -551,7 +564,9 @@ export default function ActiveTradePage({
   const preAcceptLogs = transferLogs.filter(
     (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed"
   );
-  const wrongObjektLogs = transferLogs.filter((l) => l.event === "wrong_objekt");
+  const suspiciousTransferLogs = transferLogs.filter(
+    (l) => l.event === "wrong_objekt" || l.event === "wrong_recipient"
+  );
 
   const terminalStatuses = ["completed", "cancelled", "disputed"];
   useEffect(() => {
@@ -774,12 +789,12 @@ export default function ActiveTradePage({
                 );
               })()}
 
-              {wrongObjektLogs.length > 0 && (
+              {suspiciousTransferLogs.length > 0 && (
                 <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
                   <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
                   <div className="text-sm space-y-1">
-                    <p className="font-medium text-red-700 dark:text-red-300">Wrong objekt(s) detected!</p>
-                    <p className="text-muted-foreground">One or more objekts that are not part of this trade were sent between the parties. Check the Transfer Logs below for details.</p>
+                    <p className="font-medium text-red-700 dark:text-red-300">Suspicious transfer(s) detected!</p>
+                    <p className="text-muted-foreground">One or more transfers are unsafe (wrong objekt or wrong recipient). Check the Transfer Logs below for details.</p>
                   </div>
                 </div>
               )}
@@ -862,12 +877,12 @@ export default function ActiveTradePage({
             );
           })()}
 
-          {["accepted", "partial"].includes(trade.status) && isParticipant && wrongObjektLogs.length > 0 && (
+          {["accepted", "partial"].includes(trade.status) && isParticipant && suspiciousTransferLogs.length > 0 && (
             <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
               <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
               <div className="text-sm space-y-1">
-                <p className="font-medium text-red-700 dark:text-red-300">Wrong objekt(s) detected!</p>
-                <p className="text-muted-foreground">One or more objekts that are not part of this trade were sent between the parties. Check the Transfer Logs below for details.</p>
+                <p className="font-medium text-red-700 dark:text-red-300">Suspicious transfer(s) detected!</p>
+                <p className="text-muted-foreground">One or more transfers are unsafe (wrong objekt or wrong recipient). Check the Transfer Logs below for details.</p>
               </div>
             </div>
           )}

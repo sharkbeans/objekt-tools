@@ -44,16 +44,6 @@ export async function POST(
 
   const tradeObjektIds = trade.sides.map((s) => s.objektId);
 
-  // Query indexer for current owners (only needed for pending pre-accept detection)
-  let ownerMap = new Map<string, string>();
-  if (trade.status === "pending") {
-    const owned = await indexer
-      .select({ id: objekts.id, owner: objekts.owner })
-      .from(objekts)
-      .where(inArray(objekts.id, tradeObjektIds));
-    ownerMap = new Map(owned.map((o) => [o.id, o.owner]));
-  }
-
   // Build a set of objekt IDs that are part of this trade for quick lookup
   const tradeObjektIdSet = new Set(tradeObjektIds);
 
@@ -68,14 +58,39 @@ export async function POST(
   let updatedCount = 0;
 
   if (trade.status === "pending") {
-    // ── PENDING: detect pre-accept transfers ──
-    for (const side of trade.sides) {
-      const currentOwner = ownerMap.get(side.objektId);
-      if (!currentOwner) continue;
+    // ── PENDING: detect pre-accept transfers with strict sender/recipient matching ──
+    const transferEvents = await indexer
+      .select({
+        objektId: transfers.objektId,
+        from: transfers.from,
+        to: transfers.to,
+        timestamp: transfers.timestamp,
+      })
+      .from(transfers)
+      .where(
+        and(
+          inArray(transfers.objektId, tradeObjektIds),
+          trade.createdAt
+            ? gte(transfers.timestamp, trade.createdAt)
+            : undefined,
+        )
+      );
 
-      // Objekt already arrived at recipient before acceptance
-      if (currentOwner.toLowerCase() === side.recipientAddress.toLowerCase()) {
-        if (!loggedEvents.has(`${side.objektId}:pre_accept_confirmed`)) {
+    for (const side of trade.sides) {
+      const matchedTransfer = transferEvents.find(
+        (t) =>
+          t.objektId === side.objektId &&
+          t.from.toLowerCase() === side.address.toLowerCase() &&
+          t.to.toLowerCase() === side.recipientAddress.toLowerCase()
+      );
+      const wrongRecipientTransfer = transferEvents.find(
+        (t) =>
+          t.objektId === side.objektId &&
+          t.from.toLowerCase() === side.address.toLowerCase() &&
+          t.to.toLowerCase() !== side.recipientAddress.toLowerCase()
+      );
+      if (!matchedTransfer) {
+        if (wrongRecipientTransfer && !loggedEvents.has(`${side.objektId}:wrong_recipient`)) {
           const recipientUserId = side.userId === trade.initiatorUserId
             ? trade.recipientUserId
             : trade.initiatorUserId;
@@ -83,7 +98,7 @@ export async function POST(
             activeTradeId: tradeId,
             activeTradeSideId: side.id,
             fromAddress: side.address,
-            toAddress: side.recipientAddress,
+            toAddress: wrongRecipientTransfer.to,
             objektId: side.objektId,
             collectionId: side.collectionId,
             collectionNo: side.collectionNo,
@@ -91,33 +106,51 @@ export async function POST(
             serial: side.serial,
             senderUserId: side.userId,
             recipientUserId,
-            event: "pre_accept_confirmed",
+            event: "wrong_recipient",
           });
           updatedCount++;
         }
+        continue;
       }
-      // Objekt left sender but hasn't arrived at recipient yet
-      else if (currentOwner.toLowerCase() !== side.address.toLowerCase()) {
-        if (!loggedEvents.has(`${side.objektId}:pre_accept_sent`)) {
-          const recipientUserId = side.userId === trade.initiatorUserId
-            ? trade.recipientUserId
-            : trade.initiatorUserId;
-          await db.insert(tradeTransferLog).values({
-            activeTradeId: tradeId,
-            activeTradeSideId: side.id,
-            fromAddress: side.address,
-            toAddress: side.recipientAddress,
-            objektId: side.objektId,
-            collectionId: side.collectionId,
-            collectionNo: side.collectionNo,
-            member: side.member,
-            serial: side.serial,
-            senderUserId: side.userId,
-            recipientUserId,
-            event: "pre_accept_sent",
-          });
-          updatedCount++;
-        }
+
+      const recipientUserId = side.userId === trade.initiatorUserId
+        ? trade.recipientUserId
+        : trade.initiatorUserId;
+
+      if (!loggedEvents.has(`${side.objektId}:pre_accept_sent`)) {
+        await db.insert(tradeTransferLog).values({
+          activeTradeId: tradeId,
+          activeTradeSideId: side.id,
+          fromAddress: side.address,
+          toAddress: side.recipientAddress,
+          objektId: side.objektId,
+          collectionId: side.collectionId,
+          collectionNo: side.collectionNo,
+          member: side.member,
+          serial: side.serial,
+          senderUserId: side.userId,
+          recipientUserId,
+          event: "pre_accept_sent",
+        });
+        updatedCount++;
+      }
+
+      if (!loggedEvents.has(`${side.objektId}:pre_accept_confirmed`)) {
+        await db.insert(tradeTransferLog).values({
+          activeTradeId: tradeId,
+          activeTradeSideId: side.id,
+          fromAddress: side.address,
+          toAddress: side.recipientAddress,
+          objektId: side.objektId,
+          collectionId: side.collectionId,
+          collectionNo: side.collectionNo,
+          member: side.member,
+          serial: side.serial,
+          senderUserId: side.userId,
+          recipientUserId,
+          event: "pre_accept_confirmed",
+        });
+        updatedCount++;
       }
     }
   } else {
@@ -159,6 +192,12 @@ export async function POST(
             t.from.toLowerCase() === side.address.toLowerCase() &&
             t.to.toLowerCase() === side.recipientAddress.toLowerCase()
         );
+        const wrongRecipientTransfer = transferEvents.find(
+          (t) =>
+            t.objektId === side.objektId &&
+            t.from.toLowerCase() === side.address.toLowerCase() &&
+            t.to.toLowerCase() !== side.recipientAddress.toLowerCase()
+        );
 
         if (confirmedTransfer) {
           // Skip unsolicited pre-accept transfers
@@ -169,34 +208,7 @@ export async function POST(
             continue;
           }
 
-          await db
-            .update(activeTradeSide)
-            .set({ status: "confirmed", detectedAt: new Date() })
-            .where(eq(activeTradeSide.id, side.id));
-          await db.insert(tradeTransferLog).values({
-            activeTradeId: tradeId,
-            activeTradeSideId: side.id,
-            fromAddress: side.address,
-            toAddress: side.recipientAddress,
-            objektId: side.objektId,
-            collectionId: side.collectionId,
-            collectionNo: side.collectionNo,
-            member: side.member,
-            serial: side.serial,
-            senderUserId: side.userId,
-            recipientUserId,
-            event: "confirmed",
-          });
-          updatedCount++;
-        } else if (side.status === "pending") {
-          // Check if there's a transfer from the correct sender (but to a different/intermediate address)
-          const sentTransfer = transferEvents.find(
-            (t) =>
-              t.objektId === side.objektId &&
-              t.from.toLowerCase() === side.address.toLowerCase()
-          );
-
-          if (sentTransfer) {
+          if (side.status === "pending") {
             await db
               .update(activeTradeSide)
               .set({ status: "sent" })
@@ -216,7 +228,43 @@ export async function POST(
               event: "sent",
             });
             updatedCount++;
+          } else if (side.status === "sent") {
+            await db
+              .update(activeTradeSide)
+              .set({ status: "confirmed", detectedAt: new Date() })
+              .where(eq(activeTradeSide.id, side.id));
+            await db.insert(tradeTransferLog).values({
+              activeTradeId: tradeId,
+              activeTradeSideId: side.id,
+              fromAddress: side.address,
+              toAddress: side.recipientAddress,
+              objektId: side.objektId,
+              collectionId: side.collectionId,
+              collectionNo: side.collectionNo,
+              member: side.member,
+              serial: side.serial,
+              senderUserId: side.userId,
+              recipientUserId,
+              event: "confirmed",
+            });
+            updatedCount++;
           }
+        } else if (wrongRecipientTransfer && !loggedEvents.has(`${side.objektId}:wrong_recipient`)) {
+          await db.insert(tradeTransferLog).values({
+            activeTradeId: tradeId,
+            activeTradeSideId: side.id,
+            fromAddress: side.address,
+            toAddress: wrongRecipientTransfer.to,
+            objektId: side.objektId,
+            collectionId: side.collectionId,
+            collectionNo: side.collectionNo,
+            member: side.member,
+            serial: side.serial,
+            senderUserId: side.userId,
+            recipientUserId,
+            event: "wrong_recipient",
+          });
+          updatedCount++;
         }
       }
     }
@@ -419,7 +467,7 @@ export async function POST(
     }
   }
 
-  // Reload logs to return pre-accept and wrong-objekt warnings
+  // Reload logs to return warning counts
   const freshLogs = await db.query.tradeTransferLog.findMany({
     where: eq(tradeTransferLog.activeTradeId, tradeId),
   });
@@ -428,6 +476,7 @@ export async function POST(
     l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed"
   );
   const wrongObjektLogs = freshLogs.filter((l) => l.event === "wrong_objekt");
+  const wrongRecipientLogs = freshLogs.filter((l) => l.event === "wrong_recipient");
 
   return NextResponse.json({
     status: newTradeStatus,
@@ -435,5 +484,7 @@ export async function POST(
     sides: freshSides,
     preAcceptTransfers: preAcceptLogs.length,
     wrongObjektTransfers: wrongObjektLogs.length,
+    wrongRecipientTransfers: wrongRecipientLogs.length,
+    suspiciousTransfers: wrongObjektLogs.length + wrongRecipientLogs.length,
   });
 }

@@ -225,7 +225,7 @@ export const tradeTransferLog = pgTable("trade_transfer_log", {
   recipientUserId: text("recipient_user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  event: text("event").notNull().$type<"sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt">(),
+  event: text("event").notNull().$type<"sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient">(),
   detectedAt: timestamp("detected_at").notNull().defaultNow(),
 }, (t) => [
   index("trade_transfer_log_trade_idx").on(t.activeTradeId),
