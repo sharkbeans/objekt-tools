@@ -171,6 +171,7 @@ export const activeTrade = pgTable("active_trade", {
   >(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  acceptedAt: timestamp("accepted_at"),
   expiresAt: timestamp("expires_at"),
 }, (t) => [
   index("active_trade_initiator_idx").on(t.initiatorUserId),
@@ -196,6 +197,7 @@ export const activeTradeSide = pgTable("active_trade_side", {
   serial: integer("serial"),
   thumbnailUrl: text("thumbnail_url"),
   status: text("status").notNull().default("pending").$type<"pending" | "sent" | "confirmed">(),
+  ownerAtAcceptance: text("owner_at_acceptance"),
   transferHash: text("transfer_hash"),
   detectedAt: timestamp("detected_at"),
 }, (t) => [

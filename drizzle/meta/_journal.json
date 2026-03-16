@@ -57,6 +57,13 @@
       "when": 1741344000006,
       "tag": "0007_trade_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1741344000007,
+      "tag": "0008_unsolicited_transfer_defense",
+      "breakpoints": true
     }
   ]
 }

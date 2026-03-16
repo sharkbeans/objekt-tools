@@ -64,6 +64,15 @@ export async function POST(
 
     // Objekt has reached recipient address → mark as confirmed
     if (currentOwner.toLowerCase() === side.recipientAddress.toLowerCase()) {
+      // Belt-and-suspenders: if the objekt was already at the recipient when the
+      // trade was accepted (unsolicited transfer), do not confirm it.
+      if (
+        side.ownerAtAcceptance &&
+        side.ownerAtAcceptance.toLowerCase() === side.recipientAddress.toLowerCase()
+      ) {
+        continue;
+      }
+
       await db
         .update(activeTradeSide)
         .set({ status: "confirmed", detectedAt: new Date() })

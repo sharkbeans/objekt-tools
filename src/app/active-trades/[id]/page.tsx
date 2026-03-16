@@ -441,7 +441,16 @@ export default function ActiveTradePage({
   async function handleAccept() {
     const res = await fetch(`/api/active-trades/${id}/accept`, { method: "POST" });
     if (!res.ok) {
-      toast.error("Failed to accept trade");
+      const data = await res.json().catch(() => null);
+      if (res.status === 409) {
+        toast.error(
+          data?.error ||
+            "Cannot accept: objekts may have been transferred before this trade was accepted.",
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(data?.error || "Failed to accept trade");
+      }
       return;
     }
     toast.success("Trade accepted! Both parties can now send their objekts.");
