@@ -12,6 +12,7 @@ import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { XIcon, AlertTriangleIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 function buildParams(filters: TradeFilterState, page: number) {
   const p = new URLSearchParams();
@@ -60,10 +61,12 @@ function TradeNotifications() {
       {notifications.map((n: { id: number; message: string; createdAt: string }) => (
         <div
           key={n.id}
-          className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/50 p-3"
+          className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 p-3"
         >
-          <AlertTriangleIcon className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p className="text-sm flex-1">{n.message}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-sm">{n.message}</p>
+          </div>
           <button
             type="button"
             onClick={() => dismiss.mutate([n.id])}

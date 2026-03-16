@@ -623,8 +623,8 @@ export default function ActiveTradePage({
           )}
 
           {trade.status === "completed" && (
-            <div className="rounded-md bg-primary/10 border border-primary/20 px-4 py-3 text-sm text-center">
-              Trade complete! Both objekts have been successfully transferred.
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-green-300 bg-green-500/20 dark:border-green-800 dark:bg-green-500/20 p-3">
+              <p className="text-sm">Trade complete! Both objekts have been successfully transferred.</p>
             </div>
           )}
 

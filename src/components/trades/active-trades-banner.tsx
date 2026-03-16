@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth-client";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { XIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed";
 
@@ -83,11 +84,22 @@ export function ActiveTradesBanner() {
         const needsAccept = isRecipient && trade.status === "pending";
         const isTerminal = terminalStatuses.includes(trade.status);
 
+        const bannerClass = cn(
+          "flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors min-w-0",
+          trade.status === "completed"
+            ? "border-green-300 bg-green-500/20 dark:border-green-800 dark:bg-green-500/20 hover:bg-green-500/25"
+            : trade.status === "pending"
+            ? "border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 hover:bg-amber-500/40"
+            : trade.status === "cancelled" || trade.status === "disputed"
+            ? "border-destructive/40 bg-destructive/15 dark:bg-destructive/20 hover:bg-destructive/20"
+            : "border-border hover:bg-muted/50"
+        );
+
         return (
-          <div key={trade.id} className="flex items-center gap-2">
+          <div key={trade.id} className={bannerClass}>
             <Link
               href={`/active-trades/${trade.id}`}
-              className="flex flex-1 items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors min-w-0"
+              className="flex flex-1 items-center justify-between gap-3 min-w-0"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <Badge variant={statusVariant[trade.status as TradeStatus]} className="capitalize shrink-0">
