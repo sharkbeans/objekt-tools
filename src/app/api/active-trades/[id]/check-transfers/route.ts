@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { activeTrade, activeTradeSide, tradeNotification, tradePost } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
 import { objekts } from "@/lib/db/indexer-schema";
 import { eq, inArray, and, or, ne } from "drizzle-orm";
 
@@ -73,18 +73,52 @@ export async function POST(
         continue;
       }
 
+      const recipientUserId = side.userId === trade.initiatorUserId
+        ? trade.recipientUserId
+        : trade.initiatorUserId;
       await db
         .update(activeTradeSide)
         .set({ status: "confirmed", detectedAt: new Date() })
         .where(eq(activeTradeSide.id, side.id));
+      await db.insert(tradeTransferLog).values({
+        activeTradeId: tradeId,
+        activeTradeSideId: side.id,
+        fromAddress: side.address,
+        toAddress: side.recipientAddress,
+        objektId: side.objektId,
+        collectionId: side.collectionId,
+        collectionNo: side.collectionNo,
+        member: side.member,
+        serial: side.serial,
+        senderUserId: side.userId,
+        recipientUserId,
+        event: "confirmed",
+      });
       updatedCount++;
     }
     // Objekt left sender but hasn't arrived → mark as sent
     else if (currentOwner.toLowerCase() !== side.address.toLowerCase() && side.status === "pending") {
+      const recipientUserIdForSent = side.userId === trade.initiatorUserId
+        ? trade.recipientUserId
+        : trade.initiatorUserId;
       await db
         .update(activeTradeSide)
         .set({ status: "sent" })
         .where(eq(activeTradeSide.id, side.id));
+      await db.insert(tradeTransferLog).values({
+        activeTradeId: tradeId,
+        activeTradeSideId: side.id,
+        fromAddress: side.address,
+        toAddress: side.recipientAddress,
+        objektId: side.objektId,
+        collectionId: side.collectionId,
+        collectionNo: side.collectionNo,
+        member: side.member,
+        serial: side.serial,
+        senderUserId: side.userId,
+        recipientUserId: recipientUserIdForSent,
+        event: "sent",
+      });
       updatedCount++;
     }
   }

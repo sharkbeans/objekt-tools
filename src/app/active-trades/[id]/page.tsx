@@ -17,7 +17,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon } from "lucide-react";
+import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon } from "lucide-react";
 
 type SideStatus = "pending" | "sent" | "confirmed";
 type TradeStatus =
@@ -352,6 +352,85 @@ function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
   );
 }
 
+interface TransferLog {
+  id: number;
+  event: "sent" | "confirmed";
+  objektId: string;
+  collectionId: string;
+  collectionNo?: string | null;
+  member?: string | null;
+  serial?: number | null;
+  fromAddress: string;
+  toAddress: string;
+  senderName: string;
+  recipientName: string;
+  detectedAt: string;
+}
+
+function TransferLogs({ tradeId }: { tradeId: string }) {
+  const { data: logs = [] } = useQuery<TransferLog[]>({
+    queryKey: ["trade-transfer-logs", tradeId],
+    queryFn: async () => {
+      const res = await fetch(`/api/active-trades/${tradeId}/transfer-logs`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    refetchInterval: 30_000,
+  });
+
+  function formatObjektName(log: TransferLog) {
+    const name =
+      log.collectionNo && log.member
+        ? `${log.member} ${log.collectionNo}`
+        : log.collectionId;
+    const serial =
+      log.serial != null ? `#${String(log.serial).padStart(5, "0")}` : "";
+    return `${name}${serial ? ` ${serial}` : ""}`;
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-medium">Transfer Logs</h3>
+      {logs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No transfers detected yet.</p>
+      ) : (
+        <div className="rounded-md border overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">Date &amp; Time</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Event</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log) => (
+                <tr key={log.id} className="border-b last:border-0">
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                    {new Date(log.detectedAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
+                    {" "}
+                    {new Date(log.detectedAt).toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    {" GMT"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="font-medium">{log.senderName}</span>
+                    {log.event === "confirmed" ? " sent " : " transferred "}
+                    <span className="font-medium">{formatObjektName(log)}</span>
+                    {" to "}
+                    <span className="font-medium">{log.recipientName}</span>
+                    {log.event === "sent" && (
+                      <span className="text-muted-foreground"> (in transit)</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CHECK_TRANSFERS_COOLDOWN_MS = 10_000;
 
 export default function ActiveTradePage({
@@ -436,6 +515,7 @@ export default function ActiveTradePage({
       }
     }
     queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
+    queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", id] });
   }
 
   async function handleAccept() {
@@ -499,8 +579,15 @@ export default function ActiveTradePage({
 
   const initiatorName = trade.initiator.cosmoNickname ?? trade.initiator.name;
   const recipientName = trade.recipient.cosmoNickname ?? trade.recipient.name;
-  const myInitiatorSideLabel = trade.initiatorUserId === userId ? "You send" : `${initiatorName} sends`;
-  const myRecipientSideLabel = trade.recipientUserId === userId ? "You send" : `${recipientName} sends`;
+  const isInitiator = trade.initiatorUserId === userId;
+
+  // Always show "You send" on the left, partner on the right
+  const leftSides = isInitiator ? initiatorSides : recipientSides;
+  const rightSides = isInitiator ? recipientSides : initiatorSides;
+  const leftLabel = isParticipant ? "You send" : `${initiatorName} sends`;
+  const rightLabel = isParticipant
+    ? `${isInitiator ? recipientName : initiatorName} sends`
+    : `${recipientName} sends`;
 
   const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
     pending: "secondary",
@@ -554,25 +641,32 @@ export default function ActiveTradePage({
 
           <Separator />
 
+          {trade.status === "pending" && isParticipant && (
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 p-3">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <p className="text-sm">Do not send any objekts until this trade has been accepted by both parties.</p>
+            </div>
+          )}
+
           <div className="flex gap-4">
-            {initiatorSides.length > 0 && (
+            {leftSides.length > 0 && (
               <div className="flex-1 min-w-0 space-y-2">
-                {initiatorSides.map((side, i) => (
+                {leftSides.map((side, i) => (
                   <SideCard
                     key={side.id}
                     side={side}
-                    label={i === 0 ? myInitiatorSideLabel : ""}
+                    label={i === 0 ? leftLabel : ""}
                   />
                 ))}
               </div>
             )}
-            {recipientSides.length > 0 && (
+            {rightSides.length > 0 && (
               <div className="flex-1 min-w-0 space-y-2">
-                {recipientSides.map((side, i) => (
+                {rightSides.map((side, i) => (
                   <SideCard
                     key={side.id}
                     side={side}
-                    label={i === 0 ? myRecipientSideLabel : ""}
+                    label={i === 0 ? rightLabel : ""}
                   />
                 ))}
               </div>
@@ -580,11 +674,10 @@ export default function ActiveTradePage({
           </div>
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && (() => {
-            const isInitiator = trade.initiatorUserId === userId;
             const myName = isInitiator ? initiatorName : recipientName;
             const theirName = isInitiator ? recipientName : initiatorName;
-            const mySides = isInitiator ? initiatorSides : recipientSides;
-            const theirSides = isInitiator ? recipientSides : initiatorSides;
+            const mySides = leftSides;
+            const theirSides = rightSides;
             return (
               <>
                 <Separator />
@@ -641,6 +734,13 @@ export default function ActiveTradePage({
             <>
               <Separator />
               <TradeChat tradeId={trade.id} userId={userId} />
+            </>
+          )}
+
+          {isParticipant && (
+            <>
+              <Separator />
+              <TransferLogs tradeId={trade.id} />
             </>
           )}
 

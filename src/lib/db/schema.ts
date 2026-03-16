@@ -205,6 +205,33 @@ export const activeTradeSide = pgTable("active_trade_side", {
   index("active_trade_side_user_idx").on(t.userId),
 ]);
 
+export const tradeTransferLog = pgTable("trade_transfer_log", {
+  id: serial("id").primaryKey(),
+  activeTradeId: text("active_trade_id")
+    .notNull()
+    .references(() => activeTrade.id, { onDelete: "cascade" }),
+  activeTradeSideId: integer("active_trade_side_id")
+    .notNull()
+    .references(() => activeTradeSide.id, { onDelete: "cascade" }),
+  fromAddress: text("from_address").notNull(),
+  toAddress: text("to_address").notNull(),
+  objektId: text("objekt_id").notNull(),
+  collectionId: text("collection_id").notNull(),
+  collectionNo: text("collection_no"),
+  member: text("member"),
+  serial: integer("serial"),
+  senderUserId: text("sender_user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  recipientUserId: text("recipient_user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  event: text("event").notNull().$type<"sent" | "confirmed">(),
+  detectedAt: timestamp("detected_at").notNull().defaultNow(),
+}, (t) => [
+  index("trade_transfer_log_trade_idx").on(t.activeTradeId),
+]);
+
 export const tradeMessage = pgTable("trade_message", {
   id: serial("id").primaryKey(),
   activeTradeId: text("active_trade_id")
@@ -280,6 +307,27 @@ export const tradeMessageRelations = relations(tradeMessage, ({ one }) => ({
   }),
 }));
 
+export const tradeTransferLogRelations = relations(tradeTransferLog, ({ one }) => ({
+  activeTrade: one(activeTrade, {
+    fields: [tradeTransferLog.activeTradeId],
+    references: [activeTrade.id],
+  }),
+  side: one(activeTradeSide, {
+    fields: [tradeTransferLog.activeTradeSideId],
+    references: [activeTradeSide.id],
+  }),
+  sender: one(user, {
+    fields: [tradeTransferLog.senderUserId],
+    references: [user.id],
+    relationName: "logSender",
+  }),
+  recipient: one(user, {
+    fields: [tradeTransferLog.recipientUserId],
+    references: [user.id],
+    relationName: "logRecipient",
+  }),
+}));
+
 export const activeTradeRelations = relations(activeTrade, ({ one, many }) => ({
   tradePost: one(tradePost, {
     fields: [activeTrade.tradePostId],
@@ -303,6 +351,7 @@ export const activeTradeRelations = relations(activeTrade, ({ one, many }) => ({
   }),
   sides: many(activeTradeSide),
   messages: many(tradeMessage),
+  transferLogs: many(tradeTransferLog),
 }));
 
 export const activeTradeSideRelations = relations(activeTradeSide, ({ one }) => ({
