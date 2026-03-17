@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { XIcon } from "lucide-react";
 import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
@@ -118,6 +118,18 @@ export default function NewTradePage() {
 
   const haveImages = useObjektImages(haves);
   const wantImages = useObjektImages(wants);
+
+  const [previewHover, setPreviewHover] = useState<{ image: string; top: number; left: number } | null>(null);
+
+  const handlePreviewMouseEnter = useCallback((e: React.MouseEvent<HTMLDivElement>, image: string | undefined) => {
+    if (!image) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPreviewHover({ image, top: rect.top, left: rect.right + 8 });
+  }, []);
+
+  const handlePreviewMouseLeave = useCallback(() => {
+    setPreviewHover(null);
+  }, []);
 
   function handleArtistChange(next: string[]) {
     setAnyArtist(next);
@@ -426,7 +438,12 @@ export default function NewTradePage() {
                   <p className="text-sm font-medium text-muted-foreground mb-2">HAVE</p>
                   <div className="flex flex-col gap-1">
                     {haves.map((item, i) => (
-                      <div key={i} className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between">
+                      <div
+                        key={i}
+                        className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
+                        onMouseEnter={(e) => handlePreviewMouseEnter(e, haveImages.get(item.collectionId) ?? item.thumbnailImage)}
+                        onMouseLeave={handlePreviewMouseLeave}
+                      >
                         <span>
                           <span className="text-muted-foreground">{item.artist}</span>{" "}
                           {item.member}{" "}
@@ -450,7 +467,12 @@ export default function NewTradePage() {
                       </div>
                     ))}
                     {wants.map((item, i) => (
-                      <div key={i} className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between">
+                      <div
+                        key={i}
+                        className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
+                        onMouseEnter={(e) => handlePreviewMouseEnter(e, wantImages.get(item.collectionId) ?? item.thumbnailImage)}
+                        onMouseLeave={handlePreviewMouseLeave}
+                      >
                         <span>
                           <span className="text-muted-foreground">{item.artist}</span>{" "}
                           {item.member}{" "}
@@ -502,6 +524,14 @@ export default function NewTradePage() {
           </div>
         </CardContent>
       </Card>
+      {previewHover && (
+        <div
+          className="fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+          style={{ top: previewHover.top, left: previewHover.left }}
+        >
+          <img src={previewHover.image} alt="" className="w-24 h-auto block" />
+        </div>
+      )}
     </div>
   );
 }

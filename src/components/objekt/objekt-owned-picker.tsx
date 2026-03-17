@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { makeTradeItemTags, searchFilter } from "@/lib/filter-utils";
@@ -227,11 +228,25 @@ export function ObjektOwnedPicker({
       )}
 
       {selected.length > 0 && (
+        <p className="text-md font-medium">Selected Haves</p>
+      )}
+
+      {selected.length > 0 && (
         <div className="border rounded-md divide-y">
           {selected.map((objekt) => (
             <div
               key={objekt.serial ?? objekt.collectionId}
               className="flex items-center justify-between px-3 py-2 text-sm"
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setHoverPos({ top: rect.top, left: rect.right + 8 });
+                if (objekt.thumbnailImage) {
+                  setHoverImage(objekt.thumbnailImage);
+                } else {
+                  fetchThumbnail(objekt.collectionId).then(setHoverImage);
+                }
+              }}
+              onMouseLeave={handleMouseLeave}
             >
               <span>
                 <span className="text-muted-foreground">{objekt.artist}</span>{" "}
@@ -244,10 +259,10 @@ export function ObjektOwnedPicker({
                 </span>
                 <button
                   type="button"
-                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                   onClick={() => onDeselect(objekt)}
+                  className="text-red-500/80 hover:text-red-600 transition-colors"
                 >
-                  Remove
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </span>
             </div>

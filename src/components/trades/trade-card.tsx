@@ -23,6 +23,7 @@ interface TradeItem {
   artist?: string | null;
 }
 
+
 function anyWantLabel(item: TradeItem): string {
   if (item.member) return `Any ${item.member}`;
   if (item.season && item.artist) return `Any ${item.artist} ${item.season}`;
@@ -110,17 +111,19 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
 
   return (
     <span
-      className="text-xs relative cursor-default inline-flex items-center gap-1"
+      className="text-xs relative cursor-default flex items-center w-full"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
     >
-      {label.name}
+      <span className="flex items-center gap-1 min-w-0">
+        {label.name}
+      </span>
       {label.right && (
-        <span className="text-muted-foreground ml-1">{label.right}</span>
+        <span className="text-muted-foreground ml-auto pl-2 shrink-0">{label.right}</span>
       )}
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground"
+        className="ml-2 text-muted-foreground hover:text-foreground"
         onClick={(e) => { e.stopPropagation(); window.open(buildObjektTopUrl(item, cosmoNickname, showSerial), "_blank", "noopener,noreferrer"); }}
         title="View on Objekt.top"
       >
@@ -143,7 +146,7 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
 
 function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]; showSerial?: boolean; cosmoNickname?: string | null }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-0.5 w-full">
       {items.map((item) =>
         item.isAny ? (
           <span key={item.id} className="text-xs text-muted-foreground italic">
@@ -176,12 +179,9 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
                 </Badge>
               )}
             </div>
-            <Badge
-              variant={trade.status === "open" ? "default" : "secondary"}
-              className="text-xs"
-            >
-              {trade.status}
-            </Badge>
+            {/* TODO: trade type tag — add a `type` field to trade_post (e.g. "WTT" | "WTS" | "WTB")
+                and render a badge here. WTT = want to trade, WTS = want to sell, WTB = want to buy.
+                Will need a DB migration, updates to the new trade form, and filter support. */}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
