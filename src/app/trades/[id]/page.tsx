@@ -19,6 +19,7 @@ import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
 import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { Tooltip as TooltipPrimitive } from "radix-ui";
 
 interface TradeItem {
   id: number;
@@ -157,29 +158,48 @@ function ObjektImages({
   );
 }
 
-function ObjektList({ items, label, showSerial }: { items: TradeItem[]; label: string; showSerial?: boolean }) {
+function ObjektList({ items, label, showSerial, images }: { items: TradeItem[]; label: string; showSerial?: boolean; images?: Map<string, string> }) {
   return (
     <div>
       <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
-      <div className="flex flex-col gap-1">
-        {items.map((item) => {
-          const right = item.isAny ? null : [
-            item.class,
-            showSerial && item.serial != null ? formatSerial(item.serial) : null,
-          ].filter(Boolean).join(" ") || null;
-          return (
-            <div
-              key={item.id}
-              className="objekt-list-row"
-            >
-              <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
-              {right && (
-                <span className="text-xs text-muted-foreground ml-4 shrink-0">{right}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <TooltipPrimitive.Provider delayDuration={200}>
+        <div className="flex flex-col gap-1">
+          {items.map((item) => {
+            const right = item.isAny ? null : [
+              item.class,
+              showSerial && item.serial != null ? formatSerial(item.serial) : null,
+            ].filter(Boolean).join(" ") || null;
+            const imgUrl = !item.isAny ? images?.get(item.collectionId) : undefined;
+            const rowContent = (
+              <>
+                <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
+                {right && (
+                  <span className="text-xs text-muted-foreground ml-4 shrink-0">{right}</span>
+                )}
+              </>
+            );
+            if (!imgUrl) {
+              return <div key={item.id} className="objekt-list-row">{rowContent}</div>;
+            }
+            return (
+              <TooltipPrimitive.Root key={item.id}>
+                <TooltipPrimitive.Trigger asChild>
+                  <div className="objekt-list-row">{rowContent}</div>
+                </TooltipPrimitive.Trigger>
+                <TooltipPrimitive.Portal>
+                  <TooltipPrimitive.Content
+                    side="right"
+                    sideOffset={8}
+                    className="z-50 rounded-md border bg-popover p-1 shadow-md"
+                  >
+                    <img src={imgUrl} alt={item.collectionId} className="w-24 h-auto rounded" />
+                  </TooltipPrimitive.Content>
+                </TooltipPrimitive.Portal>
+              </TooltipPrimitive.Root>
+            );
+          })}
+        </div>
+      </TooltipPrimitive.Provider>
     </div>
   );
 }
@@ -341,9 +361,9 @@ export default function TradeDetailPage({
           </div>
         )}
         <CardContent className="space-y-4">
-          <ObjektList items={trade.haves} label="HAVE" showSerial />
+          <ObjektList items={trade.haves} label="HAVE" showSerial images={haveImages} />
           <Separator />
-          <ObjektList items={trade.wants} label="WANT" />
+          <ObjektList items={trade.wants} label="WANT" images={wantImages} />
           {trade.description && (
             <>
               <Separator />

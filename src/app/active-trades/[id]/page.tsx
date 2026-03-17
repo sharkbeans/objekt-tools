@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -17,7 +17,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon } from "lucide-react";
+import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon } from "lucide-react";
+import { Tooltip as TooltipPrimitive } from "radix-ui";
 
 type SideStatus = "pending" | "sent" | "confirmed";
 type TradeStatus =
@@ -150,8 +151,93 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function SideCard({ side, label }: { side: TradeSide; label: string }) {
+function ObjektThumbnail({
+  src,
+  alt,
+  href,
+}: {
+  src: string;
+  alt: string;
+  href?: string | null;
+}) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useLayoutEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    if (img.complete) {
+      setStatus(img.naturalWidth === 0 ? "error" : "loaded");
+    }
+  }, [src]);
+
+  const thumbnail = (
+    <div className="w-12 aspect-[2/3] relative rounded-sm overflow-hidden">
+      <img
+        ref={imgRef}
+        src={src}
+        alt={alt}
+        onLoad={() => setStatus("loaded")}
+        onError={() => setStatus("error")}
+        className={cn("w-full h-full object-cover", status !== "loaded" && "opacity-0")}
+      />
+      {status === "loading" && (
+        <div className="absolute inset-0 bg-muted animate-pulse flex items-end justify-center pb-1">
+          <span className="text-[8px] text-muted-foreground">Loading...</span>
+        </div>
+      )}
+      {status === "error" && (
+        <div className="absolute inset-0 bg-muted flex items-center justify-center">
+          <span className="text-[8px] text-muted-foreground text-center leading-tight px-1">No image</span>
+        </div>
+      )}
+    </div>
+  );
+
+  const trigger = href ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="shrink-0 self-start block hover:opacity-80 transition-opacity cursor-zoom-in">
+      {thumbnail}
+    </a>
+  ) : (
+    <div className="shrink-0 self-start cursor-zoom-in">{thumbnail}</div>
+  );
+
+  return (
+    <TooltipPrimitive.Provider delayDuration={200}>
+      <TooltipPrimitive.Root>
+        <TooltipPrimitive.Trigger asChild>
+          {trigger}
+        </TooltipPrimitive.Trigger>
+        {status === "loaded" && (
+          <TooltipPrimitive.Portal>
+            <TooltipPrimitive.Content side="left" sideOffset={8} className="z-50 rounded-md shadow-xl overflow-hidden border border-border">
+              <img src={src} alt={alt} className="w-36 block" />
+            </TooltipPrimitive.Content>
+          </TooltipPrimitive.Portal>
+        )}
+      </TooltipPrimitive.Root>
+    </TooltipPrimitive.Provider>
+  );
+}
+
+function SideCard({
+  side,
+  label,
+  recipientUser,
+  isYours,
+}: {
+  side: TradeSide;
+  label: string;
+  recipientUser?: { cosmoNickname?: string | null; name: string } | null;
+  isYours?: boolean;
+}) {
   const { name: sideName, serial: sideSerial } = formatLabel(side);
+  const displayName = side.user.cosmoNickname ?? side.user.name;
+  const recipientDisplayName = recipientUser
+    ? (recipientUser.cosmoNickname ?? recipientUser.name)
+    : null;
+
+  // Link to sender's own Cosmo profile filtered to this objekt — lets them find it quickly to send
   const profileUrl = side.user.cosmoNickname
     ? (() => {
         const base = `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`;
@@ -165,77 +251,91 @@ function SideCard({ side, label }: { side: TradeSide; label: string }) {
           : base;
       })()
     : null;
-  const displayName = side.user.cosmoNickname ?? side.user.name;
+
+  const yourStatusText: Record<SideStatus, string> = {
+    pending: "Not sent yet",
+    sent: "Sent · awaiting confirmation",
+    confirmed: "Confirmed",
+  };
+  const theirStatusText: Record<SideStatus, string> = {
+    pending: "Waiting for them",
+    sent: "In transit",
+    confirmed: "Received",
+  };
+  const statusText =
+    isYours === true ? yourStatusText[side.status]
+    : isYours === false ? theirStatusText[side.status]
+    : side.status;
+
+  const objektLine = (
+    <span className="text-sm font-medium flex items-center gap-2">
+      <span>{sideName}</span>
+      {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
+      {profileUrl && (
+        <ExternalLinkIcon className="h-3 w-3 text-muted-foreground" />
+      )}
+    </span>
+  );
+
   return (
     <div className="space-y-1">
-      {label && <p className="text-xs font-medium text-muted-foreground">{label}</p>}
-      {profileUrl ? (
-        <a
-          href={profileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block rounded-md border p-3 space-y-2 hover:bg-muted/50 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <div>
-              <span className="text-sm font-medium flex items-center gap-2">
-                <span>{sideName}</span>
-                {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
-                <ExternalLinkIcon className="h-3 w-3 text-muted-foreground" />
-              </span>
-              <div className="flex items-center gap-1 mt-0.5">
-                <p className="text-xs text-muted-foreground">
-                  {displayName}
-                </p>
+      {label && (
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {label}
+        </p>
+      )}
+      <div
+        className={cn(
+          "rounded-md border p-3",
+          isYours === true && "border-primary/40 bg-primary/5"
+        )}
+      >
+        <div className="flex gap-3">
+          {side.thumbnailUrl && (
+            <ObjektThumbnail src={side.thumbnailUrl} alt={sideName} href={profileUrl} />
+          )}
+          <div className="flex-1 min-w-0 space-y-1.5">
+            {profileUrl ? (
+              <a
+                href={profileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:opacity-80 transition-opacity block"
+              >
+                {objektLine}
+              </a>
+            ) : (
+              objektLine
+            )}
+
+            {isYours === true && recipientDisplayName ? (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-muted-foreground">Send to</span>
+                <span className="font-medium">{recipientDisplayName}</span>
+                <CopyButton text={recipientDisplayName} />
+              </div>
+            ) : isYours === false ? (
+              <p className="text-xs text-muted-foreground">from {displayName}</p>
+            ) : (
+              <div className="flex items-center gap-1">
+                <p className="text-xs text-muted-foreground">{displayName}</p>
                 <CopyButton text={displayName} />
               </div>
-              <p className="text-xs text-muted-foreground truncate" title={side.address}>
-                {side.address.slice(0, 8)}…{side.address.slice(-6)}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant={sideStatusVariant[side.status]} className="text-xs capitalize">
-              {side.status}
-            </Badge>
-            {side.detectedAt && (
-              <span className="text-xs text-muted-foreground">
-                {new Date(side.detectedAt).toLocaleString()}
-              </span>
             )}
-          </div>
-        </a>
-      ) : (
-        <div className="rounded-md border p-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <div>
-              <span className="text-sm font-medium flex items-center gap-2">
-                <span>{sideName}</span>
-                {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
-              </span>
-              <div className="flex items-center gap-1 mt-0.5">
-                <p className="text-xs text-muted-foreground">
-                  {displayName}
-                </p>
-                <CopyButton text={displayName} />
-              </div>
-              <p className="text-xs text-muted-foreground truncate" title={side.address}>
-                {side.address.slice(0, 8)}…{side.address.slice(-6)}
-              </p>
+
+            <div className="flex items-center gap-2">
+              <Badge variant={sideStatusVariant[side.status]} className="text-xs">
+                {statusText}
+              </Badge>
+              {side.detectedAt && (
+                <span className="text-xs text-muted-foreground">
+                  {new Date(side.detectedAt).toLocaleString("en-GB", { timeZone: "GMT" })} GMT
+                </span>
+              )}
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant={sideStatusVariant[side.status]} className="text-xs capitalize">
-              {side.status}
-            </Badge>
-            {side.detectedAt && (
-              <span className="text-xs text-muted-foreground">
-                {new Date(side.detectedAt).toLocaleString()}
-              </span>
-            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -328,9 +428,10 @@ function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
               </div>
               <span className="text-[10px] text-muted-foreground">
                 {new Date(msg.createdAt).toLocaleTimeString("en-GB", {
+                  timeZone: "GMT",
                   hour: "2-digit",
                   minute: "2-digit",
-                })}
+                })} GMT
               </span>
             </div>
           );
@@ -822,69 +923,53 @@ export default function ActiveTradePage({
             </Button>
           )}
 
-          <div className="flex gap-4">
-            {leftSides.length > 0 && (
-              <div className="flex-1 min-w-0 space-y-2">
+          {isParticipant ? (
+            <div className="space-y-2">
+              <div className="space-y-2">
                 {leftSides.map((side, i) => (
                   <SideCard
                     key={side.id}
                     side={side}
-                    label={i === 0 ? leftLabel : ""}
+                    label={i === 0 ? "You send" : ""}
+                    recipientUser={isInitiator ? trade.recipient : trade.initiator}
+                    isYours={true}
                   />
                 ))}
               </div>
-            )}
-            {rightSides.length > 0 && (
-              <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-center gap-2 text-muted-foreground py-0.5">
+                <div className="flex-1 h-px bg-border" />
+                <ArrowUpDownIcon className="h-3 w-3" />
+                <div className="flex-1 h-px bg-border" />
+              </div>
+              <div className="space-y-2">
                 {rightSides.map((side, i) => (
                   <SideCard
                     key={side.id}
                     side={side}
-                    label={i === 0 ? rightLabel : ""}
+                    label={i === 0 ? "You receive" : ""}
+                    isYours={false}
                   />
                 ))}
               </div>
-            )}
-          </div>
-
-          {["accepted", "partial"].includes(trade.status) && isParticipant && (() => {
-            const myName = isInitiator ? initiatorName : recipientName;
-            const theirName = isInitiator ? recipientName : initiatorName;
-            const mySides = leftSides;
-            const theirSides = rightSides;
-            return (
-              <>
-                <Separator />
-                <div className="rounded-md bg-muted/50 px-4 py-3 text-sm space-y-4">
-                  <p className="font-medium">Send guide</p>
-                  {mySides.map((side) => {
-                    const { name, serial } = formatLabel(side);
-                    return (
-                      <div key={side.id} className="space-y-0.5">
-                        <p className="text-xs text-muted-foreground">You ({myName}) send</p>
-                        <p className="font-medium">{name}{serial && <span className="text-muted-foreground font-normal"> {serial}</span>}</p>
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs text-muted-foreground">to <span className="text-foreground font-medium">{theirName}</span></p>
-                          <CopyButton text={theirName} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {theirSides.map((side) => {
-                    const { name, serial } = formatLabel(side);
-                    return (
-                      <div key={side.id} className="space-y-0.5">
-                        <p className="text-xs text-muted-foreground">{theirName} sends</p>
-                        <p className="font-medium">{name}{serial && <span className="text-muted-foreground font-normal"> {serial}</span>}</p>
-                        <p className="text-xs text-muted-foreground">to {myName}</p>
-                      </div>
-                    );
-                  })}
-                  <p className="text-xs text-muted-foreground">Transfer on Cosmo, then click "Check Transfers" below to verify.</p>
+            </div>
+          ) : (
+            <div className="flex gap-4">
+              {leftSides.length > 0 && (
+                <div className="flex-1 min-w-0 space-y-2">
+                  {leftSides.map((side, i) => (
+                    <SideCard key={side.id} side={side} label={i === 0 ? leftLabel : ""} />
+                  ))}
                 </div>
-              </>
-            );
-          })()}
+              )}
+              {rightSides.length > 0 && (
+                <div className="flex-1 min-w-0 space-y-2">
+                  {rightSides.map((side, i) => (
+                    <SideCard key={side.id} side={side} label={i === 0 ? rightLabel : ""} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && suspiciousTransferLogs.length > 0 && (
             <div className="banner-danger flex items-start gap-3">
@@ -897,15 +982,20 @@ export default function ActiveTradePage({
           )}
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCheckTransfers}
-              disabled={checkCooldown > 0}
-              className="w-full"
-            >
-              {checkCooldown > 0 ? `Check Transfers (${checkCooldown}s)` : "Check Transfers"}
-            </Button>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground text-center">
+                Transfer on Cosmo, then click below to verify.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckTransfers}
+                disabled={checkCooldown > 0}
+                className="w-full"
+              >
+                {checkCooldown > 0 ? `Check Transfers (${checkCooldown}s)` : "Check Transfers"}
+              </Button>
+            </div>
           )}
 
           {trade.status === "completed" && (
