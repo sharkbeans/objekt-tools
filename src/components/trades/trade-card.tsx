@@ -76,6 +76,29 @@ const imageCache = new Map<string, string | null>();
 
 const THUMBNAIL_VISIBLE = 4;
 
+function ThumbnailWithTooltip({ url, label }: { url: string; label: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      className="relative shrink-0"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <img
+        src={url}
+        alt={label}
+        className="w-12 h-auto rounded-sm object-cover block"
+      />
+      {show && (
+        <span className="absolute left-0 bottom-full mb-1.5 z-50 rounded-md overflow-hidden shadow-xl border bg-background pointer-events-none">
+          <img src={url} alt={label} className="w-36 h-auto block" />
+          <span className="block text-[10px] text-center text-muted-foreground px-1 pb-1">{label}</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
 function ObjektThumbnailStrip({ items }: { items: TradeItem[] }) {
   const nonAny = items.filter((i) => !i.isAny);
   const anyItems = items.filter((i) => i.isAny);
@@ -114,33 +137,30 @@ function ObjektThumbnailStrip({ items }: { items: TradeItem[] }) {
   }, []);
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className="flex flex-wrap items-end gap-1.5">
       {visible.map((item) => {
         const url = images.get(item.collectionId);
         // url === undefined: not yet fetched (show pulse placeholder)
         // url === null: fetched but no image found (skip)
         // url === string: show image
         if (url === null) return null;
+        const label = item.collectionNo && item.member
+          ? `${item.member} ${item.collectionNo}`
+          : item.collectionId;
         return url ? (
-          <img
-            key={item.id}
-            src={url}
-            alt={item.collectionId}
-            title={item.collectionNo && item.member ? `${item.member} ${item.collectionNo}` : item.collectionId}
-            className="w-9 h-auto rounded-sm object-cover shrink-0"
-          />
+          <ThumbnailWithTooltip key={item.id} url={url} label={label} />
         ) : (
           <div
             key={item.id}
-            className="w-9 h-12 rounded-sm bg-muted animate-pulse shrink-0"
+            className="w-12 h-16 rounded-sm bg-muted animate-pulse shrink-0"
           />
         );
       })}
       {overflow > 0 && (
-        <span className="text-[10px] text-muted-foreground font-medium">+{overflow}</span>
+        <span className="text-xs text-muted-foreground font-medium self-center">+{overflow}</span>
       )}
       {anyItems.map((item) => (
-        <span key={item.id} className="text-[10px] text-muted-foreground italic">
+        <span key={item.id} className="text-[10px] text-muted-foreground italic self-center">
           {anyWantLabel(item)}
         </span>
       ))}

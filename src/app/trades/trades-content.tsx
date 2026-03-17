@@ -25,16 +25,16 @@ function TradeCardSkeleton() {
         <div>
           <div className="h-3 w-8 rounded bg-muted animate-pulse mb-2" />
           <div className="flex gap-1">
-            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
-            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
-            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
+            <div className="w-12 h-16 rounded-sm bg-muted animate-pulse" />
+            <div className="w-12 h-16 rounded-sm bg-muted animate-pulse" />
+            <div className="w-12 h-16 rounded-sm bg-muted animate-pulse" />
           </div>
         </div>
         <div>
           <div className="h-3 w-10 rounded bg-muted animate-pulse mb-2" />
           <div className="flex gap-1">
-            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
-            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
+            <div className="w-12 h-16 rounded-sm bg-muted animate-pulse" />
+            <div className="w-12 h-16 rounded-sm bg-muted animate-pulse" />
           </div>
         </div>
       </CardContent>
