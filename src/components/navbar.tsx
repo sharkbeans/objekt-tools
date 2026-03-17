@@ -49,7 +49,7 @@ export function Navbar() {
               >
                 My Trades
                 {matchCount > 0 && (
-                  <span className="absolute -top-2 -right-4 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  <span className="absolute -top-2 -right-4 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
                     {matchCount > 99 ? "99+" : matchCount}
                   </span>
                 )}

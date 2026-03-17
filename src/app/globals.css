@@ -129,4 +129,43 @@
   .aspect-photocard {
     aspect-ratio: 2 / 3;
   }
+
+  /* Objekt picker / hover preview */
+  .objekt-hover-preview {
+    @apply fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none;
+  }
+  .picker-item {
+    @apply w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors;
+  }
+  .picker-selected-row {
+    @apply flex items-center justify-between px-3 py-2 text-sm;
+  }
+  .objekt-list-row {
+    @apply text-sm px-2 py-1 rounded border border-border flex items-center justify-between;
+  }
+
+  /* Semantic status banners — pair with flex layout classes as needed */
+  .banner-warning {
+    @apply rounded-lg border border-amber-200 bg-amber-500/30 dark:border-amber-900 p-3;
+  }
+  .banner-danger {
+    @apply rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 p-3;
+  }
+  .banner-success {
+    @apply rounded-lg border border-green-300 bg-green-500/20 dark:border-green-800 p-3;
+  }
+
+  /* Semantic status text colors */
+  .text-warning {
+    @apply text-amber-600 dark:text-amber-400;
+  }
+  .text-warning-strong {
+    @apply text-amber-700 dark:text-amber-300;
+  }
+  .text-danger {
+    @apply text-red-600 dark:text-red-400;
+  }
+  .text-danger-strong {
+    @apply text-red-700 dark:text-red-300;
+  }
 }

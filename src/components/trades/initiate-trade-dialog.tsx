@@ -19,6 +19,9 @@ interface TradeItem {
   collectionId: string;
   collectionNo?: string | null;
   member?: string | null;
+  artist?: string | null;
+  season?: string | null;
+  class?: string | null;
   serial?: number | null;
   thumbnailUrl?: string | null;
   objektId?: string | null;
@@ -56,25 +59,33 @@ function ObjektOption({
   selected: boolean;
   onClick: () => void;
 }) {
+  const rightMeta = [
+    item.season,
+    item.class,
+    item.serial != null ? `#${String(item.serial).padStart(5, "0")}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-md border px-3 py-2 text-sm text-left transition-colors w-full",
+        "flex items-center justify-between rounded-md border px-3 py-2 text-sm text-left transition-colors w-full",
         selected
           ? "border-primary bg-primary/10"
           : "border-border hover:border-primary/50"
       )}
     >
-      {item.thumbnailUrl && (
-        <img
-          src={item.thumbnailUrl}
-          alt={item.collectionId}
-          className="w-10 h-auto rounded"
-        />
+      <span>
+        <span className="text-muted-foreground">{item.artist}</span>{" "}
+        {item.member}{" "}
+        <span className="font-mono">{item.collectionNo}</span>
+      </span>
+      {rightMeta && (
+        <span className="text-xs text-muted-foreground shrink-0 ml-3">{rightMeta}</span>
       )}
-      <span>{formatLabel(item)}</span>
     </button>
   );
 }

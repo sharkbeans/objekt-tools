@@ -440,7 +440,7 @@ export default function NewTradePage() {
                     {haves.map((item, i) => (
                       <div
                         key={i}
-                        className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
+                        className="objekt-list-row"
                         onMouseEnter={(e) => handlePreviewMouseEnter(e, haveImages.get(item.collectionId) ?? item.thumbnailImage)}
                         onMouseLeave={handlePreviewMouseLeave}
                       >
@@ -469,7 +469,7 @@ export default function NewTradePage() {
                     {wants.map((item, i) => (
                       <div
                         key={i}
-                        className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
+                        className="objekt-list-row"
                         onMouseEnter={(e) => handlePreviewMouseEnter(e, wantImages.get(item.collectionId) ?? item.thumbnailImage)}
                         onMouseLeave={handlePreviewMouseLeave}
                       >
@@ -526,7 +526,7 @@ export default function NewTradePage() {
       </Card>
       {previewHover && (
         <div
-          className="fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+          className="objekt-hover-preview"
           style={{ top: previewHover.top, left: previewHover.left }}
         >
           <img src={previewHover.image} alt="" className="w-24 h-auto block" />

@@ -177,9 +177,7 @@ export function ObjektPicker({
                 key={entry.collectionId}
                 type="button"
                 disabled={isSelected(entry)}
-                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
-                  isSelected(entry) ? "opacity-40" : ""
-                }`}
+                className={`picker-item ${isSelected(entry) ? "opacity-40" : ""}`}
                 onClick={() => handleSelect(entry)}
                 onMouseEnter={(e) => handleMouseEnter(e, entry)}
                 onMouseLeave={handleMouseLeave}
@@ -204,7 +202,7 @@ export function ObjektPicker({
 
       {hoverPos && (
         <div
-          className="fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+          className="objekt-hover-preview"
           style={{ top: hoverPos.top, left: hoverPos.left }}
         >
           {!imageLoaded && (
@@ -224,7 +222,7 @@ export function ObjektPicker({
       )}
 
       {selected.length > 0 && (
-        <p className="text-md font-medium">Selected Wants</p>
+        <p className="text-base font-medium">Selected Wants</p>
       )}
 
       {selected.length > 0 && (
@@ -232,7 +230,7 @@ export function ObjektPicker({
           {selected.map((objekt) => (
             <div
               key={objekt.collectionId}
-              className="flex items-center justify-between px-3 py-2 text-sm"
+              className="picker-selected-row"
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 setHoverPos({ top: rect.top, left: rect.right + 8 });

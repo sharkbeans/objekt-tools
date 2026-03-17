@@ -61,10 +61,10 @@ function TradeNotifications() {
       {notifications.map((n: { id: number; message: string; createdAt: string }) => (
         <div
           key={n.id}
-          className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 p-3"
+          className="banner-warning flex items-center justify-between gap-3"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
             <p className="text-sm">{n.message}</p>
           </div>
           <button

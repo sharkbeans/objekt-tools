@@ -170,7 +170,7 @@ function ObjektList({ items, label, showSerial }: { items: TradeItem[]; label: s
           return (
             <div
               key={item.id}
-              className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
+              className="objekt-list-row"
             >
               <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
               {right && (

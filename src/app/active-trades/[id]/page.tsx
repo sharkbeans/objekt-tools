@@ -419,51 +419,51 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
       case "pre_accept_confirmed":
         return (
           <>
-            <span className="font-medium text-amber-600 dark:text-amber-400">[PRE-ACCEPT]</span>
+            <span className="font-medium text-warning">[PRE-ACCEPT]</span>
             {" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
             {" to "}
             <span className="font-medium">{log.recipientName}</span>
-            <span className="text-amber-600 dark:text-amber-400"> (before trade was accepted)</span>
+            <span className="text-warning"> (before trade was accepted)</span>
           </>
         );
       case "pre_accept_sent":
         return (
           <>
-            <span className="font-medium text-amber-600 dark:text-amber-400">[PRE-ACCEPT]</span>
+            <span className="font-medium text-warning">[PRE-ACCEPT]</span>
             {" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
-            <span className="text-amber-600 dark:text-amber-400"> (before trade was accepted, in transit)</span>
+            <span className="text-warning"> (before trade was accepted, in transit)</span>
           </>
         );
       case "wrong_objekt":
         return (
           <>
-            <span className="font-medium text-red-600 dark:text-red-400">[WRONG OBJEKT]</span>
+            <span className="font-medium text-danger">[WRONG OBJEKT]</span>
             {" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
             {" to "}
             <span className="font-medium">{log.recipientName}</span>
-            <span className="text-red-600 dark:text-red-400"> (not part of this trade)</span>
+            <span className="text-danger"> (not part of this trade)</span>
           </>
         );
       case "wrong_recipient":
         return (
           <>
-            <span className="font-medium text-red-600 dark:text-red-400">[WRONG RECIPIENT]</span>
+            <span className="font-medium text-danger">[WRONG RECIPIENT]</span>
             {" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
             {" to "}
             <span className="font-mono text-[11px]">{log.toAddress}</span>
-            <span className="text-red-600 dark:text-red-400"> (not the intended recipient)</span>
+            <span className="text-danger"> (not the intended recipient)</span>
           </>
         );
       default:
@@ -761,8 +761,8 @@ export default function ActiveTradePage({
 
           {trade.status === "pending" && isParticipant && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 p-3">
-                <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="banner-warning flex items-center gap-3">
+                <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
                 <p className="text-sm">Do not send any objekts until this trade has been accepted by both parties.</p>
               </div>
 
@@ -773,10 +773,10 @@ export default function ActiveTradePage({
                 return (
                   <>
                     {theirPreAcceptSends.length > 0 && (
-                      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-500/20 dark:border-amber-900 dark:bg-amber-500/20 p-3">
-                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <div className="banner-warning flex items-start gap-3">
+                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning mt-0.5" />
                         <div className="text-sm space-y-1">
-                          <p className="font-medium text-amber-700 dark:text-amber-300">{partnerName} has sent objekt(s) before the trade was accepted.</p>
+                          <p className="font-medium text-warning-strong">{partnerName} has sent objekt(s) before the trade was accepted.</p>
                           {isRecipient ? (
                             <p className="text-muted-foreground">You are still allowed to cancel this trade. If you are happy with the trade, you may accept it and the transfer will be auto-confirmed. You may also return the objekt(s) to the sender via Cosmo.</p>
                           ) : (
@@ -786,10 +786,10 @@ export default function ActiveTradePage({
                       </div>
                     )}
                     {myPreAcceptSends.length > 0 && (
-                      <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
-                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+                      <div className="banner-danger flex items-start gap-3">
+                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
                         <div className="text-sm space-y-1">
-                          <p className="font-medium text-red-700 dark:text-red-300">You sent objekt(s) before {partnerName} accepted.</p>
+                          <p className="font-medium text-danger-strong">You sent objekt(s) before {partnerName} accepted.</p>
                           <p className="text-muted-foreground">{partnerName} has not accepted this trade yet. They can cancel and your objekt may be lost. Wait for acceptance before sending.</p>
                         </div>
                       </div>
@@ -799,10 +799,10 @@ export default function ActiveTradePage({
               })()}
 
               {suspiciousTransferLogs.length > 0 && (
-                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
-                  <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+                <div className="banner-danger flex items-start gap-3">
+                  <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
                   <div className="text-sm space-y-1">
-                    <p className="font-medium text-red-700 dark:text-red-300">Suspicious transfer(s) detected!</p>
+                    <p className="font-medium text-danger-strong">Suspicious transfer(s) detected!</p>
                     <p className="text-muted-foreground">One or more transfers are unsafe (wrong objekt or wrong recipient). Check the Transfer Logs below for details.</p>
                   </div>
                 </div>
@@ -887,10 +887,10 @@ export default function ActiveTradePage({
           })()}
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && suspiciousTransferLogs.length > 0 && (
-            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-500/20 dark:border-red-900 dark:bg-red-500/20 p-3">
-              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+            <div className="banner-danger flex items-start gap-3">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
               <div className="text-sm space-y-1">
-                <p className="font-medium text-red-700 dark:text-red-300">Suspicious transfer(s) detected!</p>
+                <p className="font-medium text-danger-strong">Suspicious transfer(s) detected!</p>
                 <p className="text-muted-foreground">One or more transfers are unsafe (wrong objekt or wrong recipient). Check the Transfer Logs below for details.</p>
               </div>
             </div>
@@ -909,7 +909,7 @@ export default function ActiveTradePage({
           )}
 
           {trade.status === "completed" && (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-green-300 bg-green-500/20 dark:border-green-800 dark:bg-green-500/20 p-3">
+            <div className="banner-success flex items-center justify-between gap-3">
               <p className="text-sm">Trade complete! Both objekts have been successfully transferred.</p>
             </div>
           )}

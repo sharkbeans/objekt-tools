@@ -188,9 +188,7 @@ export function ObjektOwnedPicker({
                 key={entry.serial}
                 type="button"
                 disabled={isSelected(entry)}
-                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-accent transition-colors ${
-                  isSelected(entry) ? "opacity-40" : ""
-                }`}
+                className={`picker-item ${isSelected(entry) ? "opacity-40" : ""}`}
                 onClick={() => handleSelect(entry)}
                 onMouseEnter={(e) => handleMouseEnter(e, entry.collectionId)}
                 onMouseLeave={handleMouseLeave}
@@ -220,7 +218,7 @@ export function ObjektOwnedPicker({
 
       {hoverImage && hoverPos && (
         <div
-          className="fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+          className="objekt-hover-preview"
           style={{ top: hoverPos.top, left: hoverPos.left }}
         >
           <img src={hoverImage} alt="" className="w-24 h-auto block" />
@@ -228,7 +226,7 @@ export function ObjektOwnedPicker({
       )}
 
       {selected.length > 0 && (
-        <p className="text-md font-medium">Selected Haves</p>
+        <p className="text-base font-medium">Selected Haves</p>
       )}
 
       {selected.length > 0 && (
@@ -236,7 +234,7 @@ export function ObjektOwnedPicker({
           {selected.map((objekt) => (
             <div
               key={objekt.serial ?? objekt.collectionId}
-              className="flex items-center justify-between px-3 py-2 text-sm"
+              className="picker-selected-row"
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 setHoverPos({ top: rect.top, left: rect.right + 8 });
