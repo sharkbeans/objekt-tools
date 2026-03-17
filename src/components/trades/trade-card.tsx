@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -73,6 +73,80 @@ interface TradeCardProps {
 }
 
 const imageCache = new Map<string, string | null>();
+
+const THUMBNAIL_VISIBLE = 4;
+
+function ObjektThumbnailStrip({ items }: { items: TradeItem[] }) {
+  const nonAny = items.filter((i) => !i.isAny);
+  const anyItems = items.filter((i) => i.isAny);
+  const visible = nonAny.slice(0, THUMBNAIL_VISIBLE);
+  const overflow = nonAny.length - visible.length;
+
+  const [images, setImages] = useState<Map<string, string | null>>(() => {
+    const m = new Map<string, string | null>();
+    for (const item of visible) {
+      const cached = imageCache.get(item.collectionId);
+      if (cached !== undefined) m.set(item.collectionId, cached);
+    }
+    return m;
+  });
+
+  useEffect(() => {
+    const missing = visible.filter((i) => !imageCache.has(i.collectionId));
+    if (missing.length === 0) return;
+
+    for (const item of missing) {
+      fetch(`/api/objekts/search?q=${encodeURIComponent(item.collectionId)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const match = data.results?.find(
+            (r: any) => r.collectionId === item.collectionId
+          );
+          const url = match?.thumbnailImage ?? match?.frontImage ?? null;
+          imageCache.set(item.collectionId, url);
+          setImages((prev) => new Map(prev).set(item.collectionId, url));
+        })
+        .catch(() => {
+          imageCache.set(item.collectionId, null);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {visible.map((item) => {
+        const url = images.get(item.collectionId);
+        // url === undefined: not yet fetched (show pulse placeholder)
+        // url === null: fetched but no image found (skip)
+        // url === string: show image
+        if (url === null) return null;
+        return url ? (
+          <img
+            key={item.id}
+            src={url}
+            alt={item.collectionId}
+            title={item.collectionNo && item.member ? `${item.member} ${item.collectionNo}` : item.collectionId}
+            className="w-9 h-auto rounded-sm object-cover shrink-0"
+          />
+        ) : (
+          <div
+            key={item.id}
+            className="w-9 h-12 rounded-sm bg-muted animate-pulse shrink-0"
+          />
+        );
+      })}
+      {overflow > 0 && (
+        <span className="text-[10px] text-muted-foreground font-medium">+{overflow}</span>
+      )}
+      {anyItems.map((item) => (
+        <span key={item.id} className="text-[10px] text-muted-foreground italic">
+          {anyWantLabel(item)}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; showSerial?: boolean; cosmoNickname?: string | null }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -190,13 +264,19 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
             <p className="text-xs text-muted-foreground mb-1 font-medium">
               HAVE
             </p>
-            <ObjektLabels items={trade.haves} showSerial cosmoNickname={trade.cosmoNickname} />
+            <ObjektThumbnailStrip items={trade.haves} />
+            <div className="mt-1">
+              <ObjektLabels items={trade.haves} showSerial cosmoNickname={trade.cosmoNickname} />
+            </div>
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1 font-medium">
               WANT
             </p>
-            <ObjektLabels items={trade.wants} />
+            <ObjektThumbnailStrip items={trade.wants} />
+            <div className="mt-1">
+              <ObjektLabels items={trade.wants} />
+            </div>
           </div>
           {trade.description && (
             <p className="text-xs text-muted-foreground line-clamp-2">

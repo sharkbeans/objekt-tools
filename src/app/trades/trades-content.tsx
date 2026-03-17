@@ -7,6 +7,43 @@ import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+
+function TradeCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+            <div className="h-4 w-16 rounded bg-muted animate-pulse" />
+          </div>
+          <div className="h-5 w-12 rounded-full bg-muted animate-pulse" />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div>
+          <div className="h-3 w-8 rounded bg-muted animate-pulse mb-2" />
+          <div className="flex gap-1">
+            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
+            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
+            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
+          </div>
+        </div>
+        <div>
+          <div className="h-3 w-10 rounded bg-muted animate-pulse mb-2" />
+          <div className="flex gap-1">
+            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
+            <div className="w-9 h-12 rounded-sm bg-muted animate-pulse" />
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter className="pt-0">
+        <div className="h-3 w-16 rounded bg-muted animate-pulse" />
+      </CardFooter>
+    </Card>
+  );
+}
 
 function filtersFromSearchParams(params: URLSearchParams): TradeFilterState {
   return {
@@ -67,7 +104,11 @@ export function TradesContent() {
       <TradeFilters filters={filters} onChange={handleFiltersChange} />
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading trades...</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <TradeCardSkeleton key={i} />
+          ))}
+        </div>
       ) : trades.length > 0 ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -8,6 +8,8 @@ A peer-to-peer trading platform for [MODHAUS](https://www.mod-haus.com/)' **[Cos
 
 Cosmo only supports one-way transfers, requiring trust between traders. This platform minimizes that risk through trade matching, transfer verification, and ownership monitoring.
 
+Cosmo account linking uses a simple status message verification flow — you set a short code (e.g. `verify-123456`) in your Cosmo profile status, and the platform reads it to confirm ownership. Your Cosmo credentials, session tokens, and account access are never requested or stored.
+
 ## Features
 
 - Create bulletin-board style trade posts with specific objekts
@@ -15,7 +17,7 @@ Cosmo only supports one-way transfers, requiring trust between traders. This pla
 - Track active trades with real-time status updates
 - Verify objekt transfers via external indexer APIs
 - Monitor ownership to ensure offered objekts remain available
-- Link Cosmo account via status message verification
+- Link Cosmo account via status message verification — no session tokens or credentials are ever collected
 - Support for "any" filters (e.g., "any member", "any season")
 - Trade notifications and history
 - Automatic trade expiration and availability checks if objekts are unavailable for trade
@@ -145,7 +147,7 @@ The client auto-refreshes the token on 401/403 responses. If you leave the token
 
 ## Trade Flow
 
-1. Link Cosmo account by setting verification code in status message
+1. Link Cosmo account by setting a short verification code in your Cosmo status message — no login, QR code, or session token is required
 2. Create trade post with specific objekts to offer and request
 3. System finds users who have what you want and want what you have
 4. Send a Trade Offer with matched party
