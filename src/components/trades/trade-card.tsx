@@ -118,18 +118,16 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
       {label.right && (
         <span className="text-muted-foreground ml-1">{label.right}</span>
       )}
-      <a
-        href={buildObjektTopUrl(item, cosmoNickname, showSerial)}
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
+        type="button"
         className="text-muted-foreground hover:text-foreground"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); window.open(buildObjektTopUrl(item, cosmoNickname, showSerial), "_blank", "noopener,noreferrer"); }}
         title="View on Objekt.top"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
         </svg>
-      </a>
+      </button>
       {show && imageUrl && (
         <span className="absolute left-0 bottom-full mb-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background">
           <img
@@ -210,15 +208,13 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
             {new Date(trade.createdAt).toLocaleDateString()}
           </p>
           {trade.cosmoNickname && (
-            <a
-              href={`https://objekt.top/@${trade.cosmoNickname}?transferable=true`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
               className="text-[10px] text-primary hover:underline"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); window.open(`https://objekt.top/@${trade.cosmoNickname}?transferable=true`, "_blank", "noopener,noreferrer"); }}
             >
               Verify inventory
-            </a>
+            </button>
           )}
         </CardFooter>
       </Card>
