@@ -216,14 +216,23 @@ export function ObjektPicker({
               key={objekt.collectionId}
               className="flex items-center justify-between px-3 py-2 text-sm"
             >
-              <span>{objekt.member} <span className="text-muted-foreground">{objekt.collectionId}</span> {objekt.collectionNo}</span>
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-                onClick={() => onDeselect(objekt)}
-              >
-                Remove
-              </button>
+              <span>
+                <span className="text-muted-foreground">{objekt.artist}</span>{" "}
+                {objekt.member}{" "}
+                <span className="font-mono">{objekt.collectionNo}</span>
+              </span>
+              <span className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {objekt.season} · {objekt.class}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  onClick={() => onDeselect(objekt)}
+                >
+                  Remove
+                </button>
+              </span>
             </div>
           ))}
         </div>

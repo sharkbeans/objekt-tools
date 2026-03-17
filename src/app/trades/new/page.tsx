@@ -427,10 +427,14 @@ export default function NewTradePage() {
                   <div className="flex flex-col gap-1">
                     {haves.map((item, i) => (
                       <div key={i} className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between">
-                        <span>{item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}</span>
-                        {item.serial != null && (
-                          <span className="text-xs text-muted-foreground">#{String(item.serial).padStart(5, "0")}</span>
-                        )}
+                        <span>
+                          <span className="text-muted-foreground">{item.artist}</span>{" "}
+                          {item.member}{" "}
+                          <span className="font-mono">{item.collectionNo}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {item.season} · {item.class}{item.serial != null ? ` · #${String(item.serial).padStart(5, "0")}` : ""}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -446,8 +450,15 @@ export default function NewTradePage() {
                       </div>
                     ))}
                     {wants.map((item, i) => (
-                      <div key={i} className="text-sm px-2 py-1 rounded border border-border">
-                        {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
+                      <div key={i} className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between">
+                        <span>
+                          <span className="text-muted-foreground">{item.artist}</span>{" "}
+                          {item.member}{" "}
+                          <span className="font-mono">{item.collectionNo}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {item.season} · {item.class}
+                        </span>
                       </div>
                     ))}
                   </div>

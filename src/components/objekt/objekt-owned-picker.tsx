@@ -234,18 +234,22 @@ export function ObjektOwnedPicker({
               className="flex items-center justify-between px-3 py-2 text-sm"
             >
               <span>
-                {objekt.member} {objekt.collectionNo}
-                {objekt.serial != null && (
-                  <span className="text-xs text-muted-foreground ml-1">#{String(objekt.serial).padStart(5, "0")}</span>
-                )}
+                <span className="text-muted-foreground">{objekt.artist}</span>{" "}
+                {objekt.member}{" "}
+                <span className="font-mono">{objekt.collectionNo}</span>
               </span>
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-                onClick={() => onDeselect(objekt)}
-              >
-                Remove
-              </button>
+              <span className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {objekt.season} · {objekt.class}{objekt.serial != null ? ` · #${String(objekt.serial).padStart(5, "0")}` : ""}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  onClick={() => onDeselect(objekt)}
+                >
+                  Remove
+                </button>
+              </span>
             </div>
           ))}
         </div>
