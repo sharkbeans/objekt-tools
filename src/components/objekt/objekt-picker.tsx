@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "./objekt-owned-picker";
 import { shortformMembers } from "@/lib/filters";
+import { Trash2 } from "lucide-react";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   if (!filters) return false;
@@ -64,6 +65,7 @@ export function ObjektPicker({
   const [loading, setLoading] = useState(false);
   const [hoverImage, setHoverImage] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const filtersActive = hasActiveFilters(filters);
@@ -141,6 +143,7 @@ export function ObjektPicker({
     (e: React.MouseEvent<HTMLButtonElement>, entry: ObjektEntry) => {
       const rect = e.currentTarget.getBoundingClientRect();
       setHoverPos({ top: rect.top, left: rect.right + 8 });
+      setImageLoaded(false);
       setHoverImage(entry.thumbnailImage ?? null);
     },
     [],
@@ -200,12 +203,24 @@ export function ObjektPicker({
         </div>
       )}
 
-      {hoverImage && hoverPos && (
+      {hoverPos && (
         <div
           className="fixed z-100 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
           style={{ top: hoverPos.top, left: hoverPos.left }}
         >
-          <img src={hoverImage} alt="" className="w-24 h-auto block" />
+          {!imageLoaded && (
+            <div className="w-24 h-32 flex items-center justify-center text-xs text-muted-foreground">
+              Loading...
+            </div>
+          )}
+          {hoverImage && (
+            <img
+              src={hoverImage}
+              alt=""
+              className={`w-24 h-auto block ${imageLoaded ? "" : "hidden"}`}
+              onLoad={() => setImageLoaded(true)}
+            />
+          )}
         </div>
       )}
 
@@ -227,10 +242,10 @@ export function ObjektPicker({
                 </span>
                 <button
                   type="button"
-                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                   onClick={() => onDeselect(objekt)}
+                  className="text-red-500/80 hover:text-red-600 transition-colors"
                 >
-                  Remove
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </span>
             </div>

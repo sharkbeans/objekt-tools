@@ -57,5 +57,9 @@ export async function GET(request: NextRequest) {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .limit(200);
 
-  return NextResponse.json({ results: rows });
+  return NextResponse.json({ results: rows }, {
+    headers: {
+      "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
+    },
+  });
 }
