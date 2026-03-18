@@ -1,9 +1,8 @@
 "use client";
 
-import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +56,39 @@ interface ActiveTrade {
   initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
   recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
   sides: TradeSide[];
+}
+
+const thumbnailLookupCache = new Map<string, string | null>();
+
+async function fetchCollectionThumbnailUrl(collectionId: string): Promise<string | null> {
+  const normalizedId = collectionId.trim().toLowerCase();
+  if (!normalizedId) return null;
+
+  const cached = thumbnailLookupCache.get(normalizedId);
+  if (cached !== undefined) return cached;
+
+  try {
+    const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`);
+    if (!res.ok) {
+      thumbnailLookupCache.set(normalizedId, null);
+      return null;
+    }
+    const data = await res.json();
+    const results: Array<{
+      collectionId?: string;
+      thumbnailImage?: string | null;
+      frontImage?: string | null;
+    }> = Array.isArray(data?.results) ? data.results : [];
+    const match =
+      results.find((r) => (r.collectionId ?? "").trim().toLowerCase() === normalizedId) ??
+      results[0];
+    const url = match?.thumbnailImage ?? match?.frontImage ?? null;
+    thumbnailLookupCache.set(normalizedId, url);
+    return url;
+  } catch {
+    thumbnailLookupCache.set(normalizedId, null);
+    return null;
+  }
 }
 
 function formatLabel(side: TradeSide) {
@@ -153,37 +185,96 @@ function CopyButton({ text }: { text: string }) {
 
 function ObjektThumbnail({
   src,
+  collectionId,
   alt,
   href,
 }: {
   src: string;
+  collectionId: string;
   alt: string;
   href?: string | null;
 }) {
+  const normalizedInitialSrc = src.trim();
+  const [resolvedSrc, setResolvedSrc] = useState(normalizedInitialSrc);
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-  const imgRef = useRef<HTMLImageElement>(null);
 
-  useLayoutEffect(() => {
-    const img = imgRef.current;
-    if (!img) return;
-    if (img.complete) {
-      setStatus(img.naturalWidth === 0 ? "error" : "loaded");
+  useEffect(() => {
+    setResolvedSrc(normalizedInitialSrc);
+  }, [normalizedInitialSrc]);
+
+  // Always try to resolve a canonical thumbnail by collectionId.
+  // This overrides stale/placeholder URLs persisted in older trades.
+  useEffect(() => {
+    if (!collectionId) return;
+    let cancelled = false;
+    fetchCollectionThumbnailUrl(collectionId).then((canonicalUrl) => {
+      if (cancelled || !canonicalUrl) return;
+      const trimmed = canonicalUrl.trim();
+      if (!trimmed) return;
+      setResolvedSrc((current) => (current === trimmed ? current : trimmed));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionId]);
+
+  useEffect(() => {
+    setStatus("loading");
+    if (!resolvedSrc) {
+      setStatus("error");
+      return;
     }
-  }, [src]);
+
+    let cancelled = false;
+    const probe = new window.Image();
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+      setStatus((prev) => (prev === "loading" ? "error" : prev));
+    }, 8000);
+
+    const markComplete = () => {
+      if (cancelled) return;
+      window.clearTimeout(timeoutId);
+      setStatus(probe.naturalWidth === 0 ? "error" : "loaded");
+    };
+
+    const markError = () => {
+      if (cancelled) return;
+      window.clearTimeout(timeoutId);
+      setStatus("error");
+    };
+
+    probe.onload = markComplete;
+    probe.onerror = markError;
+    probe.src = resolvedSrc;
+
+    if (probe.complete) {
+      markComplete();
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      probe.onload = null;
+      probe.onerror = null;
+    };
+  }, [resolvedSrc]);
 
   const thumbnail = (
     <div className="w-12 aspect-[2/3] relative rounded-sm overflow-hidden">
       <img
-        ref={imgRef}
-        src={src}
+        key={resolvedSrc}
+        src={resolvedSrc}
         alt={alt}
-        onLoad={() => setStatus("loaded")}
+        onLoad={(e) =>
+          setStatus(e.currentTarget.naturalWidth === 0 ? "error" : "loaded")
+        }
         onError={() => setStatus("error")}
         className={cn("w-full h-full object-cover", status !== "loaded" && "opacity-0")}
       />
       {status === "loading" && (
-        <div className="absolute inset-0 bg-muted animate-pulse flex items-end justify-center pb-1">
-          <span className="text-[8px] text-muted-foreground">Loading...</span>
+        <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
+          <span className="text-[8px] text-muted-foreground text-center leading-tight px-1">Loading image</span>
         </div>
       )}
       {status === "error" && (
@@ -211,7 +302,7 @@ function ObjektThumbnail({
         {status === "loaded" && (
           <TooltipPrimitive.Portal>
             <TooltipPrimitive.Content side="left" sideOffset={8} className="z-50 rounded-md shadow-xl overflow-hidden border border-border">
-              <img src={src} alt={alt} className="w-36 block" />
+              <img src={resolvedSrc} alt={alt} className="w-36 block" />
             </TooltipPrimitive.Content>
           </TooltipPrimitive.Portal>
         )}
@@ -291,9 +382,12 @@ function SideCard({
         )}
       >
         <div className="flex gap-3">
-          {side.thumbnailUrl && (
-            <ObjektThumbnail src={side.thumbnailUrl} alt={sideName} href={profileUrl} />
-          )}
+          <ObjektThumbnail
+            src={side.thumbnailUrl ?? ""}
+            collectionId={side.collectionId}
+            alt={sideName}
+            href={profileUrl}
+          />
           <div className="flex-1 min-w-0 space-y-1.5">
             {profileUrl ? (
               <a
@@ -631,8 +725,7 @@ export default function ActiveTradePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { data: session } = useSession();
-  const router = useRouter();
+  const { data: session, isPending: sessionPending } = useSession();
   const queryClient = useQueryClient();
   const lastCheckRef = useRef<number>(0);
   const [checkCooldown, setCheckCooldown] = useState(0);
@@ -763,7 +856,7 @@ export default function ActiveTradePage({
     await runCheckTransfers(false);
   }
 
-  if (isLoading) {
+  if (isLoading || sessionPending) {
     return (
       <div className="text-center py-12 text-muted-foreground">Loading...</div>
     );
@@ -928,7 +1021,7 @@ export default function ActiveTradePage({
               <div className="space-y-2">
                 {leftSides.map((side, i) => (
                   <SideCard
-                    key={side.id}
+                    key={`left-${side.id}`}
                     side={side}
                     label={i === 0 ? "You send" : ""}
                     recipientUser={isInitiator ? trade.recipient : trade.initiator}
@@ -944,7 +1037,7 @@ export default function ActiveTradePage({
               <div className="space-y-2">
                 {rightSides.map((side, i) => (
                   <SideCard
-                    key={side.id}
+                    key={`right-${side.id}`}
                     side={side}
                     label={i === 0 ? "You receive" : ""}
                     isYours={false}
@@ -957,14 +1050,22 @@ export default function ActiveTradePage({
               {leftSides.length > 0 && (
                 <div className="flex-1 min-w-0 space-y-2">
                   {leftSides.map((side, i) => (
-                    <SideCard key={side.id} side={side} label={i === 0 ? leftLabel : ""} />
+                    <SideCard
+                      key={`left-public-${side.id}`}
+                      side={side}
+                      label={i === 0 ? leftLabel : ""}
+                    />
                   ))}
                 </div>
               )}
               {rightSides.length > 0 && (
                 <div className="flex-1 min-w-0 space-y-2">
                   {rightSides.map((side, i) => (
-                    <SideCard key={side.id} side={side} label={i === 0 ? rightLabel : ""} />
+                    <SideCard
+                      key={`right-public-${side.id}`}
+                      side={side}
+                      label={i === 0 ? rightLabel : ""}
+                    />
                   ))}
                 </div>
               )}

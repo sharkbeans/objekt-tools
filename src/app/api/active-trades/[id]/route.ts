@@ -1,18 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
+import { eq, inArray } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
+import { indexer } from "@/lib/db/indexer";
+import { collections } from "@/lib/db/indexer-schema";
 import { activeTrade } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 // GET /api/active-trades/[id]
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  let session;
-  try {
-    session = await requireSession();
-  } catch {
+  const session = await requireSession().catch(() => null);
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -52,6 +52,29 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const uniqueCollectionIds = [
+    ...new Set(trade.sides.map((s) => s.collectionId).filter(Boolean)),
+  ];
+  const canonicalByCollectionId = new Map<string, string>();
+
+  if (uniqueCollectionIds.length > 0) {
+    const rows = await indexer
+      .select({
+        collectionId: collections.collectionId,
+        thumbnailImage: collections.thumbnailImage,
+        frontImage: collections.frontImage,
+      })
+      .from(collections)
+      .where(inArray(collections.collectionId, uniqueCollectionIds));
+
+    for (const row of rows) {
+      const canonical = row.thumbnailImage ?? row.frontImage;
+      if (canonical) {
+        canonicalByCollectionId.set(row.collectionId, canonical);
+      }
+    }
+  }
+
   const mapped = {
     ...trade,
     initiator: {
@@ -66,6 +89,8 @@ export async function GET(
     },
     sides: trade.sides.map((s) => ({
       ...s,
+      thumbnailUrl:
+        canonicalByCollectionId.get(s.collectionId) ?? s.thumbnailUrl ?? null,
       user: {
         ...s.user,
         cosmoNickname: s.user.cosmoAccount?.nickname ?? null,

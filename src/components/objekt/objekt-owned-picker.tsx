@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { makeTradeItemTags, searchFilter } from "@/lib/filter-utils";
+import { Portal } from "radix-ui";
 
 type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
 
@@ -138,7 +139,7 @@ export function ObjektOwnedPicker({
       class: entry.class,
       serial: entry.serial,
       objektId: entry.objektId,
-      thumbnailImage: thumbnailCache.get(entry.collectionId) ?? undefined,
+      thumbnailImage: entry.thumbnailImage ?? thumbnailCache.get(entry.collectionId) ?? undefined,
     });
     setHoverImage(null);
     setHoverPos(null);
@@ -217,12 +218,14 @@ export function ObjektOwnedPicker({
       )}
 
       {hoverImage && hoverPos && (
-        <div
-          className="objekt-hover-preview"
-          style={{ top: hoverPos.top, left: hoverPos.left }}
-        >
-          <img src={hoverImage} alt="" className="w-24 h-auto block" />
-        </div>
+        <Portal.Root>
+          <div
+            className="objekt-hover-preview"
+            style={{ top: hoverPos.top, left: hoverPos.left }}
+          >
+            <img src={hoverImage} alt="" className="w-24 h-auto block" />
+          </div>
+        </Portal.Root>
       )}
 
       {selected.length > 0 && (

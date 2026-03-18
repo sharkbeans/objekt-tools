@@ -13,6 +13,26 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Portal } from "radix-ui";
+
+const thumbnailCache = new Map<string, string | null>();
+
+function fetchThumbnail(collectionId: string): Promise<string | null> {
+  const cached = thumbnailCache.get(collectionId);
+  if (cached !== undefined) return Promise.resolve(cached);
+  return fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
+    .then((res) => res.json())
+    .then((data) => {
+      const match = data.results?.find((r: { collectionId: string }) => r.collectionId === collectionId);
+      const url = (match as { thumbnailImage?: string; frontImage?: string } | undefined)?.thumbnailImage ?? (match as { thumbnailImage?: string; frontImage?: string } | undefined)?.frontImage ?? null;
+      thumbnailCache.set(collectionId, url);
+      return url;
+    })
+    .catch(() => {
+      thumbnailCache.set(collectionId, null);
+      return null;
+    });
+}
 
 interface TradeItem {
   id: number;
@@ -54,10 +74,14 @@ function ObjektOption({
   item,
   selected,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   item: TradeItem;
   selected: boolean;
   onClick: () => void;
+  onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onMouseLeave: () => void;
 }) {
   const rightMeta = [
     item.season,
@@ -71,6 +95,8 @@ function ObjektOption({
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={cn(
         "flex items-center justify-between rounded-md border px-3 py-2 text-sm text-left transition-colors w-full",
         selected
@@ -102,6 +128,22 @@ export function InitiateTradeDialog({
   const [mySelected, setMySelected] = useState<Set<number>>(new Set());
   const [theirSelected, setTheirSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [hoverImage, setHoverImage] = useState<string | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+
+  function handleMouseEnter(e: React.MouseEvent<HTMLButtonElement>, item: TradeItem) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoverPos({ top: rect.top, left: rect.right + 8 });
+    const collectionId = item.collectionId;
+    const cached = thumbnailCache.get(collectionId);
+    setHoverImage(item.thumbnailUrl ?? cached ?? null);
+    fetchThumbnail(collectionId).then(setHoverImage);
+  }
+
+  function handleMouseLeave() {
+    setHoverImage(null);
+    setHoverPos(null);
+  }
 
   function toggleMy(item: TradeItem) {
     setMySelected((prev) => {
@@ -213,6 +255,8 @@ export function InitiateTradeDialog({
                   item={item}
                   selected={mySelected.has(item.id)}
                   onClick={() => toggleMy(item)}
+                  onMouseEnter={(e) => handleMouseEnter(e, item)}
+                  onMouseLeave={handleMouseLeave}
                 />
               ))}
             </div>
@@ -232,11 +276,24 @@ export function InitiateTradeDialog({
                   item={item}
                   selected={theirSelected.has(item.id)}
                   onClick={() => toggleTheir(item)}
+                  onMouseEnter={(e) => handleMouseEnter(e, item)}
+                  onMouseLeave={handleMouseLeave}
                 />
               ))}
             </div>
           </div>
         </div>
+
+        {hoverImage && hoverPos && (
+          <Portal.Root>
+            <div
+              className="objekt-hover-preview"
+              style={{ top: hoverPos.top, left: hoverPos.left }}
+            >
+              <img src={hoverImage} alt="" className="w-24 h-auto block" />
+            </div>
+          </Portal.Root>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

@@ -3,6 +3,25 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+
+const thumbnailCache = new Map<string, string | null>();
+
+function fetchThumbnail(collectionId: string): Promise<string | null> {
+  const cached = thumbnailCache.get(collectionId);
+  if (cached !== undefined) return Promise.resolve(cached);
+  return fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
+    .then((res) => res.json())
+    .then((data) => {
+      const match = data.results?.find((r: { collectionId: string }) => r.collectionId === collectionId);
+      const url = (match as { thumbnailImage?: string; frontImage?: string } | undefined)?.thumbnailImage ?? (match as { thumbnailImage?: string; frontImage?: string } | undefined)?.frontImage ?? null;
+      thumbnailCache.set(collectionId, url);
+      return url;
+    })
+    .catch(() => {
+      thumbnailCache.set(collectionId, null);
+      return null;
+    });
+}
 import {
   Dialog,
   DialogContent,
@@ -13,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Portal } from "radix-ui";
 import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { cn } from "@/lib/utils";
@@ -53,10 +73,14 @@ function TheirObjektOption({
   item,
   selected,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   item: TradeItem;
   selected: boolean;
   onClick: () => void;
+  onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onMouseLeave: () => void;
 }) {
   const rightMeta = [
     item.season,
@@ -70,6 +94,8 @@ function TheirObjektOption({
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={cn(
         "flex items-center justify-between rounded-md border px-3 py-2 text-sm text-left transition-colors w-full",
         selected
@@ -99,6 +125,21 @@ export function InitiateDirectDialog({
   const [mySelected, setMySelected] = useState<ObjektEntry[]>([]);
   const [theirSelected, setTheirSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [hoverImage, setHoverImage] = useState<string | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+
+  function handleTheirMouseEnter(e: React.MouseEvent<HTMLButtonElement>, item: TradeItem) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoverPos({ top: rect.top, left: rect.right + 8 });
+    const cached = thumbnailCache.get(item.collectionId);
+    setHoverImage(item.thumbnailUrl ?? cached ?? null);
+    fetchThumbnail(item.collectionId).then(setHoverImage);
+  }
+
+  function handleTheirMouseLeave() {
+    setHoverImage(null);
+    setHoverPos(null);
+  }
 
   function toggleTheir(item: TradeItem) {
     setTheirSelected((prev) => {
@@ -214,11 +255,24 @@ export function InitiateDirectDialog({
                   item={item}
                   selected={theirSelected.has(item.id)}
                   onClick={() => toggleTheir(item)}
+                  onMouseEnter={(e) => handleTheirMouseEnter(e, item)}
+                  onMouseLeave={handleTheirMouseLeave}
                 />
               ))}
             </div>
           </div>
         </div>
+
+        {hoverImage && hoverPos && (
+          <Portal.Root>
+            <div
+              className="objekt-hover-preview"
+              style={{ top: hoverPos.top, left: hoverPos.left }}
+            >
+              <img src={hoverImage} alt="" className="w-24 h-auto block" />
+            </div>
+          </Portal.Root>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
