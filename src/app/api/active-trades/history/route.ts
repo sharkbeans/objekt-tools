@@ -19,7 +19,7 @@ export async function GET() {
         eq(activeTrade.initiatorUserId, session.user.id),
         eq(activeTrade.recipientUserId, session.user.id),
       ),
-      inArray(activeTrade.status, ["completed", "cancelled", "disputed"]),
+      inArray(activeTrade.status, ["completed", "cancelled", "countered", "disputed"]),
     ),
     with: {
       sides: {

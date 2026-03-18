@@ -26,7 +26,7 @@ function maskEmail(email: string): string {
   return local[0] + "*".repeat(local.length - 1) + tld;
 }
 
-type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed";
+type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "countered" | "disputed";
 
 const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
   pending: "secondary",
@@ -34,6 +34,7 @@ const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "
   partial: "default",
   completed: "default",
   cancelled: "destructive",
+  countered: "outline",
   disputed: "destructive",
 };
 
@@ -43,6 +44,7 @@ const statusLabel: Record<TradeStatus, string> = {
   partial: "Ongoing",
   completed: "Completed",
   cancelled: "Cancelled",
+  countered: "Countered",
   disputed: "Disputed",
 };
 

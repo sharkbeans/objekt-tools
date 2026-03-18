@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed";
+type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "countered" | "disputed";
 
 const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
   pending: "secondary",
@@ -16,6 +16,7 @@ const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "
   partial: "default",
   completed: "default",
   cancelled: "destructive",
+  countered: "outline",
   disputed: "destructive",
 };
 
@@ -25,6 +26,7 @@ const statusLabel: Record<TradeStatus, string> = {
   partial: "Ongoing",
   completed: "Completed",
   cancelled: "Cancelled",
+  countered: "Countered",
   disputed: "Disputed",
 };
 
@@ -43,7 +45,7 @@ function saveDismissed(ids: Set<string>) {
   localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]));
 }
 
-const terminalStatuses: TradeStatus[] = ["completed", "cancelled", "disputed"];
+const terminalStatuses: TradeStatus[] = ["completed", "cancelled", "countered", "disputed"];
 
 export function ActiveTradesBanner() {
   const { data: session } = useSession();

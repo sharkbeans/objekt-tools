@@ -36,7 +36,7 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (trade.status === "completed" || trade.status === "cancelled") {
+  if (trade.status === "completed" || trade.status === "cancelled" || trade.status === "countered") {
     return NextResponse.json({ error: "Trade already finalised" }, { status: 400 });
   }
 

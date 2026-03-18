@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       eq(activeTrade.initiatorUserId, session.user.id),
       eq(activeTrade.recipientUserId, session.user.id),
     ),
-    not(inArray(activeTrade.status, ["cancelled"])),
+    not(inArray(activeTrade.status, ["cancelled", "countered"])),
   );
 
   const [totalResult, trades] = await Promise.all([

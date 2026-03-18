@@ -26,6 +26,7 @@ type TradeStatus =
   | "partial"
   | "completed"
   | "cancelled"
+  | "countered"
   | "disputed";
 
 interface TradeSide {
@@ -786,7 +787,7 @@ export default function ActiveTradePage({
       (l.event === "wrong_recipient" && !recoveredObjektIds.has(l.objektId))
   );
 
-  const terminalStatuses = ["completed", "cancelled", "disputed"];
+  const terminalStatuses = ["completed", "cancelled", "countered", "disputed"];
   useEffect(() => {
     if (trade && terminalStatuses.includes(trade.status)) {
       queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
@@ -896,7 +897,7 @@ export default function ActiveTradePage({
   const isParticipant =
     trade.initiatorUserId === userId || trade.recipientUserId === userId;
   const isRecipient = trade.recipientUserId === userId;
-  const isActive = !["completed", "cancelled", "disputed"].includes(trade.status);
+  const isActive = !["completed", "cancelled", "countered", "disputed"].includes(trade.status);
   const anyConfirmed = trade.sides.some((s) => s.status === "confirmed");
   const canCancel = isActive && !anyConfirmed;
 
@@ -922,6 +923,7 @@ export default function ActiveTradePage({
     partial: "default",
     completed: "default",
     cancelled: "destructive",
+    countered: "outline",
     disputed: "destructive",
   };
 
@@ -931,6 +933,7 @@ export default function ActiveTradePage({
     partial: "Ongoing",
     completed: "Completed",
     cancelled: "Cancelled",
+    countered: "Countered",
     disputed: "Disputed",
   };
 

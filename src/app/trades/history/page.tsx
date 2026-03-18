@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 
-type TradeStatus = "completed" | "cancelled" | "disputed";
+type TradeStatus = "completed" | "cancelled" | "countered" | "disputed";
 
-const statusVariant: Record<TradeStatus, "default" | "destructive" | "secondary"> = {
+const statusVariant: Record<TradeStatus, "default" | "destructive" | "secondary" | "outline"> = {
   completed: "default",
   cancelled: "destructive",
+  countered: "outline",
   disputed: "destructive",
 };
 

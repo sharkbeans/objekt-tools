@@ -6,6 +6,7 @@ import {
   boolean,
   serial,
   index,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { customAlphabet } from "nanoid";
@@ -166,8 +167,9 @@ export const activeTrade = pgTable("active_trade", {
   recipientUserId: text("recipient_user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
+  counterOfferToId: text("counter_offer_to_id"),
   status: text("status").notNull().default("pending").$type<
-    "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed"
+    "pending" | "accepted" | "partial" | "completed" | "cancelled" | "countered" | "disputed"
   >(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -178,6 +180,7 @@ export const activeTrade = pgTable("active_trade", {
   index("active_trade_initiator_idx").on(t.initiatorUserId),
   index("active_trade_recipient_idx").on(t.recipientUserId),
   index("active_trade_status_idx").on(t.status),
+  foreignKey({ columns: [t.counterOfferToId], foreignColumns: [t.id] }).onDelete("set null"),
 ]);
 
 // One row per side of the trade (initiator side + recipient side)
@@ -349,6 +352,12 @@ export const activeTradeRelations = relations(activeTrade, ({ one, many }) => ({
     references: [user.id],
     relationName: "recipient",
   }),
+  counterOfferTo: one(activeTrade, {
+    fields: [activeTrade.counterOfferToId],
+    references: [activeTrade.id],
+    relationName: "counterOfferChain",
+  }),
+  counterOffers: many(activeTrade, { relationName: "counterOfferChain" }),
   sides: many(activeTradeSide),
   messages: many(tradeMessage),
   transferLogs: many(tradeTransferLog),
