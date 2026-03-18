@@ -1347,6 +1347,7 @@ export default function ActiveTradePage({
           mySides={recipientSides}
           theirSides={initiatorSides}
           theirAddress={initiatorSides[0]?.address ?? ""}
+          theirCosmoUsername={trade.initiator.cosmoNickname ?? trade.initiator.name}
         />
       )}
     </div>

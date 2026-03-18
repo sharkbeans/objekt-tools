@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
 import { ObjektUserPicker } from "@/components/objekt/objekt-user-picker";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { Plus, Minus } from "lucide-react";
+import { Plus, Minus, ArrowRight } from "lucide-react";
 
 interface TradeSide {
   id: number;
@@ -39,6 +39,8 @@ interface Props {
   theirSides: TradeSide[];
   // Cosmo wallet address of the other party
   theirAddress: string;
+  // Cosmo username of the other party
+  theirCosmoUsername: string;
 }
 
 function formatLabel(item: { collectionNo?: string | null; member?: string | null; collectionId: string; serial?: number | null }) {
@@ -66,6 +68,67 @@ function sideToObjektEntry(side: TradeSide): ObjektEntry {
   };
 }
 
+type ObjektMeta = { thumbnailImage: string | null; season: string; class: string; artist: string };
+const metaCache = new Map<string, ObjektMeta>();
+
+function fetchObjektMeta(collectionId: string): Promise<ObjektMeta> {
+  const cached = metaCache.get(collectionId);
+  if (cached !== undefined) return Promise.resolve(cached);
+  return fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
+    .then((res) => res.json())
+    .then((data) => {
+      const match = data.results?.find((r: any) => r.collectionId === collectionId);
+      const meta: ObjektMeta = {
+        thumbnailImage: match?.thumbnailImage ?? match?.frontImage ?? null,
+        season: match?.season ?? "",
+        class: match?.class ?? "",
+        artist: match?.artist ?? "",
+      };
+      metaCache.set(collectionId, meta);
+      return meta;
+    })
+    .catch(() => {
+      const empty: ObjektMeta = { thumbnailImage: null, season: "", class: "", artist: "" };
+      metaCache.set(collectionId, empty);
+      return empty;
+    });
+}
+
+function ObjektThumb({ objekt }: { objekt: ObjektEntry }) {
+  const [url, setUrl] = useState<string | null>(objekt.thumbnailImage ?? null);
+
+  useEffect(() => {
+    if (!url && objekt.collectionId) {
+      fetchObjektMeta(objekt.collectionId).then((m) => setUrl(m.thumbnailImage));
+    }
+  }, [objekt.collectionId, url]);
+
+  if (!url) {
+    return (
+      <div className="w-10 h-14 rounded bg-muted flex items-center justify-center text-[9px] text-muted-foreground text-center leading-tight px-0.5">
+        {objekt.collectionNo || "?"}
+      </div>
+    );
+  }
+  return (
+    <div className="relative group/thumb">
+      <img src={url} alt="" className="w-10 h-auto rounded shadow" />
+      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-50 pointer-events-none
+                      opacity-0 group-hover/thumb:opacity-100 transition-opacity duration-150">
+        {/* bubble tail */}
+        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-popover border-l border-t border-border rotate-45" />
+        <div className="relative bg-popover border border-border rounded-md px-2 py-1 shadow-md
+                        text-[10px] text-popover-foreground whitespace-nowrap text-center leading-snug">
+          <span className="font-medium">{objekt.member} {objekt.collectionNo}</span>
+          {objekt.serial != null && (
+            <span className="block text-muted-foreground">#{String(objekt.serial).padStart(5, "0")}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CounterOfferDialog({
   open,
   onOpenChange,
@@ -73,6 +136,7 @@ export function CounterOfferDialog({
   mySides,
   theirSides,
   theirAddress,
+  theirCosmoUsername,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -86,6 +150,32 @@ export function CounterOfferDialog({
   const [theirSelected, setTheirSelected] = useState<ObjektEntry[]>(() =>
     theirSides.map(sideToObjektEntry)
   );
+
+  // Enrich initial entries that came from TradeSide (no season/class/artist)
+  useEffect(() => {
+    const allInitial = [...mySides, ...theirSides];
+    const uniqueIds = [...new Set(allInitial.map((s) => s.collectionId))];
+    Promise.all(uniqueIds.map((id) => fetchObjektMeta(id).then((meta) => ({ id, meta })))).then(
+      (results) => {
+        const byId = new Map(results.map(({ id, meta }) => [id, meta]));
+        const enrich = (entries: ObjektEntry[]): ObjektEntry[] =>
+          entries.map((o) => {
+            const meta = byId.get(o.collectionId);
+            if (!meta || (o.season && o.class)) return o;
+            return {
+              ...o,
+              season: o.season || meta.season,
+              class: o.class || meta.class,
+              artist: o.artist || meta.artist,
+              thumbnailImage: o.thumbnailImage || meta.thumbnailImage || undefined,
+            };
+          });
+        setMySelected((prev) => enrich(prev));
+        setTheirSelected((prev) => enrich(prev));
+      }
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Track original items to show diff
   const originalMyIds = new Set(mySides.map((s) => s.objektId));
@@ -178,11 +268,51 @@ export function CounterOfferDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/* Trade preview */}
+          {(mySelected.length > 0 || theirSelected.length > 0) && (
+            <>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Trade Preview</p>
+                <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground mb-1.5">You send</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {mySelected.length > 0 ? (
+                        mySelected.map((o) => (
+                          <ObjektThumb key={o.objektId ?? o.collectionId} objekt={o} />
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Nothing selected</span>
+                      )}
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground mt-5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground mb-1.5">You receive</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {theirSelected.length > 0 ? (
+                        theirSelected.map((o) => (
+                          <ObjektThumb key={o.objektId ?? o.collectionId} objekt={o} />
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Nothing selected</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
+
           {/* My side - what I will send */}
           <div>
-            <p className="text-sm font-medium mb-2">
-              You will send{mySelected.length > 0 ? ` (${mySelected.length})` : ""}
+            <p className="text-base font-semibold mb-1">
+              You will send
+            </p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Pick from your inventory{mySelected.length > 0 ? ` · ${mySelected.length} selected` : ""}
             </p>
             <ObjektOwnedPicker
               selected={mySelected}
@@ -202,8 +332,12 @@ export function CounterOfferDialog({
 
           {/* Their side - what I want from them */}
           <div>
-            <p className="text-sm font-medium mb-2">
-              You want from them{theirSelected.length > 0 ? ` (${theirSelected.length})` : ""}
+            <p className="text-base font-semibold mb-1">
+              You want from{" "}
+              <span className="text-primary">@{theirCosmoUsername}</span>
+            </p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Browse their inventory{theirSelected.length > 0 ? ` · ${theirSelected.length} selected` : ""}
             </p>
             <ObjektUserPicker
               address={theirAddress}
@@ -225,7 +359,7 @@ export function CounterOfferDialog({
             <>
               <Separator />
               <div>
-                <p className="text-sm font-medium mb-2">Changes from original</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Changes from original</p>
                 <div className="space-y-1 text-xs">
                   {myAdded.map((o) => (
                     <div key={`add-my-${o.objektId}`} className="flex items-center gap-1.5 text-green-500">
