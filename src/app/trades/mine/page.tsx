@@ -6,13 +6,33 @@ import { useSession } from "@/lib/auth-client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
-import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { XIcon, AlertTriangleIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "disputed";
+
+const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  pending: "secondary",
+  accepted: "default",
+  partial: "default",
+  completed: "default",
+  cancelled: "destructive",
+  disputed: "destructive",
+};
+
+const statusLabel: Record<TradeStatus, string> = {
+  pending: "Pending",
+  accepted: "Accepted",
+  partial: "Ongoing",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  disputed: "Disputed",
+};
 
 function buildParams(filters: TradeFilterState, page: number) {
   const p = new URLSearchParams();
@@ -96,6 +116,7 @@ export default function MyTradesPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
   const [page, setPage] = useState(1);
+  const [activePage, setActivePage] = useState(1);
 
   const handleFiltersChange = useCallback((next: TradeFilterState) => {
     setFilters(next);
@@ -121,7 +142,7 @@ export default function MyTradesPage() {
       return data;
     },
     enabled: !!session,
-    staleTime: 5 * 60 * 1000, // only re-check every 5 minutes
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
@@ -134,10 +155,25 @@ export default function MyTradesPage() {
     enabled: !!session,
   });
 
+  const { data: activeData, isLoading: activeLoading } = useQuery({
+    queryKey: ["my-active-trades", activePage],
+    queryFn: async () => {
+      const res = await fetch(`/api/active-trades?page=${activePage}`);
+      return res.json();
+    },
+    enabled: !!session,
+    refetchInterval: 30_000,
+  });
+
   const trades = data?.trades ?? [];
   const total: number = data?.total ?? 0;
   const limit: number = data?.limit ?? 12;
   const totalPages = Math.ceil(total / limit);
+
+  const activeTrades: any[] = activeData?.trades ?? [];
+  const activeTotal: number = activeData?.total ?? 0;
+  const activeLimit: number = activeData?.limit ?? 12;
+  const activeTotalPages = Math.ceil(activeTotal / activeLimit);
 
   const tradeIds: number[] = trades.map((t: any) => t.id);
 
@@ -155,6 +191,8 @@ export default function MyTradesPage() {
     },
     enabled: tradeIds.length > 0,
   });
+
+  const userId = session?.user?.id;
 
   if (!session) return null;
 
@@ -178,8 +216,75 @@ export default function MyTradesPage() {
 
       <TradeNotifications />
 
-      <ActiveTradesBanner />
+      {/* Active Trades section */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Active Trades</h2>
+        {activeLoading ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">
+            Loading active trades...
+          </div>
+        ) : activeTrades.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeTrades.map((trade: any) => {
+                const isRecipient = trade.recipientUserId === userId;
+                const otherUser = isRecipient ? trade.initiator : trade.recipient;
+                const status = trade.status as TradeStatus;
+                const needsAccept = isRecipient && status === "pending";
 
+                const cardClass = cn(
+                  "relative rounded-lg border p-4 space-y-2 transition-colors hover:bg-muted/30",
+                  status === "completed"
+                    ? "border-green-300 bg-green-500/10 dark:border-green-800"
+                    : status === "pending"
+                    ? "border-amber-200 bg-amber-500/15 dark:border-amber-900"
+                    : status === "cancelled" || status === "disputed"
+                    ? "border-destructive/40 bg-destructive/10"
+                    : "border-border bg-card"
+                );
+
+                return (
+                  <Link key={trade.id} href={`/active-trades/${trade.id}`} className={cardClass}>
+                    <Badge
+                      variant={statusVariant[status]}
+                      className="absolute top-3 right-3 shrink-0"
+                    >
+                      {statusLabel[status]}
+                    </Badge>
+                    <p className="text-sm font-medium pr-20">Trade #{trade.id}</p>
+                    <p className="text-sm text-muted-foreground">
+                      with {otherUser.cosmoNickname ?? otherUser.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(trade.updatedAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
+                    </p>
+                    {needsAccept && (
+                      <Badge variant="default" className="text-xs">
+                        Action Required
+                      </Badge>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+            <TradePagination
+              page={activePage}
+              totalPages={activeTotalPages}
+              total={activeTotal}
+              limit={activeLimit}
+              onPageChange={setActivePage}
+            />
+          </>
+        ) : (
+          <Card>
+            <CardContent className="py-6 text-center text-muted-foreground text-sm">
+              No active trades.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <h2 className="text-lg font-semibold">My Trade Posts</h2>
       <TradeFilters filters={filters} onChange={handleFiltersChange} />
 
       {isLoading ? (

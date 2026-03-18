@@ -378,7 +378,8 @@ function SideCard({
       <div
         className={cn(
           "rounded-md border p-3",
-          isYours === true && "border-primary/40 bg-primary/5"
+          isYours === true && side.status !== "confirmed" && "border-primary/40 bg-primary/5",
+          side.status === "confirmed" && "border-green-600/50 bg-green-950/40"
         )}
       >
         <div className="flex gap-3">
@@ -547,7 +548,7 @@ function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
   );
 }
 
-type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient";
+type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient" | "recovered";
 
 interface TransferLog {
   id: number;
@@ -559,6 +560,7 @@ interface TransferLog {
   serial?: number | null;
   fromAddress: string;
   toAddress: string;
+  toName?: string | null;
   senderUserId: string;
   recipientUserId: string;
   senderName: string;
@@ -567,7 +569,7 @@ interface TransferLog {
 }
 
 function TransferLogs({ tradeId }: { tradeId: string }) {
-  const { data: logs = [] } = useQuery<TransferLog[]>({
+  const { data: rawLogs = [] } = useQuery<TransferLog[]>({
     queryKey: ["trade-transfer-logs", tradeId],
     queryFn: async () => {
       const res = await fetch(`/api/active-trades/${tradeId}/transfer-logs`);
@@ -576,6 +578,8 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
     },
     refetchInterval: 30_000,
   });
+
+  const logs = rawLogs.filter((l) => l.event !== "sent" && l.event !== "pre_accept_sent");
 
   function formatObjektName(log: TransferLog) {
     const name =
@@ -657,8 +661,22 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
             {" sent "}
             <span className="font-medium">{objekt}</span>
             {" to "}
-            <span className="font-mono text-[11px]">{log.toAddress}</span>
+            {log.toName
+              ? <span className="font-medium">{log.toName}</span>
+              : <span className="font-mono text-[11px]">{log.toAddress}</span>
+            }
             <span className="text-danger"> (not the intended recipient)</span>
+          </>
+        );
+      case "recovered":
+        return (
+          <>
+            <span className="font-medium text-green-500">[RECOVERED]</span>
+            {" "}
+            <span className="font-medium">{objekt}</span>
+            {" was forwarded to "}
+            <span className="font-medium">{log.recipientName}</span>
+            <span className="text-green-500"> (objekt reached the intended recipient)</span>
           </>
         );
       default:
@@ -696,6 +714,7 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
                     "border-b last:border-0",
                     (log.event === "wrong_objekt" || log.event === "wrong_recipient") && "bg-red-500/10",
                     (log.event === "pre_accept_sent" || log.event === "pre_accept_confirmed") && "bg-amber-500/10",
+                    log.event === "recovered" && "bg-green-500/10",
                   )}
                 >
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
@@ -758,8 +777,13 @@ export default function ActiveTradePage({
   const preAcceptLogs = transferLogs.filter(
     (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed"
   );
+  const recoveredObjektIds = new Set(
+    transferLogs.filter((l) => l.event === "recovered").map((l) => l.objektId)
+  );
   const suspiciousTransferLogs = transferLogs.filter(
-    (l) => l.event === "wrong_objekt" || l.event === "wrong_recipient"
+    (l) =>
+      l.event === "wrong_objekt" ||
+      (l.event === "wrong_recipient" && !recoveredObjektIds.has(l.objektId))
   );
 
   const terminalStatuses = ["completed", "cancelled", "disputed"];

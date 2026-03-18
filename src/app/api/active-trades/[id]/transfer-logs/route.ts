@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeTransferLog } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { activeTrade, cosmoAccount, tradeTransferLog } from "@/lib/db/schema";
+import { eq, asc, inArray } from "drizzle-orm";
 
 // GET /api/active-trades/[id]/transfer-logs
 export async function GET(
@@ -48,6 +48,22 @@ export async function GET(
     },
   });
 
+  // Resolve toAddress → cosmo nickname for wrong_recipient logs
+  const wrongRecipientAddresses = logs
+    .filter((l) => l.event === "wrong_recipient")
+    .map((l) => l.toAddress.toLowerCase());
+
+  const toAddressNicknameMap = new Map<string, string>();
+  if (wrongRecipientAddresses.length > 0) {
+    const accounts = await db.query.cosmoAccount.findMany({
+      where: inArray(cosmoAccount.address, wrongRecipientAddresses),
+      columns: { address: true, nickname: true },
+    });
+    for (const account of accounts) {
+      toAddressNicknameMap.set(account.address.toLowerCase(), account.nickname);
+    }
+  }
+
   const mapped = logs.map((log) => ({
     id: log.id,
     event: log.event,
@@ -58,6 +74,7 @@ export async function GET(
     serial: log.serial,
     fromAddress: log.fromAddress,
     toAddress: log.toAddress,
+    toName: toAddressNicknameMap.get(log.toAddress.toLowerCase()) ?? null,
     senderUserId: log.senderUserId,
     recipientUserId: log.recipientUserId,
     senderName: log.sender.cosmoAccount?.nickname ?? log.sender.name,

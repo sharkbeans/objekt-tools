@@ -90,10 +90,10 @@ export async function POST(
           t.to.toLowerCase() !== side.recipientAddress.toLowerCase()
       );
       if (!matchedTransfer) {
+        const recipientUserIdForWrong = side.userId === trade.initiatorUserId
+          ? trade.recipientUserId
+          : trade.initiatorUserId;
         if (wrongRecipientTransfer && !loggedEvents.has(`${side.objektId}:wrong_recipient`)) {
-          const recipientUserId = side.userId === trade.initiatorUserId
-            ? trade.recipientUserId
-            : trade.initiatorUserId;
           await db.insert(tradeTransferLog).values({
             activeTradeId: tradeId,
             activeTradeSideId: side.id,
@@ -105,11 +105,45 @@ export async function POST(
             member: side.member,
             serial: side.serial,
             senderUserId: side.userId,
-            recipientUserId,
+            recipientUserId: recipientUserIdForWrong,
             event: "wrong_recipient",
           });
+          loggedEvents.add(`${side.objektId}:wrong_recipient`);
           updatedCount++;
         }
+
+        // ── RECOVERY: after wrong_recipient, check if a third party forwarded
+        // the objekt to the intended recipient (e.g. user3 → user2)
+        if (
+          loggedEvents.has(`${side.objektId}:wrong_recipient`) &&
+          !loggedEvents.has(`${side.objektId}:recovered`)
+        ) {
+          const recoveryTransfer = transferEvents.find(
+            (t) =>
+              t.objektId === side.objektId &&
+              t.to.toLowerCase() === side.recipientAddress.toLowerCase() &&
+              t.from.toLowerCase() !== side.address.toLowerCase()
+          );
+          if (recoveryTransfer) {
+            await db.insert(tradeTransferLog).values({
+              activeTradeId: tradeId,
+              activeTradeSideId: side.id,
+              fromAddress: recoveryTransfer.from,
+              toAddress: recoveryTransfer.to,
+              objektId: side.objektId,
+              collectionId: side.collectionId,
+              collectionNo: side.collectionNo,
+              member: side.member,
+              serial: side.serial,
+              senderUserId: side.userId,
+              recipientUserId: recipientUserIdForWrong,
+              event: "recovered",
+            });
+            loggedEvents.add(`${side.objektId}:recovered`);
+            updatedCount++;
+          }
+        }
+
         continue;
       }
 
@@ -397,7 +431,53 @@ export async function POST(
             recipientUserId,
             event: "wrong_recipient",
           });
+          loggedEvents.add(`${side.objektId}:wrong_recipient`);
           updatedCount++;
+        }
+
+        // ── RECOVERY: after wrong_recipient, check if the objekt reached the
+        // intended recipient via a third party (scenario 1: user3 → user2)
+        // or via the original sender getting it back (scenario 2: user3 → user1 → user2,
+        // where the second leg is already handled by confirmedTransfer above).
+        // This block only fires when there's no direct confirmedTransfer from the
+        // original sender and a wrong_recipient was previously logged.
+        if (
+          !confirmedTransfer &&
+          loggedEvents.has(`${side.objektId}:wrong_recipient`) &&
+          !loggedEvents.has(`${side.objektId}:recovered`)
+        ) {
+          // Look for any transfer to the intended recipient, regardless of sender
+          const recoveryTransfer = transferEvents.find(
+            (t) =>
+              t.objektId === side.objektId &&
+              t.to.toLowerCase() === side.recipientAddress.toLowerCase() &&
+              t.from.toLowerCase() !== side.address.toLowerCase() // not the original sender (that path is confirmedTransfer)
+          );
+          if (recoveryTransfer) {
+            // Log the recovery event
+            await db.insert(tradeTransferLog).values({
+              activeTradeId: tradeId,
+              activeTradeSideId: side.id,
+              fromAddress: recoveryTransfer.from,
+              toAddress: recoveryTransfer.to,
+              objektId: side.objektId,
+              collectionId: side.collectionId,
+              collectionNo: side.collectionNo,
+              member: side.member,
+              serial: side.serial,
+              senderUserId: side.userId,
+              recipientUserId,
+              event: "recovered",
+            });
+            loggedEvents.add(`${side.objektId}:recovered`);
+            updatedCount++;
+
+            // Mark the side as confirmed since the objekt arrived at the right place
+            await db
+              .update(activeTradeSide)
+              .set({ status: "confirmed", detectedAt: new Date() })
+              .where(eq(activeTradeSide.id, side.id));
+          }
         }
       }
     }
@@ -627,6 +707,13 @@ export async function POST(
   );
   const wrongObjektLogs = freshLogs.filter((l) => l.event === "wrong_objekt");
   const wrongRecipientLogs = freshLogs.filter((l) => l.event === "wrong_recipient");
+  const recoveredLogs = freshLogs.filter((l) => l.event === "recovered");
+
+  // wrong_recipient logs that have a matching recovered log are no longer suspicious
+  const recoveredObjektIds = new Set(recoveredLogs.map((l) => l.objektId));
+  const unresolvedWrongRecipientLogs = wrongRecipientLogs.filter(
+    (l) => !recoveredObjektIds.has(l.objektId)
+  );
 
   return NextResponse.json({
     status: newTradeStatus,
@@ -635,6 +722,7 @@ export async function POST(
     preAcceptTransfers: preAcceptLogs.length,
     wrongObjektTransfers: wrongObjektLogs.length,
     wrongRecipientTransfers: wrongRecipientLogs.length,
-    suspiciousTransfers: wrongObjektLogs.length + wrongRecipientLogs.length,
+    recoveredTransfers: recoveredLogs.length,
+    suspiciousTransfers: wrongObjektLogs.length + unresolvedWrongRecipientLogs.length,
   });
 }
