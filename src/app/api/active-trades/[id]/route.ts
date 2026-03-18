@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
 import { collections } from "@/lib/db/indexer-schema";
-import { activeTrade } from "@/lib/db/schema";
+import { activeTrade, cosmoAccount, user } from "@/lib/db/schema";
 
 // GET /api/active-trades/[id]
 export async function GET(
@@ -36,6 +36,9 @@ export async function GET(
       recipient: {
         columns: { id: true, name: true, image: true },
         with: { cosmoAccount: { columns: { nickname: true } } },
+      },
+      counterOffers: {
+        columns: { id: true, status: true },
       },
     },
   });
@@ -75,8 +78,71 @@ export async function GET(
     }
   }
 
+  // Walk the counter-offer chain to build negotiation history
+  const counterOfferChain: Array<{
+    id: string;
+    status: string;
+    initiatorUserId: string;
+    recipientUserId: string;
+    createdAt: Date;
+    initiatorName: string;
+    recipientName: string;
+  }> = [];
+
+  if (trade.counterOfferToId) {
+    // Walk backwards from this trade through the chain
+    let currentId: string | null = trade.counterOfferToId;
+    while (currentId && counterOfferChain.length < 20) {
+      const [ancestor] = await db
+        .select({
+          id: activeTrade.id,
+          status: activeTrade.status,
+          initiatorUserId: activeTrade.initiatorUserId,
+          recipientUserId: activeTrade.recipientUserId,
+          createdAt: activeTrade.createdAt,
+          counterOfferToId: activeTrade.counterOfferToId,
+        })
+        .from(activeTrade)
+        .where(eq(activeTrade.id, currentId))
+        .limit(1);
+      if (!ancestor) break;
+
+      // Fetch display names for both parties
+      const [initiatorRow] = await db
+        .select({ name: user.name, nickname: cosmoAccount.nickname })
+        .from(user)
+        .leftJoin(cosmoAccount, eq(user.id, cosmoAccount.userId))
+        .where(eq(user.id, ancestor.initiatorUserId))
+        .limit(1);
+      const [recipientRow] = await db
+        .select({ name: user.name, nickname: cosmoAccount.nickname })
+        .from(user)
+        .leftJoin(cosmoAccount, eq(user.id, cosmoAccount.userId))
+        .where(eq(user.id, ancestor.recipientUserId))
+        .limit(1);
+
+      counterOfferChain.unshift({
+        id: ancestor.id,
+        status: ancestor.status,
+        initiatorUserId: ancestor.initiatorUserId,
+        recipientUserId: ancestor.recipientUserId,
+        createdAt: ancestor.createdAt,
+        initiatorName: initiatorRow?.nickname ?? initiatorRow?.name ?? "Unknown",
+        recipientName: recipientRow?.nickname ?? recipientRow?.name ?? "Unknown",
+      });
+      currentId = ancestor.counterOfferToId;
+    }
+  }
+
+  // The counter-offer made TO this trade (if status is "countered")
+  const counterOfferId = trade.counterOffers?.[0]?.id ?? null;
+
   const mapped = {
     ...trade,
+    counterOfferToId: trade.counterOfferToId ?? null,
+    counterOfferId,
+    counterOfferChain,
+    counterOffers: undefined,
     initiator: {
       ...trade.initiator,
       cosmoNickname: trade.initiator.cosmoAccount?.nickname ?? null,

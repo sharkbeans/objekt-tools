@@ -16,7 +16,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon } from "lucide-react";
+import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon } from "lucide-react";
+import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 
 type SideStatus = "pending" | "sent" | "confirmed";
@@ -45,6 +46,16 @@ interface TradeSide {
   user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
 }
 
+interface CounterOfferChainEntry {
+  id: string;
+  status: string;
+  initiatorUserId: string;
+  recipientUserId: string;
+  createdAt: string;
+  initiatorName: string;
+  recipientName: string;
+}
+
 interface ActiveTrade {
   id: string;
   status: TradeStatus;
@@ -54,6 +65,9 @@ interface ActiveTrade {
   matchedTradePostId?: string | null;
   initiatorUserId: string;
   recipientUserId: string;
+  counterOfferToId?: string | null;
+  counterOfferId?: string | null;
+  counterOfferChain?: CounterOfferChainEntry[];
   initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
   recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
   sides: TradeSide[];
@@ -737,6 +751,80 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
   );
 }
 
+function NegotiationHistory({
+  chain,
+  currentTradeId,
+  currentInitiatorName,
+  currentRecipientName,
+  currentStatus,
+}: {
+  chain: CounterOfferChainEntry[];
+  currentTradeId: string;
+  currentInitiatorName: string;
+  currentRecipientName: string;
+  currentStatus: TradeStatus;
+}) {
+  const statusColors: Record<string, string> = {
+    countered: "text-blue-400",
+    cancelled: "text-red-400",
+    completed: "text-green-400",
+    accepted: "text-green-400",
+    pending: "text-yellow-400",
+  };
+
+  // Build full timeline: ancestors + current trade
+  const entries = [
+    ...chain.map((entry) => ({
+      id: entry.id,
+      label: `${entry.initiatorName} → ${entry.recipientName}`,
+      status: entry.status,
+      isCurrent: false,
+    })),
+    {
+      id: currentTradeId,
+      label: `${currentInitiatorName} → ${currentRecipientName}`,
+      status: currentStatus,
+      isCurrent: true,
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-medium">Negotiation History</h3>
+      <div className="space-y-1">
+        {entries.map((entry, i) => (
+          <div key={entry.id} className="flex items-center gap-2 text-xs">
+            <span className={cn(
+              "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold border shrink-0",
+              entry.isCurrent
+                ? "bg-primary border-primary text-primary-foreground"
+                : "border-muted-foreground/30 text-muted-foreground"
+            )}>
+              {i + 1}
+            </span>
+            {entry.isCurrent ? (
+              <span className="font-medium">{entry.label}</span>
+            ) : (
+              <a
+                href={`/active-trades/${entry.id}`}
+                className="hover:underline text-muted-foreground hover:text-foreground"
+              >
+                {entry.label}
+              </a>
+            )}
+            <span className={cn("capitalize", statusColors[entry.status] ?? "text-muted-foreground")}>
+              {entry.status}
+            </span>
+            {entry.isCurrent && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">current</Badge>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const CHECK_TRANSFERS_COOLDOWN_MS = 10_000;
 
 export default function ActiveTradePage({
@@ -750,6 +838,7 @@ export default function ActiveTradePage({
   const lastCheckRef = useRef<number>(0);
   const [checkCooldown, setCheckCooldown] = useState(0);
   const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [counterOfferOpen, setCounterOfferOpen] = useState(false);
 
   const { data: trade, isLoading } = useQuery<ActiveTrade>({
     queryKey: ["active-trade", id],
@@ -961,9 +1050,14 @@ export default function ActiveTradePage({
             {isParticipant && (
               <div className="flex gap-2">
                 {isRecipient && trade.status === "pending" && (
-                  <Button size="sm" onClick={handleAccept}>
-                    Accept
-                  </Button>
+                  <>
+                    <Button size="sm" onClick={handleAccept}>
+                      Accept
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setCounterOfferOpen(true)}>
+                      Counter-Offer
+                    </Button>
+                  </>
                 )}
                 {canCancel && (
                   <Button size="sm" variant="outline" onClick={handleCancel}>
@@ -1132,6 +1226,19 @@ export default function ActiveTradePage({
             </div>
           )}
 
+          {trade.status === "countered" && trade.counterOfferId && (
+            <div className="rounded-md border border-blue-500/30 bg-blue-950/20 px-4 py-3 flex items-center justify-between gap-3">
+              <p className="text-sm">This trade was countered.</p>
+              <a
+                href={`/active-trades/${trade.counterOfferId}`}
+                className="text-sm font-medium text-blue-400 hover:text-blue-300 flex items-center gap-1 shrink-0"
+              >
+                View counter-offer
+                <ArrowRightIcon className="h-3 w-3" />
+              </a>
+            </div>
+          )}
+
           {isParticipant && userId && (
             <>
               <Separator />
@@ -1179,8 +1286,32 @@ export default function ActiveTradePage({
               )}
             </p>
           )}
+          {/* Negotiation History Chain */}
+          {trade.counterOfferChain && trade.counterOfferChain.length > 0 && (
+            <>
+              <Separator />
+              <NegotiationHistory
+                chain={trade.counterOfferChain}
+                currentTradeId={trade.id}
+                currentInitiatorName={trade.initiator.cosmoNickname ?? trade.initiator.name}
+                currentRecipientName={trade.recipient.cosmoNickname ?? trade.recipient.name}
+                currentStatus={trade.status}
+              />
+            </>
+          )}
         </CardContent>
       </Card>
+
+      {/* Counter-Offer Dialog */}
+      {isRecipient && trade.status === "pending" && (
+        <CounterOfferDialog
+          open={counterOfferOpen}
+          onOpenChange={setCounterOfferOpen}
+          tradeId={trade.id}
+          mySides={recipientSides}
+          theirSides={initiatorSides}
+        />
+      )}
     </div>
   );
 }

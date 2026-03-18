@@ -38,12 +38,17 @@ export async function GET() {
         columns: { id: true, name: true, image: true },
         with: { cosmoAccount: { columns: { nickname: true } } },
       },
+      counterOffers: {
+        columns: { id: true },
+      },
     },
     orderBy: [desc(activeTrade.updatedAt)],
   });
 
   const mapped = trades.map((t) => ({
     ...t,
+    counterOfferId: t.counterOffers?.[0]?.id ?? null,
+    counterOffers: undefined,
     initiator: {
       ...t.initiator,
       cosmoNickname: t.initiator.cosmoAccount?.nickname ?? null,

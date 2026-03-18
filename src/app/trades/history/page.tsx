@@ -24,6 +24,7 @@ interface HistoryTrade {
   updatedAt: string;
   initiatorUserId: string;
   recipientUserId: string;
+  counterOfferId?: string | null;
   initiator: { id: string; name: string; cosmoNickname?: string | null };
   recipient: { id: string; name: string; cosmoNickname?: string | null };
 }
@@ -78,26 +79,35 @@ export default function TradeHistoryPage() {
             const isRecipient = trade.recipientUserId === userId;
             const otherUser = isRecipient ? trade.initiator : trade.recipient;
             return (
-              <Link
-                key={trade.id}
-                href={`/active-trades/${trade.id}`}
-                className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Badge
-                    variant={statusVariant[trade.status]}
-                    className="capitalize shrink-0"
-                  >
-                    {trade.status}
-                  </Badge>
-                  <span className="text-sm truncate">
-                    Trade #{trade.id} with {otherUser.cosmoNickname ?? otherUser.name}
+              <div key={trade.id} className="rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                <Link
+                  href={`/active-trades/${trade.id}`}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Badge
+                      variant={statusVariant[trade.status]}
+                      className="capitalize shrink-0"
+                    >
+                      {trade.status}
+                    </Badge>
+                    <span className="text-sm truncate">
+                      Trade #{trade.id} with {otherUser.cosmoNickname ?? otherUser.name}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {new Date(trade.updatedAt).toLocaleDateString()}
                   </span>
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {new Date(trade.updatedAt).toLocaleDateString()}
-                </span>
-              </Link>
+                </Link>
+                {trade.status === "countered" && trade.counterOfferId && (
+                  <Link
+                    href={`/active-trades/${trade.counterOfferId}`}
+                    className="text-xs text-blue-400 hover:text-blue-300 mt-1 ml-[calc(var(--spacing)*3+4rem)] block"
+                  >
+                    → View counter-offer
+                  </Link>
+                )}
+              </div>
             );
           })}
         </div>
