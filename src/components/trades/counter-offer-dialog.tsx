@@ -13,11 +13,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
+import { ObjektUserPicker } from "@/components/objekt/objekt-user-picker";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { Trash2, Plus, Minus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Plus, Minus } from "lucide-react";
 
 interface TradeSide {
   id: number;
@@ -38,6 +37,8 @@ interface Props {
   mySides: TradeSide[];
   // Other party's sides from the original trade (what they would send)
   theirSides: TradeSide[];
+  // Cosmo wallet address of the other party
+  theirAddress: string;
 }
 
 function formatLabel(item: { collectionNo?: string | null; member?: string | null; collectionId: string; serial?: number | null }) {
@@ -71,6 +72,7 @@ export function CounterOfferDialog({
   tradeId,
   mySides,
   theirSides,
+  theirAddress,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -81,8 +83,6 @@ export function CounterOfferDialog({
   );
 
   // "Their objekts" = what the counter-offerer wants from the other party
-  // These are pre-filled from the original trade and can be removed but not added
-  // (we don't have access to the other user's full inventory)
   const [theirSelected, setTheirSelected] = useState<ObjektEntry[]>(() =>
     theirSides.map(sideToObjektEntry)
   );
@@ -90,14 +90,6 @@ export function CounterOfferDialog({
   // Track original items to show diff
   const originalMyIds = new Set(mySides.map((s) => s.objektId));
   const originalTheirIds = new Set(theirSides.map((s) => s.objektId));
-
-  function handleRemoveTheir(objekt: ObjektEntry) {
-    setTheirSelected((prev) =>
-      prev.filter((h) =>
-        objekt.serial != null ? h.serial !== objekt.serial : h.collectionId !== objekt.collectionId
-      )
-    );
-  }
 
   async function handleSubmit() {
     if (mySelected.length === 0 || theirSelected.length === 0) return;
@@ -167,8 +159,9 @@ export function CounterOfferDialog({
   // Compute diff for display
   const myAdded = mySelected.filter((o) => !originalMyIds.has(o.objektId!));
   const myRemoved = mySides.filter((s) => !mySelected.some((o) => o.objektId === s.objektId));
+  const theirAdded = theirSelected.filter((o) => !originalTheirIds.has(o.objektId!));
   const theirRemoved = theirSides.filter((s) => !theirSelected.some((o) => o.objektId === s.objektId));
-  const hasChanges = myAdded.length > 0 || myRemoved.length > 0 || theirRemoved.length > 0;
+  const hasChanges = myAdded.length > 0 || myRemoved.length > 0 || theirAdded.length > 0 || theirRemoved.length > 0;
 
   const ratioLabel =
     mySelected.length > 0 && theirSelected.length > 0
@@ -181,7 +174,7 @@ export function CounterOfferDialog({
         <DialogHeader>
           <DialogTitle>Counter-Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
-            Modify the trade proposal. You can change which objekts you send and remove objekts you want from the other party.
+            Modify the trade proposal. You can change which objekts you send and browse the other party&apos;s inventory to pick what you want.
           </DialogDescription>
         </DialogHeader>
 
@@ -212,52 +205,19 @@ export function CounterOfferDialog({
             <p className="text-sm font-medium mb-2">
               You want from them{theirSelected.length > 0 ? ` (${theirSelected.length})` : ""}
             </p>
-            <p className="text-xs text-muted-foreground mb-2">
-              Remove items you no longer want. Items from the original offer are shown below.
-            </p>
-            {theirSelected.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4 border rounded-md">
-                No items selected. Add items from the original trade or keep at least one.
-              </p>
-            ) : (
-              <div className="border rounded-md divide-y">
-                {theirSelected.map((objekt) => {
-                  const isOriginal = originalTheirIds.has(objekt.objektId!);
-                  return (
-                    <div
-                      key={objekt.objektId ?? objekt.collectionId}
-                      className="flex items-center justify-between px-3 py-2 text-sm"
-                    >
-                      <span>
-                        {objekt.member && (
-                          <span className="text-muted-foreground">{objekt.member} </span>
-                        )}
-                        <span className="font-mono">{objekt.collectionNo || objekt.collectionId}</span>
-                        {objekt.serial != null && (
-                          <span className="text-muted-foreground ml-1">
-                            #{String(objekt.serial).padStart(5, "0")}
-                          </span>
-                        )}
-                      </span>
-                      <span className="flex items-center gap-2">
-                        {isOriginal && (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                            original
-                          </Badge>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTheir(objekt)}
-                          className="text-red-500/80 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <ObjektUserPicker
+              address={theirAddress}
+              selected={theirSelected}
+              onSelect={(o) => setTheirSelected((prev) => [...prev, o])}
+              onDeselect={(o) =>
+                setTheirSelected((prev) =>
+                  prev.filter((h) =>
+                    o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId
+                  )
+                )
+              }
+              maxSelections={10}
+            />
           </div>
 
           {/* Diff summary */}
@@ -277,6 +237,12 @@ export function CounterOfferDialog({
                     <div key={`rm-my-${s.objektId}`} className="flex items-center gap-1.5 text-red-500">
                       <Minus className="w-3 h-3" />
                       <span>You send: {formatLabel(s)}</span>
+                    </div>
+                  ))}
+                  {theirAdded.map((o) => (
+                    <div key={`add-their-${o.objektId}`} className="flex items-center gap-1.5 text-green-500">
+                      <Plus className="w-3 h-3" />
+                      <span>You want: {formatLabel(o)}</span>
                     </div>
                   ))}
                   {theirRemoved.map((s) => (

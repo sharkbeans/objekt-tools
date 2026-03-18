@@ -55,7 +55,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Rate limit: 10 requests per 60 seconds
+  // Rate limit: 10 requests per 60 seconds (general)
   const rateLimitKey = `rate-limit:initiate:${session.user.id}`;
   const attempts = await redis.incr(rateLimitKey);
   if (attempts === 1) {
@@ -69,6 +69,31 @@ export async function POST(
   }
 
   const { id: originalTradeId } = await params;
+
+  // Load the original trade early so we can use it for pair rate limiting
+  const [originalTrade] = await db
+    .select()
+    .from(activeTrade)
+    .where(eq(activeTrade.id, originalTradeId))
+    .limit(1);
+
+  if (!originalTrade) {
+    return NextResponse.json({ error: "Trade not found" }, { status: 404 });
+  }
+
+  // Per-pair rate limit: max 3 counter-offers per hour between the same two users
+  const sortedPair = [session.user.id, originalTrade.initiatorUserId].sort().join(":");
+  const pairRateLimitKey = `rate-limit:counter:${sortedPair}`;
+  const pairAttempts = await redis.incr(pairRateLimitKey);
+  if (pairAttempts === 1) {
+    await redis.expire(pairRateLimitKey, 3600);
+  }
+  if (pairAttempts > 3) {
+    return NextResponse.json(
+      { error: "Counter-offer limit between you and this user reached (max 3 per hour). Try again later." },
+      { status: 429 }
+    );
+  }
 
   const body = await request.json();
   const { myObjekts, theirObjekts } = body as {
@@ -94,17 +119,6 @@ export async function POST(
     if (!o.objektId) {
       return NextResponse.json({ error: "All requested objekts must have an objektId. Please select a specific serial." }, { status: 400 });
     }
-  }
-
-  // Load the original trade
-  const [originalTrade] = await db
-    .select()
-    .from(activeTrade)
-    .where(eq(activeTrade.id, originalTradeId))
-    .limit(1);
-
-  if (!originalTrade) {
-    return NextResponse.json({ error: "Trade not found" }, { status: 404 });
   }
 
   // Caller must be the recipient of the original trade
@@ -157,6 +171,42 @@ export async function POST(
     return NextResponse.json({ error: "Other party has no linked Cosmo account" }, { status: 422 });
   }
 
+  // Load original trade sides for diff summary in notification
+  const originalSides = await db.query.activeTradeSide.findMany({
+    where: eq(activeTradeSide.activeTradeId, originalTradeId),
+  });
+
+  function formatObjektLabel(o: { member?: string | null; collectionNo?: string | null; collectionId: string }) {
+    return o.member && o.collectionNo ? `${o.member} ${o.collectionNo}` : o.collectionId;
+  }
+
+  // Compute diff: what changed between original and counter-offer
+  // "my" objekts in the counter-offer = what counter-offerer sends (was recipient's side in original)
+  // "their" objekts in the counter-offer = what they want from the other party (was initiator's side in original)
+  const originalRecipientObjektIds = new Set(
+    originalSides.filter((s) => s.userId === session.user.id).map((s) => s.objektId)
+  );
+  const originalInitiatorObjektIds = new Set(
+    originalSides.filter((s) => s.userId === originalTrade.initiatorUserId).map((s) => s.objektId)
+  );
+
+  const diffParts: string[] = [];
+  const addedMy = myObjekts.filter((o) => !originalRecipientObjektIds.has(o.objektId));
+  const removedMy = originalSides
+    .filter((s) => s.userId === session.user.id && !myObjekts.some((o) => o.objektId === s.objektId));
+  const addedTheir = theirObjekts.filter((o) => !originalInitiatorObjektIds.has(o.objektId));
+  const removedTheir = originalSides
+    .filter((s) => s.userId === originalTrade.initiatorUserId && !theirObjekts.some((o) => o.objektId === s.objektId));
+
+  for (const o of addedMy) diffParts.push(`+${formatObjektLabel(o)}`);
+  for (const s of removedMy) diffParts.push(`-${formatObjektLabel(s)}`);
+  for (const o of addedTheir) diffParts.push(`+${formatObjektLabel(o)} (wanted)`);
+  for (const s of removedTheir) diffParts.push(`-${formatObjektLabel(s)} (wanted)`);
+
+  const diffSummary = diffParts.length > 0
+    ? ` Changes: ${diffParts.slice(0, 4).join(", ")}${diffParts.length > 4 ? ` +${diffParts.length - 4} more` : ""}`
+    : "";
+
   // Create the counter-offer in a transaction
   const result = await db.transaction(async (tx) => {
     // Race condition protection: re-verify original trade is still pending inside tx
@@ -178,6 +228,7 @@ export async function POST(
 
     // Create new counter-offer trade
     // Roles flip: current user (was recipient) becomes initiator, original initiator becomes recipient
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const [newTrade] = await tx
       .insert(activeTrade)
       .values({
@@ -188,6 +239,7 @@ export async function POST(
         initiatorUserId: session.user.id,
         recipientUserId: originalTrade.initiatorUserId,
         status: "pending",
+        expiresAt,
       })
       .returning();
 
@@ -229,7 +281,7 @@ export async function POST(
     await tx.insert(tradeNotification).values({
       userId: originalTrade.initiatorUserId,
       tradePostId: null,
-      message: `${session.user.name} sent you a counter-offer for Active Trade #${originalTradeId}.`,
+      message: `${session.user.name} sent you a counter-offer for Active Trade #${originalTradeId}.${diffSummary}`,
     });
 
     return newTrade;

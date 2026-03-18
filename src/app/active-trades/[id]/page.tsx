@@ -16,7 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon } from "lucide-react";
+import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon } from "lucide-react";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 
@@ -68,6 +68,7 @@ interface ActiveTrade {
   counterOfferToId?: string | null;
   counterOfferId?: string | null;
   counterOfferChain?: CounterOfferChainEntry[];
+  expiresAt?: string | null;
   initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
   recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
   sides: TradeSide[];
@@ -825,6 +826,33 @@ function NegotiationHistory({
   );
 }
 
+function ExpiryCountdown({ expiresAt }: { expiresAt: string }) {
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    function update() {
+      const diff = new Date(expiresAt).getTime() - Date.now();
+      if (diff <= 0) {
+        setRemaining("Expired");
+        return;
+      }
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      setRemaining(`${hours}h ${minutes}m`);
+    }
+    update();
+    const interval = setInterval(update, 60_000);
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <ClockIcon className="h-3 w-3" />
+      <span>Expires in {remaining}</span>
+    </div>
+  );
+}
+
 const CHECK_TRANSFERS_COOLDOWN_MS = 10_000;
 
 export default function ActiveTradePage({
@@ -1046,6 +1074,14 @@ export default function ActiveTradePage({
                 {new Date(trade.createdAt).toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit" })}
                 {" GMT"}
               </CardDescription>
+              {trade.status === "pending" && trade.expiresAt && (
+                <ExpiryCountdown expiresAt={trade.expiresAt} />
+              )}
+              {trade.counterOfferChain && trade.counterOfferChain.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Counter-offer round {trade.counterOfferChain.length + 1}/10
+                </p>
+              )}
             </div>
             {isParticipant && (
               <div className="flex gap-2">
@@ -1310,6 +1346,7 @@ export default function ActiveTradePage({
           tradeId={trade.id}
           mySides={recipientSides}
           theirSides={initiatorSides}
+          theirAddress={initiatorSides[0]?.address ?? ""}
         />
       )}
     </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { activeTrade, tradeNotification, tradePost } from "@/lib/db/schema";
-import { and, eq, lt, inArray } from "drizzle-orm";
+import { and, eq, lt, inArray, isNotNull } from "drizzle-orm";
 
 // GET /api/cron/expire-trades
 // Called by Vercel Cron once per day.
@@ -69,8 +69,41 @@ export async function GET(request: NextRequest) {
     await db.insert(tradeNotification).values(tradeNotifications);
   }
 
+  // 3. Cancel pending counter-offers past their expiresAt deadline
+  const expiredCounterOffers = await db.query.activeTrade.findMany({
+    where: and(
+      eq(activeTrade.status, "pending"),
+      isNotNull(activeTrade.expiresAt),
+      lt(activeTrade.expiresAt, now),
+    ),
+    columns: { id: true, initiatorUserId: true, recipientUserId: true },
+  });
+
+  if (expiredCounterOffers.length > 0) {
+    const expiredCoIds = expiredCounterOffers.map((t) => t.id);
+
+    await db
+      .update(activeTrade)
+      .set({ status: "cancelled", updatedAt: now })
+      .where(inArray(activeTrade.id, expiredCoIds));
+
+    const coNotifications = expiredCounterOffers.flatMap((t) => [
+      {
+        userId: t.initiatorUserId,
+        message: `Your counter-offer (Active Trade #${t.id}) expired after 48 hours with no response.`,
+      },
+      {
+        userId: t.recipientUserId,
+        message: `A counter-offer (Active Trade #${t.id}) expired after 48 hours — it was not accepted in time.`,
+      },
+    ]);
+
+    await db.insert(tradeNotification).values(coNotifications);
+  }
+
   return NextResponse.json({
     expiredPosts: expiredPosts.length,
     expiredTrades: expiredTrades.length,
+    expiredCounterOffers: expiredCounterOffers.length,
   });
 }
