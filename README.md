@@ -21,6 +21,7 @@ Cosmo account linking uses a simple status message verification flow — you set
 - Support for "any" filters (e.g., "any member", "any season")
 - Trade notifications and history
 - Automatic trade expiration and availability checks if objekts are unavailable for trade
+- Counter-offer system: recipients can propose modified terms instead of accepting or rejecting outright
 
 ## Project
 
@@ -163,7 +164,7 @@ The client auto-refreshes the token on 401/403 responses. If you leave the token
 - **tradePost**: User trade listings
 - **tradePostHave**: Objekts offered (with serial numbers)
 - **tradePostWant**: Objekts requested (supports "any" filters)
-- **activeTrade**: Agreed trades between two users
+- **activeTrade**: Agreed trades between two users; `counterOfferToId` links back to the trade it countered; status includes `"countered"` for superseded offers
 - **activeTradeSide**: Individual objekts being exchanged per side
 - **tradeNotification**: User notifications for trade events
 
@@ -173,10 +174,37 @@ The client auto-refreshes the token on 401/403 responses. If you leave the token
 2. Create trade post with specific objekts to offer and request
 3. System finds users who have what you want and want what you have
 4. Send a Trade Offer with matched party
-5. Counterparty accepts trade
-6. Both parties transfer objekts via Cosmo app
-7. System detects and verifies transfers
-8. Trade completes when both sides confirmed
+5. Counterparty accepts, declines, or **counter-offers** with modified terms
+6. Negotiation continues until both parties agree or one side cancels
+7. Both parties transfer objekts via Cosmo app
+8. System detects and verifies transfers
+9. Trade completes when both sides confirmed
+
+## Counter-Offer System
+
+Either party can propose modified trade terms instead of accepting or rejecting outright. Counter-offers create a linked negotiation chain where each round produces a new active trade.
+
+### How It Works
+
+- The **recipient** of a pending trade can click "Counter-Offer" to open a modification dialog
+- The dialog **pre-fills** both sides with the existing trade's objekts as a starting point
+- The recipient can add/remove objekts on either side and sees a **diff view** before submitting
+- On submit, the original trade is marked `"countered"` and a new `pending` trade is created, linked via `counterOfferToId`
+- **Roles flip**: the original initiator becomes the new recipient and can accept, cancel, or counter back
+- Each trade in the chain links to the previous via `counterOfferToId`, forming a full negotiation history viewable on the trade page
+
+### Guard Rails
+
+| Guard | Detail |
+|---|---|
+| **Chain depth limit** | Max 10 rounds per negotiation |
+| **Per-pair rate limit** | Max 3 counter-offers per hour between the same two users |
+| **48-hour expiry** | Pending counter-offers expire automatically |
+| **Race condition protection** | Original trade status is re-verified inside the DB transaction before the counter is created |
+| **Blocking trade guard** | Users with unsent objekts in an accepted trade cannot create counter-offers |
+| **Recipient-only** | Only the current recipient can counter; initiators are explicitly blocked (403) |
+| **Cosmo account required** | Both parties must have a linked wallet |
+| **Diff summary in notification** | The notification to the other party includes a brief summary of what changed (e.g. `+Jiu A203, -SuA B105`) |
 
 ## Trade Safety Measures
 
@@ -229,6 +257,7 @@ Detects when a party sends objekts before the trade has been accepted:
 - `GET /api/active-trades/[id]` - Get active trade details
 - `POST /api/active-trades/[id]/accept` - Accept trade offer
 - `POST /api/active-trades/[id]/cancel` - Cancel active trade
+- `POST /api/active-trades/[id]/counter-offer` - Propose a counter-offer (recipient only)
 - `POST /api/active-trades/[id]/check-transfers` - Verify transfers
 - `GET /api/active-trades/history` - View completed/cancelled trades
 
