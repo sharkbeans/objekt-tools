@@ -99,9 +99,10 @@ export default function ProfilePage() {
 
   const activeTrades: TradeHistoryEntry[] = activeData?.trades ?? [];
   const historyTrades: TradeHistoryEntry[] = historyData?.trades ?? [];
-  const allTrades = [...activeTrades, ...historyTrades].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  const seenIds = new Set<number>();
+  const allTrades = [...activeTrades, ...historyTrades]
+    .filter((t) => !seenIds.has(t.id) && seenIds.add(t.id))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   const userId = session.user?.id;
 
