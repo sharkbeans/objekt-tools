@@ -253,30 +253,7 @@ export default function TradeDetailPage({
   const haveImages = useObjektImages(trade?.haves ?? []);
   const wantImages = useObjektImages(trade?.wants ?? []);
 
-  // Check if user has objekts matching the trade's wants (for wantsOnly restriction)
   const isOwnerEarly = session?.user?.id === trade?.user?.id;
-  const { data: canOfferData } = useQuery({
-    queryKey: ["wants-only-check", id],
-    queryFn: async () => {
-      const res = await fetch("/api/objekts/owned");
-      if (!res.ok) return { canOffer: false };
-      const { results } = await res.json() as { results: { collectionId: string; member: string; season: string; class: string; artist: string }[] };
-      const wants: TradeItem[] = trade.wants;
-      const canOffer = results.some((objekt) =>
-        wants.some((want) => {
-          if (!want.isAny) return objekt.collectionId === want.collectionId;
-          if (want.member && objekt.member !== want.member) return false;
-          if (want.season && objekt.season !== want.season) return false;
-          if (want.class && objekt.class !== want.class) return false;
-          if (want.artist && objekt.artist !== want.artist) return false;
-          return true;
-        })
-      );
-      return { canOffer };
-    },
-    enabled: !!trade && !isOwnerEarly && !!session && !!trade?.wantsOnly && trade?.status === "open",
-  });
-  const wantsOnlyBlocked = !!trade?.wantsOnly && canOfferData !== undefined && !canOfferData.canOffer;
 
   async function handleClose() {
     try {
@@ -438,16 +415,17 @@ export default function TradeDetailPage({
       {/* Non-owner: Send a Trade Offer directly against this post (no own trade post required) */}
       {!isOwner && session && trade.status === "open" && (
         <Card>
-          <CardContent className="py-4">
+          <CardContent className="py-4 space-y-3">
+            {trade.wantsOnly && (
+              <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-sm text-yellow-200">
+                This trader only accepts offers that include at least one objekt from their want list. Your offer will be rejected if none of your objekts match.
+              </div>
+            )}
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                {wantsOnlyBlocked
-                  ? "You don't have any objekts matching this trade's want list."
-                  : trade.wantsOnly
-                    ? "This trade only accepts offers that match the want list."
-                    : "Interested? Initiate a trade with this poster."}
+                Interested? Initiate a trade with this poster.
               </p>
-              <Button size="sm" onClick={() => setDirectInitiateOpen(true)} disabled={!!wantsOnlyBlocked}>
+              <Button size="sm" onClick={() => setDirectInitiateOpen(true)}>
                 Send a Trade Offer
               </Button>
             </div>

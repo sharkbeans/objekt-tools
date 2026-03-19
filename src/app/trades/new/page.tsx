@@ -111,6 +111,12 @@ export default function NewTradePage() {
   const [wantsOnly, setWantsOnly] = useState(false);
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
 
+  // Auto-disable wantsOnly if all wants are removed
+  const hasWants = wants.length > 0 || anyWants.length > 0;
+  useEffect(() => {
+    if (!hasWants && wantsOnly) setWantsOnly(false);
+  }, [hasWants, wantsOnly]);
+
   // Artist is only used to narrow the member dropdown, never stored as a want chip
   const [anyArtist, setAnyArtist] = useState<string[]>([]);
 
@@ -350,6 +356,25 @@ export default function NewTradePage() {
                 }
                 filters={filters}
               />
+              <Separator className="mt-4" />
+              <div className="flex items-center justify-between pt-3">
+                <div>
+                  <Label htmlFor="wants-only">Wants only</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {wants.length === 0 && anyWants.length === 0
+                      ? "Add at least one want item to enable this option"
+                      : wantsOnly
+                        ? "You will only accept offers containing at least one item from your want list"
+                        : "You will receive trade offers from anyone, regardless of your want list"}
+                  </p>
+                </div>
+                <Switch
+                  id="wants-only"
+                  checked={wantsOnly}
+                  onCheckedChange={setWantsOnly}
+                  disabled={wants.length === 0 && anyWants.length === 0}
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -511,16 +536,6 @@ export default function NewTradePage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="wants-only">Wants only</Label>
-              <p className="text-xs text-muted-foreground">
-                Only accept offers containing items from your want list
-              </p>
-            </div>
-            <Switch id="wants-only" checked={wantsOnly} onCheckedChange={setWantsOnly} />
           </div>
 
           <div className="flex gap-4 items-center">

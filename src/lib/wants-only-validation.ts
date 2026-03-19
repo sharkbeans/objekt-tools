@@ -31,10 +31,9 @@ export function validateWantsOnly(
   objekts: OfferedObjekt[],
   wants: TradeWant[]
 ): { valid: true } | { valid: false } {
-  for (const objekt of objekts) {
-    if (!wants.some((want) => objektMatchesWant(objekt, want))) {
-      return { valid: false };
-    }
-  }
-  return { valid: true };
+  // At least one offered objekt must match a want
+  const hasMatch = objekts.some((objekt) =>
+    wants.some((want) => objektMatchesWant(objekt, want))
+  );
+  return hasMatch ? { valid: true } : { valid: false };
 }
