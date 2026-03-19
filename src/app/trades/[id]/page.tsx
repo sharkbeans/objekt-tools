@@ -253,6 +253,31 @@ export default function TradeDetailPage({
   const haveImages = useObjektImages(trade?.haves ?? []);
   const wantImages = useObjektImages(trade?.wants ?? []);
 
+  // Check if user has objekts matching the trade's wants (for wantsOnly restriction)
+  const isOwnerEarly = session?.user?.id === trade?.user?.id;
+  const { data: canOfferData } = useQuery({
+    queryKey: ["wants-only-check", id],
+    queryFn: async () => {
+      const res = await fetch("/api/objekts/owned");
+      if (!res.ok) return { canOffer: false };
+      const { results } = await res.json() as { results: { collectionId: string; member: string; season: string; class: string; artist: string }[] };
+      const wants: TradeItem[] = trade.wants;
+      const canOffer = results.some((objekt) =>
+        wants.some((want) => {
+          if (!want.isAny) return objekt.collectionId === want.collectionId;
+          if (want.member && objekt.member !== want.member) return false;
+          if (want.season && objekt.season !== want.season) return false;
+          if (want.class && objekt.class !== want.class) return false;
+          if (want.artist && objekt.artist !== want.artist) return false;
+          return true;
+        })
+      );
+      return { canOffer };
+    },
+    enabled: !!trade && !isOwnerEarly && !!session && !!trade?.wantsOnly && trade?.status === "open",
+  });
+  const wantsOnlyBlocked = !!trade?.wantsOnly && canOfferData !== undefined && !canOfferData.canOffer;
+
   async function handleClose() {
     try {
       const res = await fetch(`/api/trades/${id}`, {
@@ -326,33 +351,7 @@ export default function TradeDetailPage({
     );
   }
 
-  const isOwner = session?.user?.id === trade.user?.id;
-
-  // Check if user has objekts matching the trade's wants (for wantsOnly restriction)
-  const { data: canOfferData } = useQuery({
-    queryKey: ["wants-only-check", id],
-    queryFn: async () => {
-      const res = await fetch("/api/objekts/owned");
-      if (!res.ok) return { canOffer: false };
-      const { results } = await res.json() as { results: { collectionId: string; member: string; season: string; class: string; artist: string }[] };
-      const wants: TradeItem[] = trade.wants;
-      // Check if at least one owned objekt matches any want
-      const canOffer = results.some((objekt) =>
-        wants.some((want) => {
-          if (!want.isAny) return objekt.collectionId === want.collectionId;
-          if (want.member && objekt.member !== want.member) return false;
-          if (want.season && objekt.season !== want.season) return false;
-          if (want.class && objekt.class !== want.class) return false;
-          if (want.artist && objekt.artist !== want.artist) return false;
-          return true;
-        })
-      );
-      return { canOffer };
-    },
-    enabled: !!trade && !isOwner && !!session && trade.wantsOnly && trade.status === "open",
-  });
-
-  const wantsOnlyBlocked = trade?.wantsOnly && canOfferData && !canOfferData.canOffer;
+  const isOwner = isOwnerEarly;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
