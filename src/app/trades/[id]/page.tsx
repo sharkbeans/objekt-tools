@@ -130,7 +130,7 @@ function ObjektImages({
           if (item.isAny) {
             return (
               <div key={item.id} className="flex flex-col items-center gap-1">
-                <div className="w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
+                <div className="w-20 aspect-80/123 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
                   {anyWantLabel(item)}
                 </div>
               </div>
@@ -145,7 +145,7 @@ function ObjektImages({
               className="w-20 h-auto rounded-md border"
             />
           ) : (
-            <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+            <div className="w-20 aspect-80/123 rounded-md border bg-muted animate-pulse" />
           );
           return (
             <div key={item.id} className="flex flex-col items-center gap-1">
