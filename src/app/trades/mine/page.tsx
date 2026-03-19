@@ -80,24 +80,43 @@ function TradeNotifications() {
 
   return (
     <div className="space-y-2">
-      {notifications.map((n: { id: number; message: string; createdAt: string }) => (
-        <div
-          key={n.id}
-          className="banner-warning flex items-center justify-between gap-3"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
-            <p className="text-sm">{n.message}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => dismiss.mutate([n.id])}
-            className="shrink-0 text-muted-foreground hover:text-foreground"
+      {notifications.map((n: { id: number; message: string; createdAt: string }) => {
+        const activeTradeMatch = n.message.match(/Active Trade #([a-zA-Z0-9]+)/);
+        const activeTradeId = activeTradeMatch?.[1] ?? null;
+
+        const inner = (
+          <>
+            <div className="flex items-center gap-3 min-w-0">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
+              <p className="text-sm">{n.message}</p>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); dismiss.mutate([n.id]); }}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <XIcon className="h-4 w-4" />
+            </button>
+          </>
+        );
+
+        return activeTradeId ? (
+          <Link
+            key={n.id}
+            href={`/active-trades/${activeTradeId}`}
+            className="banner-warning flex items-center justify-between gap-3"
           >
-            <XIcon className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
+            {inner}
+          </Link>
+        ) : (
+          <div
+            key={n.id}
+            className="banner-warning flex items-center justify-between gap-3"
+          >
+            {inner}
+          </div>
+        );
+      })}
       {notifications.length > 1 && (
         <button
           type="button"

@@ -20,6 +20,16 @@ import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface TradeItem {
   id: number;
@@ -219,6 +229,7 @@ export default function TradeDetailPage({
   } | null>(null);
   // For non-owners: direct initiation (no own trade post required)
   const [directInitiateOpen, setDirectInitiateOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<"close" | "delete" | null>(null);
 
   const { data: trade, isLoading: tradeLoading } = useQuery({
     queryKey: ["trade", id],
@@ -343,10 +354,10 @@ export default function TradeDetailPage({
             </div>
             {isOwner && trade.status === "open" && (
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleClose}>
+                <Button variant="outline" size="sm" onClick={() => setConfirmDialog("close")}>
                   Close Trade
                 </Button>
-                <Button variant="destructive" size="sm" onClick={handleDelete}>
+                <Button variant="destructive" size="sm" onClick={() => setConfirmDialog("delete")}>
                   Delete
                 </Button>
               </div>
@@ -453,6 +464,42 @@ export default function TradeDetailPage({
           </Card>
         )}
       </div>
+
+      {/* Close trade confirmation */}
+      <AlertDialog open={confirmDialog === "close"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close this trade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This trade will no longer be visible to others or accept new offers. You can&apos;t reopen it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleClose(); }}>
+              Close trade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete trade confirmation */}
+      <AlertDialog open={confirmDialog === "delete"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this trade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the trade post. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleDelete(); }}>
+              Delete trade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Owner-side: initiate dialog (owner picking from their matches) */}
       {initiateTarget && (

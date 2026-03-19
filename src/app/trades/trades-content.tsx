@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
-import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
+import { TradeFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 
@@ -72,8 +72,21 @@ function buildParams(filters: TradeFilterState, page: number) {
   return p;
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
+}
+
 export function TradesContent() {
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
   const [filters, setFilters] = useState<TradeFilterState>(() =>
     filtersFromSearchParams(searchParams),
   );
@@ -84,6 +97,28 @@ export function TradesContent() {
     setPage(1);
   }, []);
 
+  return (
+    <>
+      <ActiveTradesBanner />
+      <TradeFilters filters={filters} onChange={handleFiltersChange} />
+      {isMobile ? (
+        <InfiniteTradesList filters={filters} />
+      ) : (
+        <PaginatedTradesList filters={filters} page={page} onPageChange={setPage} />
+      )}
+    </>
+  );
+}
+
+function PaginatedTradesList({
+  filters,
+  page,
+  onPageChange,
+}: {
+  filters: TradeFilterState;
+  page: number;
+  onPageChange: (p: number) => void;
+}) {
   const { data, isLoading } = useQuery({
     queryKey: ["trades", filters, page],
     queryFn: async () => {
@@ -97,38 +132,120 @@ export function TradesContent() {
   const limit: number = data?.limit ?? 12;
   const totalPages = Math.ceil(total / limit);
 
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <TradeCardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  if (trades.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        No trades found. Be the first to post one!
+      </div>
+    );
+  }
+
   return (
     <>
-      <ActiveTradesBanner />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {trades.map((trade: any) => (
+          <TradeCard key={trade.id} trade={trade} />
+        ))}
+      </div>
+      <TradePagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        limit={limit}
+        onPageChange={onPageChange}
+      />
+    </>
+  );
+}
 
-      <TradeFilters filters={filters} onChange={handleFiltersChange} />
+function InfiniteTradesList({ filters }: { filters: TradeFilterState }) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["trades-infinite", filters],
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await fetch(`/api/trades?${buildParams(filters, pageParam as number)}`);
+      return res.json();
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const { page, limit, total } = lastPage;
+      const totalPages = Math.ceil(total / limit);
+      return page < totalPages ? page + 1 : undefined;
+    },
+  });
+
+  // IntersectionObserver — fire fetchNextPage when sentinel enters viewport
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const allTrades = data?.pages.flatMap((p) => p.trades) ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <TradeCardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  if (allTrades.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        No trades found. Be the first to post one!
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4">
+      {allTrades.map((trade: any) => (
+        <TradeCard key={trade.id} trade={trade} />
+      ))}
+      {/* Sentinel for IntersectionObserver */}
+      <div ref={sentinelRef} className="h-1" />
+      {isFetchingNextPage && (
+        <div className="grid grid-cols-1 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
             <TradeCardSkeleton key={i} />
           ))}
         </div>
-      ) : trades.length > 0 ? (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {trades.map((trade: any) => (
-              <TradeCard key={trade.id} trade={trade} />
-            ))}
-          </div>
-          <TradePagination
-            page={page}
-            totalPages={totalPages}
-            total={total}
-            limit={limit}
-            onPageChange={setPage}
-          />
-        </>
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">
-          No trades found. Be the first to post one!
-        </div>
       )}
-    </>
+      {!hasNextPage && allTrades.length > 0 && (
+        <p className="text-center text-xs text-muted-foreground py-4">
+          You&apos;ve seen all trades
+        </p>
+      )}
+    </div>
   );
 }

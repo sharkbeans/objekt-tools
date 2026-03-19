@@ -106,10 +106,15 @@ export function ActiveTradesBanner() {
             : "border-border hover:bg-muted/50"
         );
 
+        const isCounterOffer = !!trade.counterOfferToId;
+        const linkHref = isCounterOffer
+          ? `/active-trades/${trade.counterOfferToId}`
+          : `/active-trades/${trade.id}`;
+
         return (
           <div key={trade.id} className={bannerClass}>
             <Link
-              href={`/active-trades/${trade.id}`}
+              href={linkHref}
               className="flex flex-1 items-center justify-between gap-3 min-w-0"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -117,7 +122,9 @@ export function ActiveTradesBanner() {
                   {statusLabel[trade.status as TradeStatus]}
                 </Badge>
                 <span className="text-sm truncate">
-                  Trade #{trade.id} with {otherUser.cosmoNickname ?? otherUser.name}
+                  {isCounterOffer
+                    ? `${otherUser.cosmoNickname ?? otherUser.name} sent a counter-offer for Trade #${trade.counterOfferToId}`
+                    : `Trade #${trade.id} with ${otherUser.cosmoNickname ?? otherUser.name}`}
                 </span>
               </div>
               {needsAccept && (

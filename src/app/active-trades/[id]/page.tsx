@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { Fragment, use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth-client";
 import { toast } from "sonner";
@@ -19,6 +19,16 @@ import { Input } from "@/components/ui/input";
 import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon } from "lucide-react";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type SideStatus = "pending" | "sent" | "confirmed";
 type TradeStatus =
@@ -132,15 +142,25 @@ function currentStepIndex(status: TradeStatus): number {
 }
 
 function ProgressStepper({ status }: { status: TradeStatus }) {
+  if (["countered", "cancelled", "disputed"].includes(status)) return null;
   const active = currentStepIndex(status);
   return (
-    <div className="flex items-center gap-0 w-full">
-      {STEPS.map((step, i) => (
-        <div key={step.label} className="flex items-center flex-1 last:flex-none">
-          <div className="flex flex-col items-center gap-1">
+    <div className="w-full space-y-1">
+      {/* Row 1: circles with flex-1 connectors between them */}
+      <div className="flex items-center w-full">
+        {STEPS.map((step, i) => (
+          <Fragment key={step.label}>
+            {i > 0 && (
+              <div
+                className={cn(
+                  "flex-1 h-0.5 mx-1.25 transition-colors",
+                  i <= active ? "bg-foreground" : "bg-muted-foreground/30"
+                )}
+              />
+            )}
             <div
               className={cn(
-                "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 transition-colors",
+                "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 transition-colors shrink-0",
                 i <= active
                   ? "bg-primary border-primary text-primary-foreground"
                   : "border-muted-foreground/30 text-muted-foreground"
@@ -148,6 +168,13 @@ function ProgressStepper({ status }: { status: TradeStatus }) {
             >
               {i < active ? "✓" : i + 1}
             </div>
+          </Fragment>
+        ))}
+      </div>
+      {/* Row 2: labels aligned under each circle via matching justify-between + w-7 */}
+      <div className="flex justify-between w-full">
+        {STEPS.map((step, i) => (
+          <div key={step.label} className="w-7 flex justify-center">
             <span
               className={cn(
                 "text-[10px] text-center leading-tight whitespace-nowrap",
@@ -157,16 +184,8 @@ function ProgressStepper({ status }: { status: TradeStatus }) {
               {step.label}
             </span>
           </div>
-          {i < STEPS.length - 1 && (
-            <div
-              className={cn(
-                "h-0.5 flex-1 mx-1 mt-[-12px] transition-colors",
-                i < active ? "bg-primary" : "bg-muted-foreground/20"
-              )}
-            />
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -459,7 +478,7 @@ interface TradeMessage {
   user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
 }
 
-function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
+function TradeChat({ tradeId, userId, readOnly }: { tradeId: string; userId: string; readOnly?: boolean }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -548,18 +567,22 @@ function TradeChat({ tradeId, userId }: { tradeId: string; userId: string }) {
           );
         })}
       </div>
-      <form onSubmit={handleSend} className="flex gap-2">
-        <Input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Type a message..."
-          maxLength={500}
-          className="flex-1"
-        />
-        <Button type="submit" size="icon" disabled={!message.trim() || sending}>
-          <SendIcon className="h-4 w-4" />
-        </Button>
-      </form>
+      {readOnly ? (
+        <p className="text-xs text-muted-foreground text-center py-1">Chat is closed for this trade.</p>
+      ) : (
+        <form onSubmit={handleSend} className="flex gap-2">
+          <Input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Type a message..."
+            maxLength={500}
+            className="flex-1"
+          />
+          <Button type="submit" size="icon" disabled={!message.trim() || sending}>
+            <SendIcon className="h-4 w-4" />
+          </Button>
+        </form>
+      )}
     </div>
   );
 }
@@ -867,6 +890,7 @@ export default function ActiveTradePage({
   const [checkCooldown, setCheckCooldown] = useState(0);
   const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [counterOfferOpen, setCounterOfferOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<"accept" | "decline" | "cancel" | null>(null);
 
   const { data: trade, isLoading } = useQuery<ActiveTrade>({
     queryKey: ["active-trade", id],
@@ -1049,7 +1073,7 @@ export default function ActiveTradePage({
     accepted: "Accepted",
     partial: "Ongoing",
     completed: "Completed",
-    cancelled: "Cancelled",
+    cancelled: trade.sides.every((s) => s.status === "pending") ? "Declined" : "Cancelled",
     countered: "Countered",
     disputed: "Disputed",
   };
@@ -1058,7 +1082,7 @@ export default function ActiveTradePage({
     <div className="max-w-2xl mx-auto space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 Active Trade #{trade.id}
@@ -1084,21 +1108,27 @@ export default function ActiveTradePage({
               )}
             </div>
             {isParticipant && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {isRecipient && trade.status === "pending" && (
                   <>
-                    <Button size="sm" onClick={handleAccept}>
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white border-0" onClick={() => setConfirmDialog("accept")}>
                       Accept
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => setCounterOfferOpen(true)}>
+                    <Button size="sm" variant="outline" className="border-blue-700/60 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300" onClick={() => setCounterOfferOpen(true)}>
                       Counter-Offer
                     </Button>
                   </>
                 )}
                 {canCancel && (
-                  <Button size="sm" variant="outline" onClick={handleCancel}>
-                    Cancel
-                  </Button>
+                  trade.status === "pending" ? (
+                    <Button size="sm" variant="outline" className="border-red-800/60 text-red-400 hover:bg-red-900/30 hover:text-red-300" onClick={() => setConfirmDialog("decline")}>
+                      Decline
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="destructive" onClick={() => setConfirmDialog("cancel")}>
+                      Cancel
+                    </Button>
+                  )
                 )}
               </div>
             )}
@@ -1251,22 +1281,42 @@ export default function ActiveTradePage({
           )}
 
           {trade.status === "countered" && trade.counterOfferId && (
-            <div className="rounded-md border border-blue-500/30 bg-blue-950/20 px-4 py-3 flex items-center justify-between gap-3">
-              <p className="text-sm">This trade was countered.</p>
-              <a
-                href={`/active-trades/${trade.counterOfferId}`}
-                className="text-sm font-medium text-blue-400 hover:text-blue-300 flex items-center gap-1 shrink-0"
-              >
-                View counter-offer
-                <ArrowRightIcon className="h-3 w-3" />
-              </a>
+            <div className="space-y-4">
+              <div className="rounded-md border border-blue-500/40 bg-blue-950/30 px-4 py-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <ArrowUpDownIcon className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <p className="text-sm font-semibold text-blue-300">{isInitiator ? `${recipientName} sent a counter-offer` : "You sent a counter-offer"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isInitiator
+                        ? `${recipientName} modified the trade contents and sent a new offer. This trade is now closed — view the counter-offer to accept, decline, or counter back.`
+                        : "You modified the trade contents and sent a new offer. This trade is now closed — awaiting their response."}
+                    </p>
+                  </div>
+                </div>
+                <a href={`/active-trades/${trade.counterOfferId}`}>
+                  <Button size="sm" className="w-full bg-blue-600/80 hover:bg-blue-600 text-white">
+                    View Counter-Offer
+                    <ArrowRightIcon className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </a>
+              </div>
+              {trade.counterOfferChain && trade.counterOfferChain.length > 0 && (
+                <NegotiationHistory
+                  chain={trade.counterOfferChain}
+                  currentTradeId={trade.id}
+                  currentInitiatorName={trade.initiator.cosmoNickname ?? trade.initiator.name}
+                  currentRecipientName={trade.recipient.cosmoNickname ?? trade.recipient.name}
+                  currentStatus={trade.status}
+                />
+              )}
             </div>
           )}
 
           {isParticipant && userId && (
             <>
               <Separator />
-              <TradeChat tradeId={trade.id} userId={userId} />
+              <TradeChat tradeId={trade.id} userId={userId} readOnly={!isActive} />
             </>
           )}
 
@@ -1310,8 +1360,8 @@ export default function ActiveTradePage({
               )}
             </p>
           )}
-          {/* Negotiation History Chain */}
-          {trade.counterOfferChain && trade.counterOfferChain.length > 0 && (
+          {/* Negotiation History Chain — shown inline with countered banner above; only show here for other statuses */}
+          {trade.counterOfferChain && trade.counterOfferChain.length > 0 && trade.status !== "countered" && (
             <>
               <Separator />
               <NegotiationHistory
@@ -1325,6 +1375,60 @@ export default function ActiveTradePage({
           )}
         </CardContent>
       </Card>
+
+      {/* Accept confirmation */}
+      <AlertDialog open={confirmDialog === "accept"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Accept this trade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Both parties will be committed to sending their objekts. This cannot be undone once accepted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { setConfirmDialog(null); handleAccept(); }}>
+              Accept trade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Decline confirmation */}
+      <AlertDialog open={confirmDialog === "decline"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Decline this trade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This trade will be permanently cancelled and the other party will be notified. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleCancel(); }}>
+              Decline trade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel confirmation */}
+      <AlertDialog open={confirmDialog === "cancel"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this trade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This trade is already in progress. Cancelling now may cause issues if either party has already sent their objekt. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleCancel(); }}>
+              Cancel trade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Counter-Offer Dialog */}
       {isRecipient && trade.status === "pending" && (
