@@ -1161,18 +1161,6 @@ export default function ActiveTradePage({
             </div>
           )}
 
-          {trade.status === "pending" && isParticipant && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCheckTransfers}
-              disabled={checkCooldown > 0}
-              className="w-full"
-            >
-              {checkCooldown > 0 ? `Check Transfers (${checkCooldown}s)` : "Check Transfers"}
-            </Button>
-          )}
-
           {isParticipant ? (
             <div className="space-y-2">
               <div className="space-y-2">
@@ -1188,7 +1176,7 @@ export default function ActiveTradePage({
               </div>
               <div className="flex items-center gap-2 text-muted-foreground py-0.5">
                 <div className="flex-1 h-px bg-border" />
-                <ArrowUpDownIcon className="h-3 w-3" />
+                <ArrowUpDownIcon className="h-6 w-6" />
                 <div className="flex-1 h-px bg-border" />
               </div>
               <div className="space-y-2">

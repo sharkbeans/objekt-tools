@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { TradesContent } from "./trades-content";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function TradesPage() {
   return (
@@ -8,6 +10,20 @@ export default function TradesPage() {
         <h1 className="text-2xl font-bold">Browse Trades</h1>
         <p className="text-muted-foreground">Find someone to trade Objekts with</p>
       </div>
+
+          <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">My Trades</h1>
+          <p className="text-muted-foreground">
+            Manage your trade posts and see matches
+          </p>
+        </div>
+        <Button asChild size="sm">
+          <Link href="/trades/new">New Trade</Link>
+        </Button>
+      </div>
+    </div>
 
 <Suspense>
         <TradesContent />
