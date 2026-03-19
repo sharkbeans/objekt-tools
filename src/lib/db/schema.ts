@@ -91,6 +91,7 @@ export const tradePost = pgTable("trade_post", {
     .references(() => user.id, { onDelete: "cascade" }),
   description: text("description"),
   status: text("status").notNull().default("open"),
+  wantsOnly: boolean("wants_only").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [

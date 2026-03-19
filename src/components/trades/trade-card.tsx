@@ -65,6 +65,7 @@ interface TradeCardProps {
     description?: string | null;
     status: string;
     createdAt: string;
+    wantsOnly?: boolean;
     user: { id: string; name: string; image?: string | null };
     cosmoNickname?: string | null;
     haves: TradeItem[];
@@ -179,9 +180,9 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
                 </Badge>
               )}
             </div>
-            {/* TODO: trade type tag — add a `type` field to trade_post (e.g. "WTT" | "WTS" | "WTB")
-                and render a badge here. WTT = want to trade, WTS = want to sell, WTB = want to buy.
-                Will need a DB migration, updates to the new trade form, and filter support. */}
+            {trade.wantsOnly && (
+              <Badge variant="outline" className="text-[10px]">Wants only</Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">

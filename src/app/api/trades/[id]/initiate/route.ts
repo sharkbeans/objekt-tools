@@ -10,12 +10,16 @@ import {
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getBlockingTradeId } from "@/lib/trade-guards";
+import { validateWantsOnly } from "@/lib/wants-only-validation";
 
 interface SideInput {
   objektId: string;
   collectionId: string;
   collectionNo?: string;
   member?: string;
+  season?: string;
+  class?: string;
+  artist?: string;
   serial?: number;
   thumbnailUrl?: string;
 }
@@ -107,6 +111,7 @@ export async function POST(
       eq(tradePost.id, matchedTradePostId),
       eq(tradePost.status, "open"),
     ),
+    with: { wants: true },
   });
 
   if (!matchedPost) {
@@ -116,6 +121,17 @@ export async function POST(
   // Don't allow trading with yourself
   if (matchedPost.userId === session.user.id) {
     return NextResponse.json({ error: "Cannot Send a Trade Offer with yourself" }, { status: 400 });
+  }
+
+  // Validate wants-only restriction
+  if (matchedPost.wantsOnly) {
+    const result = validateWantsOnly(myObjekts, matchedPost.wants);
+    if (!result.valid) {
+      return NextResponse.json(
+        { error: "This trade only accepts offers matching its want list. One or more of your objekts don't match." },
+        { status: 400 }
+      );
+    }
   }
 
   // Get initiator's cosmo address

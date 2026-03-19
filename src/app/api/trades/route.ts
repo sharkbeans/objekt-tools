@@ -93,10 +93,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { description, haves, wants } = body as {
+  const { description, haves, wants, wantsOnly } = body as {
     description?: string;
     haves: TradeItemInput[];
     wants: TradeItemInput[];
+    wantsOnly?: boolean;
   };
 
   if (!haves?.length || !wants?.length) {
@@ -142,6 +143,7 @@ export async function POST(request: NextRequest) {
     .values({
       userId: session.user.id,
       description: description ?? null,
+      wantsOnly: wantsOnly ?? false,
     })
     .returning();
 

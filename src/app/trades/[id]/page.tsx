@@ -328,6 +328,32 @@ export default function TradeDetailPage({
 
   const isOwner = session?.user?.id === trade.user?.id;
 
+  // Check if user has objekts matching the trade's wants (for wantsOnly restriction)
+  const { data: canOfferData } = useQuery({
+    queryKey: ["wants-only-check", id],
+    queryFn: async () => {
+      const res = await fetch("/api/objekts/owned");
+      if (!res.ok) return { canOffer: false };
+      const { results } = await res.json() as { results: { collectionId: string; member: string; season: string; class: string; artist: string }[] };
+      const wants: TradeItem[] = trade.wants;
+      // Check if at least one owned objekt matches any want
+      const canOffer = results.some((objekt) =>
+        wants.some((want) => {
+          if (!want.isAny) return objekt.collectionId === want.collectionId;
+          if (want.member && objekt.member !== want.member) return false;
+          if (want.season && objekt.season !== want.season) return false;
+          if (want.class && objekt.class !== want.class) return false;
+          if (want.artist && objekt.artist !== want.artist) return false;
+          return true;
+        })
+      );
+      return { canOffer };
+    },
+    enabled: !!trade && !isOwner && !!session && trade.wantsOnly && trade.status === "open",
+  });
+
+  const wantsOnlyBlocked = trade?.wantsOnly && canOfferData && !canOfferData.canOffer;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Trade details */}
@@ -342,6 +368,11 @@ export default function TradeDetailPage({
                 >
                   {trade.status}
                 </Badge>
+                {trade.wantsOnly && (
+                  <Badge variant="outline" className="text-xs">
+                    Wants only
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription className="mt-1">
                 by {trade.user.name}
@@ -411,9 +442,13 @@ export default function TradeDetailPage({
           <CardContent className="py-4">
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                Interested? Initiate a trade with this poster.
+                {wantsOnlyBlocked
+                  ? "You don't have any objekts matching this trade's want list."
+                  : trade.wantsOnly
+                    ? "This trade only accepts offers that match the want list."
+                    : "Interested? Initiate a trade with this poster."}
               </p>
-              <Button size="sm" onClick={() => setDirectInitiateOpen(true)}>
+              <Button size="sm" onClick={() => setDirectInitiateOpen(true)} disabled={!!wantsOnlyBlocked}>
                 Send a Trade Offer
               </Button>
             </div>

@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
@@ -107,6 +108,7 @@ export default function NewTradePage() {
   const [anyWants, setAnyWants] = useState<AnyWant[]>([]);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [wantsOnly, setWantsOnly] = useState(false);
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
 
   // Artist is only used to narrow the member dropdown, never stored as a want chip
@@ -159,6 +161,7 @@ export default function NewTradePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           description: description || undefined,
+          wantsOnly,
           haves: haves.map((o) => ({
             collectionId: o.collectionId,
             collectionNo: o.collectionNo,
@@ -508,6 +511,16 @@ export default function NewTradePage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="wants-only">Wants only</Label>
+              <p className="text-xs text-muted-foreground">
+                Only accept offers containing items from your want list
+              </p>
+            </div>
+            <Switch id="wants-only" checked={wantsOnly} onCheckedChange={setWantsOnly} />
           </div>
 
           <div className="flex gap-4 items-center">

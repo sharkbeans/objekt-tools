@@ -7,15 +7,20 @@ import {
   activeTradeSide,
   cosmoAccount,
   tradeNotification,
+  tradePost,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getBlockingTradeId } from "@/lib/trade-guards";
+import { validateWantsOnly } from "@/lib/wants-only-validation";
 
 interface SideInput {
   objektId: string;
   collectionId: string;
   collectionNo?: string;
   member?: string;
+  season?: string;
+  class?: string;
+  artist?: string;
   serial?: number;
   thumbnailUrl?: string;
 }
@@ -134,6 +139,23 @@ export async function POST(
   // Original trade must be pending
   if (originalTrade.status !== "pending") {
     return NextResponse.json({ error: "Can only counter-offer a pending trade" }, { status: 400 });
+  }
+
+  // Validate wants-only restriction on the original initiator's trade post
+  if (originalTrade.tradePostId) {
+    const initiatorPost = await db.query.tradePost.findFirst({
+      where: eq(tradePost.id, originalTrade.tradePostId),
+      with: { wants: true },
+    });
+    if (initiatorPost?.wantsOnly) {
+      const result = validateWantsOnly(myObjekts, initiatorPost.wants);
+      if (!result.valid) {
+        return NextResponse.json(
+          { error: "The other party's trade only accepts offers matching their want list." },
+          { status: 400 }
+        );
+      }
+    }
   }
 
   // Block if user has unsent objekts in an accepted trade
