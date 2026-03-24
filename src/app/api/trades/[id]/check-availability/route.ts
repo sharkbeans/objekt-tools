@@ -9,12 +9,27 @@ import {
 } from "@/lib/db/schema";
 import { objekts, collections } from "@/lib/db/indexer-schema";
 import { eq, and, inArray } from "drizzle-orm";
+import { redis } from "@/lib/redis";
+import { requireSession } from "@/lib/auth-server";
 
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: tradeId } = await params;
+
+  // Rate limit: 10 requests per 60 seconds (requires auth)
+  try {
+    const session = await requireSession();
+    const rateLimitKey = `rate-limit:check-avail:${session.user.id}`;
+    const attempts = await redis.incr(rateLimitKey);
+    if (attempts === 1) await redis.expire(rateLimitKey, 60);
+    if (attempts > 10) {
+      return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+    }
+  } catch {
+    // Allow unauthenticated access but without rate limiting by user
+  }
 
   // Get the trade with haves and owner info
   const trade = await db.query.tradePost.findFirst({

@@ -10,6 +10,7 @@ import {
 import { eq, desc, asc, count } from "drizzle-orm";
 import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
 import { getBlockingTradeId } from "@/lib/trade-guards";
+import { redis } from "@/lib/redis";
 
 interface TradeItemInput {
   collectionId: string;
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
 
   // Pagination
-  const page = Number(params.get("page") ?? "1");
+  const page = Math.max(1, Math.floor(Number(params.get("page") ?? "1")) || 1);
   const limit = Math.min(Number(params.get("limit") ?? "12"), 50);
   const offset = (page - 1) * limit;
 
@@ -92,6 +93,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Rate limit: 10 requests per 60 seconds
+  const rateLimitKey = `rate-limit:create-trade:${session.user.id}`;
+  const attempts = await redis.incr(rateLimitKey);
+  if (attempts === 1) await redis.expire(rateLimitKey, 60);
+  if (attempts > 10) {
+    return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+  }
+
   const body = await request.json();
   const { description, haves, wants, wantsOnly } = body as {
     description?: string;
@@ -99,6 +108,10 @@ export async function POST(request: NextRequest) {
     wants: TradeItemInput[];
     wantsOnly?: boolean;
   };
+
+  if (description && description.length > 500) {
+    return NextResponse.json({ error: "Description must be 500 characters or less" }, { status: 400 });
+  }
 
   if (!haves?.length || !wants?.length) {
     return NextResponse.json(

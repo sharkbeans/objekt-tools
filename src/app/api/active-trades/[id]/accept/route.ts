@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
+import { redis } from "@/lib/redis";
 import { activeTrade, activeTradeSide, tradePost, tradeTransferLog, tradeNotification } from "@/lib/db/schema";
 import { objekts } from "@/lib/db/indexer-schema";
 import { eq, and, inArray, ne, or } from "drizzle-orm";
@@ -17,6 +18,14 @@ export async function POST(
     session = await requireSession();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 5 requests per 60 seconds
+  const rateLimitKey = `rate-limit:accept:${session.user.id}`;
+  const attempts = await redis.incr(rateLimitKey);
+  if (attempts === 1) await redis.expire(rateLimitKey, 60);
+  if (attempts > 5) {
+    return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
   }
 
   const { id: tradeId } = await params;
@@ -142,10 +151,12 @@ export async function POST(
       await tx.insert(tradeNotification).values([
         {
           userId: trade.initiatorUserId,
+          activeTradeId: tradeId,
           message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
         },
         {
           userId: trade.recipientUserId,
+          activeTradeId: tradeId,
           message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
         },
       ]);
@@ -176,10 +187,12 @@ export async function POST(
           const notifications = siblingTrades.flatMap((t) => [
             {
               userId: t.initiatorUserId,
+              activeTradeId: t.id,
               message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
             },
             {
               userId: t.recipientUserId,
+              activeTradeId: t.id,
               message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
             },
           ]);

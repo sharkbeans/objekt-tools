@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { MenuIcon, XIcon } from "lucide-react";
+import { MenuIcon, XIcon, BellIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function useMatchCount() {
@@ -30,9 +30,24 @@ function useMatchCount() {
   return matchData?.count ?? 0;
 }
 
+function useUnreadNotificationCount() {
+  const { data: session } = useSession();
+  const { data } = useQuery({
+    queryKey: ["notification-unread-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications/unread-count");
+      return res.json();
+    },
+    enabled: !!session,
+    refetchInterval: 30000,
+  });
+  return data?.count ?? 0;
+}
+
 export function Navbar() {
   const { data: session } = useSession();
   const matchCount = useMatchCount();
+  const unreadCount = useUnreadNotificationCount();
 
   return (
     <>
@@ -83,6 +98,20 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
+            {session && (
+              <Link
+                href="/notifications"
+                className="relative p-2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Notifications"
+              >
+                <BellIcon className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </Link>
+            )}
             {session ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -129,7 +158,7 @@ export function Navbar() {
       </header>
 
       {/* Mobile navbar */}
-      <MobileNav session={session} matchCount={matchCount} />
+      <MobileNav session={session} matchCount={matchCount} unreadCount={unreadCount} />
     </>
   );
 }
@@ -137,9 +166,11 @@ export function Navbar() {
 function MobileNav({
   session,
   matchCount,
+  unreadCount,
 }: {
   session: ReturnType<typeof useSession>["data"];
   matchCount: number;
+  unreadCount: number;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -215,6 +246,18 @@ function MobileNav({
           {session && (
             <MobileNavLink href="/trades/new" onClick={() => setOpen(false)}>
               New Trade
+            </MobileNavLink>
+          )}
+          {session && (
+            <MobileNavLink href="/notifications" onClick={() => setOpen(false)}>
+              <span className="flex items-center gap-2">
+                Notifications
+                {unreadCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </span>
             </MobileNavLink>
           )}
           {!session && (

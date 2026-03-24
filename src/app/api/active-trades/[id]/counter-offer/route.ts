@@ -303,6 +303,7 @@ export async function POST(
     await tx.insert(tradeNotification).values({
       userId: originalTrade.initiatorUserId,
       tradePostId: null,
+      activeTradeId: newTrade.id,
       message: `${session.user.name} sent you a counter-offer for Active Trade #${originalTradeId}.${diffSummary}`,
     });
 

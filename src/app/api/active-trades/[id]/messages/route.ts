@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeMessage } from "@/lib/db/schema";
+import { redis } from "@/lib/redis";
+import { activeTrade, tradeMessage, tradeNotification } from "@/lib/db/schema";
 import { eq, and, asc, desc, notInArray } from "drizzle-orm";
 
 const MAX_MESSAGES = 10;
@@ -80,6 +81,14 @@ export async function POST(
     return NextResponse.json({ error: "Trade not found" }, { status: 404 });
   }
 
+  // Rate limit: 1 message per 10 seconds
+  const msgRateKey = `rate-limit:message:${session.user.id}`;
+  const lastSent = await redis.get(msgRateKey);
+  if (lastSent) {
+    return NextResponse.json({ error: "Please wait before sending another message." }, { status: 429 });
+  }
+  await redis.set(msgRateKey, "1", "EX", 10);
+
   const body = await request.json();
   const content = typeof body.content === "string" ? body.content.trim() : "";
   if (!content || content.length > MAX_CONTENT_LENGTH) {
@@ -95,6 +104,27 @@ export async function POST(
     userId: session.user.id,
     content,
   });
+
+  // Notify the other party (only if no undismissed message notification for this trade exists)
+  const otherUserId = trade.initiatorUserId === session.user.id
+    ? trade.recipientUserId
+    : trade.initiatorUserId;
+
+  const existingMsgNotification = await db.query.tradeNotification.findFirst({
+    where: and(
+      eq(tradeNotification.userId, otherUserId),
+      eq(tradeNotification.activeTradeId, tradeId),
+      eq(tradeNotification.dismissed, false),
+    ),
+  });
+
+  if (!existingMsgNotification) {
+    await db.insert(tradeNotification).values({
+      userId: otherUserId,
+      activeTradeId: tradeId,
+      message: `${session.user.name} sent a message in Active Trade #${tradeId}.`,
+    });
+  }
 
   // Enforce the 10-message cap: keep only the newest MAX_MESSAGES, delete the rest
   const keepMessages = await db.query.tradeMessage.findMany({

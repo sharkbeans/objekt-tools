@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
-import { eq, inArray, and } from "drizzle-orm";
+import { eq, inArray, and, or } from "drizzle-orm";
 
 const CANCEL_TIMEOUT_HOURS = 24;
 
@@ -99,6 +99,27 @@ export async function POST(
           .where(inArray(tradePost.id, postIds));
       }
     }
+
+    // For any cancellation: check if either trade post has remaining active trades.
+    // If not, revert "in_trade" posts back to "open" so they aren't stuck.
+    const postIdsToCheck = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+    for (const postId of postIdsToCheck) {
+      const remainingTrade = await tx.query.activeTrade.findFirst({
+        where: and(
+          or(
+            eq(activeTrade.tradePostId, postId),
+            eq(activeTrade.matchedTradePostId, postId),
+          ),
+          inArray(activeTrade.status, ["pending", "accepted", "partial"]),
+        ),
+      });
+      if (!remainingTrade) {
+        await tx
+          .update(tradePost)
+          .set({ status: "open", updatedAt: new Date() })
+          .where(and(eq(tradePost.id, postId), eq(tradePost.status, "in_trade")));
+      }
+    }
   });
 
   const cancellerName = session.user.name;
@@ -131,10 +152,12 @@ export async function POST(
   await db.insert(tradeNotification).values([
     {
       userId: session.user.id,
+      activeTradeId: tradeId,
       message: cancellerMsg,
     },
     {
       userId: otherUserId,
+      activeTradeId: tradeId,
       message: otherMsg,
     },
   ]);

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   const params = request.nextUrl.searchParams;
-  const page = Number(params.get("page") ?? "1");
+  const page = Math.max(1, Math.floor(Number(params.get("page") ?? "1")) || 1);
   const limit = Math.min(Number(params.get("limit") ?? "12"), 50);
   const offset = (page - 1) * limit;
   const sort = params.get("sort") ?? "newest";

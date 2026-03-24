@@ -512,7 +512,11 @@ function TradeChat({ tradeId, userId, readOnly }: { tradeId: string; userId: str
         body: JSON.stringify({ content }),
       });
       if (!res.ok) {
-        toast.error("Failed to send message");
+        if (res.status === 429) {
+          toast.error("Please wait a moment before sending another message.");
+        } else {
+          toast.error("Failed to send message");
+        }
         return;
       }
       setMessage("");

@@ -7,11 +7,20 @@ import { collections } from "@/lib/db/indexer-schema";
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const q = params.get("q") || "";
+  if (q && q.length > 200) {
+    return NextResponse.json({ error: "Search query too long" }, { status: 400 });
+  }
+
   const artists = params.getAll("artist");
   const members = params.getAll("member");
   const seasons = params.getAll("season");
   const classes = params.getAll("class");
   const onOffline = params.getAll("on_offline");
+
+  const maxFilterItems = 20;
+  if (artists.length > maxFilterItems || members.length > maxFilterItems || seasons.length > maxFilterItems || classes.length > maxFilterItems) {
+    return NextResponse.json({ error: "Too many filter values" }, { status: 400 });
+  }
 
   const conditions: SQL[] = [];
 
@@ -38,8 +47,8 @@ export async function GET(request: NextRequest) {
   if (members.length) conditions.push(inArray(collections.member, members));
   if (seasons.length) conditions.push(inArray(collections.season, seasons));
   if (classes.length) conditions.push(inArray(collections.class, classes));
-  if (onOffline.length === 1) {
-    conditions.push(eq(collections.onOffline, onOffline[0] as "online" | "offline"));
+  if (onOffline.length === 1 && (onOffline[0] === "online" || onOffline[0] === "offline")) {
+    conditions.push(eq(collections.onOffline, onOffline[0]));
   }
 
   const rows = await indexer

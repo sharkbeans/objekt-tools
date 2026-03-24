@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeNotification, tradePost } from "@/lib/db/schema";
+import { activeTrade, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
 import { and, eq, lt, inArray, isNotNull } from "drizzle-orm";
 
 // GET /api/cron/expire-trades
@@ -101,9 +101,131 @@ export async function GET(request: NextRequest) {
     await db.insert(tradeNotification).values(coNotifications);
   }
 
+  // 4. Expire stale accepted/partial trades (30 days since acceptance)
+  const acceptedCutoff = new Date();
+  acceptedCutoff.setDate(acceptedCutoff.getDate() - 30);
+
+  const staleAcceptedTrades = await db.query.activeTrade.findMany({
+    where: and(
+      inArray(activeTrade.status, ["accepted", "partial"]),
+      isNotNull(activeTrade.acceptedAt),
+      lt(activeTrade.acceptedAt, acceptedCutoff),
+    ),
+    columns: { id: true, initiatorUserId: true, recipientUserId: true, tradePostId: true, matchedTradePostId: true },
+  });
+
+  if (staleAcceptedTrades.length > 0) {
+    const staleIds = staleAcceptedTrades.map((t) => t.id);
+
+    await db
+      .update(activeTrade)
+      .set({ status: "cancelled", updatedAt: now })
+      .where(inArray(activeTrade.id, staleIds));
+
+    // Revert trade posts to "open"
+    const postIdsToRevert = staleAcceptedTrades
+      .flatMap((t) => [t.tradePostId, t.matchedTradePostId])
+      .filter((id): id is string => id !== null);
+    if (postIdsToRevert.length > 0) {
+      await db
+        .update(tradePost)
+        .set({ status: "open", updatedAt: now })
+        .where(inArray(tradePost.id, postIdsToRevert));
+    }
+
+    const staleNotifications = staleAcceptedTrades.flatMap((t) => [
+      {
+        userId: t.initiatorUserId,
+        message: `Active Trade #${t.id} expired after 30 days without completion.`,
+      },
+      {
+        userId: t.recipientUserId,
+        message: `Active Trade #${t.id} expired after 30 days without completion.`,
+      },
+    ]);
+    await db.insert(tradeNotification).values(staleNotifications);
+  }
+
+  // 5. Expire trades with unrecovered wrong-recipient transfers (7 days)
+  const wrongRecipientCutoff = new Date();
+  wrongRecipientCutoff.setDate(wrongRecipientCutoff.getDate() - 7);
+
+  const wrongRecipientLogs = await db.query.tradeTransferLog.findMany({
+    where: and(
+      eq(tradeTransferLog.event, "wrong_recipient"),
+      lt(tradeTransferLog.detectedAt, wrongRecipientCutoff),
+    ),
+  });
+
+  // Filter to trades that are still active and have no corresponding "recovered" log
+  const wrongRecipientTradeIds = [...new Set(wrongRecipientLogs.map((l) => l.activeTradeId))];
+  const tradesToExpireForWrongRecipient: string[] = [];
+
+  for (const tradeIdToCheck of wrongRecipientTradeIds) {
+    // Check if trade is still active
+    const trade = await db.query.activeTrade.findFirst({
+      where: and(
+        eq(activeTrade.id, tradeIdToCheck),
+        inArray(activeTrade.status, ["accepted", "partial"]),
+      ),
+    });
+    if (!trade) continue;
+
+    // Check if the wrong-recipient objekts have been recovered
+    const wrongLogs = wrongRecipientLogs.filter((l) => l.activeTradeId === tradeIdToCheck);
+    const recoveredLogs = await db.query.tradeTransferLog.findMany({
+      where: and(
+        eq(tradeTransferLog.activeTradeId, tradeIdToCheck),
+        eq(tradeTransferLog.event, "recovered"),
+      ),
+    });
+    const recoveredObjektIds = new Set(recoveredLogs.map((l) => l.objektId));
+    const hasUnrecovered = wrongLogs.some((l) => !recoveredObjektIds.has(l.objektId));
+
+    if (hasUnrecovered) {
+      tradesToExpireForWrongRecipient.push(tradeIdToCheck);
+    }
+  }
+
+  if (tradesToExpireForWrongRecipient.length > 0) {
+    const wrongRecipientTrades = await db.query.activeTrade.findMany({
+      where: inArray(activeTrade.id, tradesToExpireForWrongRecipient),
+      columns: { id: true, initiatorUserId: true, recipientUserId: true, tradePostId: true, matchedTradePostId: true },
+    });
+
+    await db
+      .update(activeTrade)
+      .set({ status: "cancelled", updatedAt: now })
+      .where(inArray(activeTrade.id, tradesToExpireForWrongRecipient));
+
+    const wrPostIds = wrongRecipientTrades
+      .flatMap((t) => [t.tradePostId, t.matchedTradePostId])
+      .filter((id): id is string => id !== null);
+    if (wrPostIds.length > 0) {
+      await db
+        .update(tradePost)
+        .set({ status: "open", updatedAt: now })
+        .where(inArray(tradePost.id, wrPostIds));
+    }
+
+    const wrNotifications = wrongRecipientTrades.flatMap((t) => [
+      {
+        userId: t.initiatorUserId,
+        message: `Active Trade #${t.id} was cancelled because a misrouted transfer was not recovered within 7 days.`,
+      },
+      {
+        userId: t.recipientUserId,
+        message: `Active Trade #${t.id} was cancelled because a misrouted transfer was not recovered within 7 days.`,
+      },
+    ]);
+    await db.insert(tradeNotification).values(wrNotifications);
+  }
+
   return NextResponse.json({
     expiredPosts: expiredPosts.length,
     expiredTrades: expiredTrades.length,
     expiredCounterOffers: expiredCounterOffers.length,
+    expiredAcceptedTrades: staleAcceptedTrades.length,
+    expiredWrongRecipientTrades: tradesToExpireForWrongRecipient.length,
   });
 }

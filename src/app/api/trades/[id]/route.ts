@@ -65,6 +65,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Cannot modify a trade post while it is part of an active trade" }, { status: 400 });
   }
 
+  const validStatuses = ["open", "closed"] as const;
+  if (!validStatuses.includes(body.status)) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  }
+
   const [updated] = await db
     .update(tradePost)
     .set({ status: body.status, updatedAt: new Date() })

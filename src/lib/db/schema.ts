@@ -142,11 +142,13 @@ export const tradeNotification = pgTable("trade_notification", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   tradePostId: text("trade_post_id"),
+  activeTradeId: text("active_trade_id").references(() => activeTrade.id, { onDelete: "set null" }),
   message: text("message").notNull(),
   dismissed: boolean("dismissed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   index("trade_notification_user_id_idx").on(t.userId),
+  index("trade_notification_user_dismissed_idx").on(t.userId, t.dismissed),
 ]);
 
 export const cosmoToken = pgTable("cosmo_token", {

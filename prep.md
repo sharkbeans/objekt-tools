@@ -9,8 +9,8 @@
 - shadcn/ui + Radix UI, TanStack React Query v5, Zustand v5
 - Better Auth, Drizzle ORM (drizzle-kit for schema push), Sonner toasts, Lucide icons
 - Dark mode forced globally
-- DB: Neon Postgres (schema changes applied via manual SQL in Neon console)
-- No migration files for main app — schema lives in code, pushed manually
+- DB: Neon Postgres (schema changes applied manually in Neon console)
+- Migration SQL files live in `drizzle/` (e.g. `0013_p1_notifications.sql`). Always create a new numbered SQL file for any schema change. The SQL is run manually — not auto-migrated.
 
 ---
 

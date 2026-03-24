@@ -36,8 +36,8 @@ export async function PATCH(request: NextRequest) {
 
   const { ids } = (await request.json()) as { ids: number[] };
 
-  if (!ids?.length) {
-    return NextResponse.json({ error: "No notification IDs provided" }, { status: 400 });
+  if (!ids?.length || ids.length > 100) {
+    return NextResponse.json({ error: "Invalid notification IDs" }, { status: 400 });
   }
 
   await db

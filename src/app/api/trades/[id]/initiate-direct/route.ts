@@ -7,6 +7,7 @@ import {
   cosmoAccount,
   activeTrade,
   activeTradeSide,
+  tradeNotification,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getBlockingTradeId } from "@/lib/trade-guards";
@@ -198,6 +199,14 @@ export async function POST(
     );
 
     return trade;
+  });
+
+  // Notify the trade post owner that they received an offer
+  await db.insert(tradeNotification).values({
+    userId: matchedPost.userId,
+    tradePostId: matchedTradePostId,
+    activeTradeId: result.id,
+    message: `${session.user.name} sent you a trade offer on your post #${matchedTradePostId}.`,
   });
 
   return NextResponse.json({ id: result.id }, { status: 201 });
