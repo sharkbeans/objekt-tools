@@ -86,7 +86,7 @@ export async function propagateResolution(terminalTradeId: string) {
   let depth = 0;
   while (currentId && depth < MAX_DEPTH) {
     ancestorIds.push(currentId);
-    const row = await db.query.activeTrade.findFirst({
+    const row: { counterOfferToId: string | null } | undefined = await db.query.activeTrade.findFirst({
       where: eq(activeTrade.id, currentId),
       columns: { counterOfferToId: true },
     });
