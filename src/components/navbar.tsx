@@ -63,7 +63,7 @@ function useMyProfileHref() {
 
   if (!session) return "/sign-in";
   return data?.nickname
-    ? `/user/${encodeURIComponent(data.nickname)}`
+    ? `/@${encodeURIComponent(data.nickname)}`
     : "/link";
 }
 

@@ -118,7 +118,7 @@ export default function LinkCosmoPage() {
       if (!res.ok) throw new Error(data.error);
 
       toast.success(`Linked as ${data.nickname}!`);
-      router.push(`/user/${encodeURIComponent(data.nickname)}`);
+      router.push(`/@${encodeURIComponent(data.nickname)}`);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Verification failed",

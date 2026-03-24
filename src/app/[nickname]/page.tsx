@@ -107,7 +107,10 @@ export default function PublicProfilePage({
 }: {
   params: Promise<{ nickname: string }>;
 }) {
-  const { nickname } = use(params);
+  const { nickname: rawNickname } = use(params);
+  const nickname = rawNickname.startsWith("@")
+    ? rawNickname.slice(1)
+    : rawNickname;
   const [emailVisible, setEmailVisible] = useState(false);
 
   const {
