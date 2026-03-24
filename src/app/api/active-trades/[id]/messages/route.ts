@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
+import { publishTradeEvent, publishUserEvent } from "@/lib/realtime";
 import { activeTrade, tradeMessage, tradeNotification } from "@/lib/db/schema";
 import { eq, and, asc, desc, notInArray } from "drizzle-orm";
 
@@ -124,7 +125,17 @@ export async function POST(
       activeTradeId: tradeId,
       message: `${session.user.name} sent a message in Active Trade #${tradeId}.`,
     });
+    void publishUserEvent(otherUserId, "notification:new", {
+      activeTradeId: tradeId,
+      message: `${session.user.name} sent a message in Active Trade #${tradeId}.`,
+    });
   }
+
+  // Realtime: push message event so the other party's chat refreshes instantly
+  void publishTradeEvent(tradeId, "trade:message", {
+    activeTradeId: tradeId,
+    senderName: session.user.name,
+  });
 
   // Enforce the 10-message cap: keep only the newest MAX_MESSAGES, delete the rest
   const keepMessages = await db.query.tradeMessage.findMany({

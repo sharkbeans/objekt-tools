@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { activeTrade, cosmoAccount, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
 import { eq, inArray, and, or } from "drizzle-orm";
 import { issueBan, propagateResolution } from "@/lib/trade-guards";
+import { publishTradeEvent } from "@/lib/realtime";
 
 const CANCEL_TIMEOUT_HOURS = 24;
 
@@ -198,6 +199,12 @@ export async function POST(
 
   // Propagate chain resolution (cancelled = terminal state)
   await propagateResolution(tradeId);
+
+  // Realtime: push cancellation to both participants
+  void publishTradeEvent(tradeId, "trade:cancelled", {
+    activeTradeId: tradeId,
+    cancellerName: session.user.name,
+  });
 
   return NextResponse.json({ status: "cancelled" });
 }

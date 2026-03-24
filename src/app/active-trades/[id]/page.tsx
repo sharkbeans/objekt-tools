@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon } from "lucide-react";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
+import { useTradeRealtime } from "@/hooks/use-realtime";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import {
   AlertDialog,
@@ -491,7 +492,7 @@ function TradeChat({ tradeId, userId, readOnly }: { tradeId: string; userId: str
       if (!res.ok) return [];
       return res.json();
     },
-    refetchInterval: 10_000,
+    refetchInterval: 30_000, // fallback polling — realtime trade:message event handles fast updates
   });
 
   useEffect(() => {
@@ -896,6 +897,10 @@ export default function ActiveTradePage({
   const [counterOfferOpen, setCounterOfferOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<"accept" | "decline" | "cancel" | null>(null);
 
+  // Subscribe to realtime events — invalidates queries on trade updates, messages, etc.
+  // Falls back to polling intervals below if Pusher env vars are not configured.
+  useTradeRealtime(id);
+
   const { data: trade, isLoading } = useQuery<ActiveTrade>({
     queryKey: ["active-trade", id],
     queryFn: async () => {
@@ -906,7 +911,7 @@ export default function ActiveTradePage({
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (!status || status === "completed" || status === "cancelled") return false;
-      return 30_000;
+      return 60_000; // fallback polling — realtime handles fast updates
     },
   });
 
@@ -917,7 +922,7 @@ export default function ActiveTradePage({
       if (!res.ok) return [];
       return res.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000, // fallback polling
   });
 
   const preAcceptLogs = transferLogs.filter(

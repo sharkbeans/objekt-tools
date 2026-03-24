@@ -12,6 +12,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
 import { validateWantsOnly } from "@/lib/wants-only-validation";
+import { publishUserEvent } from "@/lib/realtime";
 
 interface SideInput {
   objektId: string;
@@ -210,6 +211,12 @@ export async function POST(
   await db.insert(tradeNotification).values({
     userId: matchedPost.userId,
     tradePostId: matchedTradePostId,
+    activeTradeId: result.id,
+    message: `${session.user.name} sent you a trade offer on your post #${matchedTradePostId}.`,
+  });
+
+  // Realtime: notify recipient of new offer
+  void publishUserEvent(matchedPost.userId, "notification:new", {
     activeTradeId: result.id,
     message: `${session.user.name} sent you a trade offer on your post #${matchedTradePostId}.`,
   });

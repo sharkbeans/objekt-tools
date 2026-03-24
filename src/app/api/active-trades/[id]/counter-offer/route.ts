@@ -12,6 +12,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
 import { validateWantsOnly } from "@/lib/wants-only-validation";
+import { publishTradeEvent } from "@/lib/realtime";
 
 interface SideInput {
   objektId: string;
@@ -321,6 +322,12 @@ export async function POST(
       { status: 409 }
     );
   }
+
+  // Realtime: notify both original trade channel and the new counter-offer channel
+  void publishTradeEvent(originalTradeId, "trade:counter-offer", {
+    activeTradeId: result.id,
+    originalTradeId,
+  });
 
   return NextResponse.json({ id: result.id }, { status: 201 });
 }

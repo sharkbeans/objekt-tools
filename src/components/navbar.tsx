@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { signOut, useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { useUserRealtime } from "@/hooks/use-realtime";
 
 interface CosmoLinkStatus {
   nickname: string;
@@ -72,6 +73,9 @@ export function Navbar() {
   const matchCount = useMatchCount();
   const unreadCount = useUnreadNotificationCount();
   const profileHref = useMyProfileHref();
+
+  // Subscribe to per-user realtime events so notification count updates without polling
+  useUserRealtime(session?.user?.id);
 
   return (
     <>

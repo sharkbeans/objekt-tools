@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
 import { activeTrade, activeTradeSide, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
 import { tryLiftBan, propagateResolution } from "@/lib/trade-guards";
+import { publishTradeEvent } from "@/lib/realtime";
 import { objekts, collections, transfers } from "@/lib/db/indexer-schema";
 import { eq, inArray, and, or, ne, gte } from "drizzle-orm";
 
@@ -705,6 +706,12 @@ export async function POST(
       tryLiftBan(trade.recipientUserId, tradeId),
       propagateResolution(tradeId),
     ]);
+  }
+
+  // Realtime: notify participants of transfer updates
+  if (updatedCount > 0) {
+    const event = newTradeStatus === "completed" ? "trade:completed" : "trade:transfer-detected";
+    void publishTradeEvent(tradeId, event, { activeTradeId: tradeId, count: updatedCount });
   }
 
   // Reload logs to return warning counts

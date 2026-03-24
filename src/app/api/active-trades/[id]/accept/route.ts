@@ -7,6 +7,7 @@ import { activeTrade, activeTradeSide, tradePost, tradeTransferLog, tradeNotific
 import { objekts } from "@/lib/db/indexer-schema";
 import { eq, and, inArray, ne, or } from "drizzle-orm";
 import { getBlockingTradeId, getActiveBan, propagateResolution } from "@/lib/trade-guards";
+import { publishTradeEvent } from "@/lib/realtime";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
 export async function POST(
@@ -222,6 +223,10 @@ export async function POST(
   if (finalStatus === "completed") {
     await propagateResolution(tradeId);
   }
+
+  // Realtime: push status event to both participants
+  const event = finalStatus === "completed" ? "trade:completed" : "trade:accepted";
+  void publishTradeEvent(tradeId, event, { activeTradeId: tradeId });
 
   return NextResponse.json({
     status: finalStatus,

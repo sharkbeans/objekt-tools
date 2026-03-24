@@ -473,7 +473,7 @@ ALTER TABLE active_trade ADD COLUMN resolved_by_trade_id TEXT REFERENCES active_
 
 ## P3: Lower Priority
 
-### P3.1 — WebSocket for Real-Time Updates
+### P3.1 — WebSocket for Real-Time Updates ✅ DONE
 
 **Goal:** Replace polling with push-based updates. Keep "Check Transfers" button as manual refresh (UX: user feels in control).
 
@@ -519,26 +519,39 @@ Client ←── WebSocket ──→ Next.js API Route (upgrade handler)
 
 **Recommendation:** Use **Ably or Pusher** for now (managed, serverless-compatible). Publish events from API routes via their server SDK. Subscribe from client via their client SDK. Keep "Check Transfers" button for manual refresh.
 
-**Files to create/modify:**
-- `src/lib/realtime.ts` — server-side publish helper
-- `src/hooks/use-realtime.ts` — client-side subscription hook
-- All API routes that mutate trade state — add publish calls
-- `src/app/active-trades/[id]/page.tsx` — subscribe to trade events, remove polling intervals (keep manual check button)
-- `src/components/providers.tsx` — set up realtime connection
+**Implementation (Pusher):**
+- `src/lib/realtime.ts` — server-side Pusher publish helpers (`publishTradeEvent`, `publishUserEvent`)
+- `src/hooks/use-realtime.ts` — `useTradeRealtime(tradeId)` and `useUserRealtime(userId)` hooks (singleton Pusher client, React Query invalidation on events)
+- `src/app/api/trades/[id]/initiate/route.ts` — publishes `notification:new` to recipient
+- `src/app/api/trades/[id]/initiate-direct/route.ts` — publishes `notification:new` to recipient
+- `src/app/api/active-trades/[id]/accept/route.ts` — publishes `trade:accepted` or `trade:completed`
+- `src/app/api/active-trades/[id]/cancel/route.ts` — publishes `trade:cancelled`
+- `src/app/api/active-trades/[id]/check-transfers/route.ts` — publishes `trade:transfer-detected` or `trade:completed`
+- `src/app/api/active-trades/[id]/counter-offer/route.ts` — publishes `trade:counter-offer`
+- `src/app/api/active-trades/[id]/messages/route.ts` — publishes `trade:message` + `notification:new`
+- `src/app/active-trades/[id]/page.tsx` — calls `useTradeRealtime(id)`; polling intervals increased to 60s (fallback only)
+- `src/components/navbar.tsx` — calls `useUserRealtime(userId)` for live notification count
+
+**Required env vars:**
+```
+PUSHER_APP_ID=
+PUSHER_KEY=
+PUSHER_SECRET=
+PUSHER_CLUSTER=
+NEXT_PUBLIC_PUSHER_KEY=
+NEXT_PUBLIC_PUSHER_CLUSTER=
+```
+All publish calls are fire-and-forget (`void`) — realtime is best-effort, polling remains as fallback.
 
 ---
 
-### P3.2 — Zustand
+### P3.2 — Zustand ✅ No action needed
 
 **Keep as dependency.** No conflicts found with current system. Zustand v5 is tree-shakeable — unused imports add zero bundle size. If we implement saved searches or persistent UI preferences later, Zustand + localStorage persistence will be the right tool.
 
-**No action needed.**
-
 ---
 
-### P3.3 — Tests
-
-**Skipped** per user request.
+### P3.3 — Tests ✅ Skipped per user request
 
 ---
 

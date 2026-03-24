@@ -6,12 +6,14 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  Info,
   ShieldAlert,
   XCircle,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { type ReactNode, use, useMemo, useState } from "react";
+import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,9 +110,8 @@ export default function PublicProfilePage({
   params: Promise<{ nickname: string }>;
 }) {
   const { nickname: rawNickname } = use(params);
-  const nickname = rawNickname.startsWith("@")
-    ? rawNickname.slice(1)
-    : rawNickname;
+  const decoded = decodeURIComponent(rawNickname);
+  const nickname = decoded.startsWith("@") ? decoded.slice(1) : decoded;
   const [emailVisible, setEmailVisible] = useState(false);
 
   const {
@@ -235,22 +236,31 @@ export default function PublicProfilePage({
           )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <StatCard
-              label="Completed"
-              value={profile.stats.completed}
-              icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
-            />
-            <StatCard
-              label="Cancelled"
-              value={profile.stats.cancelled}
-              icon={<XCircle className="h-4 w-4 text-muted-foreground" />}
-            />
-            <StatCard
-              label="Defaulted"
-              value={profile.stats.defaulted}
-              icon={<AlertTriangle className="h-4 w-4 text-yellow-500" />}
-            />
-            <StatCard label="Open Posts" value={profile.stats.openPosts} />
+            <TooltipPrimitive.Provider delayDuration={200}>
+              <StatCard
+                label="Completed"
+                tooltip="This user has completed trades successfully."
+                value={profile.stats.completed}
+                icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
+              />
+              <StatCard
+                label="Cancelled"
+                tooltip="This user has cancelled trades before completion."
+                value={profile.stats.cancelled}
+                icon={<XCircle className="h-4 w-4 text-muted-foreground" />}
+              />
+              <StatCard
+                label="No-shows"
+                tooltip="This user has had accepted trades where they did not send all required objekts in time."
+                value={profile.stats.defaulted}
+                icon={<AlertTriangle className="h-4 w-4 text-yellow-500" />}
+              />
+              <StatCard
+                label="Open Posts"
+                tooltip="This user has trade posts currently open to receive offers."
+                value={profile.stats.openPosts}
+              />
+            </TooltipPrimitive.Provider>
           </div>
         </CardContent>
       </Card>
@@ -373,20 +383,54 @@ export default function PublicProfilePage({
 
 function StatCard({
   label,
+  tooltip,
   value,
   icon,
 }: {
   label: string;
+  tooltip?: string;
   value: number;
   icon?: ReactNode;
 }) {
-  return (
-    <div className="rounded-lg border px-4 py-3 text-center">
-      <div className="flex items-center justify-center gap-1.5 mb-1">
-        {icon}
-        <span className="text-2xl font-bold">{value}</span>
+  if (!tooltip) {
+    return (
+      <div className="rounded-lg border px-4 py-3 text-center">
+        <div className="flex items-center justify-center gap-1.5 mb-1">
+          {icon}
+          <span className="text-2xl font-bold">{value}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">{label}</p>
       </div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-    </div>
+    );
+  }
+
+  return (
+    <TooltipPrimitive.Root>
+      <TooltipPrimitive.Trigger asChild>
+        <div
+          className="rounded-lg border px-4 py-3 text-center cursor-help"
+          tabIndex={0}
+          aria-label={`${label}: ${tooltip}`}
+        >
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            {icon}
+            <span className="text-2xl font-bold">{value}</span>
+          </div>
+          <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+            <span>{label}</span>
+            <Info className="h-3 w-3" />
+          </p>
+        </div>
+      </TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Content
+          side="top"
+          sideOffset={8}
+          className="z-50 max-w-56 rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md"
+        >
+          {tooltip}
+        </TooltipPrimitive.Content>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   );
 }
