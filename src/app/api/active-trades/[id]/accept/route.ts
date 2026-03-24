@@ -6,7 +6,7 @@ import { redis } from "@/lib/redis";
 import { activeTrade, activeTradeSide, tradePost, tradeTransferLog, tradeNotification } from "@/lib/db/schema";
 import { objekts } from "@/lib/db/indexer-schema";
 import { eq, and, inArray, ne, or } from "drizzle-orm";
-import { getBlockingTradeId } from "@/lib/trade-guards";
+import { getBlockingTradeId, getActiveBan, propagateResolution } from "@/lib/trade-guards";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
 export async function POST(
@@ -18,6 +18,11 @@ export async function POST(
     session = await requireSession();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const activeBan = await getActiveBan(session.user.id);
+  if (activeBan) {
+    return NextResponse.json({ error: "You are trade banned and cannot perform this action." }, { status: 403 });
   }
 
   // Rate limit: 5 requests per 60 seconds
@@ -211,6 +216,11 @@ export async function POST(
     finalStatus = "partial";
   } else {
     finalStatus = "accepted";
+  }
+
+  // Propagate chain resolution if trade completed immediately on accept
+  if (finalStatus === "completed") {
+    await propagateResolution(tradeId);
   }
 
   return NextResponse.json({

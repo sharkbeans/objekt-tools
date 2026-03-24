@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { activeTrade, cosmoAccount, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
 import { eq, inArray, and, or } from "drizzle-orm";
+import { issueBan, propagateResolution } from "@/lib/trade-guards";
 
 const CANCEL_TIMEOUT_HOURS = 24;
 
@@ -161,6 +162,42 @@ export async function POST(
       message: otherMsg,
     },
   ]);
+
+  // Issue bans for defaults on accepted/partial trades
+  if (["accepted", "partial"].includes(trade.status)) {
+    // Path B: I'm backing out after other party confirmed — I defaulted
+    if (iCanBackOut) {
+      const myCosmo = await db.query.cosmoAccount.findFirst({
+        where: eq(cosmoAccount.userId, session.user.id),
+        columns: { cosmoId: true, address: true },
+      });
+      const myCosmoId = myCosmo?.cosmoId?.toString() ?? myCosmo?.address ?? session.user.id;
+      await issueBan(
+        session.user.id,
+        myCosmoId,
+        tradeId,
+        `Defaulted on Active Trade #${tradeId} (backed out after partner confirmed).`
+      );
+    }
+
+    // Path C: Timeout cancel — other party didn't send after 24h, they defaulted
+    if (timeoutExpired) {
+      const otherCosmo = await db.query.cosmoAccount.findFirst({
+        where: eq(cosmoAccount.userId, otherUserId),
+        columns: { cosmoId: true, address: true },
+      });
+      const otherCosmoId = otherCosmo?.cosmoId?.toString() ?? otherCosmo?.address ?? otherUserId;
+      await issueBan(
+        otherUserId,
+        otherCosmoId,
+        tradeId,
+        `Defaulted on Active Trade #${tradeId} (did not send objekts within ${CANCEL_TIMEOUT_HOURS} hours).`
+      );
+    }
+  }
+
+  // Propagate chain resolution (cancelled = terminal state)
+  await propagateResolution(tradeId);
 
   return NextResponse.json({ status: "cancelled" });
 }

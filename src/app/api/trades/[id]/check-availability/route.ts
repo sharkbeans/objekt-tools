@@ -34,7 +34,7 @@ export async function POST(
   // Get the trade with haves and owner info
   const trade = await db.query.tradePost.findFirst({
     where: and(eq(tradePost.id, tradeId), eq(tradePost.status, "open")),
-    with: { haves: true },
+    with: { haves: { where: (h, { isNull }) => isNull(h.deletedAt) } },
   });
 
   if (!trade) {

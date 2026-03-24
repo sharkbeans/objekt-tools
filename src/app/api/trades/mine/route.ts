@@ -26,8 +26,8 @@ export async function GET(request: NextRequest) {
   const trades = await db.query.tradePost.findMany({
     where: eq(tradePost.userId, session.user.id),
     with: {
-      haves: true,
-      wants: true,
+      haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
+      wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
       user: {
         columns: { id: true, name: true, image: true },
         with: {

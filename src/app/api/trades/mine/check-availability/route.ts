@@ -33,7 +33,7 @@ export async function POST() {
       eq(tradePost.userId, session.user.id),
       eq(tradePost.status, "open"),
     ),
-    with: { haves: true },
+    with: { haves: { where: (h, { isNull }) => isNull(h.deletedAt) } },
   });
 
   if (trades.length === 0) {

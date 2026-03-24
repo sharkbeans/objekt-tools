@@ -112,6 +112,7 @@ export const tradePostHave = pgTable("trade_post_have", {
   thumbnailUrl: text("thumbnail_url"),
   serial: integer("serial"),
   objektId: text("objekt_id"),
+  deletedAt: timestamp("deleted_at"),
 }, (t) => [
   index("trade_post_have_trade_post_id_idx").on(t.tradePostId),
   index("trade_post_have_collection_id_idx").on(t.collectionId),
@@ -131,6 +132,7 @@ export const tradePostWant = pgTable("trade_post_want", {
   // ANY-filter wants: no specific objekt, just filter criteria
   isAny: boolean("is_any").notNull().default(false),
   artist: text("artist"),
+  deletedAt: timestamp("deleted_at"),
 }, (t) => [
   index("trade_post_want_trade_post_id_idx").on(t.tradePostId),
   index("trade_post_want_collection_id_idx").on(t.collectionId),
@@ -179,11 +181,13 @@ export const activeTrade = pgTable("active_trade", {
   acceptedAt: timestamp("accepted_at"),
   acceptanceBlock: integer("acceptance_block"),
   expiresAt: timestamp("expires_at"),
+  resolvedByTradeId: text("resolved_by_trade_id"),
 }, (t) => [
   index("active_trade_initiator_idx").on(t.initiatorUserId),
   index("active_trade_recipient_idx").on(t.recipientUserId),
   index("active_trade_status_idx").on(t.status),
   foreignKey({ columns: [t.counterOfferToId], foreignColumns: [t.id] }).onDelete("set null"),
+  foreignKey({ columns: [t.resolvedByTradeId], foreignColumns: [t.id] }).onDelete("set null"),
 ]);
 
 // One row per side of the trade (initiator side + recipient side)
@@ -250,6 +254,22 @@ export const tradeMessage = pgTable("trade_message", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   index("trade_message_trade_idx").on(t.activeTradeId),
+]);
+
+export const tradeBan = pgTable("trade_ban", {
+  id: serial("id").primaryKey(),
+  cosmoId: text("cosmo_id").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  activeTradeId: text("active_trade_id").references(() => activeTrade.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  liftedAt: timestamp("lifted_at"),
+  liftedReason: text("lifted_reason"),
+}, (t) => [
+  index("trade_ban_cosmo_id_idx").on(t.cosmoId),
+  index("trade_ban_user_id_idx").on(t.userId),
 ]);
 
 // ============================================================
@@ -331,6 +351,17 @@ export const tradeTransferLogRelations = relations(tradeTransferLog, ({ one }) =
     fields: [tradeTransferLog.recipientUserId],
     references: [user.id],
     relationName: "logRecipient",
+  }),
+}));
+
+export const tradeBanRelations = relations(tradeBan, ({ one }) => ({
+  user: one(user, {
+    fields: [tradeBan.userId],
+    references: [user.id],
+  }),
+  activeTrade: one(activeTrade, {
+    fields: [tradeBan.activeTradeId],
+    references: [activeTrade.id],
   }),
 }));
 

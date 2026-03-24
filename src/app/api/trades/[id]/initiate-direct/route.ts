@@ -10,7 +10,7 @@ import {
   tradeNotification,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { getBlockingTradeId } from "@/lib/trade-guards";
+import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
 import { validateWantsOnly } from "@/lib/wants-only-validation";
 
 interface SideInput {
@@ -40,6 +40,11 @@ export async function POST(
     session = await requireSession();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const activeBan = await getActiveBan(session.user.id);
+  if (activeBan) {
+    return NextResponse.json({ error: "You are trade banned and cannot perform this action." }, { status: 403 });
   }
 
   // Rate limit: 10 requests per 60 seconds
@@ -98,7 +103,7 @@ export async function POST(
       eq(tradePost.id, matchedTradePostId),
       eq(tradePost.status, "open"),
     ),
-    with: { wants: true },
+    with: { wants: { where: (w, { isNull }) => isNull(w.deletedAt) } },
   });
 
   if (!matchedPost) {

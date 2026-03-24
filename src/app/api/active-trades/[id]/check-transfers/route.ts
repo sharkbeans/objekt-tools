@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
 import { activeTrade, activeTradeSide, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { tryLiftBan, propagateResolution } from "@/lib/trade-guards";
 import { objekts, collections, transfers } from "@/lib/db/indexer-schema";
 import { eq, inArray, and, or, ne, gte } from "drizzle-orm";
 
@@ -695,6 +696,15 @@ export async function POST(
         }
       }
     }
+  }
+
+  // Auto-lift bans and propagate chain resolution if trade completed
+  if (newTradeStatus === "completed") {
+    await Promise.all([
+      tryLiftBan(trade.initiatorUserId, tradeId),
+      tryLiftBan(trade.recipientUserId, tradeId),
+      propagateResolution(tradeId),
+    ]);
   }
 
   // Reload logs to return warning counts

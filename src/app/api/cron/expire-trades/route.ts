@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { activeTrade, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, cosmoAccount, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
 import { and, eq, lt, inArray, isNotNull } from "drizzle-orm";
+import { issueBan, propagateResolution } from "@/lib/trade-guards";
 
 // GET /api/cron/expire-trades
 // Called by Vercel Cron once per day.
@@ -144,6 +145,25 @@ export async function GET(request: NextRequest) {
       },
     ]);
     await db.insert(tradeNotification).values(staleNotifications);
+
+    // Issue bans to users with unsent sides in the expired trades
+    for (const t of staleAcceptedTrades) {
+      const sides = await db.query.activeTradeSide.findMany({
+        where: and(
+          eq(activeTradeSide.activeTradeId, t.id),
+          eq(activeTradeSide.status, "pending"),
+        ),
+      });
+      const defaultedUserIds = [...new Set(sides.map((s) => s.userId))];
+      for (const userId of defaultedUserIds) {
+        const cosmo = await db.query.cosmoAccount.findFirst({
+          where: eq(cosmoAccount.userId, userId),
+          columns: { cosmoId: true, address: true },
+        });
+        const cosmoId = cosmo?.cosmoId?.toString() ?? cosmo?.address ?? userId;
+        await issueBan(userId, cosmoId, t.id, `Defaulted on Active Trade #${t.id} (expired after 30 days without completion).`);
+      }
+    }
   }
 
   // 5. Expire trades with unrecovered wrong-recipient transfers (7 days)
@@ -219,7 +239,44 @@ export async function GET(request: NextRequest) {
       },
     ]);
     await db.insert(tradeNotification).values(wrNotifications);
+
+    // Issue bans to users who sent to the wrong recipient and it wasn't recovered
+    for (const t of wrongRecipientTrades) {
+      // Find the wrong_recipient logs for this trade that aren't recovered
+      const tradeWrongLogs = wrongRecipientLogs.filter((l) => l.activeTradeId === t.id);
+      const recoveredForTrade = await db.query.tradeTransferLog.findMany({
+        where: and(
+          eq(tradeTransferLog.activeTradeId, t.id),
+          eq(tradeTransferLog.event, "recovered"),
+        ),
+      });
+      const recoveredObjIds = new Set(recoveredForTrade.map((l) => l.objektId));
+      const defaultedSenderIds = [
+        ...new Set(
+          tradeWrongLogs
+            .filter((l) => !recoveredObjIds.has(l.objektId))
+            .map((l) => l.senderUserId),
+        ),
+      ];
+      for (const userId of defaultedSenderIds) {
+        const cosmo = await db.query.cosmoAccount.findFirst({
+          where: eq(cosmoAccount.userId, userId),
+          columns: { cosmoId: true, address: true },
+        });
+        const cosmoId = cosmo?.cosmoId?.toString() ?? cosmo?.address ?? userId;
+        await issueBan(userId, cosmoId, t.id, `Defaulted on Active Trade #${t.id} (misrouted transfer not recovered within 7 days).`);
+      }
+    }
   }
+
+  // Propagate chain resolution for all cancelled trades
+  const allCancelledIds = [
+    ...expiredTrades.map((t) => t.id),
+    ...expiredCounterOffers.map((t) => t.id),
+    ...staleAcceptedTrades.map((t) => t.id),
+    ...tradesToExpireForWrongRecipient,
+  ];
+  await Promise.all(allCancelledIds.map((id) => propagateResolution(id)));
 
   return NextResponse.json({
     expiredPosts: expiredPosts.length,

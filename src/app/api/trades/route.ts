@@ -9,7 +9,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, desc, asc, count } from "drizzle-orm";
 import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
-import { getBlockingTradeId } from "@/lib/trade-guards";
+import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
 import { redis } from "@/lib/redis";
 
 interface TradeItemInput {
@@ -46,8 +46,8 @@ export async function GET(request: NextRequest) {
   const trades = await db.query.tradePost.findMany({
     where: eq(tradePost.status, status),
     with: {
-      haves: true,
-      wants: true,
+      haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
+      wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
       user: {
         columns: { id: true, name: true, image: true },
         with: {
@@ -91,6 +91,11 @@ export async function POST(request: NextRequest) {
     session = await requireSession();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const activeBan = await getActiveBan(session.user.id);
+  if (activeBan) {
+    return NextResponse.json({ error: "You are trade banned and cannot perform this action." }, { status: 403 });
   }
 
   // Rate limit: 10 requests per 60 seconds

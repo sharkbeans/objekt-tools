@@ -6,7 +6,7 @@ import {
   tradePostHave,
   tradePostWant,
 } from "@/lib/db/schema";
-import { eq, and, ne, inArray } from "drizzle-orm";
+import { eq, and, ne, inArray, isNull } from "drizzle-orm";
 
 // GET /api/trades/mine/matches-count — total match count across all user's open trades
 // Batched: 3 queries total instead of 3*N
@@ -23,7 +23,10 @@ export async function GET() {
       eq(tradePost.userId, session.user.id),
       eq(tradePost.status, "open")
     ),
-    with: { haves: true, wants: true },
+    with: {
+      haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
+      wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
+    },
   });
 
   if (myTrades.length === 0) {
@@ -50,14 +53,14 @@ export async function GET() {
         collectionId: tradePostHave.collectionId,
       })
       .from(tradePostHave)
-      .where(inArray(tradePostHave.collectionId, allMyWantCollections)),
+      .where(and(inArray(tradePostHave.collectionId, allMyWantCollections), isNull(tradePostHave.deletedAt))),
     db
       .selectDistinct({
         tradePostId: tradePostWant.tradePostId,
         collectionId: tradePostWant.collectionId,
       })
       .from(tradePostWant)
-      .where(inArray(tradePostWant.collectionId, allMyHaveCollections)),
+      .where(and(inArray(tradePostWant.collectionId, allMyHaveCollections), isNull(tradePostWant.deletedAt))),
   ]);
 
   // Build lookup: tradePostId -> Set<collectionId>

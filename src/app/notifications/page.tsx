@@ -25,7 +25,7 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(1);
   const limit = 20;
 
-  const { data, isLoading } = useQuery<{
+  const { data, isLoading, error } = useQuery<{
     notifications: Notification[];
     page: number;
     limit: number;
@@ -38,6 +38,17 @@ export default function NotificationsPage() {
       return res.json();
     },
     enabled: !!session,
+  });
+
+  const { data: unreadData } = useQuery<{ count: number | string }>({
+    queryKey: ["notification-unread-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications/unread-count");
+      if (!res.ok) throw new Error("Failed to load unread notification count");
+      return res.json();
+    },
+    enabled: !!session,
+    refetchInterval: 30_000,
   });
 
   async function handleMarkAllRead() {
@@ -69,7 +80,8 @@ export default function NotificationsPage() {
   const notifications = data?.notifications ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
-  const hasUnread = notifications.some((n) => !n.dismissed);
+  const unreadCount = Number(unreadData?.count ?? 0);
+  const hasUnread = unreadCount > 0 || notifications.some((n) => !n.dismissed);
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
@@ -89,6 +101,11 @@ export default function NotificationsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {error && (
+            <p className="text-sm text-destructive mb-3">
+              Couldn&apos;t load your notification list right now. You can still mark all as read.
+            </p>
+          )}
           {notifications.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No notifications yet.</p>
           ) : (

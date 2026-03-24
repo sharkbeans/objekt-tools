@@ -7,7 +7,7 @@ import {
   tradePostHave,
   tradePostWant,
 } from "@/lib/db/schema";
-import { eq, and, ne, inArray } from "drizzle-orm";
+import { eq, and, ne, inArray, isNull } from "drizzle-orm";
 
 // GET /api/trades/[id]/matches — find matching trades
 // A match is a trade where:
@@ -42,7 +42,10 @@ export async function GET(
   // Get the source trade
   const sourceTrade = await db.query.tradePost.findFirst({
     where: eq(tradePost.id, tradeId),
-    with: { haves: true, wants: true },
+    with: {
+      haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
+      wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
+    },
   });
 
   if (!sourceTrade) {
@@ -60,13 +63,13 @@ export async function GET(
   const theyHaveWhatIWant = await db
     .selectDistinct({ tradePostId: tradePostHave.tradePostId })
     .from(tradePostHave)
-    .where(inArray(tradePostHave.collectionId, myWantCollections));
+    .where(and(inArray(tradePostHave.collectionId, myWantCollections), isNull(tradePostHave.deletedAt)));
 
   // Find trades where someone wants what I have
   const theyWantWhatIHave = await db
     .selectDistinct({ tradePostId: tradePostWant.tradePostId })
     .from(tradePostWant)
-    .where(inArray(tradePostWant.collectionId, myHaveCollections));
+    .where(and(inArray(tradePostWant.collectionId, myHaveCollections), isNull(tradePostWant.deletedAt)));
 
   // Intersect: trades that appear in both sets
   const haveSet = new Set(theyHaveWhatIWant.map((r) => r.tradePostId));
@@ -86,8 +89,8 @@ export async function GET(
       ne(tradePost.userId, sourceTrade.userId)
     ),
     with: {
-      haves: true,
-      wants: true,
+      haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
+      wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
       user: {
         columns: { id: true, name: true, image: true },
         with: {
