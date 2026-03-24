@@ -85,67 +85,7 @@ export async function POST(
           t.from.toLowerCase() === side.address.toLowerCase() &&
           t.to.toLowerCase() === side.recipientAddress.toLowerCase()
       );
-      const wrongRecipientTransfer = transferEvents.find(
-        (t) =>
-          t.objektId === side.objektId &&
-          t.from.toLowerCase() === side.address.toLowerCase() &&
-          t.to.toLowerCase() !== side.recipientAddress.toLowerCase()
-      );
       if (!matchedTransfer) {
-        const recipientUserIdForWrong = side.userId === trade.initiatorUserId
-          ? trade.recipientUserId
-          : trade.initiatorUserId;
-        if (wrongRecipientTransfer && !loggedEvents.has(`${side.objektId}:wrong_recipient`)) {
-          await db.insert(tradeTransferLog).values({
-            activeTradeId: tradeId,
-            activeTradeSideId: side.id,
-            fromAddress: side.address,
-            toAddress: wrongRecipientTransfer.to,
-            objektId: side.objektId,
-            collectionId: side.collectionId,
-            collectionNo: side.collectionNo,
-            member: side.member,
-            serial: side.serial,
-            senderUserId: side.userId,
-            recipientUserId: recipientUserIdForWrong,
-            event: "wrong_recipient",
-          });
-          loggedEvents.add(`${side.objektId}:wrong_recipient`);
-          updatedCount++;
-        }
-
-        // ── RECOVERY: after wrong_recipient, check if a third party forwarded
-        // the objekt to the intended recipient (e.g. user3 → user2)
-        if (
-          loggedEvents.has(`${side.objektId}:wrong_recipient`) &&
-          !loggedEvents.has(`${side.objektId}:recovered`)
-        ) {
-          const recoveryTransfer = transferEvents.find(
-            (t) =>
-              t.objektId === side.objektId &&
-              t.to.toLowerCase() === side.recipientAddress.toLowerCase() &&
-              t.from.toLowerCase() !== side.address.toLowerCase()
-          );
-          if (recoveryTransfer) {
-            await db.insert(tradeTransferLog).values({
-              activeTradeId: tradeId,
-              activeTradeSideId: side.id,
-              fromAddress: recoveryTransfer.from,
-              toAddress: recoveryTransfer.to,
-              objektId: side.objektId,
-              collectionId: side.collectionId,
-              collectionNo: side.collectionNo,
-              member: side.member,
-              serial: side.serial,
-              senderUserId: side.userId,
-              recipientUserId: recipientUserIdForWrong,
-              event: "recovered",
-            });
-            loggedEvents.add(`${side.objektId}:recovered`);
-            updatedCount++;
-          }
-        }
-
         continue;
       }
 
@@ -486,8 +426,37 @@ export async function POST(
   }
 
   // ── WRONG OBJEKT DETECTION ──
+  // Only run for accepted/partial trades. On pending trades the parties' wallets
+  // may have unrelated transfers (old or other active trades) that would be
+  // falsely flagged here.
+  if (!["accepted", "partial"].includes(trade.status)) {
+    // Skip wrong_objekt detection for pending trades — the parties' wallets may
+    // have unrelated transfers (from old or other active trades) that would be
+    // falsely flagged. Only pre_accept_* events are meaningful here.
+    if (updatedCount > 0) {
+      void publishTradeEvent(tradeId, "trade:transfer-detected", { activeTradeId: tradeId, count: updatedCount });
+    }
+    const freshLogsEarly = await db.query.tradeTransferLog.findMany({
+      where: eq(tradeTransferLog.activeTradeId, tradeId),
+    });
+    const freshSidesEarly = await db.query.activeTradeSide.findMany({
+      where: eq(activeTradeSide.activeTradeId, tradeId),
+    });
+    const preAcceptLogsEarly = freshLogsEarly.filter((l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed");
+    return NextResponse.json({
+      status: trade.status,
+      updated: updatedCount,
+      sides: freshSidesEarly,
+      preAcceptTransfers: preAcceptLogsEarly.length,
+      wrongObjektTransfers: 0,
+      wrongRecipientTransfers: 0,
+      recoveredTransfers: 0,
+      suspiciousTransfers: 0,
+    });
+  }
+
   // Query the indexer's transfer table for actual transfers between trade parties
-  // since the trade was created, then flag any non-trade objekts
+  // since the trade was accepted, then flag any non-trade objekts
 
   // Sending addresses for each party (side.address = sender's wallet)
   const initiatorSendAddrs = trade.sides
@@ -523,9 +492,9 @@ export async function POST(
       and(
         inArray(transfers.from, uniqueFromAddresses),
         inArray(transfers.to, uniqueToAddresses),
-        // Only check transfers after the trade was created
-        trade.createdAt
-          ? gte(transfers.timestamp, trade.createdAt)
+        // Only check transfers after the trade was accepted (or created as fallback)
+        (trade.acceptedAt ?? trade.createdAt)
+          ? gte(transfers.timestamp, trade.acceptedAt ?? trade.createdAt!)
           : undefined,
       )
     );
