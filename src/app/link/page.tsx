@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth-client";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -12,8 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { useSession } from "@/lib/auth-client";
 import type { CosmoPublicUser, ValidArtist } from "@/lib/cosmo/types";
 
 type Step = "search" | "artist" | "verify";
@@ -21,7 +21,7 @@ type Step = "search" | "artist" | "verify";
 const ARTISTS: { id: ValidArtist; label: string }[] = [
   { id: "tripleS", label: "tripleS" },
   { id: "artms", label: "ARTMS" },
-  { id: "idntt", label: "IDNTT" },
+  { id: "idntt", label: "idntt" },
 ];
 
 export default function LinkCosmoPage() {
@@ -32,8 +32,12 @@ export default function LinkCosmoPage() {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CosmoPublicUser[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<CosmoPublicUser | null>(null);
-  const [selectedArtist, setSelectedArtist] = useState<ValidArtist | null>(null);
+  const [selectedUser, setSelectedUser] = useState<CosmoPublicUser | null>(
+    null,
+  );
+  const [selectedArtist, setSelectedArtist] = useState<ValidArtist | null>(
+    null,
+  );
   const [verificationCode, setVerificationCode] = useState("");
   const [countdown, setCountdown] = useState(0);
   const [verifying, setVerifying] = useState(false);
@@ -58,7 +62,9 @@ export default function LinkCosmoPage() {
     if (query.length < 2) return;
     setSearching(true);
     try {
-      const res = await fetch(`/api/cosmo/search?q=${encodeURIComponent(query)}`);
+      const res = await fetch(
+        `/api/cosmo/search?q=${encodeURIComponent(query)}`,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSearchResults(data.results ?? []);
@@ -91,7 +97,9 @@ export default function LinkCosmoPage() {
       setCountdown(data.expiresIn);
       setStep("verify");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to generate code");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to generate code",
+      );
     }
   }
 
@@ -110,9 +118,11 @@ export default function LinkCosmoPage() {
       if (!res.ok) throw new Error(data.error);
 
       toast.success(`Linked as ${data.nickname}!`);
-      router.push("/profile");
+      router.push(`/user/${encodeURIComponent(data.nickname)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Verification failed");
+      toast.error(
+        error instanceof Error ? error.message : "Verification failed",
+      );
     } finally {
       setVerifying(false);
     }
@@ -142,7 +152,10 @@ export default function LinkCosmoPage() {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 />
-                <Button onClick={handleSearch} disabled={searching || query.length < 2}>
+                <Button
+                  onClick={handleSearch}
+                  disabled={searching || query.length < 2}
+                >
                   {searching ? "..." : "Search"}
                 </Button>
               </div>
@@ -154,7 +167,9 @@ export default function LinkCosmoPage() {
                       key={user.id}
                       type="button"
                       className={`w-full rounded-lg border p-3 text-left transition-colors hover:bg-accent ${
-                        selectedUser?.id === user.id ? "border-primary bg-accent" : "border-border"
+                        selectedUser?.id === user.id
+                          ? "border-primary bg-accent"
+                          : "border-border"
                       }`}
                       onClick={() => setSelectedUser(user)}
                     >
@@ -224,9 +239,7 @@ export default function LinkCosmoPage() {
 
               {countdown > 0 && (
                 <div className="text-center">
-                  <Badge variant="secondary">
-                    Expires in {countdown}s
-                  </Badge>
+                  <Badge variant="secondary">Expires in {countdown}s</Badge>
                 </div>
               )}
 

@@ -1,9 +1,10 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+import { BellIcon, MenuIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { useSession, signOut } from "@/lib/auth-client";
-import { useQuery } from "@tanstack/react-query";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,9 +13,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { MenuIcon, XIcon, BellIcon } from "lucide-react";
+import { signOut, useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+
+interface CosmoLinkStatus {
+  nickname: string;
+}
 
 function useMatchCount() {
   const { data: session } = useSession();
@@ -44,10 +48,30 @@ function useUnreadNotificationCount() {
   return data?.count ?? 0;
 }
 
+function useMyProfileHref() {
+  const { data: session } = useSession();
+  const { data } = useQuery<CosmoLinkStatus | null>({
+    queryKey: ["cosmo-link-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/cosmo/status");
+      if (res.status === 404 || res.status === 401) return null;
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!session,
+  });
+
+  if (!session) return "/sign-in";
+  return data?.nickname
+    ? `/user/${encodeURIComponent(data.nickname)}`
+    : "/link";
+}
+
 export function Navbar() {
   const { data: session } = useSession();
   const matchCount = useMatchCount();
   const unreadCount = useUnreadNotificationCount();
+  const profileHref = useMyProfileHref();
 
   return (
     <>
@@ -115,7 +139,10 @@ export function Navbar() {
             {session ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                  <Button
+                    variant="ghost"
+                    className="relative h-8 w-8 rounded-full"
+                  >
                     <Avatar className="h-8 w-8">
                       <AvatarFallback>
                         {session.user.name?.charAt(0).toUpperCase() ?? "U"}
@@ -132,7 +159,7 @@ export function Navbar() {
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/profile">Profile</Link>
+                    <Link href={profileHref}>Profile</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/link">Link Cosmo</Link>
@@ -158,7 +185,12 @@ export function Navbar() {
       </header>
 
       {/* Mobile navbar */}
-      <MobileNav session={session} matchCount={matchCount} unreadCount={unreadCount} />
+      <MobileNav
+        session={session}
+        matchCount={matchCount}
+        unreadCount={unreadCount}
+        profileHref={profileHref}
+      />
     </>
   );
 }
@@ -167,10 +199,12 @@ function MobileNav({
   session,
   matchCount,
   unreadCount,
+  profileHref,
 }: {
   session: ReturnType<typeof useSession>["data"];
   matchCount: number;
   unreadCount: number;
+  profileHref: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -185,9 +219,17 @@ function MobileNav({
             className="p-2 -ml-2 text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Toggle menu"
           >
-            {open ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+            {open ? (
+              <XIcon className="h-5 w-5" />
+            ) : (
+              <MenuIcon className="h-5 w-5" />
+            )}
           </button>
-          <Link href="/" className="font-bold text-lg" onClick={() => setOpen(false)}>
+          <Link
+            href="/"
+            className="font-bold text-lg"
+            onClick={() => setOpen(false)}
+          >
             Objekt Trade
           </Link>
         </div>
@@ -195,7 +237,9 @@ function MobileNav({
 
       {/* Sidebar overlay */}
       {open && (
-        <div
+        <button
+          type="button"
+          aria-label="Close menu overlay"
           className="sm:hidden fixed inset-0 z-40 bg-black/50"
           onClick={() => setOpen(false)}
         />
@@ -205,7 +249,7 @@ function MobileNav({
       <aside
         className={cn(
           "sm:hidden fixed top-0 left-0 z-50 h-full w-72 bg-background border-r border-border flex flex-col transition-transform duration-200",
-          open ? "translate-x-0" : "-translate-x-full"
+          open ? "translate-x-0" : "-translate-x-full",
         )}
       >
         {/* Header */}
@@ -239,7 +283,10 @@ function MobileNav({
             </MobileNavLink>
           )}
           {session && (
-            <MobileNavLink href="/trades/history" onClick={() => setOpen(false)}>
+            <MobileNavLink
+              href="/trades/history"
+              onClick={() => setOpen(false)}
+            >
               Trade History
             </MobileNavLink>
           )}
@@ -282,12 +329,16 @@ function MobileNav({
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{session.user.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
+                <p className="text-sm font-medium truncate">
+                  {session.user.name}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {session.user.email}
+                </p>
               </div>
             </div>
             <div className="space-y-1">
-              <MobileNavLink href="/profile" onClick={() => setOpen(false)}>
+              <MobileNavLink href={profileHref} onClick={() => setOpen(false)}>
                 Profile
               </MobileNavLink>
               <MobileNavLink href="/link" onClick={() => setOpen(false)}>
@@ -295,7 +346,10 @@ function MobileNav({
               </MobileNavLink>
               <button
                 type="button"
-                onClick={() => { signOut(); setOpen(false); }}
+                onClick={() => {
+                  signOut();
+                  setOpen(false);
+                }}
                 className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 Sign out
