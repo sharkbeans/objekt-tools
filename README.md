@@ -14,14 +14,17 @@ Cosmo account linking uses a simple status message verification flow — you set
 
 - Create bulletin-board style trade posts with specific objekts
 - Automatic matching algorithm finds compatible trades
-- Track active trades with real-time status updates
+- Track active trades with real-time status updates via Pusher
 - Verify objekt transfers via external indexer APIs
 - Monitor ownership to ensure offered objekts remain available
 - Link Cosmo account via status message verification — no session tokens or credentials are ever collected
 - Support for "any" filters (e.g., "any member", "any season")
-- Trade notifications and history
+- Trade notifications: bell with unread count, dedicated `/notifications` page, and notifications for offers, messages, and counter-offers
 - Automatic trade expiration and availability checks if objekts are unavailable for trade
 - Counter-offer system: recipients can propose modified terms instead of accepting or rejecting outright
+- Edit or renew trade posts (description-only edits while trades are active; full edits and renewal when no active trades)
+- Public user profiles at `/user/[nickname]` with completed, cancelled, and defaulted trade stats
+- Trade ban system: automatic bans on trade default, auto-lifted when obligations are fulfilled
 
 ## Project
 
@@ -70,14 +73,22 @@ cp .env.local.example .env.development.local
 
 Edit `.env.development.local` and fill in at minimum:
 
-| Variable               | Description                     |
-| ---------------------- | ------------------------------- |
-| `DATABASE_URL`       | Postgres connection string      |
-| `REDIS_URL`          | Redis connection string         |
-| `BETTER_AUTH_SECRET` | Any random 32+ character string |
-| `BETTER_AUTH_URL`    | `http://localhost:3000`       |
+| Variable                      | Description                                        |
+| ----------------------------- | -------------------------------------------------- |
+| `DATABASE_URL`                | Postgres connection string                         |
+| `REDIS_URL`                   | Redis connection string                            |
+| `BETTER_AUTH_SECRET`          | Any random 32+ character string                    |
+| `BETTER_AUTH_URL`             | `http://localhost:3000`                            |
+| `PUSHER_APP_ID`               | Pusher app ID (real-time trade/notification events) |
+| `PUSHER_KEY`                  | Pusher key                                         |
+| `PUSHER_SECRET`               | Pusher secret                                      |
+| `PUSHER_CLUSTER`              | Pusher cluster (e.g. `ap1`)                        |
+| `NEXT_PUBLIC_PUSHER_KEY`      | Same as `PUSHER_KEY` (exposed to the browser)      |
+| `NEXT_PUBLIC_PUSHER_CLUSTER`  | Same as `PUSHER_CLUSTER` (exposed to the browser)  |
 
 `INDEXER_DATABASE_URL` powers objekt ownership lookups. Leave it blank locally — features that depend on it will fail gracefully.
+
+Pusher vars are optional locally — real-time updates will be unavailable but the app falls back to polling.
 
 Social login (`DISCORD_*`, `TWITTER_*`) is optional. Leave blank to disable those providers.
 
@@ -162,11 +173,12 @@ The client auto-refreshes the token on 401/403 responses. If you leave the token
 - **user**: Better Auth user accounts
 - **cosmoAccount**: Linked Cosmo profiles (address, nickname)
 - **tradePost**: User trade listings
-- **tradePostHave**: Objekts offered (with serial numbers)
-- **tradePostWant**: Objekts requested (supports "any" filters)
-- **activeTrade**: Agreed trades between two users; `counterOfferToId` links back to the trade it countered; status includes `"countered"` for superseded offers
+- **tradePostHave**: Objekts offered (with serial numbers); `deletedAt` supports soft-delete for post editing
+- **tradePostWant**: Objekts requested (supports "any" filters); `deletedAt` supports soft-delete for post editing
+- **activeTrade**: Agreed trades between two users; `counterOfferToId` links back to the trade it countered; status includes `"countered"` for superseded offers; `resolvedByTradeId` points to the terminal trade in a counter-offer chain
 - **activeTradeSide**: Individual objekts being exchanged per side
-- **tradeNotification**: User notifications for trade events
+- **tradeNotification**: User notifications for trade events; `activeTradeId` links message and accepted-trade notifications to the relevant active trade
+- **tradeBan**: Active and historical bans; linked to the offending trade; auto-lifted when obligations are fulfilled
 
 ## Trade Flow
 
@@ -192,6 +204,7 @@ Either party can propose modified trade terms instead of accepting or rejecting 
 - On submit, the original trade is marked `"countered"` and a new `pending` trade is created, linked via `counterOfferToId`
 - **Roles flip**: the original initiator becomes the new recipient and can accept, cancel, or counter back
 - Each trade in the chain links to the previous via `counterOfferToId`, forming a full negotiation history viewable on the trade page
+- When a chain resolves (completed or cancelled), all ancestor trades gain a `resolvedByTradeId` pointing to the terminal trade — statuses are never retroactively changed
 
 ### Guard Rails
 
@@ -217,7 +230,7 @@ Since Cosmo only supports one-way transfers, trading requires trust. This platfo
 
 ### Transfer Monitoring
 
-- **Real-time polling:** The active trade page polls the `check-transfers` endpoint to detect objekt movements via the on-chain indexer.
+- **Real-time updates:** Active trade pages receive live updates via Pusher when transfers are detected, with polling as a fallback.
 - **Status tracking:** Each trade side progresses through `pending` → `sent` → `confirmed` as transfers are detected, giving both parties visibility into progress.
 - **Transfer logs:** Every detected transfer is recorded in a `tradeTransferLog` table with timestamps, addresses, and objekt details for full audit trails.
 
@@ -240,6 +253,38 @@ Detects when a party sends objekts before the trade has been accepted:
 - **Belt-and-suspenders check:** During transfer verification, the system cross-references `ownerAtAcceptance` to prevent a pre-delivered objekt from being falsely counted as a legitimate post-acceptance transfer.
 - **UI warnings:** Prominent alerts are shown in the trade UI when any anomalous transfer activity is detected.
 
+### Automatic Trade Expiry
+
+- **Pending trades:** Expire after 30 days of inactivity.
+- **Accepted/partial trades:** Expire after 30 days from acceptance if not completed — both parties are notified and trade posts revert to `"open"`.
+- **Wrong-recipient recovery:** If a misrouted transfer is not recovered within 7 days, the trade is cancelled automatically.
+- **Post status revert:** When a trade is cancelled and no other active trades (pending/accepted/partial) reference the same post, the post is automatically reverted to `"open"`.
+
+### Trade Ban System
+
+Automatic bans protect users from repeat defaulters:
+
+- **When a ban is issued:** A user is banned when an accepted trade is cancelled because they failed to send their promised objekts — triggered by partner cancellation after 24 hours, 30-day expiry, or wrong-recipient expiry.
+- **What a ban restricts:** Banned users cannot create trade posts, initiate offers, send counter-offers, or accept trades. They can still view trades and send objekts in existing accepted trades.
+- **Auto-lift:** The ban is automatically lifted once the user sends all promised objekts in the trade that triggered the ban (detected on the next `check-transfers` call).
+- **Profile visibility:** Ban status is shown on the user's public profile.
+
+### Input Validation & Rate Limiting
+
+| Safeguard | Detail |
+|---|---|
+| **Description length** | Max 500 characters on trade post descriptions |
+| **Page bounds** | Page parameters are clamped to valid positive integers |
+| **Status enum** | PATCH status only accepts `"open"` or `"closed"`; `"in_trade"` is system-managed |
+| **Notification batch limit** | Dismiss endpoint rejects batches of more than 100 IDs |
+| **Search query length** | Objekt search queries capped at 200 characters |
+| **Filter array bounds** | Objekt filter arrays (artists, members, etc.) capped at 20 items each |
+| **Trade post creation** | 10 requests/min per user |
+| **Availability checks** | 10 requests/min per user |
+| **Cosmo user search** | 10 requests/min per user |
+| **Trade accept** | 5 requests/min per user |
+| **Chat messages** | 1 message per 10 seconds per user |
+
 ## API Routes
 
 ### Trade Posts
@@ -247,9 +292,12 @@ Detects when a party sends objekts before the trade has been accepted:
 - `GET /api/trades` - List all open trades
 - `POST /api/trades` - Create new trade post
 - `GET /api/trades/[id]` - Get trade details
+- `PATCH /api/trades/[id]` - Edit trade post (description always; haves/wants only when no active trades)
 - `GET /api/trades/[id]/matches` - Find matching trades
 - `POST /api/trades/[id]/initiate` - Initiate active trade
+- `POST /api/trades/[id]/initiate-direct` - Initiate trade directly with a specific user
 - `POST /api/trades/[id]/check-availability` - Verify objekt availability
+- `POST /api/trades/[id]/renew` - Reopen a closed/expired post (verifies ownership first)
 
 ### Active Trades
 
@@ -260,6 +308,15 @@ Detects when a party sends objekts before the trade has been accepted:
 - `POST /api/active-trades/[id]/counter-offer` - Propose a counter-offer (recipient only)
 - `POST /api/active-trades/[id]/check-transfers` - Verify transfers
 - `GET /api/active-trades/history` - View completed/cancelled trades
+
+### Notifications
+
+- `GET /api/trades/mine/notifications` - List notifications (paginated)
+- `PATCH /api/trades/mine/notifications` - Dismiss notifications by ID
+
+### Users
+
+- `GET /api/users/[nickname]` - Public profile with trade stats (no auth required)
 
 ### Cosmo Integration
 
@@ -292,11 +349,7 @@ npx tsx scripts/seed-local.ts  # Seed local test user
 
 ## Roadmap
 
-See planning documents:
-
-- `TRADE_OFFERS_PLAN.md` - UI/UX improvements
-- `trade_plan_v2.md` - Core trading system architecture
-- `trading_plan.md` - Original system design
+See `feature-plan.md` for the full prioritized backlog.
 
 ## Credit/Acknowledgment
 
