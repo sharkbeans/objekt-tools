@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         columns: { id: true, name: true, image: true },
         with: {
           cosmoAccount: {
-            columns: { nickname: true },
+            columns: { nickname: true, address: true },
           },
         },
       },
@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
   const enriched = paginated.map((t) => ({
     ...t,
     cosmoNickname: t.user.cosmoAccount?.nickname ?? null,
+    cosmoAddress: t.user.cosmoAccount?.address ?? null,
   }));
 
   return NextResponse.json({ trades: enriched, page, limit, total });

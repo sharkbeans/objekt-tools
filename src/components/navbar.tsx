@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 import { useUserRealtime } from "@/hooks/use-realtime";
 
 interface CosmoLinkStatus {
-  nickname: string;
+  address: string;
+  nickname: string | null;
 }
 
 function useMatchCount() {
@@ -63,9 +64,8 @@ function useMyProfileHref() {
   });
 
   if (!session) return "/sign-in";
-  return data?.nickname
-    ? `/@${encodeURIComponent(data.nickname)}`
-    : "/link";
+  if (!data) return "/link";
+  return `/@${data.nickname ?? data.address}`;
 }
 
 export function Navbar() {

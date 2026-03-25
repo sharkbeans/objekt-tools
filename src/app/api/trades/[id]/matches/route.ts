@@ -95,7 +95,7 @@ export async function GET(
         columns: { id: true, name: true, image: true },
         with: {
           cosmoAccount: {
-            columns: { nickname: true },
+            columns: { nickname: true, address: true },
           },
         },
       },
@@ -105,6 +105,7 @@ export async function GET(
   const enriched = matches.map((m) => ({
     ...m,
     cosmoNickname: m.user.cosmoAccount?.nickname ?? null,
+    cosmoAddress: m.user.cosmoAccount?.address ?? null,
   }));
 
   return NextResponse.json({ matches: enriched });

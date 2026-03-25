@@ -25,17 +25,17 @@ export async function GET(
         with: {
           user: {
             columns: { id: true, name: true, image: true },
-            with: { cosmoAccount: { columns: { nickname: true } } },
+            with: { cosmoAccount: { columns: { nickname: true, address: true } } },
           },
         },
       },
       initiator: {
         columns: { id: true, name: true, image: true },
-        with: { cosmoAccount: { columns: { nickname: true } } },
+        with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
       recipient: {
         columns: { id: true, name: true, image: true },
-        with: { cosmoAccount: { columns: { nickname: true } } },
+        with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
       counterOffers: {
         columns: { id: true, status: true },
@@ -146,11 +146,13 @@ export async function GET(
     initiator: {
       ...trade.initiator,
       cosmoNickname: trade.initiator.cosmoAccount?.nickname ?? null,
+      cosmoAddress: trade.initiator.cosmoAccount?.address ?? null,
       cosmoAccount: undefined,
     },
     recipient: {
       ...trade.recipient,
       cosmoNickname: trade.recipient.cosmoAccount?.nickname ?? null,
+      cosmoAddress: trade.recipient.cosmoAccount?.address ?? null,
       cosmoAccount: undefined,
     },
     sides: trade.sides.map((s) => ({
@@ -160,6 +162,7 @@ export async function GET(
       user: {
         ...s.user,
         cosmoNickname: s.user.cosmoAccount?.nickname ?? null,
+        cosmoAddress: s.user.cosmoAccount?.address ?? null,
         cosmoAccount: undefined,
       },
     })),

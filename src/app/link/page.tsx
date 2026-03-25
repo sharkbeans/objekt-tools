@@ -117,8 +117,8 @@ export default function LinkCosmoPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      toast.success(`Linked as ${data.nickname}!`);
-      router.push(`/@${encodeURIComponent(data.nickname)}`);
+      toast.success(`Linked as ${data.nickname ?? data.address}!`);
+      router.push(`/@${data.nickname ?? data.address}`);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Verification failed",

@@ -36,17 +36,17 @@ export async function GET(request: NextRequest) {
           with: {
             user: {
               columns: { id: true, name: true, image: true },
-              with: { cosmoAccount: { columns: { nickname: true } } },
+              with: { cosmoAccount: { columns: { nickname: true, address: true } } },
             },
           },
         },
         initiator: {
           columns: { id: true, name: true, image: true },
-          with: { cosmoAccount: { columns: { nickname: true } } },
+          with: { cosmoAccount: { columns: { nickname: true, address: true } } },
         },
         recipient: {
           columns: { id: true, name: true, image: true },
-          with: { cosmoAccount: { columns: { nickname: true } } },
+          with: { cosmoAccount: { columns: { nickname: true, address: true } } },
         },
       },
       orderBy: [desc(activeTrade.updatedAt)],
@@ -63,11 +63,13 @@ export async function GET(request: NextRequest) {
     initiator: {
       ...t.initiator,
       cosmoNickname: t.initiator.cosmoAccount?.nickname ?? null,
+      cosmoAddress: t.initiator.cosmoAccount?.address ?? null,
       cosmoAccount: undefined,
     },
     recipient: {
       ...t.recipient,
       cosmoNickname: t.recipient.cosmoAccount?.nickname ?? null,
+      cosmoAddress: t.recipient.cosmoAccount?.address ?? null,
       cosmoAccount: undefined,
     },
     sides: t.sides.map((s) => ({
@@ -75,6 +77,7 @@ export async function GET(request: NextRequest) {
       user: {
         ...s.user,
         cosmoNickname: s.user.cosmoAccount?.nickname ?? null,
+        cosmoAddress: s.user.cosmoAccount?.address ?? null,
         cosmoAccount: undefined,
       },
     })),

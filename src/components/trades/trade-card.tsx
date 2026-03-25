@@ -44,7 +44,7 @@ function formatObjektLabel(item: { collectionId: string; collectionNo?: string |
   return { name, right };
 }
 
-function buildObjektTopUrl(item: TradeItem, cosmoNickname: string | null | undefined, showSerial?: boolean): string {
+function buildObjektTopUrl(item: TradeItem, cosmoAddress: string | null | undefined, showSerial?: boolean): string {
   const parts: string[] = [];
   if (item.member) {
     const artist = Object.entries(membersByArtist).find(([, members]) => members.includes(item.member!))?.[0];
@@ -55,7 +55,7 @@ function buildObjektTopUrl(item: TradeItem, cosmoNickname: string | null | undef
   if (item.collectionNo) parts.push(item.collectionNo);
   if (showSerial && item.serial != null) parts.push(`#${item.serial}`);
   const search = parts.join(" ");
-  const basePath = cosmoNickname ? `/@${cosmoNickname}` : "";
+  const basePath = cosmoAddress ? `/${cosmoAddress}` : "";
   return `https://objekt.top${basePath}?${new URLSearchParams({ search }).toString()}`;
 }
 
@@ -68,6 +68,7 @@ interface TradeCardProps {
     wantsOnly?: boolean;
     user: { id: string; name: string; image?: string | null };
     cosmoNickname?: string | null;
+    cosmoAddress?: string | null;
     haves: TradeItem[];
     wants: TradeItem[];
   };
@@ -77,7 +78,7 @@ interface TradeCardProps {
 const imageCache = new Map<string, string | null>();
 
 
-function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; showSerial?: boolean; cosmoNickname?: string | null }) {
+function ObjektLabel({ item, showSerial, cosmoAddress }: { item: TradeItem; showSerial?: boolean; cosmoAddress?: string | null }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [show, setShow] = useState(false);
   const fetchedRef = useRef(false);
@@ -125,7 +126,7 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
       <button
         type="button"
         className="ml-2 text-muted-foreground hover:text-foreground"
-        onClick={(e) => { e.stopPropagation(); window.open(buildObjektTopUrl(item, cosmoNickname, showSerial), "_blank", "noopener,noreferrer"); }}
+        onClick={(e) => { e.stopPropagation(); window.open(buildObjektTopUrl(item, cosmoAddress, showSerial), "_blank", "noopener,noreferrer"); }}
         title="View on Objekt.top"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -145,7 +146,7 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
   );
 }
 
-function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]; showSerial?: boolean; cosmoNickname?: string | null }) {
+function ObjektLabels({ items, showSerial, cosmoAddress }: { items: TradeItem[]; showSerial?: boolean; cosmoAddress?: string | null }) {
   return (
     <div className="flex flex-col gap-0.5 w-full">
       {items.map((item) =>
@@ -154,7 +155,7 @@ function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]
             {anyWantLabel(item)}
           </span>
         ) : (
-          <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />
+          <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoAddress={cosmoAddress} />
         )
       )}
     </div>
@@ -190,7 +191,7 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
             <p className="text-xs text-muted-foreground mb-1 font-medium">
               HAVE
             </p>
-            <ObjektLabels items={trade.haves} showSerial cosmoNickname={trade.cosmoNickname} />
+            <ObjektLabels items={trade.haves} showSerial cosmoAddress={trade.cosmoAddress} />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1 font-medium">
@@ -208,11 +209,11 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
           <p className="text-[10px] text-muted-foreground">
             {new Date(trade.createdAt).toLocaleDateString()}
           </p>
-          {trade.cosmoNickname && (
+          {trade.cosmoAddress && (
             <button
               type="button"
               className="text-[10px] text-primary hover:underline"
-              onClick={(e) => { e.stopPropagation(); window.open(`https://objekt.top/@${trade.cosmoNickname}?transferable=true`, "_blank", "noopener,noreferrer"); }}
+              onClick={(e) => { e.stopPropagation(); window.open(`https://objekt.top/${trade.cosmoAddress}?transferable=true`, "_blank", "noopener,noreferrer"); }}
             >
               Verify inventory
             </button>

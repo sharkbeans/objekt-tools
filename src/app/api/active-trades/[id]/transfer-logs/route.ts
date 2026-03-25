@@ -39,11 +39,11 @@ export async function GET(
     with: {
       sender: {
         columns: { id: true, name: true },
-        with: { cosmoAccount: { columns: { nickname: true } } },
+        with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
       recipient: {
         columns: { id: true, name: true },
-        with: { cosmoAccount: { columns: { nickname: true } } },
+        with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
     },
   });
@@ -53,14 +53,14 @@ export async function GET(
     .filter((l) => l.event === "wrong_recipient")
     .map((l) => l.toAddress.toLowerCase());
 
-  const toAddressNicknameMap = new Map<string, string>();
+  const toAddressNicknameMap = new Map<string, string | null>();
   if (wrongRecipientAddresses.length > 0) {
     const accounts = await db.query.cosmoAccount.findMany({
       where: inArray(cosmoAccount.address, wrongRecipientAddresses),
       columns: { address: true, nickname: true },
     });
     for (const account of accounts) {
-      toAddressNicknameMap.set(account.address.toLowerCase(), account.nickname);
+      toAddressNicknameMap.set(account.address.toLowerCase(), account.nickname ?? null);
     }
   }
 

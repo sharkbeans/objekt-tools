@@ -79,7 +79,7 @@ export const cosmoAccount = pgTable("cosmo_account", {
     .unique()
     .references(() => user.id, { onDelete: "cascade" }),
   address: text("address").notNull().unique(),
-  nickname: text("nickname").notNull(),
+  nickname: text("nickname"),
   cosmoId: integer("cosmo_id"),
   linkedAt: timestamp("linked_at").notNull().defaultNow(),
 });

@@ -92,6 +92,18 @@ export async function searchUsers(
   });
 }
 
+export async function fetchUserByNickname(
+  nickname: string
+): Promise<{ nickname: string; address: string } | null> {
+  try {
+    return await cosmoFetchWithRefresh<{ nickname: string; address: string }>(
+      `/bff/v3/users/by-nickname/${encodeURIComponent(nickname)}`
+    );
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchUserProfile(
   cosmoId: number,
   artistId: ValidArtist

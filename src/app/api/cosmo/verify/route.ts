@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     // Clean up Redis
     await redis.del(redisKey);
 
-    return NextResponse.json({ success: true, nickname });
+    return NextResponse.json({ success: true, address: address.toLowerCase(), nickname });
   } catch (error) {
     console.error("Cosmo verification failed:", error);
     return NextResponse.json(

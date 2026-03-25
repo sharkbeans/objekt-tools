@@ -33,7 +33,7 @@ export async function GET(
         columns: { id: true, name: true, image: true },
         with: {
           cosmoAccount: {
-            columns: { nickname: true },
+            columns: { nickname: true, address: true },
           },
         },
       },
@@ -47,6 +47,7 @@ export async function GET(
   return NextResponse.json({
     ...trade,
     cosmoNickname: trade.user.cosmoAccount?.nickname ?? null,
+    cosmoAddress: trade.user.cosmoAccount?.address ?? null,
   });
 }
 

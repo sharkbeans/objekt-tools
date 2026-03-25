@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type ReactNode, use, useMemo, useState } from "react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { Badge } from "@/components/ui/badge";
@@ -67,7 +68,8 @@ const statusLabel: Record<TradeStatus, string> = {
 };
 
 interface UserProfile {
-  nickname: string;
+  address: string;
+  nickname: string | null;
   email: string | null;
   image: string | null;
   linkedAt: string;
@@ -107,21 +109,34 @@ interface TradeHistoryEntry {
 export default function PublicProfilePage({
   params,
 }: {
-  params: Promise<{ nickname: string }>;
+  params: Promise<{ address: string }>;
 }) {
-  const { nickname: rawNickname } = use(params);
-  const decoded = decodeURIComponent(rawNickname);
-  const nickname = decoded.startsWith("@") ? decoded.slice(1) : decoded;
+  const { address: rawAddress } = use(params);
+  const decoded = decodeURIComponent(rawAddress);
+  // Strip leading @ if present (URLs like /@0x...)
+  const identifier = decoded.startsWith("@") ? decoded.slice(1) : decoded;
+  const router = useRouter();
   const [emailVisible, setEmailVisible] = useState(false);
 
   const {
     data: profile,
     isLoading,
     error,
-  } = useQuery<UserProfile>({
-    queryKey: ["user-profile", nickname],
+  } = useQuery<UserProfile | null>({
+    queryKey: ["user-profile", identifier],
     queryFn: async () => {
-      const res = await fetch(`/api/users/${encodeURIComponent(nickname)}`);
+      const res = await fetch(`/api/users/${encodeURIComponent(identifier)}`);
+      if (res.status === 301) {
+        const json = await res.json();
+        if (json.nickname) {
+          router.replace(`/@${json.nickname}`);
+          return null;
+        }
+        if (json.address) {
+          router.replace(`/@${json.address}`);
+          return null;
+        }
+      }
       if (!res.ok) throw new Error("User not found");
       return res.json();
     },
@@ -160,7 +175,7 @@ export default function PublicProfilePage({
       );
   }, [activeData?.trades, historyData?.trades, isOwner]);
 
-  if (isLoading) {
+  if (isLoading || profile === null) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center text-muted-foreground">
         Loading...
@@ -173,12 +188,13 @@ export default function PublicProfilePage({
       <div className="max-w-2xl mx-auto py-12 text-center">
         <h1 className="text-2xl font-bold mb-2">User not found</h1>
         <p className="text-muted-foreground">
-          No user with the nickname &quot;{nickname}&quot; exists.
+          No user with the address &quot;{identifier}&quot; exists.
         </p>
       </div>
     );
   }
 
+  const displayName = profile.nickname ?? profile.address;
   const viewerId = profile.viewer.userId;
 
   return (
@@ -187,10 +203,16 @@ export default function PublicProfilePage({
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-lg font-bold">
-              {profile.nickname.charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase()}
             </div>
             <div>
-              <CardTitle className="text-xl">@{profile.nickname}</CardTitle>
+              <CardTitle className="text-xl">
+                {profile.nickname ? (
+                  <>@{profile.nickname}</>
+                ) : (
+                  <span className="font-mono text-sm">{profile.address}</span>
+                )}
+              </CardTitle>
               <CardDescription>
                 Member since{" "}
                 {new Date(profile.linkedAt).toLocaleDateString("en-GB", {
@@ -268,10 +290,10 @@ export default function PublicProfilePage({
       {profile.stats.openPosts > 0 && (
         <div className="text-center">
           <Link
-            href={`/trades?user=${encodeURIComponent(profile.nickname)}`}
+            href={`/trades?user=${encodeURIComponent(profile.address)}`}
             className="text-sm text-muted-foreground hover:text-foreground underline transition-colors"
           >
-            View {profile.nickname}&apos;s trade posts
+            View {displayName}&apos;s trade posts
           </Link>
         </div>
       )}

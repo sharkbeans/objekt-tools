@@ -21,8 +21,8 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    nickname: linked.nickname,
     address: linked.address,
+    nickname: linked.nickname ?? null,
     linkedAt: linked.linkedAt,
   });
 }

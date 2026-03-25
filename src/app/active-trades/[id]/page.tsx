@@ -54,7 +54,7 @@ interface TradeSide {
   thumbnailUrl?: string | null;
   status: SideStatus;
   detectedAt?: string | null;
-  user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
+  user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null };
 }
 
 interface CounterOfferChainEntry {
@@ -80,8 +80,8 @@ interface ActiveTrade {
   counterOfferId?: string | null;
   counterOfferChain?: CounterOfferChainEntry[];
   expiresAt?: string | null;
-  initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
-  recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
+  initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null };
+  recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null };
   sides: TradeSide[];
 }
 
@@ -365,9 +365,9 @@ function SideCard({
     : null;
 
   // Link to sender's own Cosmo profile filtered to this objekt — lets them find it quickly to send
-  const profileUrl = side.user.cosmoNickname
+  const profileUrl = side.user.cosmoAddress
     ? (() => {
-        const base = `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`;
+        const base = `https://objekt.top/${side.user.cosmoAddress}?transferable=true`;
         const parts = [
           side.member,
           side.collectionNo,

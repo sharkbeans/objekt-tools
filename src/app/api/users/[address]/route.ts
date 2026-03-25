@@ -1,4 +1,4 @@
-import { and, count, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, count, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -8,23 +8,67 @@ import {
   tradeBan,
   tradePost,
 } from "@/lib/db/schema";
+import { fetchUserByNickname } from "@/lib/cosmo/client";
 
-// GET /api/users/[nickname] — public user profile stats
+function isWalletAddress(value: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+
+// GET /api/users/[address] — public user profile stats
+// Accepts: wallet address (0x...) or cosmo nickname (falls back to Cosmo API lookup)
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ nickname: string }> },
+  { params }: { params: Promise<{ address: string }> },
 ) {
-  const { nickname } = await params;
+  const { address: identifier } = await params;
   const session = await getSession();
 
-  const cosmo = await db.query.cosmoAccount.findFirst({
-    where: eq(cosmoAccount.nickname, nickname),
-    with: {
-      user: {
-        columns: { id: true, name: true, image: true, email: true },
+  let cosmo;
+
+  if (isWalletAddress(identifier)) {
+    // Direct address lookup
+    cosmo = await db.query.cosmoAccount.findFirst({
+      where: eq(cosmoAccount.address, identifier.toLowerCase()),
+      with: {
+        user: {
+          columns: { id: true, name: true, image: true, email: true },
+        },
       },
-    },
-  });
+    });
+    // If the user has a nickname, redirect to the prettier /@nickname URL
+    if (cosmo?.nickname) {
+      return NextResponse.json(
+        { nickname: cosmo.nickname },
+        { status: 301 },
+      );
+    }
+  } else {
+    // Treat as nickname — try DB first (case-insensitive)
+    const lower = identifier.toLowerCase();
+    cosmo = await db.query.cosmoAccount.findFirst({
+      where: sql`lower(${cosmoAccount.nickname}) = ${lower}`,
+      with: {
+        user: {
+          columns: { id: true, name: true, image: true, email: true },
+        },
+      },
+    });
+
+    if (!cosmo) {
+      // Fall back to Cosmo API to resolve nickname → address
+      const resolved = await fetchUserByNickname(identifier);
+      if (!resolved) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+      // Return a redirect hint so the client can navigate to the address URL
+      return NextResponse.json(
+        { address: resolved.address.toLowerCase() },
+        { status: 301 },
+      );
+    }
+
+    // Nickname found in DB — already at canonical URL, proceed to profile
+  }
 
   if (!cosmo) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -77,7 +121,8 @@ export async function GET(
   ).length;
 
   return NextResponse.json({
-    nickname: cosmo.nickname,
+    address: cosmo.address,
+    nickname: cosmo.nickname ?? null,
     image: cosmo.user.image,
     linkedAt: cosmo.linkedAt,
     email: isOwner ? cosmo.user.email : null,
