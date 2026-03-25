@@ -31,7 +31,7 @@ export async function GET(
       where: eq(cosmoAccount.address, identifier.toLowerCase()),
       with: {
         user: {
-          columns: { id: true, name: true, image: true, email: true },
+          columns: { id: true, name: true, image: true, email: true, discordUsername: true },
         },
       },
     });
@@ -49,7 +49,7 @@ export async function GET(
       where: sql`lower(${cosmoAccount.nickname}) = ${lower}`,
       with: {
         user: {
-          columns: { id: true, name: true, image: true, email: true },
+          columns: { id: true, name: true, image: true, email: true, discordUsername: true },
         },
       },
     });
@@ -126,6 +126,8 @@ export async function GET(
     image: cosmo.user.image,
     linkedAt: cosmo.linkedAt,
     email: isOwner ? cosmo.user.email : null,
+    // Discord username is shown publicly on profiles and to trade partners
+    discordUsername: cosmo.user.discordUsername ?? null,
     viewer: {
       isOwner,
       userId: isOwner ? userId : null,

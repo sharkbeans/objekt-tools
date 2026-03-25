@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { Navbar } from "@/components/navbar";
+import { DiscordBanner } from "@/components/discord-banner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,6 +32,7 @@ export default function RootLayout({
       >
         <Providers>
           <Navbar />
+          <DiscordBanner />
           <main className="container mx-auto px-4 py-6">{children}</main>
         </Providers>
       </body>

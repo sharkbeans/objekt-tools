@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
 import { activeTrade, activeTradeSide, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { tryLiftBan, propagateResolution } from "@/lib/trade-guards";
 import { publishTradeEvent } from "@/lib/realtime";
 import { objekts, collections, transfers } from "@/lib/db/indexer-schema";
@@ -187,17 +188,17 @@ export async function POST(
             .where(inArray(tradePost.id, postIds));
         }
 
-        await tx.insert(tradeNotification).values([
-          {
-            userId: trade.initiatorUserId,
-            message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
-          },
-          {
-            userId: trade.recipientUserId,
-            message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
-          },
-        ]);
       });
+      await notify([
+        {
+          userId: trade.initiatorUserId,
+          message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
+        },
+        {
+          userId: trade.recipientUserId,
+          message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
+        },
+      ]);
     } else if (recipientAllPreSent) {
       // Recipient sent all their objekts pre-accept — auto-promote to accepted
       const now = new Date();
@@ -238,22 +239,22 @@ export async function POST(
             .where(inArray(tradePost.id, postIds));
         }
 
-        await tx.insert(tradeNotification).values([
-          {
-            userId: trade.initiatorUserId,
-            message: `Active Trade #${tradeId}: the other party has already sent all their objekts. Please send yours to complete the trade.`,
-          },
-          {
-            userId: trade.recipientUserId,
-            message: `Active Trade #${tradeId} has been automatically accepted because you sent all your objekts. Waiting for the other party to send theirs.`,
-          },
-        ]);
       });
+      await notify([
+        {
+          userId: trade.initiatorUserId,
+          message: `Active Trade #${tradeId}: the other party has already sent all their objekts. Please send yours to complete the trade.`,
+        },
+        {
+          userId: trade.recipientUserId,
+          message: `Active Trade #${tradeId} has been automatically accepted because you sent all your objekts. Waiting for the other party to send theirs.`,
+        },
+      ]);
     } else if (initiatorAllPreSent) {
       // Initiator sent all pre-accept — notify recipient once (they can still cancel or accept)
       const notifMsg = `Active Trade #${tradeId}: the other party has already sent all their objekts before you accepted. You can accept as normal, or cancel — if you cancel, please return the objekts to them.`;
       if (!notifMessages.has(notifMsg)) {
-        await db.insert(tradeNotification).values({
+        await notify({
           userId: trade.recipientUserId,
           message: notifMsg,
         });
@@ -419,6 +420,91 @@ export async function POST(
               .update(activeTradeSide)
               .set({ status: "confirmed", detectedAt: new Date() })
               .where(eq(activeTradeSide.id, side.id));
+          }
+        }
+      }
+    }
+  }
+
+  // ── RETURN DETECTION ──
+  // A return is when the recipient of a confirmed side sends that same objekt
+  // back to the original sender. Detected on accepted/partial trades only.
+  // When all confirmed sides that were received by a user have been returned,
+  // either party can cancel the trade without penalty.
+  if (["accepted", "partial"].includes(trade.status)) {
+    const confirmedSides = trade.sides.filter((s) => s.status === "confirmed");
+
+    if (confirmedSides.length > 0) {
+      const confirmedObjektIds = confirmedSides.map((s) => s.objektId);
+      const transferSince = trade.acceptedAt ?? trade.createdAt;
+
+      // Query the indexer for any transfers of confirmed objekt IDs since acceptance
+      const returnCandidates = await indexer
+        .select({
+          objektId: transfers.objektId,
+          from: transfers.from,
+          to: transfers.to,
+          timestamp: transfers.timestamp,
+        })
+        .from(transfers)
+        .where(
+          and(
+            inArray(transfers.objektId, confirmedObjektIds),
+            transferSince ? gte(transfers.timestamp, transferSince) : undefined,
+          )
+        );
+
+      for (const side of confirmedSides) {
+        // A return: the objekt that was sent FROM side.address TO side.recipientAddress
+        // is now being sent back FROM side.recipientAddress TO side.address
+        const returnTransfer = returnCandidates.find(
+          (t) =>
+            t.objektId === side.objektId &&
+            t.from.toLowerCase() === side.recipientAddress.toLowerCase() &&
+            t.to.toLowerCase() === side.address.toLowerCase()
+        );
+
+        if (returnTransfer && !loggedEvents.has(`${side.objektId}:returned`)) {
+          const recipientUserId = side.userId === trade.initiatorUserId
+            ? trade.recipientUserId
+            : trade.initiatorUserId;
+
+          await db.insert(tradeTransferLog).values({
+            activeTradeId: tradeId,
+            activeTradeSideId: side.id,
+            fromAddress: side.recipientAddress,
+            toAddress: side.address,
+            objektId: side.objektId,
+            collectionId: side.collectionId,
+            collectionNo: side.collectionNo,
+            member: side.member,
+            serial: side.serial,
+            // sender of the return = the recipient of the original transfer
+            senderUserId: recipientUserId,
+            recipientUserId: side.userId,
+            event: "returned",
+          });
+          loggedEvents.add(`${side.objektId}:returned`);
+          updatedCount++;
+
+          // Notify both parties
+          const senderName = recipientUserId === trade.initiatorUserId
+            ? (trade as typeof trade & { initiator?: { name: string } }).initiator?.name ?? "Your partner"
+            : (trade as typeof trade & { recipient?: { name: string } }).recipient?.name ?? "Your partner";
+          const objektLabel = side.collectionNo && side.member
+            ? `${side.member} ${side.collectionNo}`
+            : side.collectionId;
+
+          const returnNotifMsg = `Active Trade #${tradeId}: ${senderName} returned ${objektLabel}. Either party can now cancel this trade without penalty.`;
+          const existingReturnNotifs = await db.query.tradeNotification.findMany({
+            where: inArray(tradeNotification.userId, [trade.initiatorUserId, trade.recipientUserId]),
+          });
+          const existingMsgs = new Set(existingReturnNotifs.map((n) => n.message));
+          if (!existingMsgs.has(returnNotifMsg)) {
+            await notify([
+              { userId: trade.initiatorUserId, activeTradeId: tradeId, message: returnNotifMsg },
+              { userId: trade.recipientUserId, activeTradeId: tradeId, message: returnNotifMsg },
+            ]);
           }
         }
       }
@@ -608,7 +694,7 @@ export async function POST(
         .where(eq(activeTrade.id, tradeId));
 
       if (newTradeStatus === "completed") {
-        await db.insert(tradeNotification).values([
+        await notify([
           {
             userId: trade.initiatorUserId,
             message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
@@ -661,7 +747,7 @@ export async function POST(
                 message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
               },
             ]);
-            await db.insert(tradeNotification).values(notifications);
+            await notify(notifications);
           }
         }
       }
@@ -694,12 +780,16 @@ export async function POST(
   const wrongObjektLogs = freshLogs.filter((l) => l.event === "wrong_objekt");
   const wrongRecipientLogs = freshLogs.filter((l) => l.event === "wrong_recipient");
   const recoveredLogs = freshLogs.filter((l) => l.event === "recovered");
+  const returnedLogs = freshLogs.filter((l) => l.event === "returned");
 
   // wrong_recipient logs that have a matching recovered log are no longer suspicious
   const recoveredObjektIds = new Set(recoveredLogs.map((l) => l.objektId));
   const unresolvedWrongRecipientLogs = wrongRecipientLogs.filter(
     (l) => !recoveredObjektIds.has(l.objektId)
   );
+
+  // A user has "fully returned" if every confirmed side they received has a matching returned log
+  const returnedObjektIds = new Set(returnedLogs.map((l) => l.objektId));
 
   return NextResponse.json({
     status: newTradeStatus,
@@ -709,6 +799,8 @@ export async function POST(
     wrongObjektTransfers: wrongObjektLogs.length,
     wrongRecipientTransfers: wrongRecipientLogs.length,
     recoveredTransfers: recoveredLogs.length,
+    returnedTransfers: returnedLogs.length,
+    returnedObjektIds: [...returnedObjektIds],
     suspiciousTransfers: wrongObjektLogs.length + unresolvedWrongRecipientLogs.length,
   });
 }

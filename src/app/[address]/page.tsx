@@ -73,6 +73,7 @@ interface UserProfile {
   email: string | null;
   image: string | null;
   linkedAt: string;
+  discordUsername: string | null;
   viewer: {
     isOwner: boolean;
     userId: string | null;
@@ -244,6 +245,13 @@ export default function PublicProfilePage({
                   )}
                 </button>
               </p>
+            </div>
+          )}
+
+          {profile.discordUsername && (
+            <div className="mb-4">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Discord</p>
+              <p className="text-sm">{profile.discordUsername}</p>
             </div>
           )}
 

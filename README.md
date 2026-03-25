@@ -73,18 +73,18 @@ cp .env.local.example .env.development.local
 
 Edit `.env.development.local` and fill in at minimum:
 
-| Variable                      | Description                                        |
-| ----------------------------- | -------------------------------------------------- |
-| `DATABASE_URL`                | Postgres connection string                         |
-| `REDIS_URL`                   | Redis connection string                            |
-| `BETTER_AUTH_SECRET`          | Any random 32+ character string                    |
-| `BETTER_AUTH_URL`             | `http://localhost:3000`                            |
-| `PUSHER_APP_ID`               | Pusher app ID (real-time trade/notification events) |
-| `PUSHER_KEY`                  | Pusher key                                         |
-| `PUSHER_SECRET`               | Pusher secret                                      |
-| `PUSHER_CLUSTER`              | Pusher cluster (e.g. `ap1`)                        |
-| `NEXT_PUBLIC_PUSHER_KEY`      | Same as `PUSHER_KEY` (exposed to the browser)      |
-| `NEXT_PUBLIC_PUSHER_CLUSTER`  | Same as `PUSHER_CLUSTER` (exposed to the browser)  |
+| Variable                       | Description                                         |
+| ------------------------------ | --------------------------------------------------- |
+| `DATABASE_URL`               | Postgres connection string                          |
+| `REDIS_URL`                  | Redis connection string                             |
+| `BETTER_AUTH_SECRET`         | Any random 32+ character string                     |
+| `BETTER_AUTH_URL`            | `http://localhost:3000`                           |
+| `PUSHER_APP_ID`              | Pusher app ID (real-time trade/notification events) |
+| `PUSHER_KEY`                 | Pusher key                                          |
+| `PUSHER_SECRET`              | Pusher secret                                       |
+| `PUSHER_CLUSTER`             | Pusher cluster (e.g.`ap1`)                        |
+| `NEXT_PUBLIC_PUSHER_KEY`     | Same as `PUSHER_KEY` (exposed to the browser)     |
+| `NEXT_PUBLIC_PUSHER_CLUSTER` | Same as `PUSHER_CLUSTER` (exposed to the browser) |
 
 `INDEXER_DATABASE_URL` powers objekt ownership lookups. Leave it blank locally — features that depend on it will fail gracefully.
 
@@ -208,16 +208,16 @@ Either party can propose modified trade terms instead of accepting or rejecting 
 
 ### Guard Rails
 
-| Guard | Detail |
-|---|---|
-| **Chain depth limit** | Max 10 rounds per negotiation |
-| **Per-pair rate limit** | Max 3 counter-offers per hour between the same two users |
-| **48-hour expiry** | Pending counter-offers expire automatically |
-| **Race condition protection** | Original trade status is re-verified inside the DB transaction before the counter is created |
-| **Blocking trade guard** | Users with unsent objekts in an accepted trade cannot create counter-offers |
-| **Recipient-only** | Only the current recipient can counter; initiators are explicitly blocked (403) |
-| **Cosmo account required** | Both parties must have a linked wallet |
-| **Diff summary in notification** | The notification to the other party includes a brief summary of what changed (e.g. `+Jiu A203, -SuA B105`) |
+| Guard                                  | Detail                                                                                                      |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Chain depth limit**            | Max 10 rounds per negotiation                                                                               |
+| **Per-pair rate limit**          | Max 3 counter-offers per hour between the same two users                                                    |
+| **48-hour expiry**               | Pending counter-offers expire automatically                                                                 |
+| **Race condition protection**    | Original trade status is re-verified inside the DB transaction before the counter is created                |
+| **Blocking trade guard**         | Users with unsent objekts in an accepted trade cannot create counter-offers                                 |
+| **Recipient-only**               | Only the current recipient can counter; initiators are explicitly blocked (403)                             |
+| **Cosmo account required**       | Both parties must have a linked wallet                                                                      |
+| **Diff summary in notification** | The notification to the other party includes a brief summary of what changed (e.g.`+Jiu A203, -SuA B105`) |
 
 ## Trade Safety Measures
 
@@ -242,6 +242,8 @@ Detects when a party sends objekts before the trade has been accepted:
 - **Sender warning:** Alerts that the recipient hasn't accepted yet and can cancel, meaning the sent objekt could be lost.
 - **Auto-confirmation on accept:** If a recipient accepts a trade where objekts were already pre-delivered, those sides are automatically confirmed and the trade skips ahead to the appropriate status (`partial` or `completed`).
 
+**Example scenario:** User A creates a trade post. User B finds it and sends a trade offer, but User A never responds. Impatient (or confused), User B sends their objekt via Cosmo anyway — before User A has accepted anything. At this point, the trade is not agreed upon, and User A can still cancel it, leaving User B's objekt in User A's wallet with no recourse. The platform detects this early transfer and warns both sides: User B sees that their objekt is at risk because User A hasn't committed, and User A sees that User B has already sent — so they know to act (accept or cancel) rather than leave things in limbo.
+
 ### Wrong Objekt Detection
 
 - **Transfer-based detection:** Queries the indexer's transfer history for all objekts sent between the two trade parties since the trade was created.
@@ -264,26 +266,24 @@ Detects when a party sends objekts before the trade has been accepted:
 
 Automatic bans protect users from repeat defaulters:
 
-- **When a ban is issued:** A user is banned when an accepted trade is cancelled because they failed to send their promised objekts — triggered by partner cancellation after 24 hours, 30-day expiry, or wrong-recipient expiry.
+- **When a ban is issued:** A user is banned when an accepted trade is cancelled because they failed to send their promised objekts — triggered by partner cancellation after 24 hours, or wrong-recipient expiry. For 30-day expiry, a ban is only issued if the partner had already sent their side; if both parties ghosted, no ban is issued.
 - **What a ban restricts:** Banned users cannot create trade posts, initiate offers, send counter-offers, or accept trades. They can still view trades and send objekts in existing accepted trades.
-- **Auto-lift:** The ban is automatically lifted once the user sends all promised objekts in the trade that triggered the ban (detected on the next `check-transfers` call).
+- **Auto-lift:** The ban is automatically lifted once the user sends all promised objekts in the trade that triggered the ban (detected on the next `check-transfers` call). This works even if the trade was already cancelled — calling `check-transfers` on the cancelled trade checks transfer logs to confirm the user followed through.
 - **Profile visibility:** Ban status is shown on the user's public profile.
 
 ### Input Validation & Rate Limiting
 
-| Safeguard | Detail |
-|---|---|
-| **Description length** | Max 500 characters on trade post descriptions |
-| **Page bounds** | Page parameters are clamped to valid positive integers |
-| **Status enum** | PATCH status only accepts `"open"` or `"closed"`; `"in_trade"` is system-managed |
-| **Notification batch limit** | Dismiss endpoint rejects batches of more than 100 IDs |
-| **Search query length** | Objekt search queries capped at 200 characters |
-| **Filter array bounds** | Objekt filter arrays (artists, members, etc.) capped at 20 items each |
-| **Trade post creation** | 10 requests/min per user |
-| **Availability checks** | 10 requests/min per user |
-| **Cosmo user search** | 10 requests/min per user |
-| **Trade accept** | 5 requests/min per user |
-| **Chat messages** | 1 message per 10 seconds per user |
+| Safeguard                          | Detail                                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| **Status enum**              | PATCH status only accepts `"open"` or `"closed"`; `"in_trade"` is system-managed |
+| **Notification batch limit** | Dismiss endpoint rejects batches of more than 100 IDs                                  |
+| **Search query length**      | Objekt search queries capped at 200 characters                                         |
+| **Filter array bounds**      | Objekt filter arrays (artists, members, etc.) capped at 20 items each                  |
+| **Trade post creation**      | 10 requests/min per user                                                               |
+| **Availability checks**      | 10 requests/min per user                                                               |
+| **Cosmo user search**        | 10 requests/min per user                                                               |
+| **Trade accept**             | 5 requests/min per user                                                                |
+| **Chat messages**            | 1 message per 10 seconds per user                                                      |
 
 ## API Routes
 
@@ -346,10 +346,6 @@ npx drizzle-kit push      # Apply schema to database
 npx drizzle-kit studio    # Open Drizzle Studio (DB browser)
 npx tsx scripts/seed-local.ts  # Seed local test user
 ```
-
-## Roadmap
-
-See `feature-plan.md` for the full prioritized backlog.
 
 ## Credit/Acknowledgment
 

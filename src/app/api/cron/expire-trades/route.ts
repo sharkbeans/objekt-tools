@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { activeTrade, activeTradeSide, cosmoAccount, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, cosmoAccount, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { and, eq, lt, inArray, isNotNull } from "drizzle-orm";
 import { issueBan, propagateResolution } from "@/lib/trade-guards";
 
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   }));
 
   if (postNotifications.length > 0) {
-    await db.insert(tradeNotification).values(postNotifications);
+    await notify(postNotifications);
   }
 
   // 2. Cancel pending active trades older than 30 days (never accepted)
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
       },
     ]);
 
-    await db.insert(tradeNotification).values(tradeNotifications);
+    await notify(tradeNotifications);
   }
 
   // 3. Cancel pending counter-offers past their expiresAt deadline
@@ -99,7 +100,7 @@ export async function GET(request: NextRequest) {
       },
     ]);
 
-    await db.insert(tradeNotification).values(coNotifications);
+    await notify(coNotifications);
   }
 
   // 4. Expire stale accepted/partial trades (30 days since acceptance)
@@ -144,18 +145,22 @@ export async function GET(request: NextRequest) {
         message: `Active Trade #${t.id} expired after 30 days without completion.`,
       },
     ]);
-    await db.insert(tradeNotification).values(staleNotifications);
+    await notify(staleNotifications);
 
-    // Issue bans to users with unsent sides in the expired trades
+    // Issue bans to users with unsent sides, but only if the other party had confirmed.
+    // If both parties ghosted (both sides still pending), nobody gets banned.
     for (const t of staleAcceptedTrades) {
       const sides = await db.query.activeTradeSide.findMany({
-        where: and(
-          eq(activeTradeSide.activeTradeId, t.id),
-          eq(activeTradeSide.status, "pending"),
-        ),
+        where: eq(activeTradeSide.activeTradeId, t.id),
       });
-      const defaultedUserIds = [...new Set(sides.map((s) => s.userId))];
-      for (const userId of defaultedUserIds) {
+      const unsentUserIds = [...new Set(
+        sides.filter((s) => s.status === "pending").map((s) => s.userId),
+      )];
+      for (const userId of unsentUserIds) {
+        const otherUserId = userId === t.initiatorUserId ? t.recipientUserId : t.initiatorUserId;
+        const otherSides = sides.filter((s) => s.userId === otherUserId);
+        const otherSent = otherSides.length > 0 && otherSides.every((s) => s.status === "confirmed");
+        if (!otherSent) continue; // Both ghosted — no ban
         const cosmo = await db.query.cosmoAccount.findFirst({
           where: eq(cosmoAccount.userId, userId),
           columns: { cosmoId: true, address: true },
@@ -238,7 +243,7 @@ export async function GET(request: NextRequest) {
         message: `Active Trade #${t.id} was cancelled because a misrouted transfer was not recovered within 7 days.`,
       },
     ]);
-    await db.insert(tradeNotification).values(wrNotifications);
+    await notify(wrNotifications);
 
     // Issue bans to users who sent to the wrong recipient and it wasn't recovered
     for (const t of wrongRecipientTrades) {

@@ -16,7 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon } from "lucide-react";
+import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon, MessageCircleIcon } from "lucide-react";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
 import { useTradeRealtime } from "@/hooks/use-realtime";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
@@ -72,6 +72,7 @@ interface ActiveTrade {
   status: TradeStatus;
   createdAt: string;
   updatedAt: string;
+  acceptedAt?: string | null;
   tradePostId?: string | null;
   matchedTradePostId?: string | null;
   initiatorUserId: string;
@@ -80,8 +81,8 @@ interface ActiveTrade {
   counterOfferId?: string | null;
   counterOfferChain?: CounterOfferChainEntry[];
   expiresAt?: string | null;
-  initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null };
-  recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null };
+  initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null; discordUsername?: string | null };
+  recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null; discordUsername?: string | null };
   sides: TradeSide[];
 }
 
@@ -471,6 +472,58 @@ function SideCard({
   );
 }
 
+function DiscordContact({
+  partnerDiscord,
+  partnerName,
+}: {
+  partnerDiscord?: string | null;
+  partnerName: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  if (!partnerDiscord) {
+    return (
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium flex items-center gap-1.5">
+          <MessageCircleIcon className="h-4 w-4" /> Contact on Discord
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          {partnerName} has not linked a Discord account yet.
+        </p>
+      </div>
+    );
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(partnerDiscord!).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium flex items-center gap-1.5">
+        <MessageCircleIcon className="h-4 w-4" /> Contact on Discord
+      </h3>
+      <div className="flex items-center gap-2 rounded-md border px-3 py-2 bg-muted/20">
+        <span className="text-sm font-medium flex-1">{partnerDiscord}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Copy Discord username"
+        >
+          {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-500" /> : <CopyIcon className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Reach out on Discord to coordinate your trade or confirm details.
+      </p>
+    </div>
+  );
+}
+
 interface TradeMessage {
   id: number;
   userId: string;
@@ -592,7 +645,7 @@ function TradeChat({ tradeId, userId, readOnly }: { tradeId: string; userId: str
   );
 }
 
-type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient" | "recovered";
+type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient" | "recovered" | "returned";
 
 interface TransferLog {
   id: number;
@@ -723,6 +776,19 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
             <span className="text-green-500"> (objekt reached the intended recipient)</span>
           </>
         );
+      case "returned":
+        return (
+          <>
+            <span className="font-medium text-blue-400">[RETURNED]</span>
+            {" "}
+            <span className="font-medium">{log.senderName}</span>
+            {" returned "}
+            <span className="font-medium">{objekt}</span>
+            {" to "}
+            <span className="font-medium">{log.recipientName}</span>
+            <span className="text-blue-400"> (objekt returned to original sender)</span>
+          </>
+        );
       default:
         return (
           <>
@@ -759,6 +825,7 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
                     (log.event === "wrong_objekt" || log.event === "wrong_recipient") && "bg-red-500/10",
                     (log.event === "pre_accept_sent" || log.event === "pre_accept_confirmed") && "bg-amber-500/10",
                     log.event === "recovered" && "bg-green-500/10",
+                    log.event === "returned" && "bg-blue-500/10",
                   )}
                 >
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
@@ -896,6 +963,8 @@ export default function ActiveTradePage({
   const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [counterOfferOpen, setCounterOfferOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<"accept" | "decline" | "cancel" | null>(null);
+  const [cancelCheckDone, setCancelCheckDone] = useState(false);
+  const [cancelCheckRunning, setCancelCheckRunning] = useState(false);
 
   // Subscribe to realtime events — invalidates queries on trade updates, messages, etc.
   // Falls back to polling intervals below if Pusher env vars are not configured.
@@ -930,6 +999,9 @@ export default function ActiveTradePage({
   );
   const recoveredObjektIds = new Set(
     transferLogs.filter((l) => l.event === "recovered").map((l) => l.objektId)
+  );
+  const returnedObjektIds = new Set(
+    transferLogs.filter((l) => l.event === "returned").map((l) => l.objektId)
   );
   const suspiciousTransferLogs = transferLogs.filter(
     (l) =>
@@ -1031,6 +1103,37 @@ export default function ActiveTradePage({
     await runCheckTransfers(false);
   }
 
+  async function openCancelDialog() {
+    setCancelCheckDone(false);
+    setConfirmDialog("cancel");
+
+    // For accepted/partial trades only: run a fresh transfer check before the user can confirm.
+    // This ensures the ban warning reflects the latest on-chain state.
+    const currentStatus = queryClient.getQueryData<ActiveTrade>(["active-trade", id])?.status;
+    if (currentStatus === "accepted" || currentStatus === "partial") {
+      setCancelCheckRunning(true);
+      try {
+        const now = Date.now();
+        // Bypass the UI cooldown — this is a dedicated safety check, not a user-initiated poll
+        lastCheckRef.current = now;
+        startCooldownDisplay();
+        const res = await fetch(`/api/active-trades/${id}/check-transfers`, { method: "POST" });
+        if (res.ok) {
+          queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
+          queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", id] });
+          // Wait for the query to settle so the dialog renders updated side statuses
+          await queryClient.refetchQueries({ queryKey: ["active-trade", id] });
+        }
+      } finally {
+        setCancelCheckRunning(false);
+        setCancelCheckDone(true);
+      }
+    } else {
+      // Pending trade — no transfer check needed
+      setCancelCheckDone(true);
+    }
+  }
+
   if (isLoading || sessionPending) {
     return (
       <div className="text-center py-12 text-muted-foreground">Loading...</div>
@@ -1048,8 +1151,33 @@ export default function ActiveTradePage({
     trade.initiatorUserId === userId || trade.recipientUserId === userId;
   const isRecipient = trade.recipientUserId === userId;
   const isActive = !["completed", "cancelled", "countered", "disputed"].includes(trade.status);
-  const anyConfirmed = trade.sides.some((s) => s.status === "confirmed");
-  const canCancel = isActive && !anyConfirmed;
+  const mySides = trade.sides.filter((s) => s.userId === userId);
+  const otherSides = trade.sides.filter((s) => s.userId !== userId);
+  const myAllPending = mySides.every((s) => s.status === "pending");
+  const myAllConfirmed = mySides.length > 0 && mySides.every((s) => s.status === "confirmed");
+  const otherAllConfirmed = otherSides.length > 0 && otherSides.every((s) => s.status === "confirmed");
+  const otherAllPending = otherSides.every((s) => s.status === "pending");
+
+  // Path D: I sent, partner received, partner returned everything back to me.
+  // Both parties can cancel cleanly — no ban for either side.
+  const allMySentReturned = isActive &&
+    myAllConfirmed &&
+    mySides.length > 0 &&
+    mySides.every((s) => s.status === "confirmed" && returnedObjektIds.has(s.objektId));
+
+  // I've sent everything but partner hasn't — waiting on them.
+  // The API allows cancel after 24h (Path C), but we don't surface the button at all.
+  // There is no benefit to cancelling: userA gets nothing back and userB faces no ban yet.
+  // Exception: Path D — if they returned, unlock the cancel button immediately.
+  const iWaitingForPartner = isActive && myAllConfirmed && otherAllPending && !allMySentReturned;
+
+  // Can cancel if: nothing sent yet (Path A), partner confirmed but I haven't sent (Path B),
+  // or partner returned everything to me (Path D).
+  const canCancel = isActive && !iWaitingForPartner && (
+    trade.sides.every((s) => s.status === "pending") ||  // Path A
+    (myAllPending && otherAllConfirmed) ||               // Path B
+    allMySentReturned                                    // Path D
+  );
 
   // Split sides into initiator's and recipient's (may be multiple per user for multi-objekt trades)
   const initiatorSides = trade.sides.filter((s) => s.userId === trade.initiatorUserId);
@@ -1117,7 +1245,7 @@ export default function ActiveTradePage({
               )}
             </div>
             {isParticipant && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
                 {isRecipient && trade.status === "pending" && (
                   <>
                     <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white border-0" onClick={() => setConfirmDialog("accept")}>
@@ -1128,13 +1256,18 @@ export default function ActiveTradePage({
                     </Button>
                   </>
                 )}
+                {iWaitingForPartner && (
+                  <p className="text-xs text-muted-foreground">
+                    Waiting for {isInitiator ? recipientName : initiatorName} to send
+                  </p>
+                )}
                 {canCancel && (
                   trade.status === "pending" ? (
                     <Button size="sm" variant="outline" className="border-red-800/60 text-red-400 hover:bg-red-900/30 hover:text-red-300" onClick={() => setConfirmDialog("decline")}>
                       Decline
                     </Button>
                   ) : (
-                    <Button size="sm" variant="destructive" onClick={() => setConfirmDialog("cancel")}>
+                    <Button size="sm" variant="destructive" onClick={openCancelDialog}>
                       Cancel
                     </Button>
                   )
@@ -1256,6 +1389,31 @@ export default function ActiveTradePage({
             </div>
           )}
 
+          {allMySentReturned && isParticipant && (
+            <div className="rounded-md border border-blue-500/40 bg-blue-950/30 px-4 py-3 flex items-start gap-3">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-blue-400 mt-0.5" />
+              <div className="text-sm space-y-1">
+                <p className="font-medium text-blue-300">{isInitiator ? recipientName : initiatorName} returned your objekt(s).</p>
+                <p className="text-muted-foreground">
+                  All transferred objekts have been returned. Either party can now cancel this trade without any penalties or bans.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {iWaitingForPartner && isParticipant && (
+            <div className="banner-warning flex items-start gap-3">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning mt-0.5" />
+              <div className="text-sm space-y-1">
+                <p className="font-medium text-warning-strong">You have sent your objekt — waiting for {isInitiator ? recipientName : initiatorName} to send theirs.</p>
+                <p className="text-muted-foreground">
+                  You cannot cancel this trade yet. If {isInitiator ? recipientName : initiatorName} does not send within 24 hours of your transfer being detected, you will be able to cancel and they will be banned.
+                  If they no longer want to trade, ask them to return your objekt via Cosmo — the system will detect it and unlock a penalty-free cancel.
+                </p>
+              </div>
+            </div>
+          )}
+
           {["accepted", "partial"].includes(trade.status) && isParticipant && suspiciousTransferLogs.length > 0 && (
             <div className="banner-danger flex items-start gap-3">
               <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
@@ -1320,6 +1478,16 @@ export default function ActiveTradePage({
                 />
               )}
             </div>
+          )}
+
+          {isParticipant && (
+            <>
+              <Separator />
+              <DiscordContact
+                partnerDiscord={isInitiator ? trade.recipient.discordUsername : trade.initiator.discordUsername}
+                partnerName={isInitiator ? recipientName : initiatorName}
+              />
+            </>
           )}
 
           {isParticipant && userId && (
@@ -1426,14 +1594,69 @@ export default function ActiveTradePage({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel this trade?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This trade is already in progress. Cancelling now may cause issues if either party has already sent their objekt. This cannot be undone.
-            </AlertDialogDescription>
+            {cancelCheckRunning ? (
+              <AlertDialogDescription>
+                Checking transfer status… please wait.
+              </AlertDialogDescription>
+            ) : (() => {
+              // Re-derive from latest trade data after the check
+              const freshMySides = trade.sides.filter((s) => s.userId === userId);
+              const freshOtherSides = trade.sides.filter((s) => s.userId !== userId);
+              const freshMyAllPending = freshMySides.every((s) => s.status === "pending");
+              const freshOtherAllConfirmed = freshOtherSides.length > 0 && freshOtherSides.every((s) => s.status === "confirmed");
+              const partnerName = isInitiator ? recipientName : initiatorName;
+
+              // Path D: all my sent objekts were returned — clean cancel
+              if (allMySentReturned) {
+                return (
+                  <div className="space-y-3">
+                    <div className="rounded-md border border-blue-500/40 bg-blue-950/30 px-4 py-3 space-y-1.5">
+                      <p className="text-sm font-semibold text-blue-300">Your objekt(s) were returned — no penalties will apply.</p>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-semibold">{partnerName}</span> returned all transferred objekts. Cancelling this trade will not result in a ban for either party.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Path B: partner confirmed, I haven't sent — I will be banned
+              if (freshMyAllPending && freshOtherAllConfirmed) {
+                const sentObjekts = freshOtherSides.map((s) => {
+                  const { name, serial } = formatLabel(s);
+                  return serial ? `${name} ${serial}` : name;
+                }).join(", ");
+                return (
+                  <div className="space-y-3">
+                    <div className="rounded-md border border-red-600/60 bg-red-950/40 px-4 py-3 space-y-1.5">
+                      <p className="text-sm font-bold text-red-400">⚠ YOU WILL BE BANNED if you cancel now.</p>
+                      <p className="text-sm text-red-300">
+                        <span className="font-semibold">{partnerName}</span> has already sent: <span className="font-semibold">{sentObjekts}</span>.
+                        Cancelling means you are defaulting on an agreed trade — a trade ban will be issued to your account automatically.
+                      </p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      If you believe this is a mistake or you were pressured into cancelling, do not proceed. Contact support instead.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <AlertDialogDescription>
+                  Neither party has sent their objekt yet. Cancelling will revert both trade posts to open. This cannot be undone.
+                </AlertDialogDescription>
+              );
+            })()}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleCancel(); }}>
-              Cancel trade
+            <AlertDialogAction
+              variant="destructive"
+              disabled={!cancelCheckDone}
+              onClick={() => { setConfirmDialog(null); handleCancel(); }}
+            >
+              {cancelCheckRunning ? "Checking…" : "Cancel trade"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

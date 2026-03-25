@@ -24,6 +24,10 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  // Denormalised from the `account` table for fast lookups without a join.
+  // Populated via Better Auth's databaseHooks after-sign-in.
+  discordId: text("discord_id").unique(),
+  discordUsername: text("discord_username"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -236,7 +240,7 @@ export const tradeTransferLog = pgTable("trade_transfer_log", {
   recipientUserId: text("recipient_user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  event: text("event").notNull().$type<"sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient" | "recovered">(),
+  event: text("event").notNull().$type<"sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient" | "recovered" | "returned">(),
   detectedAt: timestamp("detected_at").notNull().defaultNow(),
 }, (t) => [
   index("trade_transfer_log_trade_idx").on(t.activeTradeId),

@@ -6,8 +6,8 @@ import {
   tradePost,
   tradePostHave,
   cosmoAccount,
-  tradeNotification,
 } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { objekts, collections } from "@/lib/db/indexer-schema";
 import { eq, and, inArray } from "drizzle-orm";
 
@@ -131,7 +131,7 @@ export async function POST() {
 
   // Insert notifications
   if (notifications.length > 0) {
-    await db.insert(tradeNotification).values(
+    await notify(
       notifications.map((n) => ({
         userId: session.user.id,
         tradePostId: n.tradePostId,

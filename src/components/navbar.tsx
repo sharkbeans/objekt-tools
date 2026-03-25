@@ -176,11 +176,8 @@ export function Navbar() {
               </DropdownMenu>
             ) : (
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/sign-in">Sign in</Link>
-                </Button>
                 <Button size="sm" asChild>
-                  <Link href="/sign-up">Sign up</Link>
+                  <Link href="/sign-in">Sign in with Discord</Link>
                 </Button>
               </div>
             )}
@@ -312,14 +309,9 @@ function MobileNav({
             </MobileNavLink>
           )}
           {!session && (
-            <>
-              <MobileNavLink href="/sign-in" onClick={() => setOpen(false)}>
-                Sign in
-              </MobileNavLink>
-              <MobileNavLink href="/sign-up" onClick={() => setOpen(false)}>
-                Sign up
-              </MobileNavLink>
-            </>
+            <MobileNavLink href="/sign-in" onClick={() => setOpen(false)}>
+              Sign in with Discord
+            </MobileNavLink>
           )}
         </nav>
 

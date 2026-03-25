@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, cosmoAccount, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, cosmoAccount, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { eq, inArray, and, or } from "drizzle-orm";
 import { issueBan, propagateResolution } from "@/lib/trade-guards";
 import { publishTradeEvent } from "@/lib/realtime";
@@ -65,17 +66,44 @@ export async function POST(
   // Path B: I haven't sent anything, other party has confirmed — I can back out
   const iCanBackOut = myAllPending && otherConfirmed;
 
-  // Path C: I've confirmed but other party hasn't sent — allow cancel after timeout
+  // Path C: I've confirmed but other party hasn't sent — allow cancel after timeout.
+  // The clock starts from when I sent (earliest detectedAt on my confirmed sides),
+  // not from acceptedAt. This protects userB from being banned for not responding
+  // within 24h of acceptance if userA only sent much later.
   let timeoutExpired = false;
-  if (myConfirmed && otherAllPending && trade.acceptedAt) {
-    const hoursSinceAcceptance = (Date.now() - trade.acceptedAt.getTime()) / (1000 * 60 * 60);
-    timeoutExpired = hoursSinceAcceptance >= CANCEL_TIMEOUT_HOURS;
+  if (myConfirmed && otherAllPending) {
+    const myConfirmedSides = mySides.filter((s) => s.status === "confirmed" && s.detectedAt);
+    const earliestSend = myConfirmedSides.length > 0
+      ? new Date(Math.min(...myConfirmedSides.map((s) => s.detectedAt!.getTime())))
+      : trade.acceptedAt;
+    if (earliestSend) {
+      const hoursSinceSend = (Date.now() - earliestSend.getTime()) / (1000 * 60 * 60);
+      timeoutExpired = hoursSinceSend >= CANCEL_TIMEOUT_HOURS;
+    }
   }
 
-  if (!noOneSent && !iCanBackOut && !timeoutExpired) {
+  // Path D: The other party received my objekt(s) and returned them all — clean cancel, no ban.
+  // Check transfer logs for "returned" events covering all confirmed sides the other party received.
+  let allReceivedReturned = false;
+  if (["accepted", "partial"].includes(trade.status)) {
+    // "confirmed" sides where the other party was the recipient (i.e. I sent, they received)
+    const mySentConfirmedSides = mySides.filter((s) => s.status === "confirmed");
+    if (mySentConfirmedSides.length > 0) {
+      const returnedLogs = await db.query.tradeTransferLog.findMany({
+        where: and(
+          eq(tradeTransferLog.activeTradeId, tradeId),
+          eq(tradeTransferLog.event, "returned"),
+        ),
+      });
+      const returnedObjektIds = new Set(returnedLogs.map((l) => l.objektId));
+      allReceivedReturned = mySentConfirmedSides.every((s) => returnedObjektIds.has(s.objektId));
+    }
+  }
+
+  if (!noOneSent && !iCanBackOut && !timeoutExpired && !allReceivedReturned) {
     if (myConfirmed && otherAllPending) {
       return NextResponse.json(
-        { error: `Cannot cancel yet: you must wait ${CANCEL_TIMEOUT_HOURS} hours after acceptance before cancelling when you've already sent. Contact support if there is a dispute.` },
+        { error: `Cannot cancel yet: you must wait ${CANCEL_TIMEOUT_HOURS} hours after sending your objekt before cancelling. Contact support if there is a dispute.` },
         { status: 400 }
       );
     }
@@ -143,29 +171,26 @@ export async function POST(
     otherPartyPreSentCount = preAcceptLogs.length;
   }
 
-  const cancellerMsg = otherPartyPreSentCount > 0
-    ? `You cancelled Active Trade #${tradeId}. The other party had already sent ${otherPartyPreSentCount} objekt(s) — please return them.`
-    : `You cancelled Active Trade #${tradeId}.`;
+  const cancellerMsg = allReceivedReturned
+    ? `You cancelled Active Trade #${tradeId}. The other party returned your objekt(s) — no penalties applied.`
+    : otherPartyPreSentCount > 0
+      ? `You cancelled Active Trade #${tradeId}. The other party had already sent ${otherPartyPreSentCount} objekt(s) — please return them.`
+      : `You cancelled Active Trade #${tradeId}.`;
 
-  const otherMsg = otherPartyPreSentCount > 0
-    ? `${cancellerName} cancelled Active Trade #${tradeId}. They have been asked to return your ${otherPartyPreSentCount} objekt(s).`
-    : `${cancellerName} cancelled Active Trade #${tradeId}.`;
+  const otherMsg = allReceivedReturned
+    ? `${cancellerName} cancelled Active Trade #${tradeId}. Your returned objekt(s) have been acknowledged — no penalties applied.`
+    : otherPartyPreSentCount > 0
+      ? `${cancellerName} cancelled Active Trade #${tradeId}. They have been asked to return your ${otherPartyPreSentCount} objekt(s).`
+      : `${cancellerName} cancelled Active Trade #${tradeId}.`;
 
-  await db.insert(tradeNotification).values([
-    {
-      userId: session.user.id,
-      activeTradeId: tradeId,
-      message: cancellerMsg,
-    },
-    {
-      userId: otherUserId,
-      activeTradeId: tradeId,
-      message: otherMsg,
-    },
+  await notify([
+    { userId: session.user.id, activeTradeId: tradeId, message: cancellerMsg },
+    { userId: otherUserId, activeTradeId: tradeId, message: otherMsg },
   ]);
 
   // Issue bans for defaults on accepted/partial trades
-  if (["accepted", "partial"].includes(trade.status)) {
+  // Path D (allReceivedReturned): other party returned everything — no ban for anyone
+  if (["accepted", "partial"].includes(trade.status) && !allReceivedReturned) {
     // Path B: I'm backing out after other party confirmed — I defaulted
     if (iCanBackOut) {
       const myCosmo = await db.query.cosmoAccount.findFirst({
@@ -192,7 +217,7 @@ export async function POST(
         otherUserId,
         otherCosmoId,
         tradeId,
-        `Defaulted on Active Trade #${tradeId} (did not send objekts within ${CANCEL_TIMEOUT_HOURS} hours).`
+        `Defaulted on Active Trade #${tradeId} (did not send within ${CANCEL_TIMEOUT_HOURS} hours of partner sending).`
       );
     }
   }

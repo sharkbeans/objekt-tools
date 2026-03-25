@@ -3,7 +3,8 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
 import { redis } from "@/lib/redis";
-import { activeTrade, activeTradeSide, tradePost, tradeTransferLog, tradeNotification } from "@/lib/db/schema";
+import { activeTrade, activeTradeSide, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { objekts } from "@/lib/db/indexer-schema";
 import { eq, and, inArray, ne, or } from "drizzle-orm";
 import { getBlockingTradeId, getActiveBan, propagateResolution } from "@/lib/trade-guards";
@@ -154,7 +155,7 @@ export async function POST(
 
     // If already completed, handle post-completion tasks
     if (newStatus === "completed") {
-      await tx.insert(tradeNotification).values([
+      await notify([
         {
           userId: trade.initiatorUserId,
           activeTradeId: tradeId,
@@ -202,7 +203,7 @@ export async function POST(
               message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
             },
           ]);
-          await tx.insert(tradeNotification).values(notifications);
+          await notify(notifications);
         }
       }
     }

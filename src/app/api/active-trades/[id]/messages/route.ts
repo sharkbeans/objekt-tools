@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
 import { publishTradeEvent, publishUserEvent } from "@/lib/realtime";
 import { activeTrade, tradeMessage, tradeNotification } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { eq, and, asc, desc, notInArray } from "drizzle-orm";
 
 const MAX_MESSAGES = 10;
@@ -121,7 +122,7 @@ export async function POST(
   });
 
   if (!existingMsgNotification) {
-    await db.insert(tradeNotification).values({
+    await notify({
       userId: otherUserId,
       activeTradeId: tradeId,
       message: `${session.user.name} sent a message in Active Trade #${tradeId}.`,

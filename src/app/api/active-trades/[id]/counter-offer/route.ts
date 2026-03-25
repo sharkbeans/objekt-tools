@@ -6,9 +6,9 @@ import {
   activeTrade,
   activeTradeSide,
   cosmoAccount,
-  tradeNotification,
   tradePost,
 } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { eq, and } from "drizzle-orm";
 import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
 import { validateWantsOnly } from "@/lib/wants-only-validation";
@@ -306,9 +306,8 @@ export async function POST(
     );
 
     // Notify the other party
-    await tx.insert(tradeNotification).values({
+    await notify({
       userId: originalTrade.initiatorUserId,
-      tradePostId: null,
       activeTradeId: newTrade.id,
       message: `${session.user.name} sent you a counter-offer for Active Trade #${originalTradeId}.${diffSummary}`,
     });

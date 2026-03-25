@@ -5,8 +5,8 @@ import {
   tradePost,
   tradePostHave,
   cosmoAccount,
-  tradeNotification,
 } from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { objekts, collections } from "@/lib/db/indexer-schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { redis } from "@/lib/redis";
@@ -100,7 +100,7 @@ export async function POST(
     if (availableHaves.length === 0) {
       // All haves gone — delete the trade
       await db.delete(tradePost).where(eq(tradePost.id, tradeId));
-      await db.insert(tradeNotification).values({
+      await notify({
         userId: trade.userId,
         tradePostId: tradeId,
         message: `Your trade #${tradeId} was removed because all offered objekts are no longer in your inventory.`,
@@ -120,7 +120,7 @@ export async function POST(
       await db
         .delete(tradePostHave)
         .where(inArray(tradePostHave.id, unavailableHaves.map((h) => h.id)));
-      await db.insert(tradeNotification).values({
+      await notify({
         userId: trade.userId,
         tradePostId: tradeId,
         message: `Removed unavailable objekts from trade #${tradeId}: ${removedLabels}. If you have duplicates with different serials, you can update the trade.`,
