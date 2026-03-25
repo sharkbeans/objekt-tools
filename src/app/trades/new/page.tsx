@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { ClassMultiSelect, SeasonMultiSelect, decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,20 +37,28 @@ import {
 
 export type AnyWant = {
   isAny: true;
+  artist?: string;
   member?: string;
   season?: string;
   class?: string;
 };
 
+const ARTIST_DISPLAY: Record<string, string> = { artms: "ARTMS" };
+
+function artistLabel(artist: string) {
+  return ARTIST_DISPLAY[artist] ?? artist;
+}
+
 function anyWantLabel(w: AnyWant): string {
+  const prefix = w.artist ? `${artistLabel(w.artist)} ` : "";
   if (w.member) return `Any ${w.member}`;
-  if (w.season) return `Any ${w.season}`;
-  if (w.class) return `Any ${w.class}`;
+  if (w.season) return `Any ${prefix}${w.season}`;
+  if (w.class) return `Any ${prefix}${w.class}`;
   return "Any";
 }
 
 function anyWantKey(w: AnyWant): string {
-  return [w.member, w.season, w.class].join("|");
+  return [w.artist, w.member, w.season, w.class].join("|");
 }
 
 function useObjektImages(items: { collectionId: string }[]) {
@@ -188,6 +197,7 @@ export default function NewTradePage() {
             ...anyWants.map((w) => ({
               collectionId: "",
               isAny: true,
+              artist: w.artist,
               member: w.member,
               season: w.season,
               class: w.class,
@@ -286,33 +296,45 @@ export default function NewTradePage() {
                   placeholder="Member"
                   className="min-w-32"
                 />
-                <MultiSelect
-                  options={availableAnySeasons.map((s) => ({ label: s, value: s }))}
-                  value={anyWants.filter((w) => w.season).map((w) => w.season!)}
+                <SeasonMultiSelect
+                  options={availableAnySeasons}
+                  value={anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!)}
                   onChange={(next) => {
-                    const prev = anyWants.filter((w) => w.season).map((w) => w.season!);
+                    const prev = anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!);
                     const added = next.filter((v) => !prev.includes(v));
                     const removed = prev.filter((v) => !next.includes(v));
-                    const removedKeys = new Set(removed.map((s) => anyWantKey({ isAny: true, season: s })));
+                    const removedKeys = new Set(removed.map((s) => {
+                      const d = decodeGroupedValue(s);
+                      return anyWantKey({ isAny: true, artist: d?.artistId, season: d?.item ?? s });
+                    }));
                     setAnyWants((ws) => [
                       ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
-                      ...added.map((s) => ({ isAny: true as const, season: s })),
+                      ...added.map((s) => {
+                        const d = decodeGroupedValue(s);
+                        return { isAny: true as const, artist: d?.artistId, season: d?.item ?? s };
+                      }),
                     ]);
                   }}
                   placeholder="Season"
                   className="min-w-32"
                 />
-                <MultiSelect
-                  options={availableAnyClasses.map((c) => ({ label: c, value: c }))}
-                  value={anyWants.filter((w) => w.class).map((w) => w.class!)}
+                <ClassMultiSelect
+                  options={availableAnyClasses}
+                  value={anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!)}
                   onChange={(next) => {
-                    const prev = anyWants.filter((w) => w.class).map((w) => w.class!);
+                    const prev = anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!);
                     const added = next.filter((v) => !prev.includes(v));
                     const removed = prev.filter((v) => !next.includes(v));
-                    const removedKeys = new Set(removed.map((c) => anyWantKey({ isAny: true, class: c })));
+                    const removedKeys = new Set(removed.map((c) => {
+                      const d = decodeGroupedValue(c);
+                      return anyWantKey({ isAny: true, artist: d?.artistId, class: d?.item ?? c });
+                    }));
                     setAnyWants((ws) => [
                       ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
-                      ...added.map((c) => ({ isAny: true as const, class: c })),
+                      ...added.map((c) => {
+                        const d = decodeGroupedValue(c);
+                        return { isAny: true as const, artist: d?.artistId, class: d?.item ?? c };
+                      }),
                     ]);
                   }}
                   placeholder="Class"

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { ClassMultiSelect, SeasonMultiSelect, decodeGroupedValue } from "@/components/ui/class-multi-select";
 import {
   validArtists,
   validClasses,
@@ -100,8 +101,15 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
     const newMembers = getAvailableMembers(artists);
     update({
       artist: artists,
-      season: filters.season.filter((s) => newSeasons.includes(s)),
-      class: filters.class.filter((c) => newClasses.includes(c)),
+      // season/class are scoped "artistId::value" — keep only those whose item is still valid
+      season: filters.season.filter((s) => {
+        const decoded = decodeGroupedValue(s);
+        return decoded ? newSeasons.includes(decoded.item) : newSeasons.includes(s);
+      }),
+      class: filters.class.filter((c) => {
+        const decoded = decodeGroupedValue(c);
+        return decoded ? newClasses.includes(decoded.item) : newClasses.includes(c);
+      }),
       member: filters.member.filter((m) => newMembers.includes(m)),
     });
   }
@@ -170,16 +178,16 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
           className="min-w-32"
         />
 
-        <MultiSelect
-          options={availableSeasons.map((s) => ({ label: s, value: s }))}
+        <SeasonMultiSelect
+          options={availableSeasons}
           value={filters.season}
           onChange={(v) => update({ season: v })}
           placeholder="Season"
           className="min-w-32"
         />
 
-        <MultiSelect
-          options={availableClasses.map((c) => ({ label: c, value: c }))}
+        <ClassMultiSelect
+          options={availableClasses}
           value={filters.class}
           onChange={(v) => update({ class: v })}
           placeholder="Class"
@@ -264,28 +272,30 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
               </button>
             </Badge>
           ))}
-          {filters.season.map((s) => (
-            <Badge key={s} variant="secondary" className="gap-1 text-xs">
-              {s}
-              <button
-                type="button"
-                onClick={() => update({ season: filters.season.filter((x) => x !== s) })}
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-          {filters.class.map((c) => (
-            <Badge key={c} variant="secondary" className="gap-1 text-xs">
-              {c}
-              <button
-                type="button"
-                onClick={() => update({ class: filters.class.filter((x) => x !== c) })}
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
+          {filters.season.map((s) => {
+            const decoded = decodeGroupedValue(s);
+            const label = decoded ? `${decoded.artistId === "artms" ? "ARTMS" : decoded.artistId} ${decoded.item}` : s;
+            return (
+              <Badge key={s} variant="secondary" className="gap-1 text-xs">
+                {label}
+                <button type="button" onClick={() => update({ season: filters.season.filter((x) => x !== s) })}>
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </Badge>
+            );
+          })}
+          {filters.class.map((c) => {
+            const decoded = decodeGroupedValue(c);
+            const label = decoded ? `${decoded.artistId === "artms" ? "ARTMS" : decoded.artistId} ${decoded.item}` : c;
+            return (
+              <Badge key={c} variant="secondary" className="gap-1 text-xs">
+                {label}
+                <button type="button" onClick={() => update({ class: filters.class.filter((x) => x !== c) })}>
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </Badge>
+            );
+          })}
           {filters.on_offline.map((t) => (
             <Badge key={t} variant="secondary" className="gap-1 text-xs">
               {t === "online" ? "Digital" : "Physical"}

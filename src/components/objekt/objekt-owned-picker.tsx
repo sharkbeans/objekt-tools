@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { makeTradeItemTags, searchFilter } from "@/lib/filter-utils";
+import { makeTradeItemTags, searchFilter, getArtistForMember } from "@/lib/filter-utils";
+import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Portal } from "radix-ui";
 
 type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
@@ -112,8 +113,14 @@ export function ObjektOwnedPicker({
     if (filters) {
       if (filters.artist.length) result = result.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
       if (filters.member.length) result = result.filter((o) => filters.member.includes(o.member));
-      if (filters.season.length) result = result.filter((o) => filters.season.includes(o.season));
-      if (filters.class.length) result = result.filter((o) => filters.class.includes(o.class));
+      if (filters.season.length) result = result.filter((o) => filters.season.some((s) => {
+        const d = decodeGroupedValue(s);
+        return d ? d.item === o.season && d.artistId === (getArtistForMember(o.member) ?? o.artist) : s === o.season;
+      }));
+      if (filters.class.length) result = result.filter((o) => filters.class.some((c) => {
+        const d = decodeGroupedValue(c);
+        return d ? d.item === o.class && d.artistId === (getArtistForMember(o.member) ?? o.artist) : c === o.class;
+      }));
       if (filters.on_offline.length) {
         result = result.filter((o) => {
           const type = o.collectionNo.toLowerCase().endsWith("z") ? "offline" : "online";

@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "./objekt-owned-picker";
 import { shortformMembers } from "@/lib/filters";
+import { getArtistForMember } from "@/lib/filter-utils";
+import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Trash2 } from "lucide-react";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
@@ -22,8 +24,16 @@ async function fetchByFilters(filters: ObjektStructuralFilters): Promise<ObjektE
   const params = new URLSearchParams();
   for (const a of filters.artist) params.append("artist", a);
   for (const m of filters.member) params.append("member", m);
-  for (const s of filters.season) params.append("season", s);
-  for (const c of filters.class) params.append("class", c);
+  for (const s of filters.season) {
+    const d = decodeGroupedValue(s);
+    if (d) { params.append("season", d.item); params.append("artist", d.artistId); }
+    else params.append("season", s);
+  }
+  for (const c of filters.class) {
+    const d = decodeGroupedValue(c);
+    if (d) { params.append("class", d.item); params.append("artist", d.artistId); }
+    else params.append("class", c);
+  }
   for (const o of filters.on_offline) params.append("on_offline", o);
   const res = await fetch(`/api/objekts/search?${params.toString()}`);
   if (!res.ok) return [];
@@ -36,8 +46,76 @@ function resolveShortform(query: string): string {
   return resolved ?? query;
 }
 
+// Maps season prefix (repeated letter) → full season name
+// e.g. "A" → "Atom01", "AA" → "Atom02", "BB" → "Binary02"
+const seasonPrefixMap: Record<string, string> = {
+  A: "Atom01", AA: "Atom02",
+  B: "Binary01", BB: "Binary02",
+  C: "Cream01",
+  D: "Divine01",
+  E: "Ever01",
+  W: "Winter26",
+  SP: "Spring25", SU: "Summer25", AU: "Autumn25",
+};
+
+// Parse a query like "AA201 HeeJin" or "HeeJin AA201" into structured params.
+// Returns null if it can't be parsed as a season-prefix query (falls back to raw q).
+function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
+  const terms = query.trim().split(/\s+/);
+  // Match a token like "AA201", "B109z", "AA201Z" — optional season prefix + 3 digits + optional type char
+  const collectionNoRe = /^([A-Za-z]*)(\d{3})[azAZ]?$/i;
+
+  let seasonPrefix: string | null = null;
+  let collectionNoDigits: string | null = null;
+  let memberTerms: string[] = [];
+
+  for (const term of terms) {
+    const m = term.match(collectionNoRe);
+    if (m) {
+      const prefix = m[1].toUpperCase();
+      const digits = m[2];
+      if (prefix && seasonPrefixMap[prefix]) {
+        seasonPrefix = prefix;
+      }
+      collectionNoDigits = digits;
+    } else {
+      memberTerms.push(term);
+    }
+  }
+
+  // Need at least a collection number to use structured search
+  if (!collectionNoDigits) return null;
+
+  const params = new URLSearchParams();
+  if (seasonPrefix && seasonPrefixMap[seasonPrefix]) {
+    params.append("season", seasonPrefixMap[seasonPrefix]);
+  }
+  // collectionNo in DB is like "201z" or "201a" — match both by sending just the digits as q
+  params.append("q", collectionNoDigits);
+
+  // Resolve member terms
+  for (const t of memberTerms) {
+    const resolved = resolveShortform(t);
+    params.append("member", resolved);
+  }
+
+  return params;
+}
+
 async function searchByQuery(query: string): Promise<ObjektEntry[]> {
-  const resolved = resolveShortform(query.trim());
+  const trimmed = query.trim();
+
+  // Try season-prefix structured parsing first (e.g. "AA201 HeeJin")
+  const structured = parseSeasonPrefixQuery(trimmed);
+  if (structured) {
+    const res = await fetch(`/api/objekts/search?${structured.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.results ?? [];
+  }
+
+  // Fallback: single shortform or raw text
+  const resolved = resolveShortform(trimmed);
   const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(resolved)}`);
   if (!res.ok) return [];
   const data = await res.json();
@@ -117,8 +195,14 @@ export function ObjektPicker({
     let r = base;
     if (filters.artist.length) r = r.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
     if (filters.member.length) r = r.filter((o) => filters.member.includes(o.member));
-    if (filters.season.length) r = r.filter((o) => filters.season.includes(o.season));
-    if (filters.class.length) r = r.filter((o) => filters.class.includes(o.class));
+    if (filters.season.length) r = r.filter((o) => filters.season.some((s) => {
+      const d = decodeGroupedValue(s);
+      return d ? d.item === o.season && d.artistId === (getArtistForMember(o.member) ?? o.artist) : s === o.season;
+    }));
+    if (filters.class.length) r = r.filter((o) => filters.class.some((c) => {
+      const d = decodeGroupedValue(c);
+      return d ? d.item === o.class && d.artistId === (getArtistForMember(o.member) ?? o.artist) : c === o.class;
+    }));
     if (filters.on_offline.length) {
       r = r.filter((o) => {
         const type = o.collectionNo?.toLowerCase().endsWith("z") ? "offline" : "online";
