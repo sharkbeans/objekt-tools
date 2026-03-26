@@ -172,16 +172,16 @@ export async function POST(
   }
 
   const cancellerMsg = allReceivedReturned
-    ? `You cancelled Active Trade #${tradeId}. The other party returned your objekt(s) — no penalties applied.`
+    ? `You cancelled this trade. The other party returned your objekt(s) — no penalties applied.`
     : otherPartyPreSentCount > 0
-      ? `You cancelled Active Trade #${tradeId}. The other party had already sent ${otherPartyPreSentCount} objekt(s) — please return them.`
-      : `You cancelled Active Trade #${tradeId}.`;
+      ? `You cancelled this trade. The other party had already sent ${otherPartyPreSentCount} objekt(s) — please return them.`
+      : `You cancelled this trade.`;
 
   const otherMsg = allReceivedReturned
-    ? `${cancellerName} cancelled Active Trade #${tradeId}. Your returned objekt(s) have been acknowledged — no penalties applied.`
+    ? `${cancellerName} cancelled this trade. Your returned objekt(s) have been acknowledged — no penalties applied.`
     : otherPartyPreSentCount > 0
-      ? `${cancellerName} cancelled Active Trade #${tradeId}. They have been asked to return your ${otherPartyPreSentCount} objekt(s).`
-      : `${cancellerName} cancelled Active Trade #${tradeId}.`;
+      ? `${cancellerName} cancelled this trade. They have been asked to return your ${otherPartyPreSentCount} objekt(s).`
+      : `${cancellerName} cancelled this trade.`;
 
   await notify([
     { userId: session.user.id, activeTradeId: tradeId, message: cancellerMsg },

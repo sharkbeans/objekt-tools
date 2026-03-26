@@ -192,11 +192,11 @@ export async function POST(
       await notify([
         {
           userId: trade.initiatorUserId,
-          message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
+          message: `This trade is complete! Both parties had already sent their objekts.`,
         },
         {
           userId: trade.recipientUserId,
-          message: `Active Trade #${tradeId} is complete! Both parties had already sent their objekts.`,
+          message: `This trade is complete! Both parties had already sent their objekts.`,
         },
       ]);
     } else if (recipientAllPreSent) {
@@ -243,16 +243,16 @@ export async function POST(
       await notify([
         {
           userId: trade.initiatorUserId,
-          message: `Active Trade #${tradeId}: the other party has already sent all their objekts. Please send yours to complete the trade.`,
+          message: `The other party has already sent all their objekts. Please send yours to complete the trade.`,
         },
         {
           userId: trade.recipientUserId,
-          message: `Active Trade #${tradeId} has been automatically accepted because you sent all your objekts. Waiting for the other party to send theirs.`,
+          message: `This trade has been automatically accepted because you sent all your objekts. Waiting for the other party to send theirs.`,
         },
       ]);
     } else if (initiatorAllPreSent) {
       // Initiator sent all pre-accept — notify recipient once (they can still cancel or accept)
-      const notifMsg = `Active Trade #${tradeId}: the other party has already sent all their objekts before you accepted. You can accept as normal, or cancel — if you cancel, please return the objekts to them.`;
+      const notifMsg = `The other party has already sent all their objekts before you accepted. You can accept as normal, or cancel — if you cancel, please return the objekts to them.`;
       if (!notifMessages.has(notifMsg)) {
         await notify({
           userId: trade.recipientUserId,
@@ -495,7 +495,7 @@ export async function POST(
             ? `${side.member} ${side.collectionNo}`
             : side.collectionId;
 
-          const returnNotifMsg = `Active Trade #${tradeId}: ${senderName} returned ${objektLabel}. Either party can now cancel this trade without penalty.`;
+          const returnNotifMsg = `${senderName} returned ${objektLabel}. Either party can now cancel this trade without penalty.`;
           const existingReturnNotifs = await db.query.tradeNotification.findMany({
             where: inArray(tradeNotification.userId, [trade.initiatorUserId, trade.recipientUserId]),
           });
@@ -697,11 +697,11 @@ export async function POST(
         await notify([
           {
             userId: trade.initiatorUserId,
-            message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+            message: `This trade is complete! Both objekts have been transferred.`,
           },
           {
             userId: trade.recipientUserId,
-            message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+            message: `This trade is complete! Both objekts have been transferred.`,
           },
         ]);
 
@@ -740,11 +740,11 @@ export async function POST(
             const notifications = siblingTrades.flatMap((t) => [
               {
                 userId: t.initiatorUserId,
-                message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+                message: `This trade was cancelled because another trade completed first.`,
               },
               {
                 userId: t.recipientUserId,
-                message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+                message: `This trade was cancelled because another trade completed first.`,
               },
             ]);
             await notify(notifications);

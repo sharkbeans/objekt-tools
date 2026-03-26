@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "./objekt-owned-picker";
-import { shortformMembers } from "@/lib/filters";
+import { shortformMembers, membersByArtist } from "@/lib/filters";
 import { getArtistForMember } from "@/lib/filter-utils";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Trash2 } from "lucide-react";
@@ -41,9 +41,17 @@ async function fetchByFilters(filters: ObjektStructuralFilters): Promise<ObjektE
   return data.results ?? [];
 }
 
+const allMembers = Object.values(membersByArtist).flat();
+
 function resolveShortform(query: string): string {
-  const resolved = shortformMembers[query.toLowerCase()];
-  return resolved ?? query;
+  const lower = query.toLowerCase();
+  // Exact shortform match
+  const shortform = shortformMembers[lower];
+  if (shortform) return shortform;
+  // Case-insensitive match against known member names (e.g. "heejin" → "HeeJin")
+  const memberMatch = allMembers.find((m) => m.toLowerCase() === lower);
+  if (memberMatch) return memberMatch;
+  return query;
 }
 
 // Maps season prefix (repeated letter) → full season name
@@ -74,10 +82,14 @@ function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
     if (m) {
       const prefix = m[1].toUpperCase();
       const digits = m[2];
+      // Only treat prefix as season if it's a known season prefix
       if (prefix && seasonPrefixMap[prefix]) {
         seasonPrefix = prefix;
+        collectionNoDigits = digits;
+      } else {
+        // No known season prefix — treat the whole token as a raw q (e.g. "A108")
+        collectionNoDigits = term;
       }
-      collectionNoDigits = digits;
     } else {
       memberTerms.push(term);
     }

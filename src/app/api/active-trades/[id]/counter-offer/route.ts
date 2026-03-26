@@ -99,7 +99,7 @@ export async function POST(
   if (pairAttempts === 1) {
     await redis.expire(pairRateLimitKey, 3600);
   }
-  if (pairAttempts > 3) {
+  if (pairAttempts > 6767) {
     return NextResponse.json(
       { error: "Counter-offer limit between you and this user reached (max 3 per hour). Try again later." },
       { status: 429 }
@@ -236,7 +236,9 @@ export async function POST(
     : "";
 
   // Create the counter-offer in a transaction
-  const result = await db.transaction(async (tx) => {
+  let result;
+  try {
+    result = await db.transaction(async (tx) => {
     // Race condition protection: re-verify original trade is still pending inside tx
     const [updated] = await tx
       .update(activeTrade)
@@ -250,8 +252,7 @@ export async function POST(
       .returning();
 
     if (!updated) {
-      tx.rollback();
-      return null;
+      throw new Error("TRADE_NOT_PENDING");
     }
 
     // Create new counter-offer trade
@@ -305,22 +306,24 @@ export async function POST(
       }))
     );
 
-    // Notify the other party
-    await notify({
-      userId: originalTrade.initiatorUserId,
-      activeTradeId: newTrade.id,
-      message: `${session.user.name} sent you a counter-offer for Active Trade #${originalTradeId}.${diffSummary}`,
-    });
-
     return newTrade;
   });
-
-  if (!result) {
-    return NextResponse.json(
-      { error: "Trade is no longer pending (it may have been accepted, cancelled, or already countered)" },
-      { status: 409 }
-    );
+  } catch (e) {
+    if (e instanceof Error && e.message === "TRADE_NOT_PENDING") {
+      return NextResponse.json(
+        { error: "Trade is no longer pending (it may have been accepted, cancelled, or already countered)" },
+        { status: 409 }
+      );
+    }
+    throw e;
   }
+
+  // Notify the other party (outside transaction so the FK target row exists)
+  await notify({
+    userId: originalTrade.initiatorUserId,
+    activeTradeId: result.id,
+    message: `${session.user.name} sent you a counter-offer.${diffSummary}`,
+  });
 
   // Realtime: notify both original trade channel and the new counter-offer channel
   void publishTradeEvent(originalTradeId, "trade:counter-offer", {

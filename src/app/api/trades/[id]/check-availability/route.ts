@@ -103,7 +103,7 @@ export async function POST(
       await notify({
         userId: trade.userId,
         tradePostId: tradeId,
-        message: `Your trade #${tradeId} was removed because all offered objekts are no longer in your inventory.`,
+        message: `Your trade post was removed because all offered objekts are no longer in your inventory.`,
       });
     } else {
       // Some haves gone — remove unavailable ones
@@ -123,7 +123,7 @@ export async function POST(
       await notify({
         userId: trade.userId,
         tradePostId: tradeId,
-        message: `Removed unavailable objekts from trade #${tradeId}: ${removedLabels}. If you have duplicates with different serials, you can update the trade.`,
+        message: `Removed unavailable objekts from your trade post: ${removedLabels}. If you have duplicates with different serials, you can update the trade.`,
       });
     }
   }

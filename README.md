@@ -19,7 +19,7 @@ Cosmo account linking uses a simple status message verification flow — you set
 - Monitor ownership to ensure offered objekts remain available
 - Link Cosmo account via status message verification — no session tokens or credentials are ever collected
 - Support for "any" filters (e.g., "any member", "any season")
-- Trade notifications: bell with unread count, dedicated `/notifications` page, and notifications for offers, messages, and counter-offers
+- Trade notifications: bell with unread count, dedicated `/notifications` page, and notifications for offers, messages, and counter-offers — with optional Discord DMs
 - Automatic trade expiration and availability checks if objekts are unavailable for trade
 - Counter-offer system: recipients can propose modified terms instead of accepting or rejecting outright
 - Edit or renew trade posts (description-only edits while trades are active; full edits and renewal when no active trades)
@@ -90,7 +90,16 @@ Edit `.env.development.local` and fill in at minimum:
 
 Pusher vars are optional locally — real-time updates will be unavailable but the app falls back to polling.
 
-Social login (`DISCORD_*`, `TWITTER_*`) is optional. Leave blank to disable those providers.
+Discord login and Discord DM notifications require:
+
+| Variable                  | Description                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| `DISCORD_CLIENT_ID`     | OAuth app client ID                                                                   |
+| `DISCORD_CLIENT_SECRET` | OAuth app client secret                                                               |
+| `DISCORD_BOT_TOKEN`     | Bot token for sending DMs                                                             |
+| `NEXT_PUBLIC_APP_URL`   | Public URL used to build trade links in DMs (e.g.`https://objekt-trade.vercel.app`) |
+
+All four are optional locally. Leave them blank to disable Discord login and DM notifications.
 
 > **Important: do not use `.env.local`.**
 > Next.js loads `.env.local` with higher priority than `.env.development.local`, so if `.env.local` exists and contains a production database URL (e.g. from `vercel env pull`), your local app will connect to production.
@@ -284,6 +293,30 @@ Automatic bans protect users from repeat defaulters:
 | **Cosmo user search**        | 10 requests/min per user                                                               |
 | **Trade accept**             | 5 requests/min per user                                                                |
 | **Chat messages**            | 1 message per 10 seconds per user                                                      |
+
+## Discord Integration
+
+Authentication is Discord-only — there is no email/password login. This also gives the platform a reachable Discord identity for every user, which is used to deliver trade notifications as direct messages.
+
+### How DM notifications work
+
+When a trade event occurs (new offer, message, counter-offer, cancellation, etc.), a notification is saved to the database and a Discord DM is sent to the affected user in the background. DM failures are logged but never surface as errors — in-app notifications are always the source of truth.
+
+The DM contains a direct link to the relevant trade so no context is needed from the message text alone.
+
+### Shared server requirement
+
+Discord prohibits bots from DMing users they don't share a server with. Users are prompted to join the community server after signing in so the bot can reach them:
+
+**Community server:** https://discord.gg/p7TqCFACsH
+
+### Setting up Discord for local development
+
+1. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications)
+2. Under **OAuth2**, add `http://localhost:3000/api/auth/callback/discord` as a redirect URI
+3. Under **Bot**, enable the bot and copy the token
+4. Add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `DISCORD_BOT_TOKEN` to `.env.development.local`
+5. Invite the bot to a test server and ensure your test account has joined it
 
 ## API Routes
 

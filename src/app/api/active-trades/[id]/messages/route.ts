@@ -125,11 +125,11 @@ export async function POST(
     await notify({
       userId: otherUserId,
       activeTradeId: tradeId,
-      message: `${session.user.name} sent a message in Active Trade #${tradeId}.`,
+      message: `${session.user.name} sent a message in your trade.`,
     });
     void publishUserEvent(otherUserId, "notification:new", {
       activeTradeId: tradeId,
-      message: `${session.user.name} sent a message in Active Trade #${tradeId}.`,
+      message: `${session.user.name} sent a message in your trade.`,
     });
   }
 

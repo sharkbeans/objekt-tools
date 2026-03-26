@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
   const postNotifications = expiredPosts.map((p) => ({
     userId: p.userId,
-    message: `Your trade post #${p.id} was closed after 30 days.`,
+    message: `Your trade post was closed after 30 days.`,
   }));
 
   if (postNotifications.length > 0) {
@@ -60,11 +60,11 @@ export async function GET(request: NextRequest) {
     const tradeNotifications = expiredTrades.flatMap((t) => [
       {
         userId: t.initiatorUserId,
-        message: `Active Trade #${t.id} expired after 30 days with no response.`,
+        message: `This trade expired after 30 days with no response.`,
       },
       {
         userId: t.recipientUserId,
-        message: `Active Trade #${t.id} expired after 30 days — the trade request was not accepted in time.`,
+        message: `This trade expired after 30 days — the trade request was not accepted in time.`,
       },
     ]);
 
@@ -92,11 +92,11 @@ export async function GET(request: NextRequest) {
     const coNotifications = expiredCounterOffers.flatMap((t) => [
       {
         userId: t.initiatorUserId,
-        message: `Your counter-offer (Active Trade #${t.id}) expired after 48 hours with no response.`,
+        message: `Your counter-offer expired after 48 hours with no response.`,
       },
       {
         userId: t.recipientUserId,
-        message: `A counter-offer (Active Trade #${t.id}) expired after 48 hours — it was not accepted in time.`,
+        message: `A counter-offer expired after 48 hours — it was not accepted in time.`,
       },
     ]);
 
@@ -138,11 +138,11 @@ export async function GET(request: NextRequest) {
     const staleNotifications = staleAcceptedTrades.flatMap((t) => [
       {
         userId: t.initiatorUserId,
-        message: `Active Trade #${t.id} expired after 30 days without completion.`,
+        message: `This trade expired after 30 days without completion.`,
       },
       {
         userId: t.recipientUserId,
-        message: `Active Trade #${t.id} expired after 30 days without completion.`,
+        message: `This trade expired after 30 days without completion.`,
       },
     ]);
     await notify(staleNotifications);
@@ -236,11 +236,11 @@ export async function GET(request: NextRequest) {
     const wrNotifications = wrongRecipientTrades.flatMap((t) => [
       {
         userId: t.initiatorUserId,
-        message: `Active Trade #${t.id} was cancelled because a misrouted transfer was not recovered within 7 days.`,
+        message: `This trade was cancelled because a misrouted transfer was not recovered within 7 days.`,
       },
       {
         userId: t.recipientUserId,
-        message: `Active Trade #${t.id} was cancelled because a misrouted transfer was not recovered within 7 days.`,
+        message: `This trade was cancelled because a misrouted transfer was not recovered within 7 days.`,
       },
     ]);
     await notify(wrNotifications);

@@ -159,12 +159,12 @@ export async function POST(
         {
           userId: trade.initiatorUserId,
           activeTradeId: tradeId,
-          message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+          message: `This trade is complete! Both objekts have been transferred.`,
         },
         {
           userId: trade.recipientUserId,
           activeTradeId: tradeId,
-          message: `Active Trade #${tradeId} is complete! Both objekts have been transferred.`,
+          message: `This trade is complete! Both objekts have been transferred.`,
         },
       ]);
 
@@ -195,12 +195,12 @@ export async function POST(
             {
               userId: t.initiatorUserId,
               activeTradeId: t.id,
-              message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+              message: `This trade was cancelled because another trade completed first.`,
             },
             {
               userId: t.recipientUserId,
               activeTradeId: t.id,
-              message: `Active Trade #${t.id} was cancelled because Trade #${tradeId} completed first.`,
+              message: `This trade was cancelled because another trade completed first.`,
             },
           ]);
           await notify(notifications);

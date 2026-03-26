@@ -228,13 +228,13 @@ export async function POST(
     userId: matchedPost.userId,
     tradePostId: matchedTradePostId,
     activeTradeId: result.id,
-    message: `${session.user.name} sent you a trade offer on your post #${matchedTradePostId}.`,
+    message: `${session.user.name} sent you a trade offer.`,
   });
 
   // Realtime: notify recipient of new offer
   void publishUserEvent(matchedPost.userId, "notification:new", {
     activeTradeId: result.id,
-    message: `${session.user.name} sent you a trade offer on your post #${matchedTradePostId}.`,
+    message: `${session.user.name} sent you a trade offer.`,
   });
 
   return NextResponse.json({ id: result.id }, { status: 201 });

@@ -97,7 +97,7 @@ export async function POST() {
       tradesToDelete.push(trade.id);
       notifications.push({
         tradePostId: trade.id,
-        message: `Your trade #${trade.id} was removed because all offered objekts are no longer in your inventory.`,
+        message: `Your trade post was removed because all offered objekts are no longer in your inventory.`,
       });
     } else if (unavailableHaves.length > 0) {
       // Some haves gone — remove unavailable ones
@@ -112,7 +112,7 @@ export async function POST() {
       havesToRemove.push(...unavailableHaves.map((h) => h.id));
       notifications.push({
         tradePostId: trade.id,
-        message: `Removed unavailable objekts from trade #${trade.id}: ${removedLabels}. If you have duplicates with different serials, you can update the trade.`,
+        message: `Removed unavailable objekts from your trade post: ${removedLabels}. If you have duplicates with different serials, you can update the trade.`,
       });
     }
   }
