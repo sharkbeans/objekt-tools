@@ -221,7 +221,7 @@ export default function NewTradePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl sm:mx-auto space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-bold">New Trade</h1>
         <p className="text-muted-foreground">
@@ -238,14 +238,14 @@ export default function NewTradePage() {
         </TabsList>
 
         <TabsContent value="have">
-          <Card>
-            <CardHeader>
+          <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
+            <CardHeader className="px-0 sm:px-6">
               <CardTitle className="text-lg">What do you have?</CardTitle>
               <CardDescription>
                 Select objekts you want to trade away
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0 sm:px-6">
               <ObjektOwnedPicker
                 selected={haves}
                 onSelect={(o) => setHaves((prev) => [...prev, o])}
@@ -264,14 +264,14 @@ export default function NewTradePage() {
 
         <TabsContent value="want" className="space-y-3">
           {/* ANY want builder */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
+            <CardHeader className="px-0 sm:px-6 pb-3">
               <CardTitle className="text-lg">Add ANY want</CardTitle>
               <CardDescription>
                 Accept any objekt matching a filter — e.g. &quot;Any HeeJin&quot; or &quot;Any Atom01&quot;
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="px-0 sm:px-6 space-y-3">
               <div className="flex flex-wrap gap-2">
                 <MultiSelect
                   options={validArtists.map((a) => ({ label: a, value: a }))}
@@ -360,14 +360,14 @@ export default function NewTradePage() {
           </Card>
 
           {/* Specific objekt want picker */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
+            <CardHeader className="px-0 sm:px-6 pb-3">
               <CardTitle className="text-lg">What do you want?</CardTitle>
               <CardDescription>
                 Select specific objekts you&apos;re looking for
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0 sm:px-6">
               <ObjektPicker
                 selected={wants}
                 onSelect={(o) => setWants((prev) => [...prev, o])}

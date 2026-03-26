@@ -8,6 +8,19 @@ import { shortformMembers, membersByArtist } from "@/lib/filters";
 import { getArtistForMember } from "@/lib/filter-utils";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Trash2 } from "lucide-react";
+import { ObjektGridPicker } from "./objekt-grid-picker";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
+}
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   if (!filters) return false;
@@ -45,17 +58,13 @@ const allMembers = Object.values(membersByArtist).flat();
 
 function resolveShortform(query: string): string {
   const lower = query.toLowerCase();
-  // Exact shortform match
   const shortform = shortformMembers[lower];
   if (shortform) return shortform;
-  // Case-insensitive match against known member names (e.g. "heejin" → "HeeJin")
   const memberMatch = allMembers.find((m) => m.toLowerCase() === lower);
   if (memberMatch) return memberMatch;
   return query;
 }
 
-// Maps season prefix (repeated letter) → full season name
-// e.g. "A" → "Atom01", "AA" → "Atom02", "BB" → "Binary02"
 const seasonPrefixMap: Record<string, string> = {
   A: "Atom01", AA: "Atom02",
   B: "Binary01", BB: "Binary02",
@@ -66,11 +75,8 @@ const seasonPrefixMap: Record<string, string> = {
   SP: "Spring25", SU: "Summer25", AU: "Autumn25",
 };
 
-// Parse a query like "AA201 HeeJin" or "HeeJin AA201" into structured params.
-// Returns null if it can't be parsed as a season-prefix query (falls back to raw q).
 function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
   const terms = query.trim().split(/\s+/);
-  // Match a token like "AA201", "B109z", "AA201Z" — optional season prefix + 3 digits + optional type char
   const collectionNoRe = /^([A-Za-z]*)(\d{3})[azAZ]?$/i;
 
   let seasonPrefix: string | null = null;
@@ -82,12 +88,10 @@ function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
     if (m) {
       const prefix = m[1].toUpperCase();
       const digits = m[2];
-      // Only treat prefix as season if it's a known season prefix
       if (prefix && seasonPrefixMap[prefix]) {
         seasonPrefix = prefix;
         collectionNoDigits = digits;
       } else {
-        // No known season prefix — treat the whole token as a raw q (e.g. "A108")
         collectionNoDigits = term;
       }
     } else {
@@ -95,17 +99,14 @@ function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
     }
   }
 
-  // Need at least a collection number to use structured search
   if (!collectionNoDigits) return null;
 
   const params = new URLSearchParams();
   if (seasonPrefix && seasonPrefixMap[seasonPrefix]) {
     params.append("season", seasonPrefixMap[seasonPrefix]);
   }
-  // collectionNo in DB is like "201z" or "201a" — match both by sending just the digits as q
   params.append("q", collectionNoDigits);
 
-  // Resolve member terms
   for (const t of memberTerms) {
     const resolved = resolveShortform(t);
     params.append("member", resolved);
@@ -117,7 +118,6 @@ function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
 async function searchByQuery(query: string): Promise<ObjektEntry[]> {
   const trimmed = query.trim();
 
-  // Try season-prefix structured parsing first (e.g. "AA201 HeeJin")
   const structured = parseSeasonPrefixQuery(trimmed);
   if (structured) {
     const res = await fetch(`/api/objekts/search?${structured.toString()}`);
@@ -126,7 +126,6 @@ async function searchByQuery(query: string): Promise<ObjektEntry[]> {
     return data.results ?? [];
   }
 
-  // Fallback: single shortform or raw text
   const resolved = resolveShortform(trimmed);
   const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(resolved)}`);
   if (!res.ok) return [];
@@ -149,6 +148,7 @@ export function ObjektPicker({
   maxSelections = 10,
   filters,
 }: ObjektPickerProps) {
+  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [filterResults, setFilterResults] = useState<ObjektEntry[]>([]);
   const [queryResults, setQueryResults] = useState<ObjektEntry[]>([]);
@@ -203,7 +203,6 @@ export function ObjektPicker({
   const displayResults = useMemo(() => {
     const base = effectiveQuery ? queryResults : filterResults;
     if (!filters || !effectiveQuery) return base;
-    // When text searching, also apply structural filters client-side
     let r = base;
     if (filters.artist.length) r = r.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
     if (filters.member.length) r = r.filter((o) => filters.member.includes(o.member));
@@ -250,6 +249,40 @@ export function ObjektPicker({
   }, []);
 
   const showList = filtersActive || effectiveQuery.length > 0;
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        <Input
+          placeholder="Search objekts..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+
+        {!showList ? (
+          <div className="text-sm text-muted-foreground text-center py-8">
+            Use the filters above to browse objekts
+          </div>
+        ) : (
+          <ObjektGridPicker
+            items={displayResults}
+            selected={selected}
+            onSelect={handleSelect}
+            onDeselect={onDeselect}
+            loading={loading}
+            maxSelections={maxSelections}
+            emptyMessage="No results found"
+          />
+        )}
+
+        {selected.length > 0 && (
+          <p className="text-xs text-muted-foreground text-center">
+            {selected.length}/{maxSelections} selected
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

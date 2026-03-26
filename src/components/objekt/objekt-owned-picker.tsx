@@ -7,6 +7,7 @@ import type { ObjektEntry } from "@/lib/cosmo/types";
 import { makeTradeItemTags, searchFilter, getArtistForMember } from "@/lib/filter-utils";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Portal } from "radix-ui";
+import { ObjektGridPicker } from "./objekt-grid-picker";
 
 type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
 
@@ -48,6 +49,18 @@ export type ObjektStructuralFilters = {
   search?: string;
 };
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
+}
+
 interface ObjektOwnedPickerProps {
   selected: ObjektEntry[];
   onSelect: (objekt: ObjektEntry) => void;
@@ -63,6 +76,7 @@ export function ObjektOwnedPicker({
   maxSelections = 10,
   filters,
 }: ObjektOwnedPickerProps) {
+  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [owned, setOwned] = useState<OwnedEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +104,6 @@ export function ObjektOwnedPicker({
       .toLowerCase();
 
     if (searchText) {
-      // Parse with the same OR (comma) / AND (space) / NOT (!) grammar as the trades page
       const queries = searchText
         .split(",")
         .map((group) =>
@@ -169,6 +182,52 @@ export function ObjektOwnedPicker({
     setHoverImage(null);
     setHoverPos(null);
   }, []);
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        <Input
+          placeholder="Filter your objekts..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+
+        {loading ? (
+          <ObjektGridPicker
+            items={[]}
+            selected={selected}
+            onSelect={() => {}}
+            onDeselect={onDeselect}
+            loading
+            compareBySerial
+            maxSelections={maxSelections}
+          />
+        ) : error ? (
+          <div className="text-sm text-destructive text-center py-4">{error}</div>
+        ) : owned.length === 0 ? (
+          <div className="text-sm text-muted-foreground text-center py-4">
+            No objekts found. Make sure your Cosmo account is linked.
+          </div>
+        ) : (
+          <ObjektGridPicker
+            items={filtered}
+            selected={selected}
+            onSelect={(o) => handleSelect(o as OwnedEntry)}
+            onDeselect={onDeselect}
+            compareBySerial
+            maxSelections={maxSelections}
+            emptyMessage="No matching objekts"
+          />
+        )}
+
+        {selected.length > 0 && (
+          <p className="text-xs text-muted-foreground text-center">
+            {selected.length}/{maxSelections} selected
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
