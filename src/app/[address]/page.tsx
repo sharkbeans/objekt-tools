@@ -114,9 +114,22 @@ export default function PublicProfilePage({
 }) {
   const { address: rawAddress } = use(params);
   const decoded = decodeURIComponent(rawAddress);
-  // Strip leading @ if present (URLs like /@0x...)
-  const identifier = decoded.startsWith("@") ? decoded.slice(1) : decoded;
   const router = useRouter();
+
+  // Profile URLs must start with @ (e.g. /@username) to avoid clashing with
+  // static routes like /trades, /notifications, etc.
+  if (!decoded.startsWith("@")) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center">
+        <h1 className="text-2xl font-bold mb-2">Page not found</h1>
+        <p className="text-muted-foreground">
+          Looking for a user profile? Try <span className="font-mono">/@username</span>
+        </p>
+      </div>
+    );
+  }
+
+  const identifier = decoded.slice(1);
   const [emailVisible, setEmailVisible] = useState(false);
 
   const {
