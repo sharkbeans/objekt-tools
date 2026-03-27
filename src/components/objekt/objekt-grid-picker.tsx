@@ -5,7 +5,7 @@ import { Check } from "lucide-react";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { TradePagination } from "@/components/trades/trade-pagination";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 36;
 
 interface ObjektGridPickerProps {
   items: ObjektEntry[];
@@ -56,7 +56,7 @@ export function ObjektGridPicker({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
         {Array.from({ length: PAGE_SIZE }).map((_, i) => (
           <div key={i} className="aspect-photocard rounded-sm bg-muted animate-pulse" />
         ))}
@@ -74,7 +74,7 @@ export function ObjektGridPicker({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
         {pageItems.map((entry, i) => {
           const sel = isSelected(entry);
           const url = entry.thumbnailImage;
@@ -131,6 +131,7 @@ export function ObjektGridPicker({
         total={items.length}
         limit={PAGE_SIZE}
         onPageChange={setPage}
+        itemLabel="objekts"
       />
     </div>
   );

@@ -1,26 +1,13 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "./objekt-owned-picker";
 import { shortformMembers, membersByArtist } from "@/lib/filters";
 import { getArtistForMember } from "@/lib/filter-utils";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
-import { Trash2 } from "lucide-react";
 import { ObjektGridPicker } from "./objekt-grid-picker";
-
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    setIsMobile(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-  return isMobile;
-}
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   if (!filters) return false;
@@ -148,19 +135,14 @@ export function ObjektPicker({
   maxSelections = 10,
   filters,
 }: ObjektPickerProps) {
-  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [filterResults, setFilterResults] = useState<ObjektEntry[]>([]);
   const [queryResults, setQueryResults] = useState<ObjektEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hoverImage, setHoverImage] = useState<string | null>(null);
-  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
-  const [imageLoaded, setImageLoaded] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const filtersActive = hasActiveFilters(filters);
 
-  // Fetch when filters change
   useEffect(() => {
     if (!filtersActive || !filters) {
       setFilterResults([]);
@@ -181,7 +163,6 @@ export function ObjektPicker({
 
   const effectiveQuery = query.trim() || (filters?.search?.trim() ?? "");
 
-  // Debounced text search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!effectiveQuery) {
@@ -199,7 +180,6 @@ export function ObjektPicker({
     };
   }, [effectiveQuery]);
 
-  // Display: query takes priority over filter results; filter client-side if both active
   const displayResults = useMemo(() => {
     const base = effectiveQuery ? queryResults : filterResults;
     if (!filters || !effectiveQuery) return base;
@@ -223,66 +203,13 @@ export function ObjektPicker({
     return r;
   }, [query, queryResults, filterResults, filters]);
 
-  const isSelected = (entry: ObjektEntry) =>
-    selected.some((s) => s.collectionId === entry.collectionId);
-
   function handleSelect(entry: ObjektEntry) {
-    if (isSelected(entry) || selected.length >= maxSelections) return;
+    const isSelected = selected.some((s) => s.collectionId === entry.collectionId);
+    if (isSelected || selected.length >= maxSelections) return;
     onSelect(entry);
-    setHoverImage(null);
-    setHoverPos(null);
   }
-
-  const handleMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>, entry: ObjektEntry) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      setHoverPos({ top: rect.top, left: rect.right + 8 });
-      setImageLoaded(false);
-      setHoverImage(entry.thumbnailImage ?? null);
-    },
-    [],
-  );
-
-  const handleMouseLeave = useCallback(() => {
-    setHoverImage(null);
-    setHoverPos(null);
-  }, []);
 
   const showList = filtersActive || effectiveQuery.length > 0;
-
-  if (isMobile) {
-    return (
-      <div className="space-y-3">
-        <Input
-          placeholder="Search objekts..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-
-        {!showList ? (
-          <div className="text-sm text-muted-foreground text-center py-8">
-            Use the filters above to browse objekts
-          </div>
-        ) : (
-          <ObjektGridPicker
-            items={displayResults}
-            selected={selected}
-            onSelect={handleSelect}
-            onDeselect={onDeselect}
-            loading={loading}
-            maxSelections={maxSelections}
-            emptyMessage="No results found"
-          />
-        )}
-
-        {selected.length > 0 && (
-          <p className="text-xs text-muted-foreground text-center">
-            {selected.length}/{maxSelections} selected
-          </p>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3">
@@ -293,101 +220,19 @@ export function ObjektPicker({
       />
 
       {!showList ? (
-        <div className="border rounded-md px-3 py-8 text-sm text-muted-foreground text-center">
+        <div className="text-sm text-muted-foreground text-center py-8">
           Use the filters above to browse objekts
         </div>
       ) : (
-        <div className="border rounded-md max-h-60 overflow-y-auto">
-          {loading ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Searching...</div>
-          ) : displayResults.length > 0 ? (
-            displayResults.map((entry) => (
-              <button
-                key={entry.collectionId}
-                type="button"
-                disabled={isSelected(entry)}
-                className={`picker-item ${isSelected(entry) ? "opacity-40" : ""}`}
-                onClick={() => handleSelect(entry)}
-                onMouseEnter={(e) => handleMouseEnter(e, entry)}
-                onMouseLeave={handleMouseLeave}
-              >
-                <span>
-                  <span className="text-muted-foreground">{entry.artist}</span>
-                  {" "}
-                  {entry.member}
-                  {" "}
-                  <span className="font-mono">{entry.collectionNo}</span>
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {entry.season} · {entry.class}
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-sm text-muted-foreground">No results found</div>
-          )}
-        </div>
-      )}
-
-      {hoverPos && (
-        <div
-          className="objekt-hover-preview"
-          style={{ top: hoverPos.top, left: hoverPos.left }}
-        >
-          {!imageLoaded && (
-            <div className="w-24 h-32 flex items-center justify-center text-xs text-muted-foreground">
-              Loading...
-            </div>
-          )}
-          {hoverImage && (
-            <img
-              src={hoverImage}
-              alt=""
-              className={`w-24 h-auto block ${imageLoaded ? "" : "hidden"}`}
-              onLoad={() => setImageLoaded(true)}
-            />
-          )}
-        </div>
-      )}
-
-      {selected.length > 0 && (
-        <p className="text-base font-medium">Selected Wants</p>
-      )}
-
-      {selected.length > 0 && (
-        <div className="border rounded-md divide-y">
-          {selected.map((objekt) => (
-            <div
-              key={objekt.collectionId}
-              className="picker-selected-row"
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setHoverPos({ top: rect.top, left: rect.right + 8 });
-                setImageLoaded(false);
-                setHoverImage(objekt.thumbnailImage ?? null);
-              }}
-              onMouseLeave={handleMouseLeave}
-            >
-              <span>
-                <span className="text-muted-foreground">{objekt.artist}</span>{" "}
-                {objekt.member}{" "}
-                <span className="font-mono">{objekt.collectionNo}</span>
-              </span>
-              <span className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">
-                  {objekt.season} · {objekt.class}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onDeselect(objekt)}
-                  className="text-red-500/80 hover:text-red-600 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </span>
-            </div>
-          ))}
-        </div>
+        <ObjektGridPicker
+          items={displayResults}
+          selected={selected}
+          onSelect={handleSelect}
+          onDeselect={onDeselect}
+          loading={loading}
+          maxSelections={maxSelections}
+          emptyMessage="No results found"
+        />
       )}
 
       {selected.length > 0 && (

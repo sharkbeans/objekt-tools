@@ -136,6 +136,8 @@ export default function NewTradePage() {
   const haveImages = useObjektImages(haves);
   const wantImages = useObjektImages(wants);
 
+  const [activeTab, setActiveTab] = useState<"have" | "want">("have");
+  const [anyWantOpen, setAnyWantOpen] = useState(false);
   const [previewHover, setPreviewHover] = useState<{ image: string; top: number; left: number } | null>(null);
 
   const handlePreviewMouseEnter = useCallback((e: React.MouseEvent<HTMLDivElement>, image: string | undefined) => {
@@ -231,7 +233,7 @@ export default function NewTradePage() {
 
       <TradeFilters filters={filters} onChange={setFilters} showSort={false} showFilterMode={false} />
 
-      <Tabs defaultValue="have">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "have" | "want")}>
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="have">Have ({haves.length})</TabsTrigger>
           <TabsTrigger value="want">Want ({wants.length + anyWants.length})</TabsTrigger>
@@ -260,105 +262,12 @@ export default function NewTradePage() {
               />
             </CardContent>
           </Card>
+          <Button className="w-full mt-3" onClick={() => setActiveTab("want")}>
+            Wants →
+          </Button>
         </TabsContent>
 
         <TabsContent value="want" className="space-y-3">
-          {/* ANY want builder */}
-          <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
-            <CardHeader className="px-0 sm:px-6 pb-3">
-              <CardTitle className="text-lg">Add ANY want</CardTitle>
-              <CardDescription>
-                Accept any objekt matching a filter — e.g. &quot;Any HeeJin&quot; or &quot;Any Atom01&quot;
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-0 sm:px-6 space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <MultiSelect
-                  options={validArtists.map((a) => ({ label: a, value: a }))}
-                  value={anyArtist}
-                  onChange={handleArtistChange}
-                  placeholder="Artist"
-                  className="min-w-28"
-                />
-                <MultiSelect
-                  options={availableAnyMembers.map((m) => ({ label: m, value: m }))}
-                  value={anyWants.filter((w) => w.member).map((w) => w.member!)}
-                  onChange={(next) => {
-                    const prev = anyWants.filter((w) => w.member).map((w) => w.member!);
-                    const added = next.filter((v) => !prev.includes(v));
-                    const removed = prev.filter((v) => !next.includes(v));
-                    const removedKeys = new Set(removed.map((m) => anyWantKey({ isAny: true, member: m })));
-                    setAnyWants((ws) => [
-                      ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
-                      ...added.map((m) => ({ isAny: true as const, member: m })),
-                    ]);
-                  }}
-                  placeholder="Member"
-                  className="min-w-32"
-                />
-                <SeasonMultiSelect
-                  options={availableAnySeasons}
-                  value={anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!)}
-                  onChange={(next) => {
-                    const prev = anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!);
-                    const added = next.filter((v) => !prev.includes(v));
-                    const removed = prev.filter((v) => !next.includes(v));
-                    const removedKeys = new Set(removed.map((s) => {
-                      const d = decodeGroupedValue(s);
-                      return anyWantKey({ isAny: true, artist: d?.artistId, season: d?.item ?? s });
-                    }));
-                    setAnyWants((ws) => [
-                      ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
-                      ...added.map((s) => {
-                        const d = decodeGroupedValue(s);
-                        return { isAny: true as const, artist: d?.artistId, season: d?.item ?? s };
-                      }),
-                    ]);
-                  }}
-                  placeholder="Season"
-                  className="min-w-32"
-                />
-                <ClassMultiSelect
-                  options={availableAnyClasses}
-                  value={anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!)}
-                  onChange={(next) => {
-                    const prev = anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!);
-                    const added = next.filter((v) => !prev.includes(v));
-                    const removed = prev.filter((v) => !next.includes(v));
-                    const removedKeys = new Set(removed.map((c) => {
-                      const d = decodeGroupedValue(c);
-                      return anyWantKey({ isAny: true, artist: d?.artistId, class: d?.item ?? c });
-                    }));
-                    setAnyWants((ws) => [
-                      ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
-                      ...added.map((c) => {
-                        const d = decodeGroupedValue(c);
-                        return { isAny: true as const, artist: d?.artistId, class: d?.item ?? c };
-                      }),
-                    ]);
-                  }}
-                  placeholder="Class"
-                  className="min-w-28"
-                />
-              </div>
-              {anyWants.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {anyWants.map((w, i) => (
-                    <Badge key={i} variant="secondary" className="gap-1 text-xs">
-                      {anyWantLabel(w)}
-                      <button
-                        type="button"
-                        onClick={() => setAnyWants((prev) => prev.filter((_, j) => j !== i))}
-                      >
-                        <XIcon className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Specific objekt want picker */}
           <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
             <CardHeader className="px-0 sm:px-6 pb-3">
@@ -367,7 +276,7 @@ export default function NewTradePage() {
                 Select specific objekts you&apos;re looking for
               </CardDescription>
             </CardHeader>
-            <CardContent className="px-0 sm:px-6">
+            <CardContent className="px-0 sm:px-6 space-y-3">
               <ObjektPicker
                 selected={wants}
                 onSelect={(o) => setWants((prev) => [...prev, o])}
@@ -378,8 +287,8 @@ export default function NewTradePage() {
                 }
                 filters={filters}
               />
-              <Separator className="mt-4" />
-              <div className="flex items-center justify-between pt-3">
+              <Separator />
+              <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="wants-only">Wants only</Label>
                   <p className="text-xs text-muted-foreground">
@@ -397,8 +306,113 @@ export default function NewTradePage() {
                   disabled={wants.length === 0 && anyWants.length === 0}
                 />
               </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="any-want-toggle">Add ANY want</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Accept any objekt matching a filter — e.g. &quot;Any HeeJin&quot; or &quot;Any Atom01&quot;
+                  </p>
+                </div>
+                <Switch
+                  id="any-want-toggle"
+                  checked={anyWantOpen}
+                  onCheckedChange={setAnyWantOpen}
+                />
+              </div>
+              {anyWantOpen && (
+                <div className="space-y-3 pt-1">
+                  <div className="flex flex-wrap gap-2">
+                    <MultiSelect
+                      options={validArtists.map((a) => ({ label: a, value: a }))}
+                      value={anyArtist}
+                      onChange={handleArtistChange}
+                      placeholder="Artist"
+                      className="min-w-28"
+                    />
+                    <MultiSelect
+                      options={availableAnyMembers.map((m) => ({ label: m, value: m }))}
+                      value={anyWants.filter((w) => w.member).map((w) => w.member!)}
+                      onChange={(next) => {
+                        const prev = anyWants.filter((w) => w.member).map((w) => w.member!);
+                        const added = next.filter((v) => !prev.includes(v));
+                        const removed = prev.filter((v) => !next.includes(v));
+                        const removedKeys = new Set(removed.map((m) => anyWantKey({ isAny: true, member: m })));
+                        setAnyWants((ws) => [
+                          ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
+                          ...added.map((m) => ({ isAny: true as const, member: m })),
+                        ]);
+                      }}
+                      placeholder="Member"
+                      className="min-w-32"
+                    />
+                    <SeasonMultiSelect
+                      options={availableAnySeasons}
+                      value={anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!)}
+                      onChange={(next) => {
+                        const prev = anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!);
+                        const added = next.filter((v) => !prev.includes(v));
+                        const removed = prev.filter((v) => !next.includes(v));
+                        const removedKeys = new Set(removed.map((s) => {
+                          const d = decodeGroupedValue(s);
+                          return anyWantKey({ isAny: true, artist: d?.artistId, season: d?.item ?? s });
+                        }));
+                        setAnyWants((ws) => [
+                          ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
+                          ...added.map((s) => {
+                            const d = decodeGroupedValue(s);
+                            return { isAny: true as const, artist: d?.artistId, season: d?.item ?? s };
+                          }),
+                        ]);
+                      }}
+                      placeholder="Season"
+                      className="min-w-32"
+                    />
+                    <ClassMultiSelect
+                      options={availableAnyClasses}
+                      value={anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!)}
+                      onChange={(next) => {
+                        const prev = anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!);
+                        const added = next.filter((v) => !prev.includes(v));
+                        const removed = prev.filter((v) => !next.includes(v));
+                        const removedKeys = new Set(removed.map((c) => {
+                          const d = decodeGroupedValue(c);
+                          return anyWantKey({ isAny: true, artist: d?.artistId, class: d?.item ?? c });
+                        }));
+                        setAnyWants((ws) => [
+                          ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
+                          ...added.map((c) => {
+                            const d = decodeGroupedValue(c);
+                            return { isAny: true as const, artist: d?.artistId, class: d?.item ?? c };
+                          }),
+                        ]);
+                      }}
+                      placeholder="Class"
+                      className="min-w-28"
+                    />
+                  </div>
+                  {anyWants.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {anyWants.map((w, i) => (
+                        <Badge key={i} variant="secondary" className="gap-1 text-xs">
+                          {anyWantLabel(w)}
+                          <button
+                            type="button"
+                            onClick={() => setAnyWants((prev) => prev.filter((_, j) => j !== i))}
+                          >
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
+          <Button className="w-full" onClick={() => setActiveTab("have")}>
+            ← Haves
+          </Button>
         </TabsContent>
       </Tabs>
 

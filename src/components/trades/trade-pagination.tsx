@@ -9,9 +9,10 @@ interface TradePaginationProps {
   total: number;
   limit: number;
   onPageChange: (page: number) => void;
+  itemLabel?: string;
 }
 
-export function TradePagination({ page, totalPages, total, limit, onPageChange }: TradePaginationProps) {
+export function TradePagination({ page, totalPages, total, limit, onPageChange, itemLabel = "trades" }: TradePaginationProps) {
   if (total === 0) return null;
 
   const from = (page - 1) * limit + 1;
@@ -44,7 +45,7 @@ export function TradePagination({ page, totalPages, total, limit, onPageChange }
   return (
     <div className="flex flex-col items-center gap-2 pt-2">
       <p className="text-sm text-muted-foreground">
-        Showing {from}–{to} of {total} trades
+        Showing {from}–{to} of {total} {itemLabel}
       </p>
       {totalPages > 1 && (
         <div className="flex items-center gap-1">
