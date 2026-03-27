@@ -10,7 +10,7 @@ import {
 } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
 import { eq, and } from "drizzle-orm";
-import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
+import { getBlockingTradeId, getActiveBan, checkTradeOfferQuota } from "@/lib/trade-guards";
 import { validateWantsOnly } from "@/lib/wants-only-validation";
 import { publishTradeEvent } from "@/lib/realtime";
 
@@ -169,6 +169,15 @@ export async function POST(
   if (blockingTradeId) {
     return NextResponse.json(
       { error: "You must send all your objekts in your current active trade before creating a counter-offer", activeTradeId: blockingTradeId },
+      { status: 403 }
+    );
+  }
+
+  // Trade offer quota check (counter-offerer becomes the initiator of the new trade)
+  const quota = await checkTradeOfferQuota(session.user.id);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: `You've reached your trade offer limit (${quota.quota}). Accept, decline, or cancel existing offers to free up space.` },
       { status: 403 }
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Portal } from "radix-ui";
+import { ObjektGridPicker } from "@/components/objekt/objekt-grid-picker";
+import type { ObjektEntry } from "@/lib/cosmo/types";
 
 const thumbnailCache = new Map<string, string | null>();
 
@@ -60,7 +62,21 @@ interface Props {
   theirHaves: TradeItem[];
 }
 
-function formatLabel(item: TradeItem) {
+function tradeItemToObjektEntry(item: TradeItem): ObjektEntry {
+  return {
+    collectionId: item.collectionId,
+    artist: item.artist ?? "",
+    member: item.member ?? "",
+    collectionNo: item.collectionNo ?? "",
+    season: item.season ?? "",
+    class: item.class ?? "",
+    serial: item.serial ?? undefined,
+    objektId: item.objektId ?? undefined,
+    thumbnailImage: item.thumbnailUrl ?? undefined,
+  };
+}
+
+function formatLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; serial?: number | null }) {
   const name =
     item.collectionNo && item.member
       ? `${item.member} ${item.collectionNo}`
@@ -126,10 +142,33 @@ export function InitiateTradeDialog({
 }: Props) {
   const router = useRouter();
   const [mySelected, setMySelected] = useState<Set<number>>(new Set());
-  const [theirSelected, setTheirSelected] = useState<Set<number>>(new Set());
+  const [theirSelected, setTheirSelected] = useState<ObjektEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [hoverImage, setHoverImage] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+
+  const baseEntries = useMemo(
+    () => theirHaves.map(tradeItemToObjektEntry),
+    [theirHaves],
+  );
+  const [theirObjektEntries, setTheirObjektEntries] = useState<ObjektEntry[]>(baseEntries);
+
+  useEffect(() => {
+    setTheirObjektEntries(baseEntries);
+    const missing = baseEntries.filter((e) => !e.thumbnailImage);
+    if (missing.length === 0) return;
+    const uniqueIds = [...new Set(missing.map((e) => e.collectionId))];
+    Promise.all(uniqueIds.map((id) => fetchThumbnail(id).then((url) => ({ id, url })))).then(
+      (results) => {
+        const byId = new Map(results.map(({ id, url }) => [id, url]));
+        setTheirObjektEntries((prev) =>
+          prev.map((e) =>
+            e.thumbnailImage ? e : { ...e, thumbnailImage: byId.get(e.collectionId) ?? undefined }
+          )
+        );
+      }
+    );
+  }, [baseEntries]);
 
   function handleMouseEnter(e: React.MouseEvent<HTMLButtonElement>, item: TradeItem) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -154,20 +193,23 @@ export function InitiateTradeDialog({
     });
   }
 
-  function toggleTheir(item: TradeItem) {
-    setTheirSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(item.id)) next.delete(item.id);
-      else if (next.size < 10) next.add(item.id);
-      return next;
-    });
+  function handleTheirSelect(o: ObjektEntry) {
+    setTheirSelected((prev) => [...prev, o]);
+  }
+
+  function handleTheirDeselect(o: ObjektEntry) {
+    setTheirSelected((prev) =>
+      prev.filter((h) =>
+        o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId
+      )
+    );
   }
 
   async function handleSubmit() {
-    if (mySelected.size === 0 || theirSelected.size === 0) return;
+    if (mySelected.size === 0 || theirSelected.length === 0) return;
 
     const myItems = myHaves.filter((i) => mySelected.has(i.id));
-    const theirItems = theirHaves.filter((i) => theirSelected.has(i.id));
+    const theirItems = theirSelected;
 
     const missingObjektId = myItems.find((i) => !i.objektId);
     if (missingObjektId) {
@@ -175,7 +217,7 @@ export function InitiateTradeDialog({
       return;
     }
 
-    const missingTheirObjektId = theirItems.find((i) => !i.objektId);
+    const missingTheirObjektId = theirItems.find((o) => !o.objektId);
     if (missingTheirObjektId) {
       toast.error(`"${formatLabel(missingTheirObjektId)}" has no objekt ID. Please select a specific serial.`);
       return;
@@ -199,13 +241,13 @@ export function InitiateTradeDialog({
             serial: i.serial,
             thumbnailUrl: i.thumbnailUrl,
           })),
-          theirObjekts: theirItems.map((i) => ({
-            objektId: i.objektId,
-            collectionId: i.collectionId,
-            collectionNo: i.collectionNo,
-            member: i.member,
-            serial: i.serial,
-            thumbnailUrl: i.thumbnailUrl,
+          theirObjekts: theirItems.map((o) => ({
+            objektId: o.objektId,
+            collectionId: o.collectionId,
+            collectionNo: o.collectionNo,
+            member: o.member,
+            serial: o.serial,
+            thumbnailUrl: o.thumbnailImage,
           })),
         }),
       });
@@ -230,7 +272,7 @@ export function InitiateTradeDialog({
   }
 
   const myRatio = mySelected.size;
-  const theirRatio = theirSelected.size;
+  const theirRatio = theirSelected.length;
   const ratioLabel = myRatio > 0 && theirRatio > 0 ? ` (${myRatio}:${theirRatio})` : "";
 
   return (
@@ -246,7 +288,7 @@ export function InitiateTradeDialog({
         <div className="space-y-4">
           <div>
             <p className="text-sm font-medium mb-2">
-              You will send{mySelected.size > 0 ? ` (${mySelected.size} selected)` : ""}
+              You offer{mySelected.size > 0 ? ` (${mySelected.size} selected)` : ""}
             </p>
             <div className="flex flex-col gap-2">
               {myHaves.length === 0 && (
@@ -267,23 +309,20 @@ export function InitiateTradeDialog({
 
           <div>
             <p className="text-sm font-medium mb-2">
-              You will receive{theirSelected.size > 0 ? ` (${theirSelected.size} selected)` : ""}
+              You will receive{theirSelected.length > 0 ? ` (${theirSelected.length} selected)` : ""}
             </p>
-            <div className="flex flex-col gap-2">
-              {theirHaves.length === 0 && (
-                <p className="text-sm text-muted-foreground">No have items available.</p>
-              )}
-              {theirHaves.map((item) => (
-                <ObjektOption
-                  key={item.id}
-                  item={item}
-                  selected={theirSelected.has(item.id)}
-                  onClick={() => toggleTheir(item)}
-                  onMouseEnter={(e) => handleMouseEnter(e, item)}
-                  onMouseLeave={handleMouseLeave}
-                />
-              ))}
-            </div>
+            {theirObjektEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No have items available.</p>
+            ) : (
+              <ObjektGridPicker
+                items={theirObjektEntries}
+                selected={theirSelected}
+                onSelect={handleTheirSelect}
+                onDeselect={handleTheirDeselect}
+                compareBySerial
+                maxSelections={10}
+              />
+            )}
           </div>
         </div>
 
@@ -304,7 +343,7 @@ export function InitiateTradeDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={mySelected.size === 0 || theirSelected.size === 0 || loading}
+            disabled={mySelected.size === 0 || theirSelected.length === 0 || loading}
           >
             {loading ? "Initiating..." : "Send a Trade Offer"}
           </Button>

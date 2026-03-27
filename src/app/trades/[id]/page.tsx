@@ -52,9 +52,22 @@ function anyWantLabel(item: TradeItem): string {
   return "Any";
 }
 
-function formatLabel(item: TradeItem) {
+/** Season prefix: Atom01→A, Atom02→AA, Binary01→B, etc. */
+function seasonPrefix(season: string | null | undefined): string {
+  if (!season) return "";
+  const match = season.match(/^([A-Za-z]+?)(\d+)$/);
+  if (!match) return "";
+  const letter = match[1].charAt(0).toUpperCase();
+  const num = parseInt(match[2], 10);
+  return letter.repeat(num);
+}
+
+/** Compact label: "HeeJin A108" — strip trailing type char (Z/A) */
+function formatLabel(item: TradeItem): string {
   if (item.collectionNo && item.member) {
-    return [item.artist, item.season, item.member, item.collectionNo].filter(Boolean).join(" ");
+    const prefix = seasonPrefix(item.season);
+    const num = item.collectionNo.replace(/[A-Za-z]$/, "");
+    return `${item.member} ${prefix}${num}`;
   }
   return item.collectionId;
 }
@@ -124,7 +137,7 @@ function ObjektImages({
 }) {
   return (
     <div className="flex-1 min-w-0">
-      <p className="text-xs font-medium text-muted-foreground mb-2">{label}</p>
+      <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
       <div className="flex flex-wrap gap-2 items-start">
         {items.map((item) => {
           if (item.isAny) {
@@ -154,11 +167,11 @@ function ObjektImages({
                   {imgEl}
                 </a>
               ) : imgEl}
-              <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
+              <span className="text-xs text-muted-foreground text-center max-w-20 truncate">
                 {formatLabel(item)}
               </span>
               {showSerial && item.serial != null && (
-                <span className="text-[10px] text-muted-foreground">{formatSerial(item.serial)}</span>
+                <span className="text-xs text-muted-foreground">{formatSerial(item.serial)}</span>
               )}
             </div>
           );
@@ -182,9 +195,9 @@ function ObjektList({ items, label, showSerial, images }: { items: TradeItem[]; 
             const imgUrl = !item.isAny ? images?.get(item.collectionId) : undefined;
             const rowContent = (
               <>
-                <span>{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
+                <span className="text-sm">{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
                 {right && (
-                  <span className="text-xs text-muted-foreground ml-4 shrink-0">{right}</span>
+                  <span className="text-sm text-muted-foreground ml-4 shrink-0">{right}</span>
                 )}
               </>
             );

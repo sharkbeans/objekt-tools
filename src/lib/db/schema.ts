@@ -28,6 +28,9 @@ export const user = pgTable("user", {
   // Populated via Better Auth's databaseHooks after-sign-in.
   discordId: text("discord_id").unique(),
   discordUsername: text("discord_username"),
+  // Maximum number of pending trade offers this user can have at once.
+  // Default 10; increase for premium users.
+  tradeOfferQuota: integer("trade_offer_quota").notNull().default(10),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

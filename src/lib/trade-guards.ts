@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { activeTrade, activeTradeSide, tradeBan } from "@/lib/db/schema";
-import { eq, and, or, inArray, isNull } from "drizzle-orm";
+import { activeTrade, activeTradeSide, tradeBan, user } from "@/lib/db/schema";
+import { eq, and, or, inArray, isNull, count } from "drizzle-orm";
 
 /**
  * Returns the blocking active trade ID if the user has an accepted/partial trade
@@ -106,6 +106,39 @@ export async function propagateResolution(terminalTradeId: string) {
         isNull(activeTrade.resolvedByTradeId),
       )
     );
+}
+
+/**
+ * Checks whether the user has remaining trade-offer quota.
+ * Quota = user.tradeOfferQuota − count of pending active trades where the user is the initiator.
+ * Returns { allowed: true, remaining } or { allowed: false, quota, used }.
+ */
+export async function checkTradeOfferQuota(userId: string): Promise<
+  | { allowed: true; remaining: number }
+  | { allowed: false; quota: number; used: number }
+> {
+  const [userRow] = await db
+    .select({ tradeOfferQuota: user.tradeOfferQuota })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+
+  const quota = userRow?.tradeOfferQuota ?? 10;
+
+  const [{ value: used }] = await db
+    .select({ value: count() })
+    .from(activeTrade)
+    .where(
+      and(
+        eq(activeTrade.initiatorUserId, userId),
+        eq(activeTrade.status, "pending"),
+      )
+    );
+
+  if (used >= quota) {
+    return { allowed: false, quota, used };
+  }
+  return { allowed: true, remaining: quota - used };
 }
 
 /**

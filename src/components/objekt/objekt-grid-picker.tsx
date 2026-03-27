@@ -7,6 +7,20 @@ import { TradePagination } from "@/components/trades/trade-pagination";
 
 const PAGE_SIZE = 36;
 
+function seasonPrefix(season: string): string {
+  const match = season.match(/^([A-Za-z]+?)(\d+)$/);
+  if (!match) return "";
+  const letter = match[1].charAt(0).toUpperCase();
+  const num = parseInt(match[2], 10);
+  return letter.repeat(num);
+}
+
+function shortLabel(entry: ObjektEntry): string {
+  const prefix = seasonPrefix(entry.season);
+  const num = entry.collectionNo.replace(/[A-Za-z]$/, "");
+  return `${entry.member} ${prefix}${num}`;
+}
+
 interface ObjektGridPickerProps {
   items: ObjektEntry[];
   selected: ObjektEntry[];
@@ -101,10 +115,7 @@ export function ObjektGridPicker({
               {/* Member + collection badge */}
               <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
                 <p className="text-[10px] text-white font-medium truncate leading-tight">
-                  {entry.member}
-                </p>
-                <p className="text-[10px] text-white/70 font-mono leading-tight">
-                  {entry.collectionNo}
+                  {shortLabel(entry)}
                 </p>
               </div>
               {/* Serial badge for owned */}

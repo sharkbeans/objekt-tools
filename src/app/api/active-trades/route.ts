@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade } from "@/lib/db/schema";
 import { or, eq, and, desc, not, inArray, count } from "drizzle-orm";
+import { checkTradeOfferQuota } from "@/lib/trade-guards";
 
 const PAGE_LIMIT = 12;
 
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     not(inArray(activeTrade.status, ["cancelled", "countered"])),
   );
 
-  const [totalResult, trades] = await Promise.all([
+  const [totalResult, trades, quotaResult] = await Promise.all([
     db.select({ count: count() }).from(activeTrade).where(where),
     db.query.activeTrade.findMany({
       where,
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
       limit: PAGE_LIMIT,
       offset,
     }),
+    checkTradeOfferQuota(session.user.id),
   ]);
 
   const total = totalResult[0]?.count ?? 0;
@@ -83,5 +85,9 @@ export async function GET(request: NextRequest) {
     })),
   }));
 
-  return NextResponse.json({ trades: mapped, total, limit: PAGE_LIMIT, page });
+  const quota = quotaResult.allowed
+    ? { remaining: quotaResult.remaining }
+    : { remaining: 0 };
+
+  return NextResponse.json({ trades: mapped, total, limit: PAGE_LIMIT, page, quota });
 }
