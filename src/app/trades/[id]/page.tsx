@@ -64,12 +64,12 @@ function formatSerial(serial: number) {
   return `#${String(serial).padStart(5, "0")}`;
 }
 
-function objektTopUrl(item: TradeItem, cosmoAddress?: string | null): string | null {
-  if (!cosmoAddress || item.isAny) return null;
+function objektTopUrl(item: TradeItem, cosmoNickname?: string | null): string | null {
+  if (!cosmoNickname || item.isAny) return null;
   const parts = [item.artist, item.season, item.member, item.collectionNo].filter(Boolean);
   if (item.serial != null) parts.push(`#${item.serial}`);
   if (!parts.length) return null;
-  return `https://objekt.top/${cosmoAddress}?search=${encodeURIComponent(parts.join(" "))}`;
+  return `https://objekt.top/@${cosmoNickname}?search=${encodeURIComponent(parts.join(" "))}`;
 }
 
 function objektTopUrlWant(item: TradeItem): string | null {
@@ -112,14 +112,14 @@ function ObjektImages({
   images,
   label,
   showSerial,
-  cosmoAddress,
+  cosmoNickname,
   isWant,
 }: {
   items: TradeItem[];
   images: Map<string, string>;
   label: string;
   showSerial?: boolean;
-  cosmoAddress?: string | null;
+  cosmoNickname?: string | null;
   isWant?: boolean;
 }) {
   return (
@@ -137,7 +137,7 @@ function ObjektImages({
             );
           }
           const url = images.get(item.collectionId);
-          const link = isWant ? objektTopUrlWant(item) : objektTopUrl(item, cosmoAddress);
+          const link = isWant ? objektTopUrlWant(item) : objektTopUrl(item, cosmoNickname);
           const imgEl = url ? (
             <img
               src={url}
@@ -373,7 +373,7 @@ export default function TradeDetailPage({
         </CardHeader>
         {trade.haves?.length > 0 && trade.wants?.length > 0 && (
           <div className="px-6 pb-4 flex gap-6">
-            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" showSerial cosmoAddress={trade.cosmoAddress} />
+            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" showSerial cosmoNickname={trade.cosmoNickname} />
             <Separator orientation="vertical" className="h-auto" />
             <ObjektImages items={trade.wants} images={wantImages} label="WANT" isWant />
           </div>
@@ -390,7 +390,7 @@ export default function TradeDetailPage({
               </p>
             </>
           )}
-          {trade.status === "open" && trade.cosmoAddress && (
+          {trade.status === "open" && trade.cosmoNickname && (
             <>
               <Separator />
               <div className="flex items-center justify-between gap-4 rounded-md bg-muted/50 px-3 py-2">
@@ -398,12 +398,12 @@ export default function TradeDetailPage({
                   Always verify the trader actually owns the listed objekts before trading.
                 </p>
                 <a
-                  href={`https://objekt.top/${trade.cosmoAddress}?transferable=true`}
+                  href={`https://objekt.top/@${trade.cosmoNickname}?transferable=true`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <Button variant="outline" size="sm">
-                    View {trade.cosmoNickname ? `@${trade.cosmoNickname}` : trade.cosmoAddress}
+                    View @{trade.cosmoNickname}
                   </Button>
                 </a>
               </div>

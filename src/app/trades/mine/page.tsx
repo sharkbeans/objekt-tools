@@ -246,7 +246,7 @@ export default function MyTradesPage() {
           </div>
         ) : activeTrades.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
               {activeTrades.map((trade: any) => {
                 const isRecipient = trade.recipientUserId === userId;
                 const otherUser = isRecipient ? trade.initiator : trade.recipient;
@@ -314,7 +314,7 @@ export default function MyTradesPage() {
         </div>
       ) : trades.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {trades.map((trade: any) => (
               <TradeCard key={trade.id} trade={trade} matchCount={matchCounts?.[trade.id]} />
             ))}

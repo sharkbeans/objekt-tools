@@ -366,9 +366,9 @@ function SideCard({
     : null;
 
   // Link to sender's own Cosmo profile filtered to this objekt — lets them find it quickly to send
-  const profileUrl = side.user.cosmoAddress
+  const profileUrl = side.user.cosmoNickname
     ? (() => {
-        const base = `https://objekt.top/${side.user.cosmoAddress}?transferable=true`;
+        const base = `https://objekt.top/@${side.user.cosmoNickname}?transferable=true`;
         const parts = [
           side.member,
           side.collectionNo,

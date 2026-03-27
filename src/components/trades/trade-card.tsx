@@ -2,13 +2,9 @@
 
 import Link from "next/link";
 import { useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "@/components/ui/card";
+import { ArrowRightIcon } from "lucide-react";
 import { membersByArtist } from "@/lib/filters";
 
 interface TradeItem {
@@ -21,8 +17,8 @@ interface TradeItem {
   serial?: number | null;
   isAny?: boolean;
   artist?: string | null;
+  thumbnailUrl?: string | null;
 }
-
 
 function anyWantLabel(item: TradeItem): string {
   if (item.member) return `Any ${item.member}`;
@@ -33,9 +29,29 @@ function anyWantLabel(item: TradeItem): string {
   return "Any";
 }
 
+/** Season prefix: Atom01→A, Atom02→AA, Binary01→B, Binary02→BB, etc. */
+function seasonPrefix(season: string | null | undefined): string {
+  if (!season) return "";
+  const match = season.match(/^([A-Za-z]+?)(\d+)$/);
+  if (!match) return "";
+  const letter = match[1].charAt(0).toUpperCase();
+  const num = parseInt(match[2], 10);
+  return letter.repeat(num);
+}
+
+/** Compact label: "SeoYeon AA101" — strip trailing type char (Z/A) */
+function shortLabel(item: TradeItem): string {
+  if (item.collectionNo && item.member) {
+    const prefix = seasonPrefix(item.season);
+    const num = item.collectionNo.replace(/[A-Za-z]$/, "");
+    return `${item.member} ${prefix}${num}`;
+  }
+  return item.collectionId;
+}
+
 function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; season?: string | null; artist?: string | null; class?: string | null; serial?: number | null }, showSerial?: boolean) {
   const name = item.collectionNo && item.member
-    ? [item.artist, item.season, item.member, item.collectionNo].filter(Boolean).join(" ")
+    ? [item.member, item.collectionNo].filter(Boolean).join(" ")
     : item.collectionId;
   const right = [
     item.class,
@@ -44,7 +60,7 @@ function formatObjektLabel(item: { collectionId: string; collectionNo?: string |
   return { name, right };
 }
 
-function buildObjektTopUrl(item: TradeItem, cosmoAddress: string | null | undefined, showSerial?: boolean): string {
+function buildObjektTopUrl(item: TradeItem, cosmoNickname: string | null | undefined, showSerial?: boolean): string {
   const parts: string[] = [];
   if (item.member) {
     const artist = Object.entries(membersByArtist).find(([, members]) => members.includes(item.member!))?.[0];
@@ -55,7 +71,7 @@ function buildObjektTopUrl(item: TradeItem, cosmoAddress: string | null | undefi
   if (item.collectionNo) parts.push(item.collectionNo);
   if (showSerial && item.serial != null) parts.push(`#${item.serial}`);
   const search = parts.join(" ");
-  const basePath = cosmoAddress ? `/${cosmoAddress}` : "";
+  const basePath = cosmoNickname ? `/@${cosmoNickname}` : "";
   return `https://objekt.top${basePath}?${new URLSearchParams({ search }).toString()}`;
 }
 
@@ -77,8 +93,127 @@ interface TradeCardProps {
 
 const imageCache = new Map<string, string | null>();
 
+function ObjektThumb({ item }: { item: TradeItem }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(item.thumbnailUrl ?? null);
+  const [failed, setFailed] = useState(false);
+  const [hover, setHover] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
+  const fetchedRef = useRef(false);
 
-function ObjektLabel({ item, showSerial, cosmoAddress }: { item: TradeItem; showSerial?: boolean; cosmoAddress?: string | null }) {
+  const ensureImage = useCallback(() => {
+    if (imageUrl || failed || fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const cached = imageCache.get(item.collectionId);
+    if (cached !== undefined) {
+      if (cached) setImageUrl(cached);
+      else setFailed(true);
+      return;
+    }
+
+    fetch(`/api/objekts/search?q=${encodeURIComponent(item.collectionId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const match = data.results?.find(
+          (r: any) => r.collectionId === item.collectionId
+        );
+        const url = match?.thumbnailImage ?? match?.frontImage ?? null;
+        imageCache.set(item.collectionId, url);
+        if (url) setImageUrl(url);
+        else setFailed(true);
+      })
+      .catch(() => {
+        imageCache.set(item.collectionId, null);
+        setFailed(true);
+      });
+  }, [item.collectionId, imageUrl, failed]);
+
+  if (item.isAny) return null;
+
+  return (
+    <div
+      ref={thumbRef}
+      className="w-12 h-18 rounded bg-muted/40 border border-border/50 shrink-0 overflow-hidden"
+      onMouseEnter={() => {
+        ensureImage();
+        if (thumbRef.current) setRect(thumbRef.current.getBoundingClientRect());
+        setHover(true);
+      }}
+      onMouseLeave={() => setHover(false)}
+    >
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={item.collectionId}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center" ref={() => ensureImage()} />
+      )}
+      {hover && imageUrl && rect && createPortal(
+        <div
+          className="fixed z-50 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+          style={{ top: rect.top, right: window.innerWidth - rect.left + 8 }}
+        >
+          <img
+            src={imageUrl}
+            alt={item.collectionId}
+            className="w-32 h-auto block"
+          />
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+/** Compact item row: small thumbnail + "SeoYeon AA101Z" + serial */
+function CompactItem({ item }: { item: TradeItem }) {
+  if (item.isAny) {
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-12 h-18 rounded bg-muted/60 border border-dashed border-muted-foreground/30 shrink-0" />
+        <span className="text-xs text-muted-foreground italic truncate">{anyWantLabel(item)}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <ObjektThumb item={item} />
+      <div className="min-w-0">
+        <p className="text-xs truncate">{shortLabel(item)}</p>
+        {item.serial != null && (
+          <p className="text-[11px] text-muted-foreground">#{String(item.serial).padStart(5, "0")}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** List of items with overflow count */
+function CompactItemList({ items, max = 3 }: { items: TradeItem[]; max?: number }) {
+  const visible = items.slice(0, max);
+  const overflow = items.length - max;
+
+  return (
+    <div className="flex flex-col gap-1 min-w-0">
+      {visible.map((item) => (
+        <CompactItem key={item.id} item={item} />
+      ))}
+      {overflow > 0 && (
+        <span className="text-[11px] text-muted-foreground pl-14">
+          +{overflow} more
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Full text list with hover preview — exported for detail pages
+function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; showSerial?: boolean; cosmoNickname?: string | null }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [show, setShow] = useState(false);
   const fetchedRef = useRef(false);
@@ -126,7 +261,7 @@ function ObjektLabel({ item, showSerial, cosmoAddress }: { item: TradeItem; show
       <button
         type="button"
         className="ml-2 text-muted-foreground hover:text-foreground"
-        onClick={(e) => { e.stopPropagation(); window.open(buildObjektTopUrl(item, cosmoAddress, showSerial), "_blank", "noopener,noreferrer"); }}
+        onClick={(e) => { e.stopPropagation(); window.open(buildObjektTopUrl(item, cosmoNickname, showSerial), "_blank", "noopener,noreferrer"); }}
         title="View on Objekt.top"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -146,7 +281,7 @@ function ObjektLabel({ item, showSerial, cosmoAddress }: { item: TradeItem; show
   );
 }
 
-function ObjektLabels({ items, showSerial, cosmoAddress }: { items: TradeItem[]; showSerial?: boolean; cosmoAddress?: string | null }) {
+export function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]; showSerial?: boolean; cosmoNickname?: string | null }) {
   return (
     <div className="flex flex-col gap-0.5 w-full">
       {items.map((item) =>
@@ -155,7 +290,7 @@ function ObjektLabels({ items, showSerial, cosmoAddress }: { items: TradeItem[];
             {anyWantLabel(item)}
           </span>
         ) : (
-          <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoAddress={cosmoAddress} />
+          <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />
         )
       )}
     </div>
@@ -164,62 +299,48 @@ function ObjektLabels({ items, showSerial, cosmoAddress }: { items: TradeItem[];
 
 export function TradeCard({ trade, matchCount }: TradeCardProps) {
   return (
-    <Link href={`/trades/${trade.id}`} className="relative">
+    <Link href={`/trades/${trade.id}`} className="relative group">
       {matchCount != null && matchCount > 0 && (
-        <span className="absolute -top-2 -right-2 z-10 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+        <span className="absolute -top-1.5 -right-1.5 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
           {matchCount > 99 ? "99+" : matchCount}
         </span>
       )}
-      <Card className="hover:border-primary/50 transition-colors h-full">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{trade.user.name}</span>
-              {trade.cosmoNickname && (
-                <Badge variant="secondary" className="text-xs">
-                  @{trade.cosmoNickname}
-                </Badge>
-              )}
-            </div>
+      <div className="rounded-lg border border-border bg-card p-3 hover:border-primary/50 transition-colors h-full flex flex-col gap-2">
+        {/* Header: user + date */}
+        <div className="flex items-center justify-between gap-1.5 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 truncate">
+            <span className="text-xs font-medium truncate">{trade.cosmoNickname ? `@${trade.cosmoNickname}` : trade.user.name}</span>
             {trade.wantsOnly && (
-              <Badge variant="outline" className="text-[10px]">Wants only</Badge>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">WTS</Badge>
             )}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1 font-medium">
-              HAVE
-            </p>
-            <ObjektLabels items={trade.haves} showSerial cosmoAddress={trade.cosmoAddress} />
+          <span className="text-[11px] text-muted-foreground shrink-0">
+            {new Date(trade.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+          </span>
+        </div>
+
+        {/* HAVE → WANT with compact item lists */}
+        <div className="flex gap-2 min-w-0">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-muted-foreground font-medium mb-1">HAVE</p>
+            <CompactItemList items={trade.haves} max={3} />
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1 font-medium">
-              WANT
-            </p>
-            <ObjektLabels items={trade.wants} />
+          <div className="flex items-center shrink-0 px-0.5">
+            <ArrowRightIcon className="w-3.5 h-3.5 text-muted-foreground" />
           </div>
-          {trade.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2">
-              {trade.description}
-            </p>
-          )}
-        </CardContent>
-        <CardFooter className="pt-0 flex justify-between items-center">
-          <p className="text-[10px] text-muted-foreground">
-            {new Date(trade.createdAt).toLocaleDateString()}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-muted-foreground font-medium mb-1">WANT</p>
+            <CompactItemList items={trade.wants} max={3} />
+          </div>
+        </div>
+
+        {/* Description preview */}
+        {trade.description && (
+          <p className="text-[11px] text-muted-foreground line-clamp-1 leading-tight">
+            {trade.description}
           </p>
-          {trade.cosmoAddress && (
-            <button
-              type="button"
-              className="text-[10px] text-primary hover:underline"
-              onClick={(e) => { e.stopPropagation(); window.open(`https://objekt.top/${trade.cosmoAddress}?transferable=true`, "_blank", "noopener,noreferrer"); }}
-            >
-              Verify inventory
-            </button>
-          )}
-        </CardFooter>
-      </Card>
+        )}
+      </div>
     </Link>
   );
 }
