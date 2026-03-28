@@ -140,6 +140,7 @@ export function CounterOfferDialog({
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ my?: string; their?: string; myObjektId?: string; theirObjektId?: string; noChange?: string }>({});
 
   // "My objekts" = what the counter-offerer will send
   const [mySelected, setMySelected] = useState<ObjektEntry[]>(() =>
@@ -182,17 +183,23 @@ export function CounterOfferDialog({
   const originalTheirIds = new Set(theirSides.map((s) => s.objektId));
 
   async function handleSubmit() {
-    if (mySelected.length === 0 || theirSelected.length === 0) return;
+    const newErrors: { my?: string; their?: string } = {};
+    if (mySelected.length === 0) newErrors.my = "You must select at least 1 objekt to send.";
+    if (theirSelected.length === 0) newErrors.their = "You must select at least 1 objekt to receive.";
+    if (newErrors.my || newErrors.their) {
+      setErrors(newErrors);
+      return;
+    }
 
     // Check all items have objektId
     const missingMy = mySelected.find((o) => !o.objektId);
     if (missingMy) {
-      toast.error(`"${formatLabel(missingMy)}" has no objekt ID.`);
+      setErrors((e) => ({ ...e, myObjektId: `"${formatLabel(missingMy)}" has no objekt ID.` }));
       return;
     }
     const missingTheir = theirSelected.find((o) => !o.objektId);
     if (missingTheir) {
-      toast.error(`"${formatLabel(missingTheir)}" has no objekt ID.`);
+      setErrors((e) => ({ ...e, theirObjektId: `"${formatLabel(missingTheir)}" has no objekt ID.` }));
       return;
     }
 
@@ -202,7 +209,7 @@ export function CounterOfferDialog({
     const sameMyObjekts = myIds.size === originalMyIds.size && [...myIds].every((id) => originalMyIds.has(id!));
     const sameTheirObjekts = theirIds.size === originalTheirIds.size && [...theirIds].every((id) => originalTheirIds.has(id!));
     if (sameMyObjekts && sameTheirObjekts) {
-      toast.error("Counter-offer must differ from the original trade.");
+      setErrors((e) => ({ ...e, noChange: "Counter-offer must differ from the original trade." }));
       return;
     }
 
@@ -316,17 +323,24 @@ export function CounterOfferDialog({
             </p>
             <p className="text-xs text-muted-foreground mb-2">
               Pick from your inventory{mySelected.length > 0 ? ` · ${mySelected.length} selected` : ""}
+              {mySelected.length >= 10 && <span className="ml-2">· Maximum 10 reached</span>}
             </p>
+            {errors.my && <p className="text-sm text-destructive mb-2">{errors.my}</p>}
+            {errors.myObjektId && <p className="text-sm text-destructive mb-2">{errors.myObjektId}</p>}
             <ObjektOwnedPicker
               selected={mySelected}
-              onSelect={(o) => setMySelected((prev) => [...prev, o])}
-              onDeselect={(o) =>
+              onSelect={(o) => {
+                setMySelected((prev) => [...prev, o]);
+                setErrors((e) => ({ ...e, my: undefined, myObjektId: undefined, noChange: undefined }));
+              }}
+              onDeselect={(o) => {
                 setMySelected((prev) =>
                   prev.filter((h) =>
                     o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId
                   )
-                )
-              }
+                );
+                setErrors((e) => ({ ...e, noChange: undefined }));
+              }}
               maxSelections={10}
             />
           </div>
@@ -341,18 +355,25 @@ export function CounterOfferDialog({
             </p>
             <p className="text-xs text-muted-foreground mb-2">
               Browse their inventory{theirSelected.length > 0 ? ` · ${theirSelected.length} selected` : ""}
+              {theirSelected.length >= 10 && <span className="ml-2">· Maximum 10 reached</span>}
             </p>
+            {errors.their && <p className="text-sm text-destructive mb-2">{errors.their}</p>}
+            {errors.theirObjektId && <p className="text-sm text-destructive mb-2">{errors.theirObjektId}</p>}
             <ObjektUserPicker
               address={theirAddress}
               selected={theirSelected}
-              onSelect={(o) => setTheirSelected((prev) => [...prev, o])}
-              onDeselect={(o) =>
+              onSelect={(o) => {
+                setTheirSelected((prev) => [...prev, o]);
+                setErrors((e) => ({ ...e, their: undefined, theirObjektId: undefined, noChange: undefined }));
+              }}
+              onDeselect={(o) => {
                 setTheirSelected((prev) =>
                   prev.filter((h) =>
                     o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId
                   )
-                )
-              }
+                );
+                setErrors((e) => ({ ...e, noChange: undefined }));
+              }}
               maxSelections={10}
             />
           </div>
@@ -394,13 +415,17 @@ export function CounterOfferDialog({
           )}
         </div>
 
+        {errors.noChange && (
+          <p className="text-sm text-destructive">{errors.noChange}</p>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={mySelected.length === 0 || theirSelected.length === 0 || loading}
+            disabled={loading}
           >
             {loading ? "Sending..." : "Send Counter-Offer"}
           </Button>

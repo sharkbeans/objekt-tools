@@ -82,6 +82,7 @@ export function InitiateDirectDialog({
   const [mySelected, setMySelected] = useState<ObjektEntry[]>([]);
   const [theirSelected, setTheirSelected] = useState<ObjektEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ my?: string; their?: string; theirObjektId?: string }>({});
 
   const baseEntries = useMemo(
     () => theirHaves.map(tradeItemToObjektEntry),
@@ -108,6 +109,7 @@ export function InitiateDirectDialog({
 
   function handleTheirSelect(o: ObjektEntry) {
     setTheirSelected((prev) => [...prev, o]);
+    setErrors((e) => ({ ...e, their: undefined, theirObjektId: undefined }));
   }
 
   function handleTheirDeselect(o: ObjektEntry) {
@@ -119,11 +121,17 @@ export function InitiateDirectDialog({
   }
 
   async function handleSubmit() {
-    if (mySelected.length === 0 || theirSelected.length === 0) return;
+    const newErrors: { my?: string; their?: string } = {};
+    if (mySelected.length === 0) newErrors.my = "You must select at least 1 objekt to offer.";
+    if (theirSelected.length === 0) newErrors.their = "You must select at least 1 objekt to receive.";
+    if (newErrors.my || newErrors.their) {
+      setErrors(newErrors);
+      return;
+    }
 
     const missingObjektId = theirSelected.find((o) => !o.objektId);
     if (missingObjektId) {
-      toast.error(`"${missingObjektId.member} ${missingObjektId.collectionNo}" has no objekt ID. Please select a specific serial.`);
+      setErrors((e) => ({ ...e, theirObjektId: `"${missingObjektId.member} ${missingObjektId.collectionNo}" has no objekt ID. Please select a specific serial.` }));
       return;
     }
 
@@ -193,10 +201,15 @@ export function InitiateDirectDialog({
           <div>
             <p className="text-sm font-medium mb-2">
               You offer{mySelected.length > 0 ? ` (${mySelected.length} selected)` : ""}
+              {mySelected.length >= 10 && <span className="text-xs text-muted-foreground font-normal ml-2">Maximum 10 reached</span>}
             </p>
+            {errors.my && <p className="text-sm text-destructive mb-2">{errors.my}</p>}
             <ObjektOwnedPicker
               selected={mySelected}
-              onSelect={(o) => setMySelected((prev) => [...prev, o])}
+              onSelect={(o) => {
+                setMySelected((prev) => [...prev, o]);
+                setErrors((e) => ({ ...e, my: undefined }));
+              }}
               onDeselect={(o) =>
                 setMySelected((prev) =>
                   prev.filter((h) =>
@@ -213,9 +226,12 @@ export function InitiateDirectDialog({
           <div>
             <p className="text-sm font-medium mb-2">
               You will receive{theirSelected.length > 0 ? ` (${theirSelected.length} selected)` : ""}
+              {theirSelected.length >= 10 && <span className="text-xs text-muted-foreground font-normal ml-2">Maximum 10 reached</span>}
             </p>
+            {errors.their && <p className="text-sm text-destructive mb-2">{errors.their}</p>}
+            {errors.theirObjektId && <p className="text-sm text-destructive mb-2">{errors.theirObjektId}</p>}
             {theirObjektEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No have items available.</p>
+              <p className="text-sm text-muted-foreground">The other user has no have items listed on their post.</p>
             ) : (
               <ObjektGridPicker
                 items={theirObjektEntries}
@@ -235,7 +251,7 @@ export function InitiateDirectDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={mySelected.length === 0 || theirSelected.length === 0 || loading}
+            disabled={loading}
           >
             {loading ? "Initiating..." : "Send a Trade Offer"}
           </Button>

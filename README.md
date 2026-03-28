@@ -97,9 +97,11 @@ Discord login and Discord DM notifications require:
 | `DISCORD_CLIENT_ID`     | OAuth app client ID                                                                   |
 | `DISCORD_CLIENT_SECRET` | OAuth app client secret                                                               |
 | `DISCORD_BOT_TOKEN`     | Bot token for sending DMs                                                             |
-| `NEXT_PUBLIC_APP_URL`   | Public URL used to build trade links in DMs (e.g.`https://objekt-trade.vercel.app`) |
+| `DISCORD_INVITE_URL`    | Invite link shown to users so the bot can DM them (e.g. `https://discord.gg/xxxxx`) |
+| `DISCORD_GUILD_ID`      | ID of the Discord server the bot must share with users to send DMs                   |
+| `NEXT_PUBLIC_APP_URL`   | Public URL used to build trade links in DMs (e.g. `https://objekt-trade.vercel.app`) |
 
-All four are optional locally. Leave them blank to disable Discord login and DM notifications.
+All six are optional locally. Leave them blank to disable Discord login and DM notifications.
 
 > **Important: do not use `.env.local`.**
 > Next.js loads `.env.local` with higher priority than `.env.development.local`, so if `.env.local` exists and contains a production database URL (e.g. from `vercel env pull`), your local app will connect to production.
@@ -315,7 +317,7 @@ Discord prohibits bots from DMing users they don't share a server with. Users ar
 1. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications)
 2. Under **OAuth2**, add `http://localhost:3000/api/auth/callback/discord` as a redirect URI
 3. Under **Bot**, enable the bot and copy the token
-4. Add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `DISCORD_BOT_TOKEN` to `.env.development.local`
+4. Add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`, `DISCORD_INVITE_URL`, and `DISCORD_GUILD_ID` to `.env.development.local`
 5. Invite the bot to a test server and ensure your test account has joined it
 
 ## API Routes

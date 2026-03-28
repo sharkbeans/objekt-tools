@@ -697,11 +697,11 @@ export async function POST(
         await notify([
           {
             userId: trade.initiatorUserId,
-            message: `This trade is complete! Both objekts have been transferred.`,
+            message: `This trade is complete! Objekts from both sides have been transferred.`,
           },
           {
             userId: trade.recipientUserId,
-            message: `This trade is complete! Both objekts have been transferred.`,
+            message: `This trade is complete! Objekts from both sides have been transferred.`,
           },
         ]);
 

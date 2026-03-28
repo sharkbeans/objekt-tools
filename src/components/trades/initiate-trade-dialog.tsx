@@ -144,6 +144,7 @@ export function InitiateTradeDialog({
   const [mySelected, setMySelected] = useState<Set<number>>(new Set());
   const [theirSelected, setTheirSelected] = useState<ObjektEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ my?: string; their?: string; myObjektId?: string; theirObjektId?: string }>({});
   const [hoverImage, setHoverImage] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -189,12 +190,14 @@ export function InitiateTradeDialog({
       const next = new Set(prev);
       if (next.has(item.id)) next.delete(item.id);
       else if (next.size < 10) next.add(item.id);
+      if (next.size > 0) setErrors((e) => ({ ...e, my: undefined, myObjektId: undefined }));
       return next;
     });
   }
 
   function handleTheirSelect(o: ObjektEntry) {
     setTheirSelected((prev) => [...prev, o]);
+    setErrors((e) => ({ ...e, their: undefined, theirObjektId: undefined }));
   }
 
   function handleTheirDeselect(o: ObjektEntry) {
@@ -206,20 +209,26 @@ export function InitiateTradeDialog({
   }
 
   async function handleSubmit() {
-    if (mySelected.size === 0 || theirSelected.length === 0) return;
+    const newErrors: { my?: string; their?: string } = {};
+    if (mySelected.size === 0) newErrors.my = "You must select at least 1 objekt to offer.";
+    if (theirSelected.length === 0) newErrors.their = "You must select at least 1 objekt to receive.";
+    if (newErrors.my || newErrors.their) {
+      setErrors(newErrors);
+      return;
+    }
 
     const myItems = myHaves.filter((i) => mySelected.has(i.id));
     const theirItems = theirSelected;
 
     const missingObjektId = myItems.find((i) => !i.objektId);
     if (missingObjektId) {
-      toast.error(`"${formatLabel(missingObjektId)}" has no objekt ID. Please use serial-specific have items.`);
+      setErrors((e) => ({ ...e, myObjektId: `"${formatLabel(missingObjektId)}" has no objekt ID. Please use serial-specific have items.` }));
       return;
     }
 
     const missingTheirObjektId = theirItems.find((o) => !o.objektId);
     if (missingTheirObjektId) {
-      toast.error(`"${formatLabel(missingTheirObjektId)}" has no objekt ID. Please select a specific serial.`);
+      setErrors((e) => ({ ...e, theirObjektId: `"${formatLabel(missingTheirObjektId)}" has no objekt ID. Please select a specific serial.` }));
       return;
     }
 
@@ -289,10 +298,13 @@ export function InitiateTradeDialog({
           <div>
             <p className="text-sm font-medium mb-2">
               You offer{mySelected.size > 0 ? ` (${mySelected.size} selected)` : ""}
+              {mySelected.size >= 10 && <span className="text-xs text-muted-foreground font-normal ml-2">Maximum 10 reached</span>}
             </p>
+            {errors.my && <p className="text-sm text-destructive mb-2">{errors.my}</p>}
+            {errors.myObjektId && <p className="text-sm text-destructive mb-2">{errors.myObjektId}</p>}
             <div className="flex flex-col gap-2">
               {myHaves.length === 0 && (
-                <p className="text-sm text-muted-foreground">No have items available.</p>
+                <p className="text-sm text-muted-foreground">Your trade post has no have items to offer. Add some to your post first.</p>
               )}
               {myHaves.map((item) => (
                 <ObjektOption
@@ -310,9 +322,12 @@ export function InitiateTradeDialog({
           <div>
             <p className="text-sm font-medium mb-2">
               You will receive{theirSelected.length > 0 ? ` (${theirSelected.length} selected)` : ""}
+              {theirSelected.length >= 10 && <span className="text-xs text-muted-foreground font-normal ml-2">Maximum 10 reached</span>}
             </p>
+            {errors.their && <p className="text-sm text-destructive mb-2">{errors.their}</p>}
+            {errors.theirObjektId && <p className="text-sm text-destructive mb-2">{errors.theirObjektId}</p>}
             {theirObjektEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No have items available.</p>
+              <p className="text-sm text-muted-foreground">The other user has no have items listed on their post.</p>
             ) : (
               <ObjektGridPicker
                 items={theirObjektEntries}
@@ -343,7 +358,7 @@ export function InitiateTradeDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={mySelected.size === 0 || theirSelected.length === 0 || loading}
+            disabled={loading}
           >
             {loading ? "Initiating..." : "Send a Trade Offer"}
           </Button>

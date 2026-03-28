@@ -159,12 +159,12 @@ export async function POST(
         {
           userId: trade.initiatorUserId,
           activeTradeId: tradeId,
-          message: `This trade is complete! Both objekts have been transferred.`,
+          message: `This trade is complete! Objekts from both sides have been transferred.`,
         },
         {
           userId: trade.recipientUserId,
           activeTradeId: tradeId,
-          message: `This trade is complete! Both objekts have been transferred.`,
+          message: `This trade is complete! Objekts from both sides have been transferred.`,
         },
       ]);
 
@@ -223,6 +223,22 @@ export async function POST(
   // Propagate chain resolution if trade completed immediately on accept
   if (finalStatus === "completed") {
     await propagateResolution(tradeId);
+  }
+
+  // Notify both parties when the trade is accepted (not completed — completion has its own notify above)
+  if (finalStatus === "accepted" || finalStatus === "partial") {
+    await notify([
+      {
+        userId: trade.recipientUserId,
+        activeTradeId: tradeId,
+        message: `You have accepted a trade. Please send your objekts.`,
+      },
+      {
+        userId: trade.initiatorUserId,
+        activeTradeId: tradeId,
+        message: `${session.user.name} accepted your trade offer. Please send your objekts.`,
+      },
+    ]);
   }
 
   // Realtime: push status event to both participants
