@@ -434,15 +434,24 @@ export default function NewTradePage() {
                       const haveUrl = haveImages.get(item.collectionId) ?? item.thumbnailImage;
                       return (
                       <div key={i} className="flex flex-col items-center gap-1">
-                        {haveUrl ? (
-                          <img
-                            src={haveUrl}
-                            alt={item.collectionId}
-                            className="w-20 h-auto rounded-md border"
-                          />
-                        ) : (
-                          <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
-                        )}
+                        <div className="relative group/thumb">
+                          {haveUrl ? (
+                            <img
+                              src={haveUrl}
+                              alt={item.collectionId}
+                              className="w-20 h-auto rounded-md border"
+                            />
+                          ) : (
+                            <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setHaves((prev) => prev.filter((_, j) => j !== i))}
+                            className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-md"
+                          >
+                            <XIcon className="w-6 h-6 text-white" />
+                          </button>
+                        </div>
                         <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
                           {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
                         </span>
@@ -463,8 +472,15 @@ export default function NewTradePage() {
                     <div className="flex flex-wrap gap-2 items-start">
                       {anyWants.map((w, i) => (
                         <div key={`any-${i}`} className="flex flex-col items-center gap-1">
-                          <div className="w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
+                          <div className="relative group/thumb w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
                             {anyWantLabel(w)}
+                            <button
+                              type="button"
+                              onClick={() => setAnyWants((prev) => prev.filter((_, j) => j !== i))}
+                              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-md"
+                            >
+                              <XIcon className="w-6 h-6 text-white" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -472,15 +488,24 @@ export default function NewTradePage() {
                         const url = wantImages.get(item.collectionId) ?? item.thumbnailImage;
                         return (
                           <div key={i} className="flex flex-col items-center gap-1">
-                            {url ? (
-                              <img
-                                src={url}
-                                alt={item.collectionId}
-                                className="w-20 h-auto rounded-md border"
-                              />
-                            ) : (
-                              <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
-                            )}
+                            <div className="relative group/thumb">
+                              {url ? (
+                                <img
+                                  src={url}
+                                  alt={item.collectionId}
+                                  className="w-20 h-auto rounded-md border"
+                                />
+                              ) : (
+                                <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setWants((prev) => prev.filter((_, j) => j !== i))}
+                                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-md"
+                              >
+                                <XIcon className="w-6 h-6 text-white" />
+                              </button>
+                            </div>
                             <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
                               {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
                             </span>
@@ -502,21 +527,24 @@ export default function NewTradePage() {
                   <p className="text-sm font-medium text-muted-foreground mb-2">HAVE</p>
                   <div className="flex flex-col gap-1">
                     {haves.map((item, i) => (
-                      <div
+                      <button
                         key={i}
-                        className="objekt-list-row"
+                        type="button"
+                        className="objekt-list-row group/row w-full text-left cursor-pointer hover:border-destructive/50 hover:bg-destructive/5"
                         onMouseEnter={(e) => handlePreviewMouseEnter(e, haveImages.get(item.collectionId) ?? item.thumbnailImage)}
                         onMouseLeave={handlePreviewMouseLeave}
+                        onClick={() => setHaves((prev) => prev.filter((_, j) => j !== i))}
                       >
                         <span>
                           <span className="text-muted-foreground">{item.artist}</span>{" "}
                           {item.member}{" "}
                           <span className="font-mono">{item.collectionNo}</span>
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                           {item.season} · {item.class}{item.serial != null ? ` · #${String(item.serial).padStart(5, "0")}` : ""}
+                          <XIcon className="w-3 h-3 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 text-destructive" />
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -526,26 +554,35 @@ export default function NewTradePage() {
                   <p className="text-sm font-medium text-muted-foreground mb-2">WANT</p>
                   <div className="flex flex-col gap-1">
                     {anyWants.map((w, i) => (
-                      <div key={`any-${i}`} className="text-sm px-2 py-1 rounded border border-border">
+                      <button
+                        key={`any-${i}`}
+                        type="button"
+                        className="group/row text-sm px-2 py-1 rounded border border-border flex items-center justify-between w-full text-left cursor-pointer hover:border-destructive/50 hover:bg-destructive/5"
+                        onClick={() => setAnyWants((prev) => prev.filter((_, j) => j !== i))}
+                      >
                         {anyWantLabel(w)}
-                      </div>
+                        <XIcon className="w-3 h-3 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 text-destructive" />
+                      </button>
                     ))}
                     {wants.map((item, i) => (
-                      <div
+                      <button
                         key={i}
-                        className="objekt-list-row"
+                        type="button"
+                        className="objekt-list-row group/row w-full text-left cursor-pointer hover:border-destructive/50 hover:bg-destructive/5"
                         onMouseEnter={(e) => handlePreviewMouseEnter(e, wantImages.get(item.collectionId) ?? item.thumbnailImage)}
                         onMouseLeave={handlePreviewMouseLeave}
+                        onClick={() => setWants((prev) => prev.filter((_, j) => j !== i))}
                       >
                         <span>
                           <span className="text-muted-foreground">{item.artist}</span>{" "}
                           {item.member}{" "}
                           <span className="font-mono">{item.collectionNo}</span>
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
                           {item.season} · {item.class}
+                          <XIcon className="w-3 h-3 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 text-destructive" />
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>

@@ -311,7 +311,7 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
           <div className="flex items-center gap-1.5 min-w-0 truncate">
             <span className="text-xs font-medium truncate">{trade.cosmoNickname ? `@${trade.cosmoNickname}` : trade.user.name}</span>
             {trade.wantsOnly && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">WTS</Badge>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">Wants Only</Badge>
             )}
           </div>
           <span className="text-[11px] text-muted-foreground shrink-0">
