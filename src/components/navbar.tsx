@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BellIcon, MenuIcon, XIcon } from "lucide-react";
+import { BellIcon, MenuIcon, SmartphoneIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -16,6 +16,7 @@ import {
 import { signOut, useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { useUserRealtime } from "@/hooks/use-realtime";
+import { LoginCodeDialog } from "@/components/login-code-dialog";
 
 interface CosmoLinkStatus {
   address: string;
@@ -73,6 +74,7 @@ export function Navbar() {
   const matchCount = useMatchCount();
   const unreadCount = useUnreadNotificationCount();
   const profileHref = useMyProfileHref();
+  const [loginCodeOpen, setLoginCodeOpen] = useState(false);
 
   // Subscribe to per-user realtime events so notification count updates without polling
   useUserRealtime(session?.user?.id);
@@ -168,6 +170,10 @@ export function Navbar() {
                   <DropdownMenuItem asChild>
                     <Link href="/link">Link Cosmo</Link>
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setLoginCodeOpen(true)}>
+                    <SmartphoneIcon className="size-4 mr-2" />
+                    Login Code
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => signOut()}>
                     Sign out
@@ -191,7 +197,10 @@ export function Navbar() {
         matchCount={matchCount}
         unreadCount={unreadCount}
         profileHref={profileHref}
+        onLoginCode={() => setLoginCodeOpen(true)}
       />
+
+      <LoginCodeDialog open={loginCodeOpen} onOpenChange={setLoginCodeOpen} />
     </>
   );
 }
@@ -201,11 +210,13 @@ function MobileNav({
   matchCount,
   unreadCount,
   profileHref,
+  onLoginCode,
 }: {
   session: ReturnType<typeof useSession>["data"];
   matchCount: number;
   unreadCount: number;
   profileHref: string;
+  onLoginCode: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -340,6 +351,17 @@ function MobileNav({
               <MobileNavLink href="/link" onClick={() => setOpen(false)}>
                 Link Cosmo
               </MobileNavLink>
+              <button
+                type="button"
+                onClick={() => {
+                  onLoginCode();
+                  setOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+              >
+                <SmartphoneIcon className="size-4" />
+                Login Code
+              </button>
               <button
                 type="button"
                 onClick={() => {

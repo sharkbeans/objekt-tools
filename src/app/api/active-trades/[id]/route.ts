@@ -30,11 +30,11 @@ export async function GET(
         },
       },
       initiator: {
-        columns: { id: true, name: true, image: true, discordUsername: true },
+        columns: { id: true, name: true, image: true, discordId: true, discordUsername: true },
         with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
       recipient: {
-        columns: { id: true, name: true, image: true, discordUsername: true },
+        columns: { id: true, name: true, image: true, discordId: true, discordUsername: true },
         with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
       counterOffers: {
@@ -147,6 +147,7 @@ export async function GET(
       ...trade.initiator,
       cosmoNickname: trade.initiator.cosmoAccount?.nickname ?? null,
       cosmoAddress: trade.initiator.cosmoAccount?.address ?? null,
+      discordId: trade.initiator.discordId ?? null,
       discordUsername: trade.initiator.discordUsername ?? null,
       cosmoAccount: undefined,
     },
@@ -154,6 +155,7 @@ export async function GET(
       ...trade.recipient,
       cosmoNickname: trade.recipient.cosmoAccount?.nickname ?? null,
       cosmoAddress: trade.recipient.cosmoAccount?.address ?? null,
+      discordId: trade.recipient.discordId ?? null,
       discordUsername: trade.recipient.discordUsername ?? null,
       cosmoAccount: undefined,
     },

@@ -1,4 +1,4 @@
-import { and, count, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, count, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -31,7 +31,7 @@ export async function GET(
       where: eq(cosmoAccount.address, identifier.toLowerCase()),
       with: {
         user: {
-          columns: { id: true, name: true, image: true, email: true, discordUsername: true },
+          columns: { id: true, name: true, image: true, email: true, discordId: true, discordUsername: true },
         },
       },
     });
@@ -44,12 +44,11 @@ export async function GET(
     }
   } else {
     // Treat as nickname — try DB first (case-insensitive)
-    const lower = identifier.toLowerCase();
     cosmo = await db.query.cosmoAccount.findFirst({
-      where: sql`lower(${cosmoAccount.nickname}) = ${lower}`,
+      where: ilike(cosmoAccount.nickname, identifier),
       with: {
         user: {
-          columns: { id: true, name: true, image: true, email: true, discordUsername: true },
+          columns: { id: true, name: true, image: true, email: true, discordId: true, discordUsername: true },
         },
       },
     });
@@ -127,6 +126,7 @@ export async function GET(
     linkedAt: cosmo.linkedAt,
     email: isOwner ? cosmo.user.email : null,
     // Discord username is shown publicly on profiles and to trade partners
+    discordId: cosmo.user.discordId ?? null,
     discordUsername: cosmo.user.discordUsername ?? null,
     viewer: {
       isOwner,
