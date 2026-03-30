@@ -63,8 +63,25 @@ export async function POST(request: NextRequest) {
     userAgent: request.headers.get("user-agent"),
   });
 
-  // Match Better Auth's cookie naming: in production (https) it prefixes
-  // with "__Secure-", in dev it uses plain "better-auth.session_token".
+  // Better Auth stores cookies as "{token}.{base64(HMAC-SHA256(token, secret))}"
+  // Replicating makeSignature from better-auth/dist/crypto/index.mjs
+  const secret = process.env.BETTER_AUTH_SECRET!;
+  const keyData = new TextEncoder().encode(secret);
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    cryptoKey,
+    new TextEncoder().encode(sessionToken)
+  );
+  const signedToken = `${sessionToken}.${btoa(String.fromCharCode(...new Uint8Array(signature)))}`;
+
+  // In production (https), Better Auth prefixes cookie names with "__Secure-"
   const isSecure =
     process.env.BETTER_AUTH_URL?.startsWith("https://") ||
     process.env.NODE_ENV === "production";
@@ -73,7 +90,7 @@ export async function POST(request: NextRequest) {
     : "better-auth.session_token";
 
   const res = NextResponse.json({ success: true });
-  res.cookies.set(cookieName, sessionToken, {
+  res.cookies.set(cookieName, signedToken, {
     httpOnly: true,
     sameSite: "lax",
     secure: isSecure,
