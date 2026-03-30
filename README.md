@@ -97,9 +97,9 @@ Discord login and Discord DM notifications require:
 | `DISCORD_CLIENT_ID`     | OAuth app client ID                                                                   |
 | `DISCORD_CLIENT_SECRET` | OAuth app client secret                                                               |
 | `DISCORD_BOT_TOKEN`     | Bot token for sending DMs                                                             |
-| `DISCORD_INVITE_URL`    | Invite link shown to users so the bot can DM them (e.g. `https://discord.gg/xxxxx`) |
-| `DISCORD_GUILD_ID`      | ID of the Discord server the bot must share with users to send DMs                   |
-| `NEXT_PUBLIC_APP_URL`   | Public URL used to build trade links in DMs (e.g. `https://objekt-trade.vercel.app`) |
+| `DISCORD_INVITE_URL`    | Invite link shown to users so the bot can DM them (e.g.`https://discord.gg/xxxxx`)  |
+| `DISCORD_GUILD_ID`      | ID of the Discord server the bot must share with users to send DMs                    |
+| `NEXT_PUBLIC_APP_URL`   | Public URL used to build trade links in DMs (e.g.`https://objekt-trade.vercel.app`) |
 
 All six are optional locally. Leave them blank to disable Discord login and DM notifications.
 
@@ -296,6 +296,26 @@ Automatic bans protect users from repeat defaulters:
 | **Trade accept**             | 5 requests/min per user                                                                |
 | **Chat messages**            | 1 message per 10 seconds per user                                                      |
 
+## Login Code
+
+Mobile Discord OAuth can be unreliable, since it redirects to the browser instead of the app, causing the flow to drop. The platform supports logging in with a short-lived code instead of going through Discord OAuth again.
+
+### How it works
+
+1. On an already-logged-in device (e.g. desktop), open the user menu and click **Login Code**
+2. A 6-digit code is displayed with a 2-minute countdown
+3. On the new device, go to the sign-in page and enter the code in the "Login with code" field
+4. The new device is logged in as the same account — no Discord OAuth required
+
+Codes are single-use and expire after 2 minutes. Signup always requires Discord OAuth; this flow is only for logging into additional devices as an existing user.
+
+### Security
+
+- 1,000,000 possible codes; max 5 failed attempts per IP per 10 minutes makes brute force infeasible
+- Codes are deleted from Redis immediately on use (atomic `GETDEL`)
+- Code generation uses `crypto.randomInt` (cryptographically secure)
+- Cookie is signed with HMAC-SHA256 using `BETTER_AUTH_SECRET`, matching Better Auth's internal signing format
+
 ## Discord Integration
 
 Authentication is Discord-only — there is no email/password login. This also gives the platform a reachable Discord identity for every user, which is used to deliver trade notifications as direct messages.
@@ -348,6 +368,11 @@ Discord prohibits bots from DMing users they don't share a server with. Users ar
 
 - `GET /api/trades/mine/notifications` - List notifications (paginated)
 - `PATCH /api/trades/mine/notifications` - Dismiss notifications by ID
+
+### Auth
+
+- `POST /api/auth/login-code/generate` - Generate a 6-digit login code (requires session)
+- `POST /api/auth/login-code/verify` - Redeem a login code and create a session
 
 ### Users
 
