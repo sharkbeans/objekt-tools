@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ChevronDown, ChevronLeft, ChevronRight, History, Pencil, Search } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import type { CosmoPublicUser, ValidArtist } from "@/lib/cosmo/types";
 
-type Step = "search" | "artist" | "verify";
+type Step = "search" | "artist" | "verify" | "done";
 
 const ARTISTS: { id: ValidArtist; label: string }[] = [
   { id: "tripleS", label: "tripleS" },
@@ -41,6 +42,13 @@ export default function LinkCosmoPage() {
   const [verificationCode, setVerificationCode] = useState("");
   const [countdown, setCountdown] = useState(0);
   const [verifying, setVerifying] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const editProfileRef = useRef<HTMLDivElement>(null);
+  const [typedCode, setTypedCode] = useState("");
+  const [linkedAs, setLinkedAs] = useState("");
+  const [deletingCode, setDeletingCode] = useState("");
+  const doneEditProfileRef = useRef<HTMLDivElement>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -48,6 +56,58 @@ export default function LinkCosmoPage() {
       router.push("/sign-in");
     }
   }, [session, router]);
+
+  // Auto-transition mockup on verify step
+  useEffect(() => {
+    if (step !== "verify") return;
+    setShowEditProfile(false);
+    const t = setTimeout(() => setShowEditProfile(true), 3000);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  // Auto-scroll edit profile mockup to bio section after transition
+  useEffect(() => {
+    if (!showEditProfile) return;
+    setTypedCode("");
+    const scrollT = setTimeout(() => {
+      editProfileRef.current?.scrollTo({ top: 120, behavior: "smooth" });
+    }, 800);
+    return () => clearTimeout(scrollT);
+  }, [showEditProfile]);
+
+  // Done step: scroll to bio then animate deletion
+  useEffect(() => {
+    if (step !== "done" || !verificationCode) return;
+    setDeletingCode(verificationCode);
+    const scrollT = setTimeout(() => {
+      doneEditProfileRef.current?.scrollTo({ top: 120, behavior: "smooth" });
+    }, 500);
+    let i = verificationCode.length;
+    let interval: ReturnType<typeof setInterval>;
+    const typeT = setTimeout(() => {
+      interval = setInterval(() => {
+        i--;
+        setDeletingCode(verificationCode.slice(0, i));
+        if (i <= 0) clearInterval(interval);
+      }, 80);
+    }, 1400);
+    return () => { clearTimeout(scrollT); clearTimeout(typeT); clearInterval(interval); };
+  }, [step, verificationCode]);
+
+  // Type out the verification code after scroll settles
+  useEffect(() => {
+    if (!showEditProfile || !verificationCode) return;
+    let i = 0;
+    let interval: ReturnType<typeof setInterval>;
+    const delay = setTimeout(() => {
+      interval = setInterval(() => {
+        i++;
+        setTypedCode(verificationCode.slice(0, i));
+        if (i >= verificationCode.length) clearInterval(interval);
+      }, 80);
+    }, 1400);
+    return () => { clearTimeout(delay); clearInterval(interval); };
+  }, [showEditProfile, verificationCode]);
 
   // Countdown timer
   useEffect(() => {
@@ -118,7 +178,8 @@ export default function LinkCosmoPage() {
       if (!res.ok) throw new Error(data.error);
 
       toast.success(`Linked as ${data.nickname ?? data.address}!`);
-      router.push(`/@${data.nickname ?? data.address}`);
+      setLinkedAs(data.nickname ?? data.address);
+      setStep("done");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Verification failed",
@@ -137,8 +198,9 @@ export default function LinkCosmoPage() {
           <CardTitle>Link Cosmo Account</CardTitle>
           <CardDescription>
             {step === "search" && "Search for your Cosmo username"}
-            {step === "artist" && "Select an artist to verify with"}
+            {step === "artist" && "Which artist are you viewing in Cosmo?"}
             {step === "verify" && "Set the code as your Cosmo status message"}
+            {step === "done" && "You're all set!"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -161,7 +223,7 @@ export default function LinkCosmoPage() {
               </div>
 
               {searchResults.length > 0 && (
-                <div className="space-y-2">
+                <div className="max-h-[calc(7*3.75rem)] overflow-y-auto space-y-2 pr-1">
                   {searchResults.map((user) => (
                     <button
                       key={user.id}
@@ -173,10 +235,12 @@ export default function LinkCosmoPage() {
                       }`}
                       onClick={() => setSelectedUser(user)}
                     >
-                      <p className="font-medium">{user.nickname}</p>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        {user.address}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{user.nickname}</p>
+                        <p className="text-xs text-muted-foreground font-mono truncate">
+                          {user.address}
+                        </p>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -193,19 +257,59 @@ export default function LinkCosmoPage() {
           {/* Step 2: Artist selection */}
           {step === "artist" && (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
+              {/* Cosmo profile illustration */}
+              <div className="rounded-md border border-border bg-background overflow-hidden text-sm" style={{ fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+                {/* top bar */}
+                <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                  <span className="text-lg font-bold text-foreground flex items-center gap-0.5" style={{ animation: "glow-flash 2s ease-in-out infinite" }}>tripleS <ChevronDown className="w-5 h-5" /></span>
+                  <div className="flex items-center gap-2.5 text-muted-foreground">
+                    <span className="rounded bg-purple-300 px-2 py-0.5 text-black font-medium">Shop</span>
+                    <span className="text-lg">⚙</span>
+                  </div>
+                </div>
+                {/* profile row */}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <img src="/user.png" alt="" className="w-12 h-12 rounded-full shrink-0 object-cover" />
+                    <span className="text-base font-semibold text-foreground">{selectedUser?.nickname ?? "nickname"}</span>
+                  </div>
+                  <span className="rounded bg-muted px-2.5 py-1 text-white flex items-center gap-1 text-xs"><History className="w-3.5 h-3.5" />History</span>
+                </div>
+                {/* streak + bio */}
+                <div className="px-4 pb-2 text-muted-foreground text-sm">
+                  <p>with WAV <span className="text-purple-400">D+100</span> · 7-Day Streak</p><br></br>
+                  <p className="text-foreground">Your bio here</p>
+                </div>
+                {/* search + pencil row */}
+                <div className="flex items-center gap-2.5 px-4 py-3">
+                  <div className="flex flex-1 items-center gap-2 rounded-full bg-muted px-4 py-2.5 text-muted-foreground">
+                    <Search className="w-4 h-4 shrink-0" />
+                    <span>Search others&apos; profiles</span>
+                  </div>
+                  <div className="aspect-square rounded-xl bg-muted p-2.5 text-muted-foreground shrink-0 flex items-center justify-center">
+                    <Pencil className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">Select the artist shown at the top of your Cosmo profile. You don&apos;t need to switch, just use whichever artist you&apos;re currently on.</p>
+
+              <div className="space-y-2">
                 {ARTISTS.map((artist) => (
                   <button
                     key={artist.id}
                     type="button"
-                    className={`rounded-lg border p-4 text-center transition-colors hover:bg-accent ${
+                    className={`w-full rounded-lg border p-3 text-left transition-colors hover:bg-accent flex items-center justify-between ${
                       selectedArtist === artist.id
                         ? "border-primary bg-accent"
                         : "border-border"
                     }`}
                     onClick={() => setSelectedArtist(artist.id)}
                   >
-                    {artist.label}
+                    <span className="font-medium">{artist.label}</span>
+                    {selectedArtist === artist.id && (
+                      <span className="text-primary">✓</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -228,6 +332,102 @@ export default function LinkCosmoPage() {
           {/* Step 3: Verify */}
           {step === "verify" && (
             <div className="space-y-4">
+              {/* Mockup transition container */}
+              <div
+                className="relative overflow-hidden rounded-md border border-border h-[230px]"
+                style={{ fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif" }}
+                onTouchStart={(e) => setTouchStartX(e.touches[0].clientX)}
+                onTouchEnd={(e) => {
+                  if (touchStartX === null) return;
+                  const delta = touchStartX - e.changedTouches[0].clientX;
+                  if (delta > 40) setShowEditProfile(true);
+                  if (delta < -40) setShowEditProfile(false);
+                  setTouchStartX(null);
+                }}
+              >
+                {/* Profile screen */}
+                <div className={`bg-background text-sm transition-all duration-500 h-[230px] overflow-y-auto ${showEditProfile ? "opacity-0 -translate-x-full absolute inset-0" : "opacity-100 translate-x-0"}`}>
+                  <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                    <span className="text-lg font-bold text-foreground flex items-center gap-0.5">tripleS <ChevronDown className="w-5 h-5" /></span>
+                    <div className="flex items-center gap-2.5 text-muted-foreground">
+                      <span className="rounded bg-purple-300 px-2 py-0.5 text-black font-medium">Shop</span>
+                      <span className="text-lg">⚙</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <img src="/user.png" alt="" className="w-12 h-12 rounded-full shrink-0 object-cover" />
+                      <span className="text-base font-semibold text-foreground">{selectedUser?.nickname ?? "nickname"}</span>
+                    </div>
+                    <span className="rounded bg-muted px-2.5 py-1 text-white flex items-center gap-1 text-xs"><History className="w-3.5 h-3.5" />History</span>
+                  </div>
+                  <div className="px-4 pb-2 text-muted-foreground text-sm">
+                    <p>with WAV <span className="text-purple-400">D+100</span> · 7-Day Streak</p>
+                    <p className="text-foreground mt-1">Your bio here</p>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-4 py-3">
+                    <div className="flex flex-1 items-center gap-2 rounded-full bg-muted px-4 py-2.5 text-muted-foreground">
+                      <Search className="w-4 h-4 shrink-0" />
+                      <span>Search others&apos; profiles</span>
+                    </div>
+                    <div className="aspect-square rounded-xl bg-muted p-2.5 text-muted-foreground shrink-0 flex items-center justify-center ring-2 ring-amber-400 animate-pulse shadow-[0_0_8px_3px_rgba(251,191,36,0.5)]">
+                      <Pencil className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Edit Profile screen */}
+                <div ref={editProfileRef} className={`bg-background text-sm transition-all duration-500 h-[230px] overflow-y-auto ${showEditProfile ? "opacity-100 translate-x-0" : "opacity-0 translate-x-full absolute inset-0"}`}>
+                  {/* header */}
+                  <div className="flex items-center justify-center border-b border-border px-4 py-3 relative">
+                    <span className="font-bold text-foreground text-base">Edit Profile</span>
+                  </div>
+                  {/* avatar */}
+                  <div className="flex flex-col items-center gap-1.5 pt-5 pb-3">
+                    <img src="/user.png" alt="" className="w-16 h-16 rounded-full object-cover" />
+                    <span className="text-xs text-muted-foreground">Change Image</span>
+                  </div>
+                  {/* nickname field */}
+                  <div className="px-4 pb-3">
+                    <p className="font-bold text-foreground mb-2">Nickname</p>
+                    <div className="rounded-lg bg-muted px-4 py-3 text-foreground text-sm">
+                      {selectedUser?.nickname ?? "nickname"}
+                    </div>
+                  </div>
+                  {/* bio field */}
+                  <div className="px-4 pb-5">
+                    <p className="font-bold text-foreground mb-2">Bio</p>
+                    <div className="rounded-lg bg-muted px-4 py-3 text-sm h-24 ring-2 ring-amber-400 animate-pulse shadow-[0_0_8px_3px_rgba(251,191,36,0.4)] font-mono">
+                      {typedCode || <span className="text-muted-foreground">Type the code here...</span>}
+                      {typedCode && typedCode.length < verificationCode.length && (
+                        <span className="animate-pulse">|</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mockup pagination */}
+              <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => setShowEditProfile(false)}
+                  disabled={!showEditProfile}
+                  className="disabled:opacity-30"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span>{showEditProfile ? "2" : "1"} / 2</span>
+                <button
+                  type="button"
+                  onClick={() => setShowEditProfile(true)}
+                  disabled={showEditProfile}
+                  className="disabled:opacity-30"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
               <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
                 <p className="text-sm text-muted-foreground mb-2">
                   Set this as your Cosmo status message:
@@ -268,6 +468,54 @@ export default function LinkCosmoPage() {
                   {verifying ? "Verifying..." : "Verify"}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Step 4: Done */}
+          {step === "done" && (
+            <div className="space-y-4">
+              {/* Edit Profile mockup with deletion animation */}
+              <div
+                className="relative overflow-hidden rounded-md border border-border h-[230px]"
+                style={{ fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif" }}
+              >
+                <div ref={doneEditProfileRef} className="bg-background text-sm h-[230px] overflow-y-auto">
+                  {/* header */}
+                  <div className="flex items-center justify-center border-b border-border px-4 py-3">
+                    <span className="font-bold text-foreground text-base">Edit Profile</span>
+                  </div>
+                  {/* avatar */}
+                  <div className="flex flex-col items-center gap-1.5 pt-5 pb-3">
+                    <img src="/user.png" alt="" className="w-16 h-16 rounded-full object-cover" />
+                    <span className="text-xs text-muted-foreground">Change Image</span>
+                  </div>
+                  {/* nickname field */}
+                  <div className="px-4 pb-3">
+                    <p className="font-bold text-foreground mb-2">Nickname</p>
+                    <div className="rounded-lg bg-muted px-4 py-3 text-foreground text-sm">
+                      {selectedUser?.nickname ?? "nickname"}
+                    </div>
+                  </div>
+                  {/* bio field */}
+                  <div className="px-4 pb-5">
+                    <p className="font-bold text-foreground mb-2">Bio</p>
+                    <div className="rounded-lg bg-muted px-4 py-3 text-sm h-24 font-mono text-foreground">
+                      {deletingCode}
+                      {deletingCode.length > 0 && (
+                        <span className="animate-pulse">|</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Your Cosmo account is now linked. You can safely delete the <span className="font-mono text-foreground">{verificationCode}</span> message from your bio.
+              </p>
+
+              <Button className="w-full" onClick={() => router.push(`/@${linkedAs}`)}>
+                Finish
+              </Button>
             </div>
           )}
         </CardContent>

@@ -228,7 +228,7 @@ Either party can propose modified trade terms instead of accepting or rejecting 
 | **Blocking trade guard**         | Users with unsent objekts in an accepted trade cannot create counter-offers                                 |
 | **Recipient-only**               | Only the current recipient can counter; initiators are explicitly blocked (403)                             |
 | **Cosmo account required**       | Both parties must have a linked wallet                                                                      |
-| **Diff summary in notification** | The notification to the other party includes a brief summary of what changed (e.g.`+Jiu A203, -SuA B105`) |
+| **Diff summary in notification** | The notification to the other party includes a brief summary of what changed (e.g.`+SeoYeon A203, -JiYeon BB105`) |
 
 ## Trade Safety Measures
 

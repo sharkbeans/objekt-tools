@@ -1,7 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BellIcon, MenuIcon, SmartphoneIcon, XIcon } from "lucide-react";
+import {
+  BellIcon,
+  LinkIcon,
+  LogOutIcon,
+  MenuIcon,
+  SmartphoneIcon,
+  UserIcon,
+  XIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -165,10 +173,16 @@ export function Navbar() {
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href={profileHref}>Profile</Link>
+                    <Link href={profileHref}>
+                      <UserIcon className="size-4 mr-2" />
+                      Profile
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/link">Link Cosmo</Link>
+                    <Link href="/link">
+                      <LinkIcon className="size-4 mr-2" />
+                      Link Cosmo
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setLoginCodeOpen(true)}>
                     <SmartphoneIcon className="size-4 mr-2" />
@@ -176,6 +190,7 @@ export function Navbar() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => signOut()}>
+                    <LogOutIcon className="size-4 mr-2" />
                     Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
