@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +15,6 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 export default function SignInPage() {
-  const router = useRouter();
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
 
@@ -39,8 +37,7 @@ export default function SignInPage() {
       }
 
       toast.success("Logged in successfully");
-      router.push("/");
-      router.refresh();
+      window.location.href = "/";
     } catch {
       toast.error("Failed to verify code");
     } finally {
