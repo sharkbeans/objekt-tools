@@ -140,7 +140,7 @@ export default function NewTradePage() {
   const [anyWantOpen, setAnyWantOpen] = useState(false);
   const [previewHover, setPreviewHover] = useState<{ image: string; top: number; left: number } | null>(null);
 
-  const handlePreviewMouseEnter = useCallback((e: React.MouseEvent<HTMLDivElement>, image: string | undefined) => {
+  const handlePreviewMouseEnter = useCallback((e: React.MouseEvent<HTMLElement>, image: string | undefined) => {
     if (!image) return;
     const rect = e.currentTarget.getBoundingClientRect();
     setPreviewHover({ image, top: rect.top, left: rect.right + 8 });
