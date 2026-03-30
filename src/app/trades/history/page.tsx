@@ -30,12 +30,12 @@ interface HistoryTrade {
 }
 
 export default function TradeHistoryPage() {
-  const { data: session } = useSession();
+  const { data: session, isPending } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (session === null) router.push("/sign-in");
-  }, [session, router]);
+    if (!isPending && session === null) router.push("/sign-in");
+  }, [session, isPending, router]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["active-trades-history"],

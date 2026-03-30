@@ -132,7 +132,7 @@ function TradeNotifications() {
 
 
 export default function MyTradesPage() {
-  const { data: session } = useSession();
+  const { data: session, isPending } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
@@ -145,8 +145,8 @@ export default function MyTradesPage() {
   }, []);
 
   useEffect(() => {
-    if (session === null) router.push("/sign-in");
-  }, [session, router]);
+    if (!isPending && session === null) router.push("/sign-in");
+  }, [session, isPending, router]);
 
   // Trigger availability check on page load
   const { isFetching: isChecking } = useQuery({
