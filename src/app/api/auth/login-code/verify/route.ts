@@ -63,12 +63,20 @@ export async function POST(request: NextRequest) {
     userAgent: request.headers.get("user-agent"),
   });
 
-  // Set the session cookie
+  // Match Better Auth's cookie naming: in production (https) it prefixes
+  // with "__Secure-", in dev it uses plain "better-auth.session_token".
+  const isSecure =
+    process.env.BETTER_AUTH_URL?.startsWith("https://") ||
+    process.env.NODE_ENV === "production";
+  const cookieName = isSecure
+    ? "__Secure-better-auth.session_token"
+    : "better-auth.session_token";
+
   const res = NextResponse.json({ success: true });
-  res.cookies.set("better-auth.session_token", sessionToken, {
+  res.cookies.set(cookieName, sessionToken, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     path: "/",
     expires: expiresAt,
   });
