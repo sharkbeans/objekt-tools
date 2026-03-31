@@ -245,11 +245,13 @@ export function Navbar() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
+              onClick={() => {
                 signOut({
                   fetchOptions: {
                     onSuccess: () => {
+                      window.location.href = "/";
+                    },
+                    onError: () => {
                       window.location.href = "/";
                     },
                   },
