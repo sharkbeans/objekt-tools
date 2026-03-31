@@ -47,6 +47,7 @@ export async function GET() {
 
   const mapped = trades.map((t) => ({
     ...t,
+    acceptedAt: t.acceptedAt ?? null,
     counterOfferId: t.counterOffers?.[0]?.id ?? null,
     counterOffers: undefined,
     initiator: {

@@ -8,25 +8,50 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
+import { cn } from "@/lib/utils";
 
 type TradeStatus = "completed" | "cancelled" | "countered" | "disputed";
 
-const statusVariant: Record<TradeStatus, "default" | "destructive" | "secondary" | "outline"> = {
-  completed: "default",
-  cancelled: "destructive",
-  countered: "outline",
-  disputed: "destructive",
-};
+interface TradeSide {
+  status: string;
+}
 
 interface HistoryTrade {
   id: number;
   status: TradeStatus;
   updatedAt: string;
+  acceptedAt: string | null;
   initiatorUserId: string;
   recipientUserId: string;
   counterOfferId?: string | null;
   initiator: { id: string; name: string; cosmoNickname?: string | null };
   recipient: { id: string; name: string; cosmoNickname?: string | null };
+  sides: TradeSide[];
+}
+
+/** Declined = cancelled before either party ever accepted (acceptedAt is null) */
+function getDisplayStatus(trade: HistoryTrade): {
+  label: string;
+  variant: "default" | "destructive" | "secondary" | "outline";
+  className?: string;
+} {
+  if (trade.status === "completed") return { label: "Completed", variant: "default" };
+  if (trade.status === "disputed") return { label: "Disputed", variant: "destructive" };
+  if (trade.status === "countered") return { label: "Countered", variant: "outline", className: "border-blue-500/60 text-blue-400" };
+  if (trade.status === "cancelled") {
+    const wasAccepted = trade.acceptedAt != null;
+    return wasAccepted
+      ? { label: "Cancelled", variant: "destructive" }
+      : { label: "Declined", variant: "outline", className: "border-red-500/60 text-red-400" };
+  }
+  return { label: trade.status, variant: "secondary" };
+}
+
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr);
+  const date = d.toLocaleDateString("en-GB", { timeZone: "GMT", day: "2-digit", month: "short", year: "numeric" });
+  const time = d.toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit" });
+  return `${date} · ${time} GMT`;
 }
 
 export default function TradeHistoryPage() {
@@ -55,7 +80,7 @@ export default function TradeHistoryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Trade History</h1>
-          <p className="text-muted-foreground">Completed and cancelled trades</p>
+          <p className="text-muted-foreground">Completed and past trades</p>
         </div>
         <Link href="/trades/mine" className="text-sm text-muted-foreground hover:text-foreground">
           ← My Trades
@@ -78,35 +103,38 @@ export default function TradeHistoryPage() {
             const userId = session.user?.id;
             const isRecipient = trade.recipientUserId === userId;
             const otherUser = isRecipient ? trade.initiator : trade.recipient;
+            const display = getDisplayStatus(trade);
             return (
-              <div key={trade.id} className="rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+              <div key={trade.id} className="rounded-lg border hover:bg-muted/50 transition-colors">
                 <Link
                   href={`/active-trades/${trade.id}`}
-                  className="flex items-center justify-between gap-3"
+                  className="flex items-center gap-3 px-4 py-3"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Badge
-                      variant={statusVariant[trade.status]}
-                      className="capitalize shrink-0"
-                    >
-                      {trade.status}
-                    </Badge>
-                    <span className="text-sm truncate">
-                      Trade #{trade.id} with {otherUser.cosmoNickname ?? otherUser.name}
+                  <Badge
+                    variant={display.variant}
+                    className={cn("shrink-0 w-24 justify-center", display.className)}
+                  >
+                    {display.label}
+                  </Badge>
+                  <span className="text-sm flex-1 min-w-0 truncate">
+                    Trade #{trade.id} with{" "}
+                    <span className="font-medium">
+                      {otherUser.cosmoNickname ?? otherUser.name}
                     </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {new Date(trade.updatedAt).toLocaleDateString()}
+                  </span>
+                  {trade.status === "countered" && trade.counterOfferId && (
+                    <Link
+                      href={`/active-trades/${trade.counterOfferId}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-blue-400 hover:text-blue-300 shrink-0"
+                    >
+                      View counter-offer →
+                    </Link>
+                  )}
+                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                    {formatDate(trade.updatedAt)}
                   </span>
                 </Link>
-                {trade.status === "countered" && trade.counterOfferId && (
-                  <Link
-                    href={`/active-trades/${trade.counterOfferId}`}
-                    className="text-xs text-blue-400 hover:text-blue-300 mt-1 ml-[calc(var(--spacing)*3+4rem)] block"
-                  >
-                    → View counter-offer
-                  </Link>
-                )}
               </div>
             );
           })}
