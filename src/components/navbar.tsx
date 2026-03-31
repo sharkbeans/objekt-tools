@@ -245,7 +245,7 @@ export function Navbar() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <Button
               onClick={async () => {
-                await fetch("/api/auth/sign-out", {
+                await fetch("/api/auth/logout", {
                   method: "POST",
                   credentials: "include",
                 });
