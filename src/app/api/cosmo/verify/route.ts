@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       !profile.statusMessage.toLowerCase().includes(code.toLowerCase())
     ) {
       return NextResponse.json(
-        { error: "Verification code not found in your Cosmo status message" },
+        { error: "Verification code not found in your Cosmo bio message" },
         { status: 400 }
       );
     }

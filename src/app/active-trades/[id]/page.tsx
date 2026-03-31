@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon, MessageCircleIcon } from "lucide-react";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
+import { DiscordNudge } from "@/components/discord-nudge";
 import { useTradeRealtime } from "@/hooks/use-realtime";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import {
@@ -1482,6 +1483,7 @@ export default function ActiveTradePage({
           {isParticipant && (
             <>
               <Separator />
+              <DiscordNudge />
               <DiscordContact
                 partnerDiscord={isInitiator ? trade.recipient.discordUsername : trade.initiator.discordUsername}
                 partnerDiscordId={isInitiator ? trade.recipient.discordId : trade.initiator.discordId}

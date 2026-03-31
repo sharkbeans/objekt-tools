@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronLeft, ChevronRight, History, Pencil, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, History, Pencil, Search, Settings } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import type { CosmoPublicUser, ValidArtist } from "@/lib/cosmo/types";
 
@@ -207,6 +207,46 @@ export default function LinkCosmoPage() {
           {/* Step 1: Search */}
           {step === "search" && (
             <div className="space-y-4">
+              {/* Cosmo profile illustration */}
+              <div
+                className="relative overflow-hidden rounded-md border border-border h-57.5"
+                style={{ fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif" }}
+              >
+                <div className="bg-background text-sm h-57.5 overflow-y-auto">
+                  {/* top bar */}
+                  <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                    <span className="text-lg font-bold text-foreground flex items-center gap-0.5">tripleS <ChevronDown className="w-5 h-5" /></span>
+                    <div className="flex items-center gap-2.5 text-muted-foreground">
+                      <span className="rounded bg-purple-300 px-2 py-0.5 text-black font-medium">Shop</span>
+                      <Settings className="w-5 h-5" />
+                    </div>
+                  </div>
+                  {/* profile row */}
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <img src="/user.png" alt="" className="w-12 h-12 rounded-full shrink-0 object-cover" />
+                      <span className="text-base font-semibold text-foreground ring-2 ring-amber-400 animate-pulse shadow-[0_0_8px_3px_rgba(251,191,36,0.5)] rounded px-1">nickname</span>
+                    </div>
+                    <span className="rounded bg-muted px-2.5 py-1 text-white flex items-center gap-1 text-xs"><History className="w-3.5 h-3.5" />History</span>
+                  </div>
+                  {/* streak + bio */}
+                  <div className="px-4 pb-2 text-muted-foreground text-sm">
+                    <p>with WAV <span className="text-purple-400">D+100</span> · 7-Day Streak</p><br />
+                    <p className="text-foreground">Your bio here</p>
+                  </div>
+                  {/* search + pencil row */}
+                  <div className="flex items-center gap-2.5 px-4 py-3">
+                    <div className="flex flex-1 items-center gap-2 rounded-full bg-muted px-4 py-2.5 text-muted-foreground">
+                      <Search className="w-4 h-4 shrink-0" />
+                      <span>Search others&apos; profiles</span>
+                    </div>
+                    <div className="aspect-square rounded-xl bg-muted p-2.5 text-muted-foreground shrink-0 flex items-center justify-center">
+                      <Pencil className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <Input
                   placeholder="Enter Cosmo nickname..."
@@ -261,10 +301,10 @@ export default function LinkCosmoPage() {
               <div className="rounded-md border border-border bg-background overflow-hidden text-sm" style={{ fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
                 {/* top bar */}
                 <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-                  <span className="text-lg font-bold text-foreground flex items-center gap-0.5" style={{ animation: "glow-flash 2s ease-in-out infinite" }}>tripleS <ChevronDown className="w-5 h-5" /></span>
+                  <span className="text-lg font-bold text-foreground flex items-center gap-0.5 ring-2 ring-amber-400 animate-pulse shadow-[0_0_8px_3px_rgba(251,191,36,0.5)] rounded px-1">tripleS <ChevronDown className="w-5 h-5" /></span>
                   <div className="flex items-center gap-2.5 text-muted-foreground">
                     <span className="rounded bg-purple-300 px-2 py-0.5 text-black font-medium">Shop</span>
-                    <span className="text-lg">⚙</span>
+                    <Settings className="w-5 h-5" />
                   </div>
                 </div>
                 {/* profile row */}
@@ -351,7 +391,7 @@ export default function LinkCosmoPage() {
                     <span className="text-lg font-bold text-foreground flex items-center gap-0.5">tripleS <ChevronDown className="w-5 h-5" /></span>
                     <div className="flex items-center gap-2.5 text-muted-foreground">
                       <span className="rounded bg-purple-300 px-2 py-0.5 text-black font-medium">Shop</span>
-                      <span className="text-lg">⚙</span>
+                      <Settings className="w-5 h-5" />
                     </div>
                   </div>
                   <div className="flex items-center justify-between px-4 py-3">

@@ -34,6 +34,7 @@ export function DiscordBanner() {
             target="_blank"
             rel="noopener noreferrer"
             className="font-medium text-[#7289da] underline hover:text-[#5865F2] transition-colors"
+            onClick={handleDismiss}
           >
             Join Server →
           </a>

@@ -2,10 +2,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowLeftRightIcon,
   BellIcon,
+  HistoryIcon,
   LinkIcon,
+  LogInIcon,
   LogOutIcon,
   MenuIcon,
+  PlusIcon,
+  SearchIcon,
   SmartphoneIcon,
   UserIcon,
   XIcon,
@@ -295,11 +300,13 @@ function MobileNav({
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
           <MobileNavLink href="/trades" onClick={() => setOpen(false)}>
+            <SearchIcon className="size-4" />
             Browse Trades
           </MobileNavLink>
           {session && (
             <MobileNavLink href="/trades/mine" onClick={() => setOpen(false)}>
               <span className="flex items-center gap-2">
+                <ArrowLeftRightIcon className="size-4 shrink-0" />
                 My Trades
                 {matchCount > 0 && (
                   <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
@@ -314,17 +321,20 @@ function MobileNav({
               href="/trades/history"
               onClick={() => setOpen(false)}
             >
+              <HistoryIcon className="size-4" />
               Trade History
             </MobileNavLink>
           )}
           {session && (
             <MobileNavLink href="/trades/new" onClick={() => setOpen(false)}>
+              <PlusIcon className="size-4" />
               New Trade
             </MobileNavLink>
           )}
           {session && (
             <MobileNavLink href="/notifications" onClick={() => setOpen(false)}>
               <span className="flex items-center gap-2">
+                <BellIcon className="size-4 shrink-0" />
                 Notifications
                 {unreadCount > 0 && (
                   <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
@@ -336,6 +346,7 @@ function MobileNav({
           )}
           {!session && (
             <MobileNavLink href="/sign-in" onClick={() => setOpen(false)}>
+              <LogInIcon className="size-4" />
               Sign in with Discord
             </MobileNavLink>
           )}
@@ -361,9 +372,11 @@ function MobileNav({
             </div>
             <div className="space-y-1">
               <MobileNavLink href={profileHref} onClick={() => setOpen(false)}>
+                <UserIcon className="size-4" />
                 Profile
               </MobileNavLink>
               <MobileNavLink href="/link" onClick={() => setOpen(false)}>
+                <LinkIcon className="size-4" />
                 Link Cosmo
               </MobileNavLink>
               <button
@@ -383,8 +396,9 @@ function MobileNav({
                   signOut();
                   setOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-2"
               >
+                <LogOutIcon className="size-4" />
                 Sign out
               </button>
             </div>
@@ -408,7 +422,7 @@ function MobileNavLink({
     <Link
       href={href}
       onClick={onClick}
-      className="block px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
     >
       {children}
     </Link>

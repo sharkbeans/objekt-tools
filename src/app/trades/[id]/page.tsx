@@ -17,6 +17,8 @@ import { Separator } from "@/components/ui/separator";
 import { TradeCard } from "@/components/trades/trade-card";
 import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
 import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
+import { SignInDialog } from "@/components/sign-in-dialog";
+import { DiscordNudge } from "@/components/discord-nudge";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
@@ -242,6 +244,7 @@ export default function TradeDetailPage({
   } | null>(null);
   // For non-owners: direct initiation (no own trade post required)
   const [directInitiateOpen, setDirectInitiateOpen] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<"close" | "delete" | null>(null);
 
   const { data: trade, isLoading: tradeLoading } = useQuery({
@@ -426,10 +429,10 @@ export default function TradeDetailPage({
       </Card>
 
       {/* Non-owner: Send a Trade Offer directly against this post (no own trade post required) */}
-      {!isOwner && session && trade.status === "open" && (
+      {!isOwner && trade.status === "open" && (
         <Card>
           <CardContent className="py-4 space-y-3">
-            {trade.wantsOnly && (
+            {trade.wantsOnly && session && (
               <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-sm text-yellow-200">
                 This trader only accepts offers that include at least one objekt from their want list. Your offer will be rejected if none of your objekts match.
               </div>
@@ -438,10 +441,14 @@ export default function TradeDetailPage({
               <p className="text-sm text-muted-foreground">
                 Interested? Initiate a trade with this poster.
               </p>
-              <Button size="sm" onClick={() => setDirectInitiateOpen(true)}>
+              <Button
+                size="sm"
+                onClick={() => session ? setDirectInitiateOpen(true) : setSignInOpen(true)}
+              >
                 Send a Trade Offer
               </Button>
             </div>
+            {session && <DiscordNudge />}
           </CardContent>
         </Card>
       )}
@@ -547,6 +554,9 @@ export default function TradeDetailPage({
           theirHaves={trade?.haves ?? []}
         />
       )}
+
+      {/* Unauthenticated: prompt sign-in */}
+      <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
     </div>
   );
 }
