@@ -21,7 +21,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -244,22 +243,14 @@ export function Navbar() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                signOut({
-                  fetchOptions: {
-                    onSuccess: () => {
-                      window.location.href = "/";
-                    },
-                    onError: () => {
-                      window.location.href = "/";
-                    },
-                  },
-                });
+            <Button
+              onClick={async () => {
+                await signOut();
+                window.location.href = "/";
               }}
             >
               Sign out
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
