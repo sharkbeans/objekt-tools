@@ -25,6 +25,7 @@ Cosmo account linking uses a simple status message verification flow — you set
 - Edit or renew trade posts (description-only edits while trades are active; full edits and renewal when no active trades)
 - Public user profiles at `/user/[nickname]` with completed, cancelled, and defaulted trade stats
 - Trade ban system: automatic bans on trade default, auto-lifted when obligations are fulfilled
+- **Paste-to-trade importer**: Bulk-add objekts from clipboard using community paste formats (no manual selection needed)
 
 ## Project
 

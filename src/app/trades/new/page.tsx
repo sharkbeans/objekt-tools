@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
+import { PasteImportDialog } from "@/components/trades/paste-import-dialog";
 import {
   validArtists,
   validClasses,
@@ -151,6 +152,27 @@ export default function NewTradePage() {
   const haveImages = useObjektImages(haves);
   const wantImages = useObjektImages(wants);
 
+  function handlePasteImport(importedHaves: ObjektEntry[], importedWants: ObjektEntry[]) {
+    setHaves((prev) => {
+      const next = [...prev];
+      for (const o of importedHaves) {
+        if (!next.some((h) => h.serial != null && h.serial === o.serial)) {
+          next.push(o);
+        }
+      }
+      return next.slice(0, 10);
+    });
+    setWants((prev) => {
+      const next = [...prev];
+      for (const o of importedWants) {
+        if (!next.some((w) => w.collectionId === o.collectionId)) {
+          next.push(o);
+        }
+      }
+      return next.slice(0, 10);
+    });
+  }
+
   const [activeTab, setActiveTab] = useState<"have" | "want">("have");
   const [anyWantOpen, setAnyWantOpen] = useState(false);
   const [previewHover, setPreviewHover] = useState<{ image: string; top: number; left: number } | null>(null);
@@ -239,11 +261,18 @@ export default function NewTradePage() {
 
   return (
     <div className="max-w-4xl sm:mx-auto space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">New Trade</h1>
-        <p className="text-muted-foreground">
-          Select what you have and what you want
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">New Trade</h1>
+          <p className="text-muted-foreground">
+            Select what you have and what you want
+          </p>
+        </div>
+        <PasteImportDialog
+          onImport={handlePasteImport}
+          existingHaveCount={haves.length}
+          existingWantCount={wants.length}
+        />
       </div>
 
       <TradeFilters filters={filters} onChange={setFilters} showSort={false} showFilterMode={false} />
