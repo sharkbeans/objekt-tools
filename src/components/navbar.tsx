@@ -244,7 +244,18 @@ export function Navbar() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => signOut()}>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                signOut({
+                  fetchOptions: {
+                    onSuccess: () => {
+                      window.location.href = "/";
+                    },
+                  },
+                });
+              }}
+            >
               Sign out
             </AlertDialogAction>
           </AlertDialogFooter>
