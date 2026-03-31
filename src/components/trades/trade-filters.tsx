@@ -141,102 +141,108 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
       )}
 
       {/* Filter row */}
-      <div className="flex flex-wrap gap-2 items-center">
-        {/* Have/Want toggle */}
-        {showFilterMode && (
-          <div className="flex gap-0.5 rounded-md border p-0.5">
-            <button
-              type="button"
-              onClick={() => update({ filterMode: "haves" })}
-              className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Haves
-            </button>
-            <button
-              type="button"
-              onClick={() => update({ filterMode: "wants" })}
-              className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Wants
-            </button>
-          </div>
-        )}
+      <div className="space-y-2">
+        {/* Top row: Have/Want toggle + Sort + Reset */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Have/Want toggle */}
+          {showFilterMode && (
+            <div className="flex gap-0.5 rounded-md border p-0.5">
+              <button
+                type="button"
+                onClick={() => update({ filterMode: "haves" })}
+                className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Haves
+              </button>
+              <button
+                type="button"
+                onClick={() => update({ filterMode: "wants" })}
+                className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Wants
+              </button>
+            </div>
+          )}
 
-        <MultiSelect
-          options={validArtists.map((a) => ({ label: a, value: a }))}
-          value={filters.artist}
-          onChange={handleArtistChange}
-          placeholder="Artist"
-          className="min-w-28"
-        />
+          {showSort && (
+            <div className="flex gap-1 ml-auto">
+              <Button
+                variant={filters.sort === "newest" ? "default" : "outline"}
+                size="sm"
+                onClick={() => update({ sort: "newest" })}
+                className="h-9 text-xs"
+              >
+                Newest
+              </Button>
+              <Button
+                variant={filters.sort === "oldest" ? "default" : "outline"}
+                size="sm"
+                onClick={() => update({ sort: "oldest" })}
+                className="h-9 text-xs"
+              >
+                Oldest
+              </Button>
+            </div>
+          )}
 
-        <MultiSelect
-          options={availableMembers.map((m) => ({ label: m, value: m }))}
-          value={filters.member}
-          onChange={(v) => update({ member: v })}
-          placeholder="Member"
-          className="min-w-32"
-        />
-
-        <SeasonMultiSelect
-          options={availableSeasons}
-          value={filters.season}
-          onChange={(v) => update({ season: v })}
-          placeholder="Season"
-          className="min-w-32"
-        />
-
-        <ClassMultiSelect
-          options={availableClasses}
-          value={filters.class}
-          onChange={(v) => update({ class: v })}
-          placeholder="Class"
-          className="min-w-28"
-        />
-
-        <MultiSelect
-          options={validOnlineTypes.map((t) => ({
-            label: t === "online" ? "Digital" : "Physical",
-            value: t,
-          }))}
-          value={filters.on_offline}
-          onChange={(v) => update({ on_offline: v })}
-          placeholder="Type"
-          className="min-w-24"
-        />
-
-        {showSort && (
-          <div className="flex gap-1 ml-auto">
+          {active && (
             <Button
-              variant={filters.sort === "newest" ? "default" : "outline"}
+              variant="ghost"
               size="sm"
-              onClick={() => update({ sort: "newest" })}
-              className="h-9 text-xs"
+              onClick={() => onChange(defaultFilters)}
+              className={`h-9 text-xs text-muted-foreground${showSort ? "" : " ml-auto"}`}
             >
-              Newest
+              <XIcon className="h-3.5 w-3.5 mr-1" />
+              Reset
             </Button>
-            <Button
-              variant={filters.sort === "oldest" ? "default" : "outline"}
-              size="sm"
-              onClick={() => update({ sort: "oldest" })}
-              className="h-9 text-xs"
-            >
-              Oldest
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {active && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onChange(defaultFilters)}
-            className="h-9 text-xs text-muted-foreground"
-          >
-            <XIcon className="h-3.5 w-3.5 mr-1" />
-            Reset
-          </Button>
-        )}
+        {/* Filter dropdowns: 2-col grid on mobile, inline on desktop */}
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
+          <MultiSelect
+            options={validArtists.map((a) => ({ label: a, value: a }))}
+            value={filters.artist}
+            onChange={handleArtistChange}
+            placeholder="Artist"
+            className="w-full sm:w-auto sm:min-w-28"
+          />
+
+          <MultiSelect
+            options={availableMembers.map((m) => ({ label: m, value: m }))}
+            value={filters.member}
+            onChange={(v) => update({ member: v })}
+            placeholder="Member"
+            className="w-full sm:w-auto sm:min-w-32"
+          />
+
+          <SeasonMultiSelect
+            options={availableSeasons}
+            value={filters.season}
+            onChange={(v) => update({ season: v })}
+            placeholder="Season"
+            className="w-full sm:w-auto sm:min-w-32"
+          />
+
+          <ClassMultiSelect
+            options={availableClasses}
+            value={filters.class}
+            onChange={(v) => update({ class: v })}
+            placeholder="Class"
+            className="w-full sm:w-auto sm:min-w-28"
+          />
+
+          <MultiSelect
+            options={validOnlineTypes.map((t) => ({
+              label: t === "online" ? "Digital" : "Physical",
+              value: t,
+            }))}
+            value={filters.on_offline}
+            onChange={(v) => update({ on_offline: v })}
+            placeholder="Type"
+            className="w-full sm:w-auto sm:min-w-24"
+          />
+        </div>
       </div>
 
       {/* Active filter badges */}

@@ -203,7 +203,7 @@ export function Navbar() {
             ) : (
               <div className="flex items-center gap-2">
                 <Button size="sm" asChild>
-                  <Link href="/sign-in">Sign in with Discord</Link>
+                  <Link href="/sign-in">Sign in</Link>
                 </Button>
               </div>
             )}
@@ -347,7 +347,7 @@ function MobileNav({
           {!session && (
             <MobileNavLink href="/sign-in" onClick={() => setOpen(false)}>
               <LogInIcon className="size-4" />
-              Sign in with Discord
+              Sign in
             </MobileNavLink>
           )}
         </nav>

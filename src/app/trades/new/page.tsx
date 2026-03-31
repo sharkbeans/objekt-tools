@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
@@ -194,10 +195,13 @@ export default function NewTradePage() {
 
   if (!session) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 space-y-4">
         <p className="text-muted-foreground">
           Please sign in to create a trade.
         </p>
+        <Button asChild>
+          <Link href="/sign-in">Sign in</Link>
+        </Button>
       </div>
     );
   }
