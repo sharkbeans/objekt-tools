@@ -122,7 +122,11 @@ export function ObjektUserPicker({
   const handleMouseEnter = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>, collectionId: string) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      setHoverPos({ top: rect.top, left: rect.right + 8 });
+      const previewHeight = 160;
+      const top = rect.bottom + previewHeight > window.innerHeight
+        ? Math.max(8, rect.bottom - previewHeight)
+        : rect.top;
+      setHoverPos({ top, left: rect.right + 8 });
       setHoverImage(thumbnailCache.get(collectionId) ?? null);
 
       fetchThumbnail(collectionId).then((url) => {
@@ -214,7 +218,11 @@ export function ObjektUserPicker({
               className="picker-selected-row"
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                setHoverPos({ top: rect.top, left: rect.right + 8 });
+                const previewHeight = 160;
+                const top = rect.bottom + previewHeight > window.innerHeight
+                  ? Math.max(8, rect.bottom - previewHeight)
+                  : rect.top;
+                setHoverPos({ top, left: rect.right + 8 });
                 if (objekt.thumbnailImage) {
                   setHoverImage(objekt.thumbnailImage);
                 } else {

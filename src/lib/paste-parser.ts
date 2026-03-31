@@ -47,6 +47,7 @@ export interface ParseResult {
   haves: ParsedItem[];
   wants: ParsedItem[];
   errors: string[];
+  notes?: string;
 }
 
 /** Case-insensitive member resolve: shortform → full name, or exact match */
@@ -179,6 +180,9 @@ function parseLine(
 
 /**
  * Main entry: parse pasted text into structured have/want items.
+ *
+ * Any trailing lines after the last HAVE/WANT section that yield no parseable
+ * items are collected as optional `notes` (e.g. "(3:1) dm and ping 📩").
  */
 export function parsePastedTrade(text: string): ParseResult {
   const lines = text.split("\n");
@@ -188,23 +192,42 @@ export function parsePastedTrade(text: string): ParseResult {
 
   let currentSection: "have" | "want" | null = null;
 
+  // Track trailing unparseable lines to extract as notes
+  const trailingUnparseable: string[] = [];
+  let inFooter = false; // once we hit the first unparseable line, start collecting with blank lines
+
   for (const line of lines) {
     const header = isSectionHeader(line);
     if (header) {
       currentSection = header;
+      trailingUnparseable.length = 0;
+      inFooter = false;
       continue;
     }
 
     const trimmed = line.trim();
+
+    // Once in footer, preserve blank lines for spacing
+    if (inFooter) {
+      trailingUnparseable.push(trimmed);
+      continue;
+    }
+
     if (!trimmed) continue;
 
     if (!currentSection) {
-      // If no section header seen yet, try to detect from content
       // Skip non-parseable lines before any header
       continue;
     }
 
     const { items, errors: lineErrors } = parseLine(trimmed, currentSection);
+    if (items.length > 0) {
+      trailingUnparseable.length = 0; // reset — this was a valid line
+    } else {
+      inFooter = true;
+      trailingUnparseable.push(trimmed); // no items parsed → start of footer/notes
+    }
+
     if (currentSection === "have") {
       haves.push(...items);
     } else {
@@ -217,5 +240,9 @@ export function parsePastedTrade(text: string): ParseResult {
     errors.push("No HAVE or WANT section found. Start with HAVE or WANT on its own line.");
   }
 
-  return { haves, wants, errors };
+  const notes = trailingUnparseable.length > 0
+    ? trailingUnparseable.join("\n").trim()
+    : undefined;
+
+  return { haves, wants, errors, notes };
 }

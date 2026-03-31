@@ -153,7 +153,8 @@ export default function NewTradePage() {
   const haveImages = useObjektImages(haves);
   const wantImages = useObjektImages(wants);
 
-  function handlePasteImport(importedHaves: ObjektEntry[], importedWants: ObjektEntry[]) {
+  function handlePasteImport(importedHaves: ObjektEntry[], importedWants: ObjektEntry[], notes?: string) {
+    if (notes) setDescription(notes);
     setHaves((prev) => {
       const next = [...prev];
       for (const o of importedHaves) {
@@ -181,7 +182,14 @@ export default function NewTradePage() {
   const handlePreviewMouseEnter = useCallback((e: React.MouseEvent<HTMLElement>, image: string | undefined) => {
     if (!image) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    setPreviewHover({ image, top: rect.top, left: rect.right + 8 });
+    // Tooltip image is w-24 (96px) wide, aspect ~2:3 so ~144px tall.
+    // Flip upward if within 160px of the bottom of the viewport to avoid
+    // the tooltip extending off-screen and triggering a scroll feedback loop.
+    const previewHeight = 160;
+    const top = rect.bottom + previewHeight > window.innerHeight
+      ? Math.max(8, rect.bottom - previewHeight)
+      : rect.top;
+    setPreviewHover({ image, top, left: rect.right + 8 });
   }, []);
 
   const handlePreviewMouseLeave = useCallback(() => {

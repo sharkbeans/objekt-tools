@@ -173,7 +173,11 @@ export function InitiateTradeDialog({
 
   function handleMouseEnter(e: React.MouseEvent<HTMLButtonElement>, item: TradeItem) {
     const rect = e.currentTarget.getBoundingClientRect();
-    setHoverPos({ top: rect.top, left: rect.right + 8 });
+    const previewHeight = 160;
+    const top = rect.bottom + previewHeight > window.innerHeight
+      ? Math.max(8, rect.bottom - previewHeight)
+      : rect.top;
+    setHoverPos({ top, left: rect.right + 8 });
     const collectionId = item.collectionId;
     const cached = thumbnailCache.get(collectionId);
     setHoverImage(item.thumbnailUrl ?? cached ?? null);

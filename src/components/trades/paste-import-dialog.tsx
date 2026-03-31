@@ -151,7 +151,7 @@ async function resolveItems(
 // ── Component ──
 
 interface PasteImportDialogProps {
-  onImport: (haves: ObjektEntry[], wants: ObjektEntry[]) => void;
+  onImport: (haves: ObjektEntry[], wants: ObjektEntry[], notes?: string) => void;
   existingHaveCount: number;
   existingWantCount: number;
 }
@@ -168,12 +168,14 @@ export function PasteImportDialog({
   const [stage, setStage] = useState<Stage>("input");
   const [result, setResult] = useState<ResolveResult | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
+  const [parsedNotes, setParsedNotes] = useState<string | undefined>(undefined);
 
   const reset = useCallback(() => {
     setText("");
     setStage("input");
     setResult(null);
     setParseErrors([]);
+    setParsedNotes(undefined);
   }, []);
 
   const handleParse = useCallback(async () => {
@@ -183,6 +185,7 @@ export function PasteImportDialog({
       return;
     }
     setParseErrors(parsed.errors);
+    setParsedNotes(parsed.notes);
     setStage("resolving");
 
     try {
@@ -210,11 +213,11 @@ export function PasteImportDialog({
       return;
     }
 
-    onImport(validHaves, validWants);
+    onImport(validHaves, validWants, parsedNotes);
     toast.success(`Imported ${validHaves.length} have, ${validWants.length} want`);
     setOpen(false);
     reset();
-  }, [result, onImport, reset]);
+  }, [result, parsedNotes, onImport, reset]);
 
   const haveErrors = result?.haves.filter((h) => h.error) ?? [];
   const wantErrors = result?.wants.filter((w) => w.error) ?? [];
@@ -353,6 +356,16 @@ export function PasteImportDialog({
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Detected notes */}
+            {parsedNotes && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">NOTE (auto-detected)</p>
+                <p className="text-sm px-2 py-1.5 rounded border border-border text-muted-foreground whitespace-pre-wrap">
+                  {parsedNotes}
+                </p>
               </div>
             )}
           </div>
