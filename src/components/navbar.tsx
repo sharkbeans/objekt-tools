@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { signOut, useSession } from "@/lib/auth-client";
+import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { useUserRealtime } from "@/hooks/use-realtime";
 import { LoginCodeDialog } from "@/components/login-code-dialog";
@@ -245,7 +245,10 @@ export function Navbar() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <Button
               onClick={async () => {
-                await signOut();
+                await fetch("/api/auth/sign-out", {
+                  method: "POST",
+                  credentials: "include",
+                });
                 window.location.href = "/";
               }}
             >
