@@ -45,7 +45,7 @@ The OAuth app and bot live in the **same Discord application** in the Developer 
 ### OAuth2 tab
 - Redirect URIs:
   - `http://localhost:3000/api/auth/callback/discord`
-  - `https://objekt-trade.vercel.app/api/auth/callback/discord`
+  - `https://objekt.my/api/auth/callback/discord`
 - Scopes used by Better Auth: `identify email`
 
 ### Bot tab
@@ -102,7 +102,7 @@ await notify({ userId, message, activeTradeId });
 
 `NEXT_PUBLIC_APP_URL` is used to build trade links in DMs. Set it in env:
 ```
-NEXT_PUBLIC_APP_URL=https://objekt-trade.vercel.app
+NEXT_PUBLIC_APP_URL=https://objekt.my
 ```
 Falls back to the Vercel URL if not set.
 

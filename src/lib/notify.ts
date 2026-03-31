@@ -49,7 +49,7 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
       if (!discordId) return;
 
       const tradeUrl = item.activeTradeId
-        ? `${process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt-trade.vercel.app"}/active-trades/${item.activeTradeId}`
+        ? `${process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my"}/active-trades/${item.activeTradeId}`
         : null;
 
       const content = tradeUrl
