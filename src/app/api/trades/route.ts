@@ -10,6 +10,7 @@ import {
 import { eq, desc, asc, count } from "drizzle-orm";
 import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
 import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
+import { sanitizeNoteText } from "@/lib/sanitize-text";
 import { redis } from "@/lib/redis";
 
 interface TradeItemInput {
@@ -115,7 +116,9 @@ export async function POST(request: NextRequest) {
     wantsOnly?: boolean;
   };
 
-  if (description && description.length > 500) {
+  const sanitizedDescription = description ? sanitizeNoteText(description) || undefined : undefined;
+
+  if (sanitizedDescription && sanitizedDescription.length > 500) {
     return NextResponse.json({ error: "Description must be 500 characters or less" }, { status: 400 });
   }
 
@@ -161,7 +164,7 @@ export async function POST(request: NextRequest) {
     .insert(tradePost)
     .values({
       userId: session.user.id,
-      description: description ?? null,
+      description: sanitizedDescription ?? null,
       wantsOnly: wantsOnly ?? false,
     })
     .returning();

@@ -36,6 +36,7 @@ import {
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import { PasteImportDialog } from "@/components/trades/paste-import-dialog";
+import { sanitizeNoteText } from "@/lib/sanitize-text";
 import {
   validArtists,
   validClasses,
@@ -663,7 +664,7 @@ export default function NewTradePage() {
               id="description"
               placeholder="Any additional details about this trade..."
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => setDescription(sanitizeNoteText(e.target.value))}
             />
           </div>
 

@@ -19,6 +19,7 @@
  */
 
 import { shortformMembers, membersByArtist } from "@/lib/filters";
+import { sanitizeNoteText } from "@/lib/sanitize-text";
 
 const allMembers = Object.values(membersByArtist).flat();
 
@@ -79,15 +80,17 @@ function parseCollectionToken(token: string): ParsedCollection | null {
 }
 
 /**
- * Strip Discord/Markdown formatting from a line before checking if it's a header.
- * Handles: ## Have, **Have**, [Have], [H], **[Have]**, etc.
+ * Strip Discord formatting from a line before checking if it's a header.
+ * Handles: ## Have, **Have**, [Have], [H], **[Have]**, HAVE:, **HAVE:**, etc.
  */
 function stripFormatting(line: string): string {
   return line
     .trim()
     .replace(/^#+\s*/, "")       // ## heading
     .replace(/\*\*/g, "")        // **bold**
+    .replace(/__/g, "")          // __underline__
     .replace(/[[\]]/g, "")       // [brackets]
+    .replace(/:$/, "")           // trailing colon (HAVE:, WANT:)
     .trim();
 }
 
@@ -118,8 +121,18 @@ function parseLine(
   line: string,
   section: "have" | "want",
 ): { items: ParsedItem[]; errors: string[] } {
-  const trimmed = line.trim();
+  let trimmed = line.trim();
   if (!trimmed) return { items: [], errors: [] };
+
+  // Strip Discord list bullet: "* __Member__: ..." → "__Member__: ..."
+  trimmed = trimmed.replace(/^\*\s+/, "");
+
+  // Strip Discord underline markdown from member name at start:
+  // "__Seoyeon__: bb101" → "Seoyeon: bb101"
+  trimmed = trimmed.replace(/^__([^_]+)__/, "$1");
+
+  // Strip trailing colon after member name: "Seoyeon: bb101" → "Seoyeon bb101"
+  trimmed = trimmed.replace(/^(\S+):/, "$1");
 
   const items: ParsedItem[] = [];
   const errors: string[] = [];
@@ -129,8 +142,17 @@ function parseLine(
   const isAnyLine = anyPrefixRe.test(trimmed);
   const lineWithoutAny = isAnyLine ? trimmed.replace(anyPrefixRe, "") : trimmed;
 
+  // Split on • (bullet separator used in WTS/WTT posts to separate item groups)
+  // Both sides share the same member and section — we parse all tokens
+  const bulletParts = lineWithoutAny.split("•");
+
   // Split by comma first to handle grouped format: "Kaede bb104, bb105, bb108"
-  const commaParts = lineWithoutAny.split(",").map((p) => p.trim()).filter(Boolean);
+  // Flatten all bullet-separated parts into a single comma-part list, preserving
+  // the leading member from the very first token.
+  const commaParts = bulletParts
+    .flatMap((bp) => bp.split(","))
+    .map((p) => p.trim())
+    .filter(Boolean);
 
   // Try to extract a leading member name from the first comma-part
   // e.g. "Kaede bb104" → member="Kaede", collection="bb104"
@@ -192,15 +214,18 @@ export function parsePastedTrade(text: string): ParseResult {
 
   let currentSection: "have" | "want" | null = null;
 
+  // Lines before the first HAVE/WANT header (e.g. WTT/WTS preamble)
+  const preambleLines: string[] = [];
+
   // Track trailing unparseable lines to extract as notes
-  const trailingUnparseable: string[] = [];
+  const trailingUnmatched: string[] = [];
   let inFooter = false; // once we hit the first unparseable line, start collecting with blank lines
 
   for (const line of lines) {
     const header = isSectionHeader(line);
     if (header) {
       currentSection = header;
-      trailingUnparseable.length = 0;
+      trailingUnmatched.length = 0;
       inFooter = false;
       continue;
     }
@@ -209,23 +234,24 @@ export function parsePastedTrade(text: string): ParseResult {
 
     // Once in footer, preserve blank lines for spacing
     if (inFooter) {
-      trailingUnparseable.push(trimmed);
+      trailingUnmatched.push(trimmed);
       continue;
     }
 
     if (!trimmed) continue;
 
     if (!currentSection) {
-      // Skip non-parseable lines before any header
+      // Collect non-empty lines before any header as preamble (e.g. WTT/WTS info)
+      preambleLines.push(trimmed);
       continue;
     }
 
     const { items, errors: lineErrors } = parseLine(trimmed, currentSection);
     if (items.length > 0) {
-      trailingUnparseable.length = 0; // reset — this was a valid line
+      trailingUnmatched.length = 0; // reset — this was a valid line
     } else {
       inFooter = true;
-      trailingUnparseable.push(trimmed); // no items parsed → start of footer/notes
+      trailingUnmatched.push(trimmed); // no items parsed → start of footer/notes
     }
 
     if (currentSection === "have") {
@@ -240,9 +266,12 @@ export function parsePastedTrade(text: string): ParseResult {
     errors.push("No HAVE or WANT section found. Start with HAVE or WANT on its own line.");
   }
 
-  const notes = trailingUnparseable.length > 0
-    ? trailingUnparseable.join("\n").trim()
-    : undefined;
+  // Combine preamble + trailing unmatched lines as notes
+  const noteParts: string[] = [];
+  if (preambleLines.length > 0) noteParts.push(preambleLines.join("\n").trim());
+  if (trailingUnmatched.length > 0) noteParts.push(trailingUnmatched.join("\n").trim());
+  const rawNotes = noteParts.length > 0 ? noteParts.join("\n\n").trim() : undefined;
+  const notes = rawNotes ? sanitizeNoteText(rawNotes) || undefined : undefined;
 
   return { haves, wants, errors, notes };
 }
