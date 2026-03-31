@@ -23,6 +23,15 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSession } from "@/lib/auth-client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
 import {
@@ -119,6 +128,12 @@ export default function NewTradePage() {
   const [submitting, setSubmitting] = useState(false);
   const [wantsOnly, setWantsOnly] = useState(false);
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [discordDismissed, setDiscordDismissed] = useState(true);
+
+  useEffect(() => {
+    setDiscordDismissed(localStorage.getItem("discord-banner-dismissed") === "1");
+  }, []);
 
   // Auto-disable wantsOnly if all wants are removed
   const hasWants = wants.length > 0 || anyWants.length > 0;
@@ -613,7 +628,7 @@ export default function NewTradePage() {
 
           <div className="flex gap-4 items-center">
             <Button
-              onClick={handleSubmit}
+              onClick={() => setConfirmOpen(true)}
               disabled={submitting || haves.length === 0 || (wants.length === 0 && anyWants.length === 0)}
               className="flex-1"
             >
@@ -633,6 +648,46 @@ export default function NewTradePage() {
           <img src={previewHover.image} alt="" className="w-24 h-auto block" />
         </div>
       )}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Post this trade?</AlertDialogTitle>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Your trade will be visible to everyone and open for offers.
+              </p>
+              {!discordDismissed && (
+                <div className="rounded-md border border-[#5865F2]/40 bg-[#5865F2]/10 px-3 py-2.5 space-y-1.5">
+                  <p className="font-medium text-[#7289da]">Get notified on Discord</p>
+                  <p>
+                    Join our server so our bot can DM you when someone sends a trade offer or responds to yours.
+                    Without it, you won&apos;t receive any notifications.
+                  </p>
+                  <a
+                    href="https://discord.gg/fFrwwpz4K3"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block font-medium text-[#7289da] underline hover:text-[#5865F2] transition-colors"
+                    onClick={() => {
+                      localStorage.setItem("discord-banner-dismissed", "1");
+                      setDiscordDismissed(true);
+                    }}
+                  >
+                    Join Server →
+                  </a>
+                </div>
+              )}
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setConfirmOpen(false); handleSubmit(); }}>
+              Post Trade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
