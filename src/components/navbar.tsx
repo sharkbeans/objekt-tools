@@ -323,7 +323,7 @@ function MobileNav({
       <aside
         className={cn(
           "sm:hidden fixed top-0 left-0 z-50 h-full w-72 bg-background border-r border-border flex flex-col transition-transform duration-200",
-          open ? "translate-x-0" : "-translate-x-full",
+          open ? "translate-x-0" : "-translate-x-full pointer-events-none",
         )}
       >
         {/* Header */}
