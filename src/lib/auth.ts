@@ -9,6 +9,9 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
+  trustedOrigins: [
+    process.env.BETTER_AUTH_URL ?? "https://objekt.my",
+  ],
   socialProviders: {
     discord: {
       clientId: process.env.DISCORD_CLIENT_ID!,
