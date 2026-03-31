@@ -20,6 +20,16 @@ import { useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -88,6 +98,7 @@ export function Navbar() {
   const unreadCount = useUnreadNotificationCount();
   const profileHref = useMyProfileHref();
   const [loginCodeOpen, setLoginCodeOpen] = useState(false);
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
 
   // Subscribe to per-user realtime events so notification count updates without polling
   useUserRealtime(session?.user?.id);
@@ -194,7 +205,7 @@ export function Navbar() {
                     Login Code
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => signOut()}>
+                  <DropdownMenuItem onClick={() => setSignOutConfirmOpen(true)}>
                     <LogOutIcon className="size-4 mr-2" />
                     Sign out
                   </DropdownMenuItem>
@@ -218,9 +229,27 @@ export function Navbar() {
         unreadCount={unreadCount}
         profileHref={profileHref}
         onLoginCode={() => setLoginCodeOpen(true)}
+        onSignOut={() => setSignOutConfirmOpen(true)}
       />
 
       <LoginCodeDialog open={loginCodeOpen} onOpenChange={setLoginCodeOpen} />
+
+      <AlertDialog open={signOutConfirmOpen} onOpenChange={setSignOutConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will be signed out of your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => signOut()}>
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -231,12 +260,14 @@ function MobileNav({
   unreadCount,
   profileHref,
   onLoginCode,
+  onSignOut,
 }: {
   session: ReturnType<typeof useSession>["data"];
   matchCount: number;
   unreadCount: number;
   profileHref: string;
   onLoginCode: () => void;
+  onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -393,8 +424,8 @@ function MobileNav({
               <button
                 type="button"
                 onClick={() => {
-                  signOut();
                   setOpen(false);
+                  onSignOut();
                 }}
                 className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-2"
               >
