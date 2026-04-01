@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "biome check",
-    "format": "biome format --write"
+    "format": "biome format --write",
+    "typecheck": "tsc --noEmit",
+    "vercel:env:pull:preview": "npx vercel env pull .env.preview.local --environment=preview",
+    "vercel:env:pull:production": "npx vercel env pull .env.production.local --environment=production",
+    "vercel:build:preview": "npx vercel build",
+    "vercel:build:production": "npx vercel build --prod"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.5.3",

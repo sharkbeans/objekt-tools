@@ -117,6 +117,22 @@ All six are optional locally. Leave them blank to disable Discord login and DM n
 > mv .env.local .env.local.bak
 > ```
 
+### Deployment workflow
+
+`main` should be production-only. Use `staging` or branch preview deployments to test changes before production.
+
+- Workflow guide: [docs/staging-workflow.md](docs/staging-workflow.md)
+- Production gate: [docs/pre-deploy-checklist.md](docs/pre-deploy-checklist.md)
+
+Helpful commands:
+
+```bash
+npm run vercel:env:pull:preview
+npm run vercel:env:pull:production
+npm run vercel:build:preview
+npm run vercel:build:production
+```
+
 ### 3. Push the database schema
 
 Because `drizzle.config.ts` uses `@next/env` to load env files, it may pick up `.env.local` over `.env.development.local`. Pass the URL explicitly to be safe:
