@@ -55,7 +55,7 @@ export default function TradesPage() {
         <div>
           <h1 className="text-2xl font-bold">Browse Trades</h1>
           <p className="text-muted-foreground">
-            Find someone to trade Objekts with
+            TESTING
           </p>
         </div>
         <Button asChild size="sm">
