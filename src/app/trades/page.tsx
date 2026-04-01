@@ -37,7 +37,7 @@ export async function generateMetadata({
 
   return {
     title: "Browse Trades | Objekt Trade",
-    description: "TESTING",
+    description: "Find someone to trade Objekts with",
     alternates: {
       canonical,
     },
@@ -55,7 +55,7 @@ export default function TradesPage() {
         <div>
           <h1 className="text-2xl font-bold">Browse Trades</h1>
           <p className="text-muted-foreground">
-            TESTING
+            Find someone to trade Objekts with
           </p>
         </div>
         <Button asChild size="sm">
