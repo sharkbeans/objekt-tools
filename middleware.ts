@@ -10,11 +10,21 @@ function unauthorized() {
   });
 }
 
+const BOT_USER_AGENTS = [
+  "Discordbot",
+];
+
 export function middleware(request: NextRequest) {
   const password = process.env.TEST_SITE_PASSWORD;
 
   // If no preview password is configured, leave the app public.
   if (!password) {
+    return NextResponse.next();
+  }
+
+  // Let embed crawlers through so link previews work on the test site.
+  const ua = request.headers.get("user-agent") ?? "";
+  if (BOT_USER_AGENTS.some((bot) => ua.includes(bot))) {
     return NextResponse.next();
   }
 
