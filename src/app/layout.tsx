@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Providers } from "@/components/providers";
-import { Navbar } from "@/components/navbar";
 import { DiscordBanner } from "@/components/discord-banner";
+import { Navbar } from "@/components/navbar";
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Objekt Trade",
   description: "Trade Cosmo Objekts with other collectors",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my"),
 };
 
 export default function RootLayout({

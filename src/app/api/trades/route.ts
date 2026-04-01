@@ -1,18 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import {
+  cosmoAccount,
   tradePost,
   tradePostHave,
   tradePostWant,
-  cosmoAccount,
 } from "@/lib/db/schema";
-import { eq, desc, asc, count, and, inArray, isNull, ne } from "drizzle-orm";
-import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
-import { getBlockingTradeId, getActiveBan } from "@/lib/trade-guards";
-import { sanitizeNoteText } from "@/lib/sanitize-text";
-import { redis } from "@/lib/redis";
+import { parseFiltersFromParams } from "@/lib/filter-utils";
 import { notify } from "@/lib/notify";
+import { parsePaginationParams } from "@/lib/pagination";
+import { redis } from "@/lib/redis";
+import { sanitizeNoteText } from "@/lib/sanitize-text";
+import { getActiveBan, getBlockingTradeId } from "@/lib/trade-guards";
+import { listTradesPage } from "@/lib/trade-listing";
 
 interface TradeItemInput {
   collectionId: string;
@@ -31,65 +33,46 @@ interface TradeItemInput {
 // GET /api/trades — list trades with filters
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-
-  // Pagination
-  const page = Math.max(1, Math.floor(Number(params.get("page") ?? "1")) || 1);
-  const limit = Math.min(Number(params.get("limit") ?? "12"), 50);
-  const offset = (page - 1) * limit;
+  const { page, limit } = parsePaginationParams(params);
 
   const filters = parseFiltersFromParams(params);
 
-  const sort = params.get("sort") ?? "newest";
+  const sort = (params.get("sort") ?? "newest") as "newest" | "oldest";
   const status = params.get("status") ?? "open";
 
-  const filterMode = (params.get("filter_mode") ?? "haves") as "haves" | "wants" | "both";
-  const hasFilters = hasAnyFilter(filters);
-
-  const trades = await db.query.tradePost.findMany({
+  const filterMode = (params.get("filter_mode") ?? "haves") as
+    | "haves"
+    | "wants"
+    | "both";
+  const { trades, total } = await listTradesPage({
     where: eq(tradePost.status, status),
-    with: {
-      haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
-      wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
-      user: {
-        columns: { id: true, name: true, image: true },
-        with: {
-          cosmoAccount: {
-            columns: { nickname: true, address: true },
-          },
-        },
-      },
-    },
-    orderBy: sort === "oldest" ? [asc(tradePost.createdAt)] : [desc(tradePost.createdAt)],
-    // When no filters, use DB-level pagination; otherwise over-fetch for post-filter pagination
-    ...(hasFilters ? { limit: 500, offset: 0 } : { limit, offset }),
+    filters,
+    filterMode,
+    sort,
+    page,
+    limit,
   });
 
-  let paginated: typeof trades;
-  let total: number;
-
-  if (hasFilters) {
-    const filtered = trades.filter((t) => tradeMatchesFilters(t, filters, filterMode));
-    paginated = filtered.slice(offset, offset + limit);
-    total = filtered.length;
-  } else {
-    paginated = trades;
-    // For unfiltered queries, get count with a lightweight SQL count
-    const [{ value }] = await db.select({ value: count() }).from(tradePost).where(eq(tradePost.status, status));
-    total = value;
-  }
-
-  const enriched = paginated.map((t) => ({
+  const enriched = trades.map((t) => ({
     ...t,
     cosmoNickname: t.user.cosmoAccount?.nickname ?? null,
     cosmoAddress: t.user.cosmoAccount?.address ?? null,
   }));
 
-  return NextResponse.json({ trades: enriched, page, limit, total });
+  return NextResponse.json(
+    { trades: enriched, page, limit, total },
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
+    },
+  );
 }
 
 // POST /api/trades — create a new trade post
 export async function POST(request: NextRequest) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -98,7 +81,10 @@ export async function POST(request: NextRequest) {
 
   const activeBan = await getActiveBan(session.user.id);
   if (activeBan) {
-    return NextResponse.json({ error: "You are trade banned and cannot perform this action." }, { status: 403 });
+    return NextResponse.json(
+      { error: "You are trade banned and cannot perform this action." },
+      { status: 403 },
+    );
   }
 
   // Rate limit: 10 requests per 60 seconds
@@ -106,7 +92,10 @@ export async function POST(request: NextRequest) {
   const attempts = await redis.incr(rateLimitKey);
   if (attempts === 1) await redis.expire(rateLimitKey, 60);
   if (attempts > 10) {
-    return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      { status: 429 },
+    );
   }
 
   const body = await request.json();
@@ -117,16 +106,21 @@ export async function POST(request: NextRequest) {
     wantsOnly?: boolean;
   };
 
-  const sanitizedDescription = description ? sanitizeNoteText(description) || undefined : undefined;
+  const sanitizedDescription = description
+    ? sanitizeNoteText(description) || undefined
+    : undefined;
 
   if (sanitizedDescription && sanitizedDescription.length > 500) {
-    return NextResponse.json({ error: "Description must be 500 characters or less" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Description must be 500 characters or less" },
+      { status: 400 },
+    );
   }
 
   if (!haves?.length || !wants?.length) {
     return NextResponse.json(
       { error: "Must have at least one 'have' and one 'want' item" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -134,8 +128,11 @@ export async function POST(request: NextRequest) {
   for (const w of wants) {
     if (w.isAny && !w.artist && !w.member && !w.season && !w.class) {
       return NextResponse.json(
-        { error: "ANY want items must specify at least one filter (artist, member, season, or class)" },
-        { status: 400 }
+        {
+          error:
+            "ANY want items must specify at least one filter (artist, member, season, or class)",
+        },
+        { status: 400 },
       );
     }
   }
@@ -144,8 +141,12 @@ export async function POST(request: NextRequest) {
   const blockingTradeId = await getBlockingTradeId(session.user.id);
   if (blockingTradeId) {
     return NextResponse.json(
-      { error: "You must send all your objekts in your current active trade before creating a new post", activeTradeId: blockingTradeId },
-      { status: 403 }
+      {
+        error:
+          "You must send all your objekts in your current active trade before creating a new post",
+        activeTradeId: blockingTradeId,
+      },
+      { status: 403 },
     );
   }
 
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
   if (!linked) {
     return NextResponse.json(
       { error: "Link your Cosmo account first" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -181,7 +182,7 @@ export async function POST(request: NextRequest) {
       thumbnailUrl: h.thumbnailUrl ?? null,
       serial: h.serial ?? null,
       objektId: h.objektId ?? null,
-    }))
+    })),
   );
 
   await db.insert(tradePostWant).values(
@@ -195,28 +196,43 @@ export async function POST(request: NextRequest) {
       thumbnailUrl: w.thumbnailUrl ?? null,
       isAny: w.isAny ?? false,
       artist: w.artist ?? null,
-    }))
+    })),
   );
 
   // Notify users whose open trades match the new post (fire-and-forget)
   void (async () => {
     try {
-      const myHaveCollections = haves.filter((h) => !h.isAny).map((h) => h.collectionId);
-      const myWantCollections = wants.filter((w) => !w.isAny).map((w) => w.collectionId);
+      const myHaveCollections = haves
+        .filter((h) => !h.isAny)
+        .map((h) => h.collectionId);
+      const myWantCollections = wants
+        .filter((w) => !w.isAny)
+        .map((w) => w.collectionId);
 
-      if (myHaveCollections.length === 0 || myWantCollections.length === 0) return;
+      if (myHaveCollections.length === 0 || myWantCollections.length === 0)
+        return;
 
       // Trades where someone has what we want
       const theyHaveWhatIWant = await db
         .selectDistinct({ tradePostId: tradePostHave.tradePostId })
         .from(tradePostHave)
-        .where(and(inArray(tradePostHave.collectionId, myWantCollections), isNull(tradePostHave.deletedAt)));
+        .where(
+          and(
+            inArray(tradePostHave.collectionId, myWantCollections),
+            isNull(tradePostHave.deletedAt),
+          ),
+        );
 
       // Trades where someone wants what we have
       const theyWantWhatIHave = await db
         .selectDistinct({ tradePostId: tradePostWant.tradePostId })
         .from(tradePostWant)
-        .where(and(inArray(tradePostWant.collectionId, myHaveCollections), isNull(tradePostWant.deletedAt)));
+        .where(
+          and(
+            inArray(tradePostWant.collectionId, myHaveCollections),
+            isNull(tradePostWant.deletedAt),
+          ),
+        );
 
       const haveSet = new Set(theyHaveWhatIWant.map((r) => r.tradePostId));
       const matchingIds = theyWantWhatIHave
@@ -247,7 +263,7 @@ export async function POST(request: NextRequest) {
           userId,
           message: `A new trade post matches yours! Check it out: ${newPostUrl}`,
           tradePostId: post.id,
-        }))
+        })),
       );
     } catch (err) {
       console.error("[trades/create] match notification failed:", err);
