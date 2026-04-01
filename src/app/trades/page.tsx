@@ -37,7 +37,7 @@ export async function generateMetadata({
 
   return {
     title: "Browse Trades | Objekt Trade",
-    description: "Find someone to trade Objekts with.",
+    description: "TESTING",
     alternates: {
       canonical,
     },
