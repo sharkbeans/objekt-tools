@@ -18,7 +18,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const username = process.env.TEST_SITE_USERNAME ?? "tester";
   const authHeader = request.headers.get("authorization");
 
   if (!authHeader?.startsWith("Basic ")) {
@@ -34,10 +33,9 @@ export function middleware(request: NextRequest) {
       return unauthorized();
     }
 
-    const providedUsername = decoded.slice(0, separatorIndex);
     const providedPassword = decoded.slice(separatorIndex + 1);
 
-    if (providedUsername !== username || providedPassword !== password) {
+    if (providedPassword !== password) {
       return unauthorized();
     }
 
