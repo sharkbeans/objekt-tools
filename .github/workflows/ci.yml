@@ -13,6 +13,15 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      BETTER_AUTH_SECRET: ci-build-secret-0123456789abcdef
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/objekt_trade?sslmode=disable
+      INDEXER_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/objekt_indexer?sslmode=disable
+      REDIS_URL: redis://127.0.0.1:6379
+      DISCORD_CLIENT_ID: ci
+      DISCORD_CLIENT_SECRET: ci
 
     steps:
       - name: Check out repository

@@ -41,88 +41,26 @@ Cosmo account linking uses a simple status message verification flow — you set
 
 ## Local Development Setup
 
-### Prerequisites
+Use the dedicated setup guide instead of reverse-engineering the app from source:
 
-- [Node.js](https://nodejs.org/) 20+
-- PostgreSQL and Redis running locally
+- Local setup and env reference: [docs/local-setup.md](docs/local-setup.md)
+- Staging and preview workflow: [docs/staging-workflow.md](docs/staging-workflow.md)
+- Production gate: [docs/pre-deploy-checklist.md](docs/pre-deploy-checklist.md)
 
-**On Debian/Ubuntu/Mint:**
-
-```bash
-sudo apt install postgresql redis-server
-sudo systemctl start postgresql redis-server
-sudo systemctl enable postgresql redis-server  # auto-start on boot
-
-# Create the database
-sudo -u postgres createdb objekt_trade
-```
-
-**On macOS:**
-
-```bash
-brew install postgresql redis
-brew services start postgresql redis
-createdb objekt_trade
-```
-
-### 1. Install dependencies
+Quick start:
 
 ```bash
 npm install
-```
-
-### 2. Configure environment variables
-
-```bash
 cp .env.local.example .env.development.local
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/objekt_trade?sslmode=disable" npx drizzle-kit push
+npm run dev
 ```
 
-Edit `.env.development.local` and fill in at minimum:
+Important:
 
-| Variable                       | Description                                         |
-| ------------------------------ | --------------------------------------------------- |
-| `DATABASE_URL`               | Postgres connection string                          |
-| `REDIS_URL`                  | Redis connection string                             |
-| `BETTER_AUTH_SECRET`         | Any random 32+ character string                     |
-| `BETTER_AUTH_URL`            | `http://localhost:3000`                           |
-| `PUSHER_APP_ID`              | Pusher app ID (real-time trade/notification events) |
-| `PUSHER_KEY`                 | Pusher key                                          |
-| `PUSHER_SECRET`              | Pusher secret                                       |
-| `PUSHER_CLUSTER`             | Pusher cluster (e.g.`ap1`)                        |
-| `NEXT_PUBLIC_PUSHER_KEY`     | Same as `PUSHER_KEY` (exposed to the browser)     |
-| `NEXT_PUBLIC_PUSHER_CLUSTER` | Same as `PUSHER_CLUSTER` (exposed to the browser) |
-
-`INDEXER_DATABASE_URL` powers objekt ownership lookups. Leave it blank locally — features that depend on it will fail gracefully.
-
-Pusher vars are optional locally — real-time updates will be unavailable but the app falls back to polling.
-
-Discord login and Discord DM notifications require:
-
-| Variable                  | Description                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------------- |
-| `DISCORD_CLIENT_ID`     | OAuth app client ID                                                                   |
-| `DISCORD_CLIENT_SECRET` | OAuth app client secret                                                               |
-| `DISCORD_BOT_TOKEN`     | Bot token for sending DMs                                                             |
-| `DISCORD_INVITE_URL`    | Invite link shown to users so the bot can DM them (e.g.`https://discord.gg/xxxxx`)  |
-| `DISCORD_GUILD_ID`      | ID of the Discord server the bot must share with users to send DMs                    |
-| `NEXT_PUBLIC_APP_URL`   | Public URL used to build trade links in DMs (e.g.`https://objekt.my`) |
-
-All six are optional locally. Leave them blank to disable Discord login and DM notifications.
-
-> **Important: do not use `.env.local`.**
-> Next.js loads `.env.local` with higher priority than `.env.development.local`, so if `.env.local` exists and contains a production database URL (e.g. from `vercel env pull`), your local app will connect to production.
-> If you've run `vercel env pull` and have a `.env.local`, rename or delete it:
->
-> ```bash
-> mv .env.local .env.local.bak
-> ```
-
-### Deployment workflow
-
-`main` should be production-only. Use `staging` or branch preview deployments to test changes before production.
-
-- Workflow guide: [docs/staging-workflow.md](docs/staging-workflow.md)
-- Production gate: [docs/pre-deploy-checklist.md](docs/pre-deploy-checklist.md)
+- Do not use `.env.local` for day-to-day development in this repo.
+- Treat `main` as production-only.
+- Pull preview and production Vercel env vars into their dedicated files, not into `.env.local`.
 
 Helpful commands:
 
@@ -132,71 +70,6 @@ npm run vercel:env:pull:production
 npm run vercel:build:preview
 npm run vercel:build:production
 ```
-
-### 3. Push the database schema
-
-Because `drizzle.config.ts` uses `@next/env` to load env files, it may pick up `.env.local` over `.env.development.local`. Pass the URL explicitly to be safe:
-
-```bash
-DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/objekt_trade?sslmode=disable" npx drizzle-kit push
-```
-
-> **`sslmode=disable` is required** — local Postgres doesn't have SSL, and without it the connection will time out.
-
-### 4. Start the dev server
-
-```bash
-npm run dev
-```
-
-The app is now running at [http://localhost:3000](http://localhost:3000).
-
-### 5. Seed a local test user
-
-The seed script creates a pre-linked test account so you can skip the real Cosmo verification flow.
-
-Start the dev server first (the seed script calls the auth API), then in another terminal:
-
-```bash
-DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/objekt_trade?sslmode=disable" NODE_ENV=development npx tsx scripts/seed-local.ts
-```
-
-### Resetting the Cosmo account link
-
-If your local database has a cosmo account already linked (e.g. copied from prod), clear it:
-
-```bash
-psql postgresql://postgres:postgres@127.0.0.1:5432/objekt_trade -c "DELETE FROM cosmo_account;"
-```
-
-Then re-run the seed script to create a fresh fake one.
-
-### External dependencies
-
-Full local functionality requires two things that aren't part of this repo:
-
-**1. Cosmo tokens**
-
-Cosmo user search and objekt lookups require a valid Cosmo access token and refresh token from an active Cosmo account session. Open [scripts/seed-local.ts](scripts/seed-local.ts) and fill them in at the top before running the script:
-
-```ts
-const COSMO_ACCESS_TOKEN = "your-access-token";
-const COSMO_REFRESH_TOKEN = "your-refresh-token";
-```
-
-The client auto-refreshes on 401/403 responses. Without tokens, trade posts and active trades still work — only Cosmo user search and objekt lookup will be unavailable.
-
-**2. Objekt indexer**
-
-Global objekt ownership data (who holds which objekt, transfer history) comes from an external Cosmo indexer database, not from this app. Set `INDEXER_DATABASE_URL` in your env to point at one. Without it, ownership verification, transfer detection, and availability checks will not work — the app falls back gracefully but those features will be non-functional.
-
-### Setting up Discord for local development
-
-1. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications)
-2. Under **OAuth2**, add `http://localhost:3000/api/auth/callback/discord` as a redirect URI
-3. Under **Bot**, enable the bot and copy the token
-4. Add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`, `DISCORD_INVITE_URL`, and `DISCORD_GUILD_ID` to `.env.development.local`
-5. Invite the bot to a test server and ensure your test account has joined it
 
 ## Commands
 
