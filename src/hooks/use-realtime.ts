@@ -63,10 +63,6 @@ export function useTradeRealtime(tradeId: string) {
       queryClient.invalidateQueries({ queryKey: ["active-trade", tradeId] });
     });
 
-    channel.bind("trade:message", () => {
-      queryClient.invalidateQueries({ queryKey: ["trade-messages", tradeId] });
-    });
-
     return () => {
       pusher.unsubscribe(`trade-${tradeId}`);
       channelRef.current = null;

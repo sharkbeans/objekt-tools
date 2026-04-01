@@ -24,7 +24,6 @@ function getPusher(): Pusher | null {
 //   trade:completed      — { activeTradeId }
 //   trade:transfer-detected — { activeTradeId, count }
 //   trade:counter-offer  — { activeTradeId, originalTradeId }
-//   trade:message        — { activeTradeId, senderName }
 //   trade:offer-received — { activeTradeId, initiatorName }  (sent on trade post channel)
 
 // Channel: `user-{userId}`

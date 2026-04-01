@@ -1,0 +1,5 @@
+BEGIN;
+
+DROP TABLE IF EXISTS "trade_message" CASCADE;
+
+COMMIT;

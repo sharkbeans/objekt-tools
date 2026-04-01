@@ -249,20 +249,6 @@ export const tradeTransferLog = pgTable("trade_transfer_log", {
   index("trade_transfer_log_trade_idx").on(t.activeTradeId),
 ]);
 
-export const tradeMessage = pgTable("trade_message", {
-  id: serial("id").primaryKey(),
-  activeTradeId: text("active_trade_id")
-    .notNull()
-    .references(() => activeTrade.id, { onDelete: "cascade" }),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (t) => [
-  index("trade_message_trade_idx").on(t.activeTradeId),
-]);
-
 export const tradeBan = pgTable("trade_ban", {
   id: serial("id").primaryKey(),
   cosmoId: text("cosmo_id").notNull(),
@@ -329,17 +315,6 @@ export const tradeNotificationRelations = relations(tradeNotification, ({ one })
   }),
 }));
 
-export const tradeMessageRelations = relations(tradeMessage, ({ one }) => ({
-  activeTrade: one(activeTrade, {
-    fields: [tradeMessage.activeTradeId],
-    references: [activeTrade.id],
-  }),
-  user: one(user, {
-    fields: [tradeMessage.userId],
-    references: [user.id],
-  }),
-}));
-
 export const tradeTransferLogRelations = relations(tradeTransferLog, ({ one }) => ({
   activeTrade: one(activeTrade, {
     fields: [tradeTransferLog.activeTradeId],
@@ -400,7 +375,6 @@ export const activeTradeRelations = relations(activeTrade, ({ one, many }) => ({
   }),
   counterOffers: many(activeTrade, { relationName: "counterOfferChain" }),
   sides: many(activeTradeSide),
-  messages: many(tradeMessage),
   transferLogs: many(tradeTransferLog),
 }));
 
