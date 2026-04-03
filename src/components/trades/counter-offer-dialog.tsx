@@ -94,7 +94,7 @@ function fetchObjektMeta(collectionId: string): Promise<ObjektMeta> {
     });
 }
 
-function ObjektThumb({ objekt }: { objekt: ObjektEntry }) {
+function ObjektCard({ objekt }: { objekt: ObjektEntry }) {
   const [url, setUrl] = useState<string | null>(objekt.thumbnailImage ?? null);
 
   useEffect(() => {
@@ -103,28 +103,21 @@ function ObjektThumb({ objekt }: { objekt: ObjektEntry }) {
     }
   }, [objekt.collectionId, url]);
 
-  if (!url) {
-    return (
-      <div className="w-10 h-14 rounded bg-muted flex items-center justify-center text-[9px] text-muted-foreground text-center leading-tight px-0.5">
-        {objekt.collectionNo || "?"}
-      </div>
-    );
-  }
   return (
-    <div className="relative group/thumb">
-      <img src={url} alt="" className="w-10 h-auto rounded shadow" />
-      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-50 pointer-events-none
-                      opacity-0 group-hover/thumb:opacity-100 transition-opacity duration-150">
-        {/* bubble tail */}
-        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-popover border-l border-t border-border rotate-45" />
-        <div className="relative bg-popover border border-border rounded-md px-2 py-1 shadow-md
-                        text-[10px] text-popover-foreground whitespace-nowrap text-center leading-snug">
-          <span className="font-medium">{objekt.member} {objekt.collectionNo}</span>
-          {objekt.serial != null && (
-            <span className="block text-muted-foreground">#{String(objekt.serial).padStart(5, "0")}</span>
-          )}
-        </div>
+    <div className="flex flex-col items-center gap-1">
+      <div className="w-16 h-auto rounded-md border overflow-hidden">
+        {url ? (
+          <img src={url} alt={objekt.collectionId} className="w-16 h-auto" />
+        ) : (
+          <div className="w-16 h-[88px] bg-muted animate-pulse" />
+        )}
       </div>
+      <span className="text-[10px] text-muted-foreground text-center max-w-16 truncate">
+        {objekt.member && objekt.collectionNo ? `${objekt.member} ${objekt.collectionNo}` : objekt.collectionId}
+      </span>
+      {objekt.serial != null && (
+        <span className="text-[10px] text-muted-foreground">#{String(objekt.serial).padStart(5, "0")}</span>
+      )}
     </div>
   );
 }
@@ -290,7 +283,7 @@ export function CounterOfferDialog({
                     <div className="flex flex-wrap gap-1.5">
                       {mySelected.length > 0 ? (
                         mySelected.map((o) => (
-                          <ObjektThumb key={o.objektId ?? o.collectionId} objekt={o} />
+                          <ObjektCard key={o.objektId ?? o.collectionId} objekt={o} />
                         ))
                       ) : (
                         <span className="text-xs text-muted-foreground italic">Nothing selected</span>
@@ -303,7 +296,7 @@ export function CounterOfferDialog({
                     <div className="flex flex-wrap gap-1.5">
                       {theirSelected.length > 0 ? (
                         theirSelected.map((o) => (
-                          <ObjektThumb key={o.objektId ?? o.collectionId} objekt={o} />
+                          <ObjektCard key={o.objektId ?? o.collectionId} objekt={o} />
                         ))
                       ) : (
                         <span className="text-xs text-muted-foreground italic">Nothing selected</span>

@@ -13,6 +13,29 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       BETTER_AUTH_SECRET: ci-build-secret-0123456789abcdef
       BETTER_AUTH_URL: http://localhost:3000
@@ -36,8 +59,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Create CI databases
+        run: |
+          PGPASSWORD=ci psql -h 127.0.0.1 -U ci -d postgres -c 'CREATE DATABASE objekt_trade;'
+          PGPASSWORD=ci psql -h 127.0.0.1 -U ci -d postgres -c 'CREATE DATABASE objekt_indexer;'
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Build
-        run: npx next build
+        run: npm run build

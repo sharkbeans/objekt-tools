@@ -15,11 +15,6 @@ function seasonPrefix(season: string): string {
   return letter.repeat(num);
 }
 
-function shortLabel(entry: ObjektEntry): string {
-  const prefix = seasonPrefix(entry.season);
-  const num = entry.collectionNo.replace(/[A-Za-z]$/, "");
-  return `${entry.member} ${prefix}${num}`;
-}
 
 interface ObjektGridPickerProps {
   items: ObjektEntry[];
@@ -70,7 +65,7 @@ export function ObjektGridPicker({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
         {Array.from({ length: PAGE_SIZE }).map((_, i) => (
           <div key={i} className="aspect-photocard rounded-sm bg-muted animate-pulse" />
         ))}
@@ -88,7 +83,7 @@ export function ObjektGridPicker({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
         {pageItems.map((entry, i) => {
           const sel = isSelected(entry);
           const url = entry.thumbnailImage;
@@ -114,8 +109,8 @@ export function ObjektGridPicker({
               )}
               {/* Member + collection badge */}
               <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
-                <p className="text-[10px] text-white font-medium truncate leading-tight">
-                  {shortLabel(entry)}
+                <p className="text-[10px] text-white font-medium leading-tight wrap-break-word">
+                  {entry.member}<br />{seasonPrefix(entry.season)}{entry.collectionNo.replace(/[A-Za-z]$/, "")}
                 </p>
               </div>
               {/* Serial badge for owned */}
