@@ -2,9 +2,13 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./indexer-schema";
 
+function createIndexer(pool: Pool) {
+  return drizzle(pool, { schema });
+}
+
 const globalForIndexer = globalThis as unknown as {
   _indexerPool: Pool;
-  indexer: ReturnType<typeof drizzle>;
+  indexer: ReturnType<typeof createIndexer>;
 };
 
 if (!globalForIndexer._indexerPool) {
@@ -20,6 +24,6 @@ if (!globalForIndexer._indexerPool) {
 }
 
 export const indexer =
-  globalForIndexer.indexer ?? drizzle(globalForIndexer._indexerPool, { schema });
+  globalForIndexer.indexer ?? createIndexer(globalForIndexer._indexerPool);
 
 if (process.env.NODE_ENV !== "production") globalForIndexer.indexer = indexer;

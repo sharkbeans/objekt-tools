@@ -2,9 +2,13 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 
+function createDb(pool: Pool) {
+  return drizzle(pool, { schema });
+}
+
 const globalForDb = globalThis as unknown as {
   _dbPool: Pool;
-  db: ReturnType<typeof drizzle>;
+  db: ReturnType<typeof createDb>;
 };
 
 if (!globalForDb._dbPool) {
@@ -20,6 +24,6 @@ if (!globalForDb._dbPool) {
 }
 
 export const db =
-  globalForDb.db ?? drizzle(globalForDb._dbPool, { schema });
+  globalForDb.db ?? createDb(globalForDb._dbPool);
 
 if (process.env.NODE_ENV !== "production") globalForDb.db = db;
