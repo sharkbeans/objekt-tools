@@ -48,6 +48,5 @@ next-env.d.ts
 /objekt-explorer
 
 # markdowns
-INFRASTRUCTURE.md
-PRESENTATION.md
-README_DEV.md
+*.md
+!README.md
