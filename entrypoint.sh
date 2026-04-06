@@ -2,7 +2,7 @@
 set -e
 
 echo "Running database migrations..."
-npx drizzle-kit migrate
+node /app/migrate.js
 
 echo "Starting app..."
 exec node server.js
