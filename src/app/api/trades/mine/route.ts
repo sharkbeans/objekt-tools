@@ -1,12 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
-import { db } from "@/lib/db";
 import { tradePost } from "@/lib/db/schema";
-import { eq, desc, asc, count } from "drizzle-orm";
-import { tradeMatchesFilters, parseFiltersFromParams, hasAnyFilter } from "@/lib/filter-utils";
+import { parseFiltersFromParams } from "@/lib/filter-utils";
+import { parsePaginationParams } from "@/lib/pagination";
+import { listTradesPage } from "@/lib/trade-listing";
 
 export async function GET(request: NextRequest) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -14,48 +15,25 @@ export async function GET(request: NextRequest) {
   }
 
   const params = request.nextUrl.searchParams;
-  const page = Math.max(1, Math.floor(Number(params.get("page") ?? "1")) || 1);
-  const limit = Math.min(Number(params.get("limit") ?? "12"), 50);
-  const offset = (page - 1) * limit;
-  const sort = params.get("sort") ?? "newest";
+  const { page, limit } = parsePaginationParams(params);
+  const sort = (params.get("sort") ?? "newest") as "newest" | "oldest";
 
   const filters = parseFiltersFromParams(params);
-  const filterMode = (params.get("filter_mode") ?? "haves") as "haves" | "wants" | "both";
-  const hasFilters = hasAnyFilter(filters);
+  const filterMode = (params.get("filter_mode") ?? "haves") as
+    | "haves"
+    | "wants"
+    | "both";
 
-  const trades = await db.query.tradePost.findMany({
+  const { trades, total } = await listTradesPage({
     where: eq(tradePost.userId, session.user.id),
-    with: {
-      haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
-      wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
-      user: {
-        columns: { id: true, name: true, image: true },
-        with: {
-          cosmoAccount: {
-            columns: { nickname: true, address: true },
-          },
-        },
-      },
-    },
-    orderBy: sort === "oldest" ? [asc(tradePost.createdAt)] : [desc(tradePost.createdAt)],
-    // When no filters, use DB-level pagination; otherwise fetch all for post-filter pagination
-    ...(!hasFilters ? { limit, offset } : {}),
+    filters,
+    filterMode,
+    sort,
+    page,
+    limit,
   });
 
-  let paginated: typeof trades;
-  let total: number;
-
-  if (hasFilters) {
-    const filtered = trades.filter((t) => tradeMatchesFilters(t, filters, filterMode));
-    paginated = filtered.slice(offset, offset + limit);
-    total = filtered.length;
-  } else {
-    paginated = trades;
-    const [{ value }] = await db.select({ value: count() }).from(tradePost).where(eq(tradePost.userId, session.user.id));
-    total = value;
-  }
-
-  const enriched = paginated.map((t) => ({
+  const enriched = trades.map((t) => ({
     ...t,
     cosmoNickname: t.user.cosmoAccount?.nickname ?? null,
     cosmoAddress: t.user.cosmoAccount?.address ?? null,

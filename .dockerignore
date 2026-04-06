@@ -1,0 +1,38 @@
+# VCS
+.git
+.gitignore
+
+# Node
+node_modules
+npm-debug.log*
+
+# Next.js build output
+.next
+out
+build
+
+# Env files — secrets must never be baked into the image
+.env
+.env.*
+!.env.docker.example
+
+# Dev / editor
+.DS_Store
+*.pem
+.vscode
+.idea
+
+# Test / coverage
+coverage
+
+# Docs
+docs/
+*.md
+!README.md
+
+# Reference repos
+cosmo-web/
+objekt-explorer/
+
+# Vercel
+.vercel

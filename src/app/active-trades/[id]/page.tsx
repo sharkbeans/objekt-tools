@@ -15,8 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
-import { CopyIcon, CheckIcon, ExternalLinkIcon, SendIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon, MessageCircleIcon } from "lucide-react";
+import { CopyIcon, CheckIcon, ExternalLinkIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon, MessageCircleIcon } from "lucide-react";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
 import { DiscordNudge } from "@/components/discord-nudge";
 import { useTradeRealtime } from "@/hooks/use-realtime";
@@ -520,127 +519,6 @@ function DiscordContact({
       <p className="text-xs text-muted-foreground">
         Reach out on Discord to coordinate your trade or confirm details.
       </p>
-    </div>
-  );
-}
-
-interface TradeMessage {
-  id: number;
-  userId: string;
-  content: string;
-  createdAt: string;
-  user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null };
-}
-
-function TradeChat({ tradeId, userId, readOnly }: { tradeId: string; userId: string; readOnly?: boolean }) {
-  const queryClient = useQueryClient();
-  const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const { data: messages = [] } = useQuery<TradeMessage[]>({
-    queryKey: ["trade-messages", tradeId],
-    queryFn: async () => {
-      const res = await fetch(`/api/active-trades/${tradeId}/messages`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-    refetchInterval: 30_000, // fallback polling — realtime trade:message event handles fast updates
-  });
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  async function handleSend(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const content = message.trim();
-    if (!content || sending) return;
-    setSending(true);
-    try {
-      const res = await fetch(`/api/active-trades/${tradeId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      if (!res.ok) {
-        if (res.status === 429) {
-          toast.error("Please wait a moment before sending another message.");
-        } else {
-          toast.error("Failed to send message");
-        }
-        return;
-      }
-      setMessage("");
-      queryClient.invalidateQueries({ queryKey: ["trade-messages", tradeId] });
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium">Chat</h3>
-      <p className="text-xs text-muted-foreground">
-        Only you and your trade partner can see these messages. Only the last 10 messages are kept.
-      </p>
-      <div
-        ref={scrollRef}
-        className="h-64 overflow-y-auto rounded-md border p-3 space-y-2 bg-muted/20"
-      >
-        {messages.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-8">
-            No messages yet. Say hi!
-          </p>
-        )}
-        {messages.map((msg) => {
-          const isMe = msg.userId === userId;
-          const displayName = msg.user.cosmoNickname ?? msg.user.name;
-          return (
-            <div
-              key={msg.id}
-              className={cn("flex flex-col gap-0.5", isMe ? "items-end" : "items-start")}
-            >
-              <span className="text-[10px] text-muted-foreground">{displayName}</span>
-              <div
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-sm max-w-[80%] break-words",
-                  isMe
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
-                )}
-              >
-                {msg.content}
-              </div>
-              <span className="text-[10px] text-muted-foreground">
-                {new Date(msg.createdAt).toLocaleTimeString("en-GB", {
-                  timeZone: "GMT",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })} GMT
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      {readOnly ? (
-        <p className="text-xs text-muted-foreground text-center py-1">Chat is closed for this trade.</p>
-      ) : (
-        <form onSubmit={handleSend} className="flex gap-2">
-          <Input
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type a message..."
-            maxLength={500}
-            className="flex-1"
-          />
-          <Button type="submit" size="icon" disabled={!message.trim() || sending}>
-            <SendIcon className="h-4 w-4" />
-          </Button>
-        </form>
-      )}
     </div>
   );
 }
@@ -1489,13 +1367,6 @@ export default function ActiveTradePage({
                 partnerDiscordId={isInitiator ? trade.recipient.discordId : trade.initiator.discordId}
                 partnerName={isInitiator ? recipientName : initiatorName}
               />
-            </>
-          )}
-
-          {isParticipant && userId && (
-            <>
-              <Separator />
-              <TradeChat tradeId={trade.id} userId={userId} readOnly={!isActive} />
             </>
           )}
 

@@ -1,13 +1,21 @@
 {
-  "name": "myapp",
+  "name": "objekt-trade",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "drizzle-kit migrate && next build",
     "start": "next start",
     "lint": "biome check",
-    "format": "biome format --write"
+    "format": "biome format --write",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "vercel:env:pull:preview": "npx vercel env pull .env.preview.local --environment=preview",
+    "vercel:env:pull:production": "npx vercel env pull .env.production.local --environment=production",
+    "vercel:build:preview": "npx vercel build",
+    "vercel:build:production": "npx vercel build --prod"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.5.3",
@@ -38,6 +46,7 @@
     "@biomejs/biome": "2.2.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.9",
