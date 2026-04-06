@@ -295,7 +295,7 @@ export async function POST(
 
       // Collect inserts to batch
       const sideInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
-      const sideUpdates: { id: string; status: "sent" | "confirmed"; detectedAt?: Date }[] = [];
+      const sideUpdates: { id: number; status: "sent" | "confirmed"; detectedAt?: Date }[] = [];
 
       for (const side of pendingSides) {
         const recipientUserId = side.userId === trade.initiatorUserId
