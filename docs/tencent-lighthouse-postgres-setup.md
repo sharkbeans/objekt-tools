@@ -1,442 +1,454 @@
-# Tencent Cloud Lighthouse — PostgreSQL Setup Guide
+# Tencent Cloud Lighthouse — Full Docker Deployment Guide
 
-This guide walks through provisioning a PostgreSQL instance on Tencent Cloud Lighthouse
-using **Ubuntu + Docker + Docker Compose** (recommended), extracting the `DATABASE_URL`,
-running the schema migration, and updating Vercel.
+Complete guide to migrate objekt-trade from Vercel + Neon DB to
+Tencent Cloud Lighthouse running Docker Compose (Next.js app + Postgres + Redis).
+
+**End state:** everything runs in Docker on your VPS. Vercel and Neon are fully replaced.
 
 ---
 
-## Part 1 — Create a Lighthouse Instance (Ubuntu)
+## Overview
 
-### 1.1 Log in and open Lighthouse
+```
+GitHub repo
+    ↓  git clone / git pull
+Lighthouse VPS (Ubuntu)
+    ├── app      (Next.js, port 3000)
+    ├── postgres (Postgres 16, internal only)
+    ├── redis    (Redis 7, internal only)
+    ├── cron     (alpine, fires /api/cron/expire-trades at 2 AM UTC)
+    └── nginx    (reverse proxy, port 80/443 → app:3000)
+```
+
+No Vercel. No Neon. Secrets live only in `.env` on the VPS — never in git.
+
+---
+
+## Part 1 — Provision the Lighthouse Instance
+
+### 1.1 Create the instance
 
 1. Go to [console.cloud.tencent.com](https://console.cloud.tencent.com)
-2. In the top search bar, type **Lighthouse** and click **轻量应用服务器 (Lighthouse App Service)**
-3. Click **新建 (New)** in the top-left of the instance list
-
-### 1.2 Configure the instance
-
-On the creation page:
+2. Search **Lighthouse** → click **轻量应用服务器**
+3. Click **新建 (New)**
 
 | Field | Value |
 |-------|-------|
-| Region | Singapore (新加坡) — see Part 9 for region guidance |
+| Region | Singapore (新加坡) — lowest latency for Asia |
 | Image type | **系统镜像 (OS image)** |
-| OS image | **Ubuntu 22.04 LTS** (or 24.04) |
-| Spec | 2 vCPU / 2 GB RAM minimum; 4 GB RAM if running multiple projects |
-| Storage | 20–40 GB SSD |
-| Traffic | Bundled monthly traffic (default) is fine |
-| Instance name | e.g. `db-server` |
+| OS | **Ubuntu 22.04 LTS** |
+| Spec | 2 vCPU / 4 GB RAM minimum |
+| Storage | 40 GB SSD |
+| Instance name | e.g. `objekt-trade` |
 
-Click **立即购买 (Buy now)** and complete payment.
+Click **立即购买** and wait ~2 minutes for status **运行中 (Running)**.
 
-> Wait 1–3 minutes for the instance status to show **运行中 (Running)**.
+### 1.2 Note your public IP
 
-> **Alternative:** If you prefer not to use Docker, you can pick **应用镜像 (App image)** →
-> **PostgreSQL** instead. Skip to the bare-metal path in the Appendix at the bottom of
-> this document.
+On the instance detail page, copy the **公网IP (Public IP)**. You'll use it everywhere below as `<VPS_IP>`.
 
 ---
 
-## Part 2 — Open the Firewall for PostgreSQL
+## Part 2 — Open the Firewall
 
-By default Lighthouse blocks all ports except 22/80/443.
+1. Click your instance → **防火墙 (Firewall)** tab → **添加规则 (Add Rule)**
+2. Add these rules:
 
-1. From the instance list, click your instance name
-2. Click the **防火墙 (Firewall)** tab
-3. Click **添加规则 (Add Rule)**
-4. Fill in:
-   - Protocol: **TCP**
-   - Port: **5432**
-   - Source: `0.0.0.0/0`
-   - Policy: **Allow**
-5. Click **确定 (Confirm)**
+| Protocol | Port | Source | Policy |
+|----------|------|--------|--------|
+| TCP | 80 | 0.0.0.0/0 | Allow |
+| TCP | 443 | 0.0.0.0/0 | Allow |
+| TCP | 22 | 0.0.0.0/0 | Allow |
+
+> Do **not** open port 3000 or 5432 — those stay internal to Docker.
 
 ---
 
 ## Part 3 — SSH into the Instance
 
-### Option A — Web terminal (easiest, no setup)
-
-1. On the instance detail page, click **登录 (Login)** in the top-right
-2. A browser-based terminal opens — you are already root
-
-### Option B — SSH from your machine
-
 ```bash
-ssh ubuntu@<YOUR_LIGHTHOUSE_IP>
-# or root, depending on what you set during creation
+ssh ubuntu@<VPS_IP>
+# If you're root: ssh root@<VPS_IP>
 ```
 
-Find your **public IP** on the instance detail page under **公网IP (Public IP)**.
+Or use the **登录 (Login)** button on the Tencent console for a browser terminal.
 
 ---
 
-## Part 4 — Install Docker
+## Part 4 — Install Docker and Git
 
-Run these commands once on the fresh Ubuntu instance:
+Run once on the fresh instance:
 
 ```bash
-# Update package index
+# Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Docker via the official convenience script
+# Install Docker via official script
 curl -fsSL https://get.docker.com | sh
 
-# Add your user to the docker group so you don't need sudo every time
+# Add your user to the docker group
 sudo usermod -aG docker $USER
-
-# Apply the group change without logging out
 newgrp docker
 
 # Verify
 docker --version
+docker compose version
+
+# Install git (usually pre-installed)
+sudo apt install -y git
 ```
 
 ---
 
-## Part 5 — Write the docker-compose.yml
-
-Create a directory for your DB config:
+## Part 5 — Clone the Repo
 
 ```bash
-mkdir -p ~/postgres && cd ~/postgres
-nano docker-compose.yml
+cd ~
+git clone https://github.com/<your-github-username>/objekt-trade.git
+cd objekt-trade
 ```
 
-Paste this content — **replace the password**:
+> The repo contains `Dockerfile`, `docker-compose.yml`, and `.env.docker.example`
+> but **no secrets**. You add secrets in the next step.
 
-```yaml
-services:
-  postgres:
-    image: postgres:16
-    container_name: postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_PASSWORD: your-strong-password-here
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+---
 
-volumes:
-  pgdata:
+## Part 6 — Create the .env File (Secrets)
+
+This is the only place secrets live. The file stays on the VPS only — never committed to git.
+
+```bash
+cp .env.docker.example .env
+nano .env
 ```
+
+Fill in every value. Reference table:
+
+| Variable | How to get it |
+|----------|--------------|
+| `POSTGRES_PASSWORD` | Make up a strong password (16+ chars) |
+| `DATABASE_URL` | `postgresql://postgres:<POSTGRES_PASSWORD>@postgres:5432/objekt_trade?sslmode=disable` — use the compose service name `postgres`, not an IP |
+| `BETTER_AUTH_SECRET` | Run `openssl rand -hex 32` on any machine |
+| `BETTER_AUTH_URL` | Your public domain e.g. `https://trade.yourdomain.com` |
+| `NEXT_PUBLIC_APP_URL` | Same as `BETTER_AUTH_URL` |
+| `DISCORD_CLIENT_ID` | [Discord Developer Portal](https://discord.com/developers/applications) → your app → OAuth2 |
+| `DISCORD_CLIENT_SECRET` | Same location |
+| `DISCORD_BOT_TOKEN` | Discord Developer Portal → your app → Bot → Reset Token |
+| `DISCORD_INVITE_URL` | Your community server invite link |
+| `DISCORD_GUILD_ID` | Right-click your Discord server icon → Copy Server ID |
+| `CRON_SECRET` | Run `openssl rand -hex 32` on any machine |
+
+Optional (leave blank to disable):
+
+| Variable | Notes |
+|----------|-------|
+| `INDEXER_DATABASE_URL` | External Cosmo indexer DB — leave blank if unused |
+| `PUSHER_*` | Leave all blank — app falls back to polling |
 
 Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
 
-> **Why no `POSTGRES_USER` or `POSTGRES_DB`?** Omitting them defaults to user `postgres`
-> and an initial database `postgres`. You will create per-project databases manually in
-> Part 6. This keeps the compose file generic and reusable across projects.
+### Verify the file looks right
+
+```bash
+# Should print your DATABASE_URL — confirm it has the right password and host "postgres"
+grep DATABASE_URL .env
+```
 
 ---
 
-## Part 6 — Start Postgres and Create the Database
+## Part 7 — Point Your Domain at the VPS
+
+Before setting up HTTPS you need DNS in place.
+
+1. In your DNS provider, create an **A record**:
+   - Name: `trade` (or `@` for apex)
+   - Value: `<VPS_IP>`
+   - TTL: 300
+2. Wait for propagation (usually 1–5 min with low TTL):
+   ```bash
+   # From your local machine — should return your VPS IP
+   nslookup trade.yourdomain.com
+   ```
+
+> If you don't have a domain yet, you can temporarily use `http://<VPS_IP>:3000` — skip
+> Part 8 and set `BETTER_AUTH_URL` / `NEXT_PUBLIC_APP_URL` to `http://<VPS_IP>:3000`.
+> Discord OAuth requires HTTPS for production, so get a domain eventually.
+
+---
+
+## Part 8 — Set Up Nginx + HTTPS (Certbot)
+
+Nginx sits in front of the app and terminates TLS. The app container never needs to handle certs.
+
+### 8.1 Install Nginx and Certbot
 
 ```bash
-# Start the container in the background
+sudo apt install -y nginx certbot python3-certbot-nginx
+```
+
+### 8.2 Create a minimal Nginx config
+
+```bash
+sudo nano /etc/nginx/sites-available/objekt-trade
+```
+
+Paste (replace `trade.yourdomain.com`):
+
+```nginx
+server {
+    listen 80;
+    server_name trade.yourdomain.com;
+
+    location / {
+        proxy_pass         http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection 'upgrade';
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/objekt-trade /etc/nginx/sites-enabled/
+sudo nginx -t        # should print "syntax is ok"
+sudo systemctl reload nginx
+```
+
+### 8.3 Issue a TLS certificate
+
+```bash
+sudo certbot --nginx -d trade.yourdomain.com
+```
+
+Follow the prompts. Certbot edits the Nginx config to add HTTPS and sets up auto-renewal.
+
+### 8.4 Verify HTTPS works
+
+```bash
+curl -I https://trade.yourdomain.com
+# Should return HTTP/2 200 (or 502 until the app is running — that's fine for now)
+```
+
+---
+
+## Part 9 — Build and Start the Stack
+
+Back in the `~/objekt-trade` directory:
+
+```bash
+# Build the app image (this runs drizzle-kit migrate + next build inside the container)
+# Takes 3–5 minutes on first run
+docker compose build
+
+# Start everything
 docker compose up -d
 
-# Verify it's running
-docker ps
-# Should show the postgres container with status "Up"
-
-# Open a psql shell inside the container
-docker exec -it postgres psql -U postgres
-
-# Inside psql — create the database for this project
-CREATE DATABASE objekt_trade;
-
-# Verify
-\l
-
-# Exit
-\q
+# Watch the logs — wait for "Ready" from the app container
+docker compose logs -f app
 ```
 
-### Adding a second project later
-
-Each new project just gets its own database (and optionally its own user):
-
-```sql
-CREATE USER myproject WITH PASSWORD 'another-password';
-CREATE DATABASE myproject_db OWNER myproject;
-GRANT ALL PRIVILEGES ON DATABASE myproject_db TO myproject;
+When you see:
+```
+objekt-trade-app  |  ✓ Ready in Xs
 ```
 
-No new containers, no firewall changes — just a new `DATABASE_URL` pointing at the same IP
-with a different database name.
+the app is live.
 
----
-
-## Part 7 — Build the DATABASE_URL
-
-```
-postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require
-```
-
-**SSL note:** The Docker Postgres image does not come with a signed TLS cert by default.
-The codebase uses `ssl: { rejectUnauthorized: false }` when `sslmode=require` is in the URL,
-which enables encryption without strict cert validation — correct for self-hosted Postgres.
-
-If the connection still fails with SSL errors, try `?sslmode=no-verify` as a fallback.
-Do **not** use `sslmode=disable` in production.
-
----
-
-## Part 8 — Test the Connection Locally
-
-Before touching Vercel, verify the URL works from your machine:
+### Check all containers are healthy
 
 ```bash
-psql "postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require"
+docker compose ps
 ```
 
-You should get a `psql` prompt. If connection is refused:
-- Recheck the Lighthouse firewall rule (Part 2) — port 5432 must be open
-- Check the container is running: `docker ps` on the server
-- Check Docker is actually publishing the port: `docker inspect postgres | grep -A5 Ports`
+All four services (`postgres`, `redis`, `app`, `cron`) should show `healthy` or `running`.
 
 ---
 
-## Part 9 — Run the Schema Migration
-
-Once the connection test passes, run the Drizzle migration against the new host:
+## Part 10 — Verify the Deployment
 
 ```bash
-# In your local objekt-trade repo
-DATABASE_URL="postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require" npm run db:migrate
+# Health endpoint
+curl https://trade.yourdomain.com/api/health
+# → {"ok":true}
+
+# Check the app loads
+curl -I https://trade.yourdomain.com
+# → HTTP/2 200
 ```
 
-Verify:
-
-```bash
-psql "postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require" \
-  -c "\dt"
-```
-
-You should see all tables: `user`, `session`, `trade_post`, `active_trade`, etc.
-
----
-
-## Part 10 — Update Vercel Environment Variables
-
-### 10.1 Navigate to Vercel project settings
-
-1. Go to [vercel.com/dashboard](https://vercel.com/dashboard)
-2. Click your **objekt-trade** project
-3. Click **Settings** (top tab) → **Environment Variables** (left sidebar)
-
-### 10.2 Update DATABASE_URL
-
-Find the existing `DATABASE_URL` entry.
-
-For **Production**:
-1. Click **...** → **Edit**
-2. Replace the value with the URL from Part 7
-3. Make sure only **Production** environment is checked (not Preview)
-4. Click **Save**
-
-For **Preview** (`testing` branch):
-- Keep Preview pointing at Neon if you want to test on the new DB in production only first
-- Or scope the same Lighthouse URL to Preview as well
-
-### 10.3 Redeploy
-
-1. Go to the **Deployments** tab
-2. Find the latest production deployment
-3. Click **...** → **Redeploy**
-
-> The build command `drizzle-kit migrate && next build` runs `db:migrate` on every deploy.
-> Since the schema was already applied in Part 9, this will be a no-op on the first redeploy.
-
----
-
-## Part 11 — Smoke Test
-
-- [ ] Load the trade board — posts appear
-- [ ] Log in via Discord — session persists
-- [ ] Open an existing trade or create a new one
+In a browser:
+- [ ] Trade board loads
+- [ ] Discord login works
+- [ ] Create or open a trade
 - [ ] Check `/api/active-trades` returns data
-- [ ] Check Vercel function logs (dashboard → **Logs**) for any `connection refused` or SSL errors
 
 ---
 
-## Rollback Plan
+## Part 11 — Migrate Data from Neon (if needed)
 
-Revert `DATABASE_URL` in Vercel back to the Neon URL and redeploy. The Neon database is
-untouched — no data was deleted or modified during this migration.
+If your Neon DB has live data you want to keep, do this **before** switching Discord OAuth
+and telling users about the new URL.
 
----
+### 11.1 Dump from Neon
 
-## Part 12 — Pull the Updated Env Locally
+On your **local machine**:
 
 ```bash
-npm run vercel:env:pull:production
-# or for the testing branch preview:
-npm run vercel:env:pull:preview
+# Get your Neon DATABASE_URL from Vercel env vars or Neon dashboard
+pg_dump "<NEON_DATABASE_URL>" \
+  --no-owner --no-acl \
+  -f neon_backup.sql
 ```
 
----
-
-## Part 13 — Migrating to a Different Region (e.g. Singapore)
-
-Do this if you provisioned in the wrong region or latency is too high.
-
-### Why region matters
-
-Vercel serverless functions execute in the region you configure. Every API route makes at
-least one DB query, so DB-to-function round-trip latency is directly visible in response times.
-
-| Vercel function region | Best Lighthouse region |
-|------------------------|----------------------|
-| `iad1` — US East (default) | No Tencent region close — consider a US provider instead |
-| `sin1` — Singapore | Singapore (新加坡) |
-| `hkg1` — Hong Kong | Hong Kong (香港) or Singapore |
-| `nrt1` — Tokyo | No direct Tencent Lighthouse region — Singapore is next closest |
-
-If your users are primarily in Asia, **Singapore on both sides** is the recommended setup.
-
----
-
-### 13.1 Change Vercel's Function Region
-
-1. Vercel dashboard → your project → **Settings** → **Functions** (left sidebar)
-2. Under **Function Region**, open the dropdown
-3. Select **Singapore (sin1)**
-4. Click **Save**
-5. Redeploy (push a commit, or **Deployments** → **...** → **Redeploy**)
-
----
-
-### 13.2 Provision a New Lighthouse Instance in Singapore
-
-You cannot change the region of an existing instance — create a new one.
-
-1. Lighthouse → **新建 (New)**
-2. On the region selector at the top, change to **新加坡 (Singapore)**
-3. Complete Parts 1–6 of this guide on the new instance
-4. Note the new **公网IP**
-
----
-
-### 13.3 Migrate Data from the Old Instance
-
-If the old instance has live data you want to keep:
+### 11.2 Copy to VPS and restore
 
 ```bash
-# On the OLD server — dump to file
-docker exec postgres pg_dump -U postgres objekt_trade > /tmp/objekt_trade_backup.sql
+# Upload to VPS
+scp neon_backup.sql ubuntu@<VPS_IP>:~/objekt-trade/
 
-# On your LOCAL machine — copy down
-scp root@<OLD_IP>:/tmp/objekt_trade_backup.sql ./objekt_trade_backup.sql
+# SSH in
+ssh ubuntu@<VPS_IP>
+cd ~/objekt-trade
 
-# Copy up to the NEW server
-scp ./objekt_trade_backup.sql root@<NEW_IP>:/tmp/objekt_trade_backup.sql
-
-# On the NEW server — restore
-docker exec -i postgres psql -U postgres objekt_trade < /tmp/objekt_trade_backup.sql
+# Restore into the running Postgres container
+docker exec -i objekt-trade-postgres \
+  psql -U postgres objekt_trade \
+  < neon_backup.sql
 ```
 
-If you're OK with schema-only (no data to preserve):
+### 11.3 Verify row counts
 
 ```bash
-DATABASE_URL="postgresql://postgres:<password>@<NEW_IP>:5432/objekt_trade?sslmode=require" npm run db:migrate
+docker exec -it objekt-trade-postgres psql -U postgres objekt_trade \
+  -c "SELECT schemaname, relname, n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC;"
 ```
 
 ---
 
-### 13.4 Update DATABASE_URL and Redeploy
+## Part 12 — Update Discord OAuth Redirect URL
 
-Follow Part 10.2 with `<NEW_IP>`, then redeploy (Part 10.3).
+Discord only allows OAuth callbacks from URLs you've whitelisted.
 
----
-
-### 13.5 Decommission the Old Instance
-
-After the smoke test passes and 24 hours have elapsed:
-
-1. Lighthouse instance list → click old instance
-2. **更多操作 (More actions)** → **销毁/退还 (Destroy/Return)**
-3. Confirm
-
----
-
-### Latency Check After Migration
-
-1. Vercel dashboard → **Logs** tab → filter by **Functions**
-2. Compare durations on `/api/active-trades` or `/api/trades` before and after
+1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
+2. Select your app → **OAuth2**
+3. Under **Redirects**, add:
+   ```
+   https://trade.yourdomain.com/api/auth/callback/discord
+   ```
+4. Click **Save Changes**
+5. Remove or keep the old Vercel redirect — keeping it won't break anything
 
 ---
 
-## Summary
+## Part 13 — Cut Over from Vercel
 
-| Item | Where to get it |
-|------|----------------|
-| Lighthouse public IP | Instance detail page → 公网IP |
-| PostgreSQL password | Set in `docker-compose.yml` (Part 5) |
-| Database name | Created in psql in Part 6 |
-| Port | `5432` (opened in Lighthouse firewall, Part 2) |
-| Full `DATABASE_URL` | Assembled in Part 7 |
+Once the VPS deployment is confirmed working:
+
+1. Update your domain's DNS A record to point at `<VPS_IP>` (already done in Part 7 if you set it up fresh)
+2. In Vercel: **Settings → Domains** — remove the custom domain so it stops serving traffic
+3. Optionally delete the Vercel project entirely
+
+Neon data is still intact until you delete it — keep it as a backup for a few days.
 
 ---
 
-## Appendix — Bare-Metal PostgreSQL (No Docker)
+## Part 14 — Ongoing Operations
 
-Use this path only if you chose the **应用镜像 → PostgreSQL** image in Part 1 instead of Ubuntu.
-
-### A.1 Get the public IP and SSH in (same as Parts 2–3)
-
-### A.2 Set the PostgreSQL password
+### Deploy a new version
 
 ```bash
-sudo -i -u postgres
-psql
-ALTER USER postgres WITH PASSWORD 'your-strong-password-here';
-CREATE DATABASE objekt_trade;
-\q
-exit
+# On the VPS
+cd ~/objekt-trade
+git pull
+
+# Rebuild and restart (downtime ~30s)
+docker compose build app
+docker compose up -d app
 ```
 
-### A.3 Allow remote connections
-
-```bash
-# Find config — usually /etc/postgresql/15/main/postgresql.conf
-sudo nano /etc/postgresql/15/main/postgresql.conf
-```
-
-Change:
-```
-#listen_addresses = 'localhost'
-```
-to:
-```
-listen_addresses = '*'
-```
+### View logs
 
 ```bash
-sudo nano /etc/postgresql/15/main/pg_hba.conf
+docker compose logs -f app       # app logs
+docker compose logs -f cron      # cron job logs
+docker compose logs postgres      # DB logs
 ```
 
-Add at the bottom:
-```
-host    all    all    0.0.0.0/0    scram-sha-256
-```
-
-```bash
-sudo systemctl restart postgresql
-```
-
-### A.4 Adding a second project's database
+### Access the database directly
 
 ```bash
-sudo -i -u postgres
-psql
-CREATE USER myproject WITH PASSWORD 'another-password';
-CREATE DATABASE myproject_db OWNER myproject;
-GRANT ALL PRIVILEGES ON DATABASE myproject_db TO myproject;
-\q
-exit
+docker exec -it objekt-trade-postgres psql -U postgres objekt_trade
 ```
 
-Then continue from Part 7 of the main guide.
+### Backup Postgres
+
+```bash
+docker exec objekt-trade-postgres \
+  pg_dump -U postgres objekt_trade \
+  > ~/backups/objekt_trade_$(date +%Y%m%d).sql
+```
+
+Set up a cron on the VPS to run this nightly:
+
+```bash
+crontab -e
+# Add:
+0 3 * * * docker exec objekt-trade-postgres pg_dump -U postgres objekt_trade > /home/ubuntu/backups/objekt_trade_$(date +\%Y\%m\%d).sql
+```
+
+### Restart a single service
+
+```bash
+docker compose restart app
+```
+
+### Rotate a secret
+
+```bash
+nano ~/objekt-trade/.env   # update the value
+docker compose up -d app   # restarts only the app with new env
+```
+
+---
+
+## Part 15 — Rollback Plan
+
+If anything goes wrong before cutover:
+
+- Vercel is still live — just don't update the DNS
+- Neon data is untouched
+
+If you've already cut over and need to revert:
+
+1. Point DNS back to Vercel's IP (found in Vercel → Settings → Domains)
+2. Re-add the domain in Vercel
+3. Vercel redeploys automatically on the next git push, or trigger manually
+
+---
+
+## Appendix — File Reference
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | 3-stage build: install deps → build (runs migrations) → minimal runner |
+| `docker-compose.yml` | Defines postgres, redis, app, cron services |
+| `.env.docker.example` | Template — copy to `.env` on the VPS, fill in secrets |
+| `.dockerignore` | Keeps node_modules, .env, .git out of the image |
+| `next.config.ts` | `output: "standalone"` enables the minimal Docker runner |
+| `src/app/api/health/route.ts` | `/api/health` used by Docker HEALTHCHECK |
+
+## Appendix — Why .env only on the VPS?
+
+The `.env` file contains database passwords, Discord secrets, and auth keys. It must never be committed to git. The workflow is:
+
+```
+git repo  →  has .env.docker.example (safe template, committed)
+VPS       →  has .env (real secrets, created manually, never leaves the server)
+```
+
+`docker compose` reads `.env` automatically from the same directory as `docker-compose.yml`.
