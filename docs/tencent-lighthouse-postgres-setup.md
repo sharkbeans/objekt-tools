@@ -1,11 +1,12 @@
 # Tencent Cloud Lighthouse — PostgreSQL Setup Guide
 
-This guide walks through provisioning a PostgreSQL instance on Tencent Cloud Lighthouse,
-extracting the `DATABASE_URL`, running the schema migration, and updating Vercel.
+This guide walks through provisioning a PostgreSQL instance on Tencent Cloud Lighthouse
+using **Ubuntu + Docker + Docker Compose** (recommended), extracting the `DATABASE_URL`,
+running the schema migration, and updating Vercel.
 
 ---
 
-## Part 1 — Create a Lighthouse Instance with PostgreSQL
+## Part 1 — Create a Lighthouse Instance (Ubuntu)
 
 ### 1.1 Log in and open Lighthouse
 
@@ -17,267 +18,258 @@ extracting the `DATABASE_URL`, running the schema migration, and updating Vercel
 
 On the creation page:
 
-| Field         | Value                                                                                                                                                                             |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Region        | Pick the region**closest to your Vercel deployment** (Vercel defaults to US East — pick `Virginia (us-east-1)` equivalent if available, else Singapore for Asia-Pacific) |
-| Image type    | **应用镜像 (App image)**                                                                                                                                                    |
-| App image     | Scroll to find**PostgreSQL** (e.g. PostgreSQL 15 or 16)                                                                                                                     |
-| Spec          | 2 vCPU / 2 GB RAM is fine for early stage (cheapest option)                                                                                                                       |
-| Storage       | 20–40 GB SSD                                                                                                                                                                     |
-| Traffic       | Bundled monthly traffic (default) is fine                                                                                                                                         |
-| Instance name | e.g.`objekt-trade-db`                                                                                                                                                           |
+| Field | Value |
+|-------|-------|
+| Region | Singapore (新加坡) — see Part 9 for region guidance |
+| Image type | **系统镜像 (OS image)** |
+| OS image | **Ubuntu 22.04 LTS** (or 24.04) |
+| Spec | 2 vCPU / 2 GB RAM minimum; 4 GB RAM if running multiple projects |
+| Storage | 20–40 GB SSD |
+| Traffic | Bundled monthly traffic (default) is fine |
+| Instance name | e.g. `db-server` |
 
 Click **立即购买 (Buy now)** and complete payment.
 
 > Wait 1–3 minutes for the instance status to show **运行中 (Running)**.
 
+> **Alternative:** If you prefer not to use Docker, you can pick **应用镜像 (App image)** →
+> **PostgreSQL** instead. Skip to the bare-metal path in the Appendix at the bottom of
+> this document.
+
 ---
 
-## Part 2 — Configure PostgreSQL Access
-
-### 2.1 Open the instance management page
-
-1. From the Lighthouse instance list, click your new instance name
-2. You will land on the **实例详情 (Instance Detail)** page
-
-### 2.2 Get the public IP
-
-On the detail page, find **公网IP (Public IP)** — this is your DB host.
-Write it down: `<YOUR_LIGHTHOUSE_IP>`
-
-### 2.3 Open the firewall for PostgreSQL (port 5432)
+## Part 2 — Open the Firewall for PostgreSQL
 
 By default Lighthouse blocks all ports except 22/80/443.
 
-1. Click the **防火墙 (Firewall)** tab on the instance detail page
-2. Click **添加规则 (Add Rule)**
-3. Fill in:
+1. From the instance list, click your instance name
+2. Click the **防火墙 (Firewall)** tab
+3. Click **添加规则 (Add Rule)**
+4. Fill in:
    - Protocol: **TCP**
    - Port: **5432**
-   - Source: `0.0.0.0/0` (or restrict to Vercel IP ranges if you know them)
+   - Source: `0.0.0.0/0`
    - Policy: **Allow**
-4. Click **确定 (Confirm)**
+5. Click **确定 (Confirm)**
 
-> If you later want to lock this down, Vercel's outbound IPs are listed at
-> https://vercel.com/docs/edge-network/regions — but `0.0.0.0/0` is fine to start.
+---
 
-### 2.4 Connect to the instance via SSH or Web Terminal
+## Part 3 — SSH into the Instance
 
-Option A — Web terminal (easiest):
+### Option A — Web terminal (easiest, no setup)
 
-1. On the instance detail page, click **登录 (Login)** in the top right
+1. On the instance detail page, click **登录 (Login)** in the top-right
 2. A browser-based terminal opens — you are already root
 
-Option B — SSH:
+### Option B — SSH from your machine
 
 ```bash
-ssh root@<YOUR_LIGHTHOUSE_IP>
+ssh ubuntu@<YOUR_LIGHTHOUSE_IP>
+# or root, depending on what you set during creation
 ```
 
-Use the key pair or password you set during creation.
+Find your **public IP** on the instance detail page under **公网IP (Public IP)**.
 
-### 2.5 Set the PostgreSQL password
+---
 
-Once in the terminal:
+## Part 4 — Install Docker
+
+Run these commands once on the fresh Ubuntu instance:
 
 ```bash
-# Switch to the postgres system user
-sudo -i -u postgres
+# Update package index
+sudo apt update && sudo apt upgrade -y
 
-# Open the psql shell
-psql
+# Install Docker via the official convenience script
+curl -fsSL https://get.docker.com | sh
 
-# Set a strong password for the postgres superuser
-ALTER USER postgres WITH PASSWORD 'your-strong-password-here';
+# Add your user to the docker group so you don't need sudo every time
+sudo usermod -aG docker $USER
 
-# Create the application database
-CREATE DATABASE objekt_trade;
+# Apply the group change without logging out
+newgrp docker
 
-# Exit psql
-\q
-
-# Exit the postgres user shell
-exit
-```
-
-### 2.6 Allow remote connections in PostgreSQL config
-
-PostgreSQL on Lighthouse typically binds to localhost only by default.
-
-```bash
-# Find the config file (path depends on installed version)
-sudo find /etc -name postgresql.conf 2>/dev/null
-# Usually: /etc/postgresql/15/main/postgresql.conf
-
-# Edit it
-sudo nano /etc/postgresql/15/main/postgresql.conf
-```
-
-Find the line:
-
-```
-#listen_addresses = 'localhost'
-```
-
-Change it to:
-
-```
-listen_addresses = '*'
-```
-
-Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X` in nano).
-
-Then edit `pg_hba.conf` to allow password auth from any IP:
-
-```bash
-sudo nano /etc/postgresql/15/main/pg_hba.conf
-```
-
-Add this line at the **bottom** of the file:
-
-```
-host    all             all             0.0.0.0/0               scram-sha-256
-```
-
-Restart PostgreSQL:
-
-```bash
-sudo systemctl restart postgresql
+# Verify
+docker --version
 ```
 
 ---
 
-## Part 3 — Build the DATABASE_URL
+## Part 5 — Write the docker-compose.yml
 
-Your connection string follows this format:
+Create a directory for your DB config:
 
+```bash
+mkdir -p ~/postgres && cd ~/postgres
+nano docker-compose.yml
 ```
-postgresql://<user>:<password>@<host>:<port>/<database>?sslmode=require
+
+Paste this content — **replace the password**:
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: your-strong-password-here
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
 ```
 
-Filled in with what you just set up:
+Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
+
+> **Why no `POSTGRES_USER` or `POSTGRES_DB`?** Omitting them defaults to user `postgres`
+> and an initial database `postgres`. You will create per-project databases manually in
+> Part 6. This keeps the compose file generic and reusable across projects.
+
+---
+
+## Part 6 — Start Postgres and Create the Database
+
+```bash
+# Start the container in the background
+docker compose up -d
+
+# Verify it's running
+docker ps
+# Should show the postgres container with status "Up"
+
+# Open a psql shell inside the container
+docker exec -it postgres psql -U postgres
+
+# Inside psql — create the database for this project
+CREATE DATABASE objekt_trade;
+
+# Verify
+\l
+
+# Exit
+\q
+```
+
+### Adding a second project later
+
+Each new project just gets its own database (and optionally its own user):
+
+```sql
+CREATE USER myproject WITH PASSWORD 'another-password';
+CREATE DATABASE myproject_db OWNER myproject;
+GRANT ALL PRIVILEGES ON DATABASE myproject_db TO myproject;
+```
+
+No new containers, no firewall changes — just a new `DATABASE_URL` pointing at the same IP
+with a different database name.
+
+---
+
+## Part 7 — Build the DATABASE_URL
 
 ```
 postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require
 ```
 
-**SSL note:** Tencent Lighthouse Postgres does not come with a signed TLS cert by default.
-The codebase is configured to use `ssl: { rejectUnauthorized: false }` when `sslmode=require`
-is in the URL, which enables encryption without strict cert validation. This is the correct
-setting for self-hosted Postgres. Do **not** use `sslmode=disable` in production.
+**SSL note:** The Docker Postgres image does not come with a signed TLS cert by default.
+The codebase uses `ssl: { rejectUnauthorized: false }` when `sslmode=require` is in the URL,
+which enables encryption without strict cert validation — correct for self-hosted Postgres.
 
-If SSL still fails on connection, try `?sslmode=no-verify` as a fallback (same security
-level, different syntax).
+If the connection still fails with SSL errors, try `?sslmode=no-verify` as a fallback.
+Do **not** use `sslmode=disable` in production.
 
 ---
 
-## Part 4 — Test the connection locally
+## Part 8 — Test the Connection Locally
 
 Before touching Vercel, verify the URL works from your machine:
 
 ```bash
-# Install psql locally if needed: brew install postgresql (macOS)
 psql "postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require"
 ```
 
-You should get a `psql` prompt. If you see a connection refused error:
-
-- Recheck the firewall rule (Part 2.3) — port 5432 must be open
-- Recheck `listen_addresses = '*'` in `postgresql.conf`
-- Recheck the `pg_hba.conf` line and that PostgreSQL was restarted
+You should get a `psql` prompt. If connection is refused:
+- Recheck the Lighthouse firewall rule (Part 2) — port 5432 must be open
+- Check the container is running: `docker ps` on the server
+- Check Docker is actually publishing the port: `docker inspect postgres | grep -A5 Ports`
 
 ---
 
-## Part 5 — Run the schema migration
+## Part 9 — Run the Schema Migration
 
-Once the connection test passes, run the Drizzle migration against the new host.
+Once the connection test passes, run the Drizzle migration against the new host:
 
 ```bash
 # In your local objekt-trade repo
-# Temporarily point DATABASE_URL at the new Lighthouse instance
-
 DATABASE_URL="postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require" npm run db:migrate
 ```
 
-This runs `drizzle-kit migrate` which applies all migration files in `drizzle/`
-and recreates the full schema (all tables, indexes, foreign keys).
-
-Verify it worked:
+Verify:
 
 ```bash
 psql "postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require" \
   -c "\dt"
 ```
 
-You should see all the tables: `user`, `session`, `trade_post`, `active_trade`, etc.
+You should see all tables: `user`, `session`, `trade_post`, `active_trade`, etc.
 
 ---
 
-## Part 6 — Update Vercel environment variables
+## Part 10 — Update Vercel Environment Variables
 
-### 6.1 Navigate to Vercel project settings
+### 10.1 Navigate to Vercel project settings
 
 1. Go to [vercel.com/dashboard](https://vercel.com/dashboard)
 2. Click your **objekt-trade** project
-3. Click **Settings** (top tab)
-4. Click **Environment Variables** (left sidebar)
+3. Click **Settings** (top tab) → **Environment Variables** (left sidebar)
 
-### 6.2 Update DATABASE_URL
+### 10.2 Update DATABASE_URL
 
 Find the existing `DATABASE_URL` entry.
 
 For **Production**:
+1. Click **...** → **Edit**
+2. Replace the value with the URL from Part 7
+3. Make sure only **Production** environment is checked (not Preview)
+4. Click **Save**
 
-1. Click the **...** menu next to `DATABASE_URL`
-2. Click **Edit**
-3. Replace the value with:
-   ```
-   postgresql://postgres:your-strong-password-here@<YOUR_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require
-   ```
-4. Make sure only **Production** environment is checked (not Preview)
-5. Click **Save**
+For **Preview** (`testing` branch):
+- Keep Preview pointing at Neon if you want to test on the new DB in production only first
+- Or scope the same Lighthouse URL to Preview as well
 
-For **Preview** (the `testing` branch):
-
-- You can keep Preview pointing at Neon for now if you want to test on the new DB only in production first
-- Or create a separate `DATABASE_URL` scoped to Preview with the same Lighthouse URL
-
-### 6.3 Redeploy
-
-After saving the env var, you need to redeploy for it to take effect.
+### 10.3 Redeploy
 
 1. Go to the **Deployments** tab
 2. Find the latest production deployment
 3. Click **...** → **Redeploy**
 
-> The build command `drizzle-kit migrate && next build` will run `db:migrate` against the
-> new Lighthouse DB automatically on every Vercel deploy. Since the schema was already
-> applied in Part 5, this will be a no-op on the first redeploy.
+> The build command `drizzle-kit migrate && next build` runs `db:migrate` on every deploy.
+> Since the schema was already applied in Part 9, this will be a no-op on the first redeploy.
 
 ---
 
-## Part 7 — Smoke test
-
-After redeploy, verify the app works end-to-end:
+## Part 11 — Smoke Test
 
 - [ ] Load the trade board — posts appear
 - [ ] Log in via Discord — session persists
 - [ ] Open an existing trade or create a new one
 - [ ] Check `/api/active-trades` returns data
-- [ ] Check Vercel function logs (Vercel dashboard → Logs) for any `connection refused` or `SSL` errors
+- [ ] Check Vercel function logs (dashboard → **Logs**) for any `connection refused` or SSL errors
 
 ---
 
-## Rollback plan
+## Rollback Plan
 
-If anything breaks, revert `DATABASE_URL` in Vercel back to the Neon URL and redeploy.
-The Neon database is untouched — no data was deleted or modified during this migration.
+Revert `DATABASE_URL` in Vercel back to the Neon URL and redeploy. The Neon database is
+untouched — no data was deleted or modified during this migration.
 
 ---
 
-## Part 8 — Pull the updated env locally
-
-After changing Vercel env vars, pull them down so your local tools are in sync:
+## Part 12 — Pull the Updated Env Locally
 
 ```bash
 npm run vercel:env:pull:production
@@ -287,138 +279,164 @@ npm run vercel:env:pull:preview
 
 ---
 
-## Summary of what you will need
+## Part 13 — Migrating to a Different Region (e.g. Singapore)
 
-| Item                  | Where to get it                                    |
-| --------------------- | -------------------------------------------------- |
-| Lighthouse public IP  | Instance detail page → 公网IP                     |
-| PostgreSQL password   | You set it in Part 2.5                             |
-| Database name         | `objekt_trade` (you created it in Part 2.5)      |
-| Port                  | `5432` (default, opened in firewall in Part 2.3) |
-| Full `DATABASE_URL` | Assembled in Part 3                                |
-
----
-
-## Part 9 — Migrating to a different region (e.g. Singapore)
-
-Do this if you provisioned in the wrong region, or if latency is unacceptably high and
-you want to move the DB closer to your users or closer to Vercel's function region.
+Do this if you provisioned in the wrong region or latency is too high.
 
 ### Why region matters
 
-Vercel serverless functions run in the region you configure. Every API route makes at
-least one DB query, so DB-to-function round-trip latency shows up directly in your
-response times. As a rough guide:
+Vercel serverless functions execute in the region you configure. Every API route makes at
+least one DB query, so DB-to-function round-trip latency is directly visible in response times.
 
-| Vercel function region        | Best Lighthouse region                                           |
-| ----------------------------- | ---------------------------------------------------------------- |
-| `iad1` — US East (default) | No Tencent region close — consider a US provider instead        |
-| `sin1` — Singapore         | Singapore (新加坡)                                               |
-| `hkg1` — Hong Kong         | Hong Kong (香港) or Singapore                                    |
-| `nrt1` — Tokyo             | No direct Tencent Lighthouse region — Singapore is next closest |
+| Vercel function region | Best Lighthouse region |
+|------------------------|----------------------|
+| `iad1` — US East (default) | No Tencent region close — consider a US provider instead |
+| `sin1` — Singapore | Singapore (新加坡) |
+| `hkg1` — Hong Kong | Hong Kong (香港) or Singapore |
+| `nrt1` — Tokyo | No direct Tencent Lighthouse region — Singapore is next closest |
 
-If your users are primarily in Asia and you can pick the Vercel function region freely,
-**Singapore on both sides** is the recommended setup.
+If your users are primarily in Asia, **Singapore on both sides** is the recommended setup.
 
 ---
 
-### 9.1 Change Vercel's function region
+### 13.1 Change Vercel's Function Region
 
-Vercel runs functions in `iad1` (US East) by default. To move to Singapore:
-
-1. Go to [vercel.com/dashboard](https://vercel.com/dashboard) → your project
-2. Click **Settings** → **Functions** (left sidebar)
-3. Under **Function Region**, open the dropdown
-4. Select **Singapore (sin1)**
-5. Click **Save**
-6. Trigger a new deployment (push a commit, or go to **Deployments** → **...** → **Redeploy**)
-
-> This affects all serverless functions in the project — every API route will now
-> be deployed to and execute in Singapore.
+1. Vercel dashboard → your project → **Settings** → **Functions** (left sidebar)
+2. Under **Function Region**, open the dropdown
+3. Select **Singapore (sin1)**
+4. Click **Save**
+5. Redeploy (push a commit, or **Deployments** → **...** → **Redeploy**)
 
 ---
 
-### 9.2 Provision a new Lighthouse instance in Singapore
+### 13.2 Provision a New Lighthouse Instance in Singapore
 
-You cannot change the region of an existing Lighthouse instance. You need to create a
-new one.
+You cannot change the region of an existing instance — create a new one.
 
-1. Go to Lighthouse → **新建 (New)**
-2. On the region selector at the top of the creation page, click the current region name
-   and change it to **新加坡 (Singapore)**
-3. Complete the rest of the setup exactly as in Parts 1–2 of this guide
-4. Note the new instance's **公网IP**
+1. Lighthouse → **新建 (New)**
+2. On the region selector at the top, change to **新加坡 (Singapore)**
+3. Complete Parts 1–6 of this guide on the new instance
+4. Note the new **公网IP**
 
 ---
 
-### 9.3 Migrate data from the old instance to the new one
+### 13.3 Migrate Data from the Old Instance
 
 If the old instance has live data you want to keep:
 
-**On the old instance** (SSH in):
+```bash
+# On the OLD server — dump to file
+docker exec postgres pg_dump -U postgres objekt_trade > /tmp/objekt_trade_backup.sql
+
+# On your LOCAL machine — copy down
+scp root@<OLD_IP>:/tmp/objekt_trade_backup.sql ./objekt_trade_backup.sql
+
+# Copy up to the NEW server
+scp ./objekt_trade_backup.sql root@<NEW_IP>:/tmp/objekt_trade_backup.sql
+
+# On the NEW server — restore
+docker exec -i postgres psql -U postgres objekt_trade < /tmp/objekt_trade_backup.sql
+```
+
+If you're OK with schema-only (no data to preserve):
 
 ```bash
-# Dump the data as SQL
+DATABASE_URL="postgresql://postgres:<password>@<NEW_IP>:5432/objekt_trade?sslmode=require" npm run db:migrate
+```
+
+---
+
+### 13.4 Update DATABASE_URL and Redeploy
+
+Follow Part 10.2 with `<NEW_IP>`, then redeploy (Part 10.3).
+
+---
+
+### 13.5 Decommission the Old Instance
+
+After the smoke test passes and 24 hours have elapsed:
+
+1. Lighthouse instance list → click old instance
+2. **更多操作 (More actions)** → **销毁/退还 (Destroy/Return)**
+3. Confirm
+
+---
+
+### Latency Check After Migration
+
+1. Vercel dashboard → **Logs** tab → filter by **Functions**
+2. Compare durations on `/api/active-trades` or `/api/trades` before and after
+
+---
+
+## Summary
+
+| Item | Where to get it |
+|------|----------------|
+| Lighthouse public IP | Instance detail page → 公网IP |
+| PostgreSQL password | Set in `docker-compose.yml` (Part 5) |
+| Database name | Created in psql in Part 6 |
+| Port | `5432` (opened in Lighthouse firewall, Part 2) |
+| Full `DATABASE_URL` | Assembled in Part 7 |
+
+---
+
+## Appendix — Bare-Metal PostgreSQL (No Docker)
+
+Use this path only if you chose the **应用镜像 → PostgreSQL** image in Part 1 instead of Ubuntu.
+
+### A.1 Get the public IP and SSH in (same as Parts 2–3)
+
+### A.2 Set the PostgreSQL password
+
+```bash
 sudo -i -u postgres
-pg_dump objekt_trade > /tmp/objekt_trade_backup.sql
+psql
+ALTER USER postgres WITH PASSWORD 'your-strong-password-here';
+CREATE DATABASE objekt_trade;
+\q
 exit
-
-# Copy the dump to your local machine
-# (run this locally, not on the server)
-scp root@<OLD_LIGHTHOUSE_IP>:/tmp/objekt_trade_backup.sql ./objekt_trade_backup.sql
 ```
 
-**On the new instance** (SSH in, after completing Parts 2.4–2.6 on it):
+### A.3 Allow remote connections
 
 ```bash
-# Copy the dump to the new server
-# (run this locally)
-scp ./objekt_trade_backup.sql root@<NEW_LIGHTHOUSE_IP>:/tmp/objekt_trade_backup.sql
+# Find config — usually /etc/postgresql/15/main/postgresql.conf
+sudo nano /etc/postgresql/15/main/postgresql.conf
+```
 
-# SSH into the new server and restore
-ssh root@<NEW_LIGHTHOUSE_IP>
+Change:
+```
+#listen_addresses = 'localhost'
+```
+to:
+```
+listen_addresses = '*'
+```
+
+```bash
+sudo nano /etc/postgresql/15/main/pg_hba.conf
+```
+
+Add at the bottom:
+```
+host    all    all    0.0.0.0/0    scram-sha-256
+```
+
+```bash
+sudo systemctl restart postgresql
+```
+
+### A.4 Adding a second project's database
+
+```bash
 sudo -i -u postgres
-psql objekt_trade < /tmp/objekt_trade_backup.sql
-exit
+psql
+CREATE USER myproject WITH PASSWORD 'another-password';
+CREATE DATABASE myproject_db OWNER myproject;
+GRANT ALL PRIVILEGES ON DATABASE myproject_db TO myproject;
+\q
 exit
 ```
 
-If you are OK wiping data (schema-only migration, same as the initial setup):
-
-```bash
-# Just run the Drizzle migration against the new host — no dump needed
-DATABASE_URL="postgresql://postgres:<password>@<NEW_LIGHTHOUSE_IP>:5432/objekt_trade?sslmode=require" npm run db:migrate
-```
-
----
-
-### 9.4 Update DATABASE_URL in Vercel to point at the new instance
-
-Follow Part 6.2 of this guide, replacing the IP with `<NEW_LIGHTHOUSE_IP>`.
-
-Then redeploy (Part 6.3).
-
----
-
-### 9.5 Decommission the old instance
-
-Once you have confirmed the new instance is healthy (smoke test from Part 7):
-
-1. Go to Lighthouse instance list
-2. Click the old instance
-3. Click **更多操作 (More actions)** → **销毁/退还 (Destroy/Return)**
-4. Confirm destruction
-
-> Do not destroy the old instance until the smoke test passes. Keep it running for at
-> least 24 hours after cutover as a safety net.
-
----
-
-### Latency check after migration
-
-After moving to Singapore, you can verify the round-trip improvement in Vercel logs:
-
-1. Vercel dashboard → your project → **Logs** tab
-2. Filter by **Functions**
-3. Look at durations on `/api/active-trades` or `/api/trades` — should drop noticeably
-   compared to a cross-continent setup
+Then continue from Part 7 of the main guide.
