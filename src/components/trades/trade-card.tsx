@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRightIcon } from "lucide-react";
 import { membersByArtist } from "@/lib/filters";
+import { getSeasonPrefix } from "@/lib/season-prefix";
 
 interface TradeItem {
   id: number;
@@ -29,20 +30,10 @@ function anyWantLabel(item: TradeItem): string {
   return "Any";
 }
 
-/** Season prefix: Atom01→A, Atom02→AA, Binary01→B, Binary02→BB, etc. */
-function seasonPrefix(season: string | null | undefined): string {
-  if (!season) return "";
-  const match = season.match(/^([A-Za-z]+?)(\d+)$/);
-  if (!match) return "";
-  const letter = match[1].charAt(0).toUpperCase();
-  const num = parseInt(match[2], 10);
-  return letter.repeat(num);
-}
-
 /** Compact label: "SeoYeon AA101" — strip trailing type char (Z/A) */
 function shortLabel(item: TradeItem): string {
   if (item.collectionNo && item.member) {
-    const prefix = seasonPrefix(item.season);
+    const prefix = getSeasonPrefix(item.season);
     const num = item.collectionNo.replace(/[A-Za-z]$/, "");
     return `${item.member} ${prefix}${num}`;
   }
