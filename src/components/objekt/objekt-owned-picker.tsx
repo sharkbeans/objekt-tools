@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { makeTradeItemTags, searchFilter, getArtistForMember } from "@/lib/filter-utils";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
@@ -142,8 +144,11 @@ export function ObjektOwnedPicker({
       ) : error ? (
         <div className="text-sm text-destructive text-center py-4">{error}</div>
       ) : owned.length === 0 ? (
-        <div className="text-sm text-muted-foreground text-center py-4">
-          No objekts found. Make sure your Cosmo account is linked.
+        <div className="text-sm text-muted-foreground text-center py-4 space-y-2">
+          <p>No objekts found. Make sure your Cosmo account is linked.</p>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/link">Link Cosmo Account</Link>
+          </Button>
         </div>
       ) : (
         <ObjektGridPicker
