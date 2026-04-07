@@ -24,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 function maskEmail(email: string): string {
   const atIndex = email.indexOf("@");
@@ -211,13 +212,43 @@ export default function PublicProfilePage({
 
   const displayName = profile.nickname ?? profile.address;
   const viewerId = profile.viewer.userId;
+  const isSjarkbean = profile.nickname?.toLowerCase() === "sjarkbean";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <Card>
-        <CardHeader>
+      <Card className="relative flex flex-col gap-6 overflow-hidden rounded-xl border bg-card py-6 text-card-foreground shadow-sm">
+        {isSjarkbean && (
+          <>
+            <div className="absolute inset-0">
+              <Image
+                src="/profile.jpg"
+                alt=""
+                fill
+                priority
+                className="object-cover"
+                sizes="(max-width: 1024px) 100vw, 896px"
+              />
+            </div>
+            <div className="absolute inset-0 bg-black/30" aria-hidden="true" />
+            <div
+              className="absolute inset-0"
+              aria-hidden="true"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(0, 0, 0, 0) 18%, rgba(0, 0, 0, 0.12) 52%, rgba(0, 0, 0, 0.38) 78%, rgba(0, 0, 0, 0.88) 100%)",
+              }}
+            />
+          </>
+        )}
+
+        <CardHeader className={cn("relative z-10", isSjarkbean && "text-white")}>
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-lg font-bold">
+            <div
+              className={cn(
+                "flex h-12 w-12 items-center justify-center rounded-full bg-muted text-lg font-bold",
+                isSjarkbean && "bg-black/40 text-white",
+              )}
+            >
               {displayName.charAt(0).toUpperCase()}
             </div>
             <div>
@@ -228,7 +259,9 @@ export default function PublicProfilePage({
                   <span className="font-mono text-sm">{profile.address}</span>
                 )}
               </CardTitle>
-              <CardDescription>
+              <CardDescription
+                className={cn(isSjarkbean && "text-white/80")}
+              >
                 Member since{" "}
                 {new Date(profile.linkedAt).toLocaleDateString("en-GB", {
                   month: "short",
@@ -238,10 +271,17 @@ export default function PublicProfilePage({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent
+          className={cn("relative z-10", isSjarkbean && "text-white")}
+        >
           {isOwner && profile.email && (
             <div className="mb-4">
-              <p className="text-sm font-medium text-muted-foreground mb-1">
+              <p
+                className={cn(
+                  "mb-1 text-sm font-medium text-muted-foreground",
+                  isSjarkbean && "text-white/75",
+                )}
+              >
                 Email
               </p>
               <p className="text-sm flex items-center gap-1.5">
@@ -249,7 +289,10 @@ export default function PublicProfilePage({
                 <button
                   type="button"
                   onClick={() => setEmailVisible((visible) => !visible)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  className={cn(
+                    "transition-colors text-muted-foreground hover:text-foreground",
+                    isSjarkbean && "text-white/70 hover:text-white",
+                  )}
                   aria-label={emailVisible ? "Hide email" : "Show email"}
                 >
                   {emailVisible ? (
@@ -264,7 +307,14 @@ export default function PublicProfilePage({
 
           {profile.discordUsername && (
             <div className="mb-4">
-              <p className="text-sm font-medium text-muted-foreground mb-1">Discord</p>
+              <p
+                className={cn(
+                  "mb-1 text-sm font-medium text-muted-foreground",
+                  isSjarkbean && "text-white/75",
+                )}
+              >
+                Discord
+              </p>
               {profile.discordId ? (
                 <a
                   href={`https://discord.com/users/${profile.discordId}`}

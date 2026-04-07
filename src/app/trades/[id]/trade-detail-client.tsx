@@ -22,6 +22,7 @@ import { DiscordNudge } from "@/components/discord-nudge";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
+import { getSeasonPrefix } from "@/lib/season-prefix";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,20 +55,10 @@ function anyWantLabel(item: TradeItem): string {
   return "Any";
 }
 
-/** Season prefix: Atom01→A, Atom02→AA, Binary01→B, etc. */
-function seasonPrefix(season: string | null | undefined): string {
-  if (!season) return "";
-  const match = season.match(/^([A-Za-z]+?)(\d+)$/);
-  if (!match) return "";
-  const letter = match[1].charAt(0).toUpperCase();
-  const num = parseInt(match[2], 10);
-  return letter.repeat(num);
-}
-
 /** Compact label: "HeeJin A108" — strip trailing type char (Z/A) */
 function formatLabel(item: TradeItem): string {
   if (item.collectionNo && item.member) {
-    const prefix = seasonPrefix(item.season);
+    const prefix = getSeasonPrefix(item.season);
     const num = item.collectionNo.replace(/[A-Za-z]$/, "");
     return `${item.member} ${prefix}${num}`;
   }

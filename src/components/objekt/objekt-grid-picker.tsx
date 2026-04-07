@@ -4,17 +4,9 @@ import { useState, useEffect } from "react";
 import { Check } from "lucide-react";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { TradePagination } from "@/components/trades/trade-pagination";
+import { getSeasonPrefix } from "@/lib/season-prefix";
 
 const PAGE_SIZE = 36;
-
-function seasonPrefix(season: string): string {
-  const match = season.match(/^([A-Za-z]+?)(\d+)$/);
-  if (!match) return "";
-  const letter = match[1].charAt(0).toUpperCase();
-  const num = parseInt(match[2], 10);
-  return letter.repeat(num);
-}
-
 
 interface ObjektGridPickerProps {
   items: ObjektEntry[];
@@ -110,7 +102,7 @@ export function ObjektGridPicker({
               {/* Member + collection badge */}
               <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
                 <p className="text-[10px] text-white font-medium leading-tight wrap-break-word">
-                  {entry.member}<br />{seasonPrefix(entry.season)}{entry.collectionNo.replace(/[A-Za-z]$/, "")}
+                  {entry.member}<br />{getSeasonPrefix(entry.season)}{entry.collectionNo.replace(/[A-Za-z]$/, "")}
                 </p>
               </div>
               {/* Serial badge for owned */}

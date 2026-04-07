@@ -2,97 +2,191 @@
 
 A peer-to-peer (P2P) trading platform for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the Gate](https://play.google.com/store/apps/details?id=com.modhaus.cosmo)** objekts with trust-minimized trades.
 
-**Objekt Trade is not affiliated with, endorsed by or supported by MODHAUS or its artists.**
+**Objekt Trade is not affiliated with, endorsed by, or supported by MODHAUS or its artists.**
 
 ## Overview
 
 Cosmo only supports one-way transfers, requiring trust between traders. This platform minimizes that risk through trade matching, transfer verification, and ownership monitoring.
 
-Cosmo account linking uses a simple status message verification flow — you set a short code (e.g. `verify-123456`) in your Cosmo profile status, and the platform reads it to confirm ownership. Your Cosmo credentials, session tokens, and account access are never requested or stored.
+Cosmo account linking uses a simple status message verification flow: users set a short code such as `verify-123456` in their Cosmo profile status, and the platform reads it to confirm ownership. Cosmo credentials, session tokens, and account access are never requested or stored.
 
 ## Features
 
-- Create posts style trade posts with specific objekts
+- Create post-style trade posts with specific objekts
 - Automatic matching algorithm finds compatible trades
-- Track active trades with real-time status updates via Pusher
+- Track active trades with realtime status updates via Pusher
 - Verify objekt transfers via external indexer APIs
 - Monitor ownership to ensure offered objekts remain available
-- Link Cosmo account via status message verification — no session tokens or credentials are ever collected
-- Support for "any" filters (e.g., "any member", "any season")
-- Trade notifications: bell with unread count, dedicated `/notifications` page, and notifications for offers, messages, and counter-offers with optional Discord DMs
-- Automatic trade expiration and availability checks if objekts are unavailable for trade
-- Counter-offer system: recipients can propose modified terms instead of accepting or rejecting outright
-- Edit or renew trade posts (description-only edits while trades are active; full edits and renewal when no active trades)
+- Link Cosmo account via status message verification without collecting credentials
+- Support "any" filters such as any member or any season
+- Trade notifications with unread counts, a dedicated `/notifications` page, and optional Discord DMs
+- Automatic trade expiration and availability checks when objekts become unavailable
+- Counter-offer flow for modified trade terms
+- Edit or renew trade posts depending on trade activity state
 - Public user profiles at `/user/[nickname]` with completed, cancelled, and defaulted trade stats
-- Trade ban system: automatic bans on trade default, auto-lifted when obligations are fulfilled
-- **Paste-to-trade importer**: Bulk-add objekts from clipboard using community paste formats (no manual selection needed)
+- Trade ban system with automatic lifting after obligations are fulfilled
+- Paste-to-trade importer for bulk objekt entry from community paste formats
 
-## Tooling
+## Stack
 
-- [Next.js 16](https://nextjs.org)
-- [TypeScript](https://www.typescriptlang.org/)
-- [Drizzle ORM](https://orm.drizzle.team/)
-- [Better Auth](https://better-auth.com)
-- [Tailwind CSS 4](https://tailwindcss.com)
-- [shadcn/ui](https://ui.shadcn.com)
-- [TanStack Query](https://tanstack.com/query)
-- [Zustand](https://zustand-demo.pmnd.rs)
-- [Biome](https://biomejs.dev)
+- Next.js 16
+- TypeScript
+- Drizzle ORM
+- Better Auth
+- PostgreSQL
+- Redis
+- Tailwind CSS 4
+- shadcn/ui
+- TanStack Query
+- Zustand
+- Biome
+- Docker for prod
 
-## Local Development Setup
+## Deployment Model
 
-Use the dedicated setup guide instead of reverse-engineering the app from source:
+Production is built around:
 
-- Local setup and env reference: [docs/local-setup.md](docs/local-setup.md)
-- Staging and preview workflow: [docs/staging-workflow.md](docs/staging-workflow.md)
-- Production gate: [docs/pre-deploy-checklist.md](docs/pre-deploy-checklist.md)
+- A Dockerized Next.js app
+- A self-hosted PostgreSQL container
+- A Redis container
+- A small cron container that calls `/api/cron/expire-trades`
+- GitHub Actions SSH deploys to the VPS on pushes to `main`
 
-Quick start:
+The app container runs Drizzle migrations automatically on startup via [`entrypoint.sh`](/home/jytan/Documents/Git/objekt-trade/entrypoint.sh).
+
+## Local Development
+
+1. Install dependencies:
 
 ```bash
 npm install
+```
+
+2. Copy the local env template:
+
+```bash
 cp .env.local.example .env.development.local
-DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/objekt_trade?sslmode=disable" npx drizzle-kit push
+```
+
+3. Start local Postgres and Redis however you prefer, then update `DATABASE_URL` and `REDIS_URL` in `.env.development.local`.
+
+Example local values:
+
+```env
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/objekt_trade?sslmode=disable"
+REDIS_URL="redis://127.0.0.1:6379"
+BETTER_AUTH_URL="http://localhost:3000"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+```
+
+4. Apply the schema:
+
+```bash
+npx drizzle-kit push
+```
+
+5. Start the app:
+
+```bash
 npm run dev
 ```
 
-Important:
-
-- Do not use `.env.local` for day-to-day development in this repo.
-- Treat `main` as production-only.
-- Pull preview and production Vercel env vars into their dedicated files, not into `.env.local`.
-
-Helpful commands:
+Optional local utilities:
 
 ```bash
-npm run vercel:env:pull:preview
-npm run vercel:env:pull:production
-npm run vercel:build:preview
-npm run vercel:build:production
+npx drizzle-kit studio
+npx tsx scripts/seed-local.ts
+```
+
+## VPS Deployment
+
+The repo includes a production-ready Docker setup in [`Dockerfile`](/home/jytan/Documents/Git/objekt-trade/Dockerfile), [`docker-compose.yml`](/home/jytan/Documents/Git/objekt-trade/docker-compose.yml), and [`.env.docker.example`](/home/jytan/Documents/Git/objekt-trade/.env.docker.example).
+
+Before running the stack on a VPS, enable Redis memory overcommit on the host:
+
+```bash
+sudo sysctl vm.overcommit_memory=1
+echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+```
+
+This avoids the Redis warning about background saves or replication failing under low-memory conditions.
+
+Basic flow:
+
+1. Copy the Docker env template on the VPS:
+
+```bash
+cp .env.docker.example .env
+```
+
+2. Fill in the real production values in `.env`.
+
+Important variables:
+
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_URL`
+- `NEXT_PUBLIC_APP_URL`
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `CRON_SECRET`
+
+Optional variables:
+
+- `INDEXER_DATABASE_URL`
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_INVITE_URL`
+- `DISCORD_GUILD_ID`
+- `PUSHER_APP_ID`
+- `PUSHER_KEY`
+- `PUSHER_SECRET`
+- `PUSHER_CLUSTER`
+- `NEXT_PUBLIC_PUSHER_KEY`
+- `NEXT_PUBLIC_PUSHER_CLUSTER`
+
+3. Build and start the stack:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+Services started by Compose:
+
+- `postgres` on `127.0.0.1:5432`
+- `redis`
+- `app` on port `3000`
+- `cron` for nightly trade expiration
+
+On deploy, the app container automatically runs database migrations before starting the Next.js server.
+
+## CI/CD
+
+[`cd.yml`](/home/jytan/Documents/Git/objekt-trade/.github/workflows/cd.yml) deploys to the VPS over SSH when `main` is updated. The remote deploy currently does:
+
+```bash
+git pull
+docker compose build
+docker compose up -d
 ```
 
 ## Commands
 
 ```bash
-npm run dev      # Start development server
-npm run build    # Build for production
-npm run start    # Start production server
-npm run lint     # Run Biome linter
-npm run format   # Format code with Biome
+npm run dev        # Start development server
+npm run build      # Build for production
+npm run start      # Start production server
+npm run lint       # Run Biome checks
+npm run format     # Format code with Biome
+npm run typecheck  # Run TypeScript checks
 ```
 
 ```bash
-npx drizzle-kit generate  # Generate migration file
-npx drizzle-kit push      # Apply schema to database
-npx drizzle-kit studio    # Open Drizzle Studio (DB browser)
-npx tsx scripts/seed-local.ts  # Seed local test user
+npm run db:generate  # Generate migration files
+npm run db:migrate   # Run migrations
+npm run db:push      # Push schema directly to the database
 ```
-
-## Credit/Acknowledgment
-
-- Inspired by trading platforms (CSFloat)
-- Built for the Cosmo community
-- Uses data from Cosmo indexers
 
 ## Contributing
 
@@ -100,4 +194,4 @@ This is a personal project. For feature requests or bug reports, please open an 
 
 ## Contact
 
-- **Discord**: @sharkbean
+- Discord: `@sharkbean`

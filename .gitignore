@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+.codex
+trade-system.excalidraw
 
 # debug
 npm-debug.log*
@@ -32,9 +34,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.local.example
+!.env.docker.example
 
 # vercel
 .vercel
+vercel.json
 
 # typescript
 *.tsbuildinfo
@@ -46,6 +51,5 @@ next-env.d.ts
 /objekt-explorer
 
 # markdowns
-INFRASTRUCTURE.md
-PRESENTATION.md
-README_DEV.md
+*.md
+!README.md
