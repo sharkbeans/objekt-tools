@@ -102,6 +102,15 @@ npx tsx scripts/seed-local.ts
 
 The repo includes a production-ready Docker setup in [`Dockerfile`](/home/jytan/Documents/Git/objekt-trade/Dockerfile), [`docker-compose.yml`](/home/jytan/Documents/Git/objekt-trade/docker-compose.yml), and [`.env.docker.example`](/home/jytan/Documents/Git/objekt-trade/.env.docker.example).
 
+Before running the stack on a VPS, enable Redis memory overcommit on the host:
+
+```bash
+sudo sysctl vm.overcommit_memory=1
+echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+```
+
+This avoids the Redis warning about background saves or replication failing under low-memory conditions.
+
 Basic flow:
 
 1. Copy the Docker env template on the VPS:
