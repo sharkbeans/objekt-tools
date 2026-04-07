@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+.codex
+trade-system.excalidraw
 
 # debug
 npm-debug.log*
@@ -37,6 +39,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+vercel.json
 
 # typescript
 *.tsbuildinfo
