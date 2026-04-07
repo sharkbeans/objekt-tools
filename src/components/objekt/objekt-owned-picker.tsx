@@ -146,7 +146,7 @@ export function ObjektOwnedPicker({
       ) : owned.length === 0 ? (
         <div className="text-sm text-muted-foreground text-center py-4 space-y-2">
           <p>No objekts found. Make sure your Cosmo account is linked.</p>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" asChild className="border-white text-white hover:bg-white/10 hover:text-white">
             <Link href="/link">Link Cosmo Account</Link>
           </Button>
         </div>
