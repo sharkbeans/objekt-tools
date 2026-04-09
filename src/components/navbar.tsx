@@ -5,6 +5,7 @@ import {
   ArrowLeftRightIcon,
   BellIcon,
   HistoryIcon,
+  ImageIcon,
   LinkIcon,
   LogInIcon,
   LogOutIcon,
@@ -147,6 +148,12 @@ export function Navbar() {
                   New Trade
                 </Link>
               )}
+              <Link
+                href="/create"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Poster
+              </Link>
             </nav>
           </div>
 
@@ -369,6 +376,10 @@ function MobileNav({
               New Trade
             </MobileNavLink>
           )}
+          <MobileNavLink href="/create" onClick={() => setOpen(false)}>
+            <ImageIcon className="size-4" />
+            Poster
+          </MobileNavLink>
           {session && (
             <MobileNavLink href="/notifications" onClick={() => setOpen(false)}>
               <span className="flex items-center gap-2">

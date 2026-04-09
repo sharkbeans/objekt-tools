@@ -42,6 +42,7 @@ export interface ParsedItem {
   season: string; // resolved season e.g. "Binary02"
   collectionNo: string; // raw digits e.g. "345"
   raw: string; // original text for error display
+  quantity?: number; // e.g. 3 from "x3" — omitted or 1 means single
 }
 
 export interface ParseResult {
@@ -102,9 +103,10 @@ function isSectionHeader(line: string): "have" | "want" | null {
   return null;
 }
 
-/** Token is a quantity annotation like x3, x10 — skip silently */
-function isQuantityToken(token: string): boolean {
-  return /^x\d+$/i.test(token);
+/** Token is a quantity annotation like x3, x10 — returns the number or null */
+function parseQuantityToken(token: string): number | null {
+  const m = token.match(/^x(\d+)$/i);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 /**
@@ -181,8 +183,14 @@ function parseLine(
 
     for (let j = startIndex; j < tokens.length; j++) {
       const token = tokens[j];
-      // Skip quantity annotations (x3, x10) and unrecognized words silently
-      if (isQuantityToken(token)) continue;
+      // Quantity annotation (x3, x10) — apply to the most recently parsed item
+      const qty = parseQuantityToken(token);
+      if (qty !== null) {
+        if (items.length > 0) {
+          items[items.length - 1].quantity = qty;
+        }
+        continue;
+      }
       const parsed = parseCollectionToken(token);
       if (parsed) {
         items.push({
