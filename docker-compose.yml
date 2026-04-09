@@ -78,6 +78,35 @@ services:
         crond -f -l 2
       "
 
+  umami-postgres:
+    image: postgres:16-alpine
+    container_name: umami-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${UMAMI_POSTGRES_PASSWORD:-umami}
+      POSTGRES_DB: umami
+    volumes:
+      - umami-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d umami"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  umami:
+    image: ghcr.io/umami-software/umami:mysql
+    container_name: umami
+    restart: unless-stopped
+    depends_on:
+      umami-postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:${UMAMI_POSTGRES_PASSWORD:-umami}@umami-postgres:5432/umami
+      HASH_SALT: ${UMAMI_HASH_SALT:-change-me-in-production}
+    ports:
+      - "127.0.0.1:3001:3000"
+
 volumes:
   pgdata:
   redisdata:
+  umami-pgdata:
