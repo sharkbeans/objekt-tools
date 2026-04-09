@@ -30,7 +30,7 @@ export async function GET(
       haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
       wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
       user: {
-        columns: { id: true, name: true, image: true },
+        columns: { id: true, name: true, image: true, discordId: true, discordUsername: true },
         with: {
           cosmoAccount: {
             columns: { nickname: true, address: true },
@@ -48,6 +48,8 @@ export async function GET(
     ...trade,
     cosmoNickname: trade.user.cosmoAccount?.nickname ?? null,
     cosmoAddress: trade.user.cosmoAccount?.address ?? null,
+    discordId: trade.user.discordId ?? null,
+    discordUsername: trade.user.discordUsername ?? null,
   });
 }
 

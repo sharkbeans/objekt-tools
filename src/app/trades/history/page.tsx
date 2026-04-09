@@ -105,36 +105,35 @@ export default function TradeHistoryPage() {
             const otherUser = isRecipient ? trade.initiator : trade.recipient;
             const display = getDisplayStatus(trade);
             return (
-              <div key={trade.id} className="rounded-lg border hover:bg-muted/50 transition-colors">
-                <Link
-                  href={`/active-trades/${trade.id}`}
-                  className="flex items-center gap-3 px-4 py-3"
+              <div
+                key={trade.id}
+                className="rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer flex items-center gap-3 px-4 py-3"
+                onClick={() => router.push(`/active-trades/${trade.id}`)}
+              >
+                <Badge
+                  variant={display.variant}
+                  className={cn("shrink-0 w-24 justify-center", display.className)}
                 >
-                  <Badge
-                    variant={display.variant}
-                    className={cn("shrink-0 w-24 justify-center", display.className)}
+                  {display.label}
+                </Badge>
+                <span className="text-sm flex-1 min-w-0 truncate">
+                  Trade #{trade.id} with{" "}
+                  <span className="font-medium">
+                    {otherUser.cosmoNickname ?? otherUser.name}
+                  </span>
+                </span>
+                {trade.status === "countered" && trade.counterOfferId && (
+                  <Link
+                    href={`/active-trades/${trade.counterOfferId}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-blue-400 hover:text-blue-300 shrink-0"
                   >
-                    {display.label}
-                  </Badge>
-                  <span className="text-sm flex-1 min-w-0 truncate">
-                    Trade #{trade.id} with{" "}
-                    <span className="font-medium">
-                      {otherUser.cosmoNickname ?? otherUser.name}
-                    </span>
-                  </span>
-                  {trade.status === "countered" && trade.counterOfferId && (
-                    <Link
-                      href={`/active-trades/${trade.counterOfferId}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-xs text-blue-400 hover:text-blue-300 shrink-0"
-                    >
-                      View counter-offer →
-                    </Link>
-                  )}
-                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                    {formatDate(trade.updatedAt)}
-                  </span>
-                </Link>
+                    View counter-offer →
+                  </Link>
+                )}
+                <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                  {formatDate(trade.updatedAt)}
+                </span>
               </div>
             );
           })}
