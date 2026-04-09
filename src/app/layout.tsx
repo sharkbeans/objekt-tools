@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Objekt Trade",
   description: "Trade Cosmo Objekts with other collectors",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://objekt.my"),
 };
 
 export default function RootLayout({

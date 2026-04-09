@@ -164,6 +164,7 @@ function ItemCard({
   label: string;
 }) {
   const quantity = item.parsed.quantity;
+  const serial = item.parsed.serial;
 
   return (
     <div
@@ -217,6 +218,26 @@ function ItemCard({
             >
               {item.parsed.raw}
             </span>
+          </div>
+        )}
+
+        {/* Serial badge — top left */}
+        {serial && (
+          <div
+            style={{
+              position: "absolute",
+              top: 4,
+              left: 4,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              color: "#fff",
+              fontSize: 9,
+              padding: "1px 4px",
+              borderRadius: 3,
+              fontFamily: "monospace",
+              lineHeight: "1.2",
+            }}
+          >
+            #{serial}
           </div>
         )}
 
@@ -485,10 +506,10 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
             <div>
               <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: theme.muted,
-                  letterSpacing: 1,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: theme.fg,
+                  letterSpacing: 1.5,
                   textTransform: "uppercase" as const,
                   marginBottom: 6,
                 }}
@@ -501,7 +522,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
                 editable={editable}
                 multiline
                 style={{
-                  fontSize: 12,
+                  fontSize: 14,
                   color: theme.muted,
                   whiteSpace: "pre-wrap",
                   lineHeight: "1.5",
