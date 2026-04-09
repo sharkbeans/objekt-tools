@@ -94,7 +94,7 @@ services:
       retries: 5
 
   umami:
-    image: ghcr.io/umami-software/umami:mysql
+    image: ghcr.io/umami-software/umami:latest
     container_name: umami
     restart: unless-stopped
     depends_on:
