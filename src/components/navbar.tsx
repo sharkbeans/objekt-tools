@@ -149,7 +149,7 @@ export function Navbar() {
                 </Link>
               )}
               <Link
-                href="/create"
+                href="/post"
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Poster
@@ -376,7 +376,7 @@ function MobileNav({
               New Trade
             </MobileNavLink>
           )}
-          <MobileNavLink href="/create" onClick={() => setOpen(false)}>
+          <MobileNavLink href="/post" onClick={() => setOpen(false)}>
             <ImageIcon className="size-4" />
             Poster
           </MobileNavLink>
