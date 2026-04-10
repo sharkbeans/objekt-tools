@@ -302,8 +302,8 @@ function ItemCard({
         onChange={(v) => onLabelChange?.(v)}
         editable={editable}
         style={{
-          fontSize: 10,
-          color: theme.muted,
+          fontSize: 12,
+          color: theme.fg,
           textAlign: "center",
           maxWidth: cardWidth,
           overflow: "hidden",

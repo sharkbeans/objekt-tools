@@ -262,7 +262,7 @@ export default function CreatePosterPage() {
             <Label htmlFor="poster-text">Trade List</Label>
             <Textarea
               id="poster-text"
-              placeholder={`HAVE\nSeoYeon AA201\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nAny bb343 bb344`}
+              placeholder={`HAVE\nSeoYeon AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
               value={text}
               onChange={(e) => { setText(e.target.value); setParseErrors([]); }}
               rows={12}
@@ -310,17 +310,6 @@ export default function CreatePosterPage() {
               Back
             </Button>
 
-            {/* Add items toggle */}
-            <Button
-              variant={showAddPanel ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowAddPanel((v) => !v)}
-              className="gap-1.5"
-            >
-              {showAddPanel ? <XIcon className="h-4 w-4" /> : <PlusIcon className="h-4 w-4" />}
-              {showAddPanel ? "Close" : "Add"}
-            </Button>
-
             {/* Theme + download on the right */}
             <div className="flex items-center gap-2 ml-auto">
               <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -362,15 +351,28 @@ export default function CreatePosterPage() {
           )}
 
           {/* Poster canvas — always editable (except during download) */}
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <PosterCanvas
-              ref={posterRef}
-              data={posterData}
-              theme={posterTheme}
-              editable={!downloading}
-              onTextChange={handleTextChange}
-              onRemoveItem={handleRemoveItem}
-            />
+          <div className="space-y-2">
+            {/* Add Objekts button — right-aligned above canvas */}
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => setShowAddPanel((v) => !v)}
+                className="gap-1.5"
+              >
+                {showAddPanel ? <XIcon className="h-4 w-4" /> : <PlusIcon className="h-4 w-4" />}
+                {showAddPanel ? "Close" : "Add Objekts"}
+              </Button>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <PosterCanvas
+                ref={posterRef}
+                data={posterData}
+                theme={posterTheme}
+                editable={!downloading}
+                onTextChange={handleTextChange}
+                onRemoveItem={handleRemoveItem}
+              />
+            </div>
           </div>
         </div>
       )}
