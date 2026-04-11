@@ -24,10 +24,10 @@ export async function resolveForPoster(
 ): Promise<ResolvedPosterItem[]> {
   if (items.length === 0) return [];
 
-  // Deduplicate by season|collectionNo|member
+  // Deduplicate by season|collectionNo|member|onOffline
   const keyMap = new Map<string, ParsedItem[]>();
   for (const item of items) {
-    const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}`;
+    const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}|${item.onOffline ?? ""}`;
     if (!keyMap.has(key)) keyMap.set(key, []);
     keyMap.get(key)!.push(item);
   }
@@ -41,6 +41,7 @@ export async function resolveForPoster(
       params.append("season", first.season);
       params.append("q", first.collectionNo);
       if (first.member) params.append("member", first.member);
+      // Don't filter by on_offline in the search — get all variants and pick the right one below
       const results = await searchObjekts(params);
       searchResults.set(key, results);
     }),
@@ -48,13 +49,19 @@ export async function resolveForPoster(
 
   // Map each original item to its resolved entry
   return items.map((item) => {
-    const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}`;
+    const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}|${item.onOffline ?? ""}`;
     const results = searchResults.get(key) ?? [];
 
-    // Filter to exact collectionNo match (strip trailing a/z)
+    // Filter to exact collectionNo match; if onOffline was specified, require that variant
     const matches = results.filter((r) => {
-      const digits = r.collectionNo.replace(/[azAZ]$/i, "");
-      return digits === item.collectionNo;
+      const suffix = r.collectionNo.slice(-1).toLowerCase();
+      const digits = /[az]/.test(suffix) ? r.collectionNo.slice(0, -1) : r.collectionNo;
+      if (digits !== item.collectionNo) return false;
+      if (item.onOffline) {
+        const rOnOffline = suffix === "a" ? "online" : suffix === "z" ? "offline" : null;
+        return rOnOffline === item.onOffline;
+      }
+      return true;
     });
 
     if (matches.length === 0) {

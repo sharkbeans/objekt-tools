@@ -54,6 +54,7 @@ export interface ParsedItem {
   raw: string;           // original text for error display
   quantity?: number;     // e.g. 3 from "x3" or "(3)"
   serial?: string;       // user-specified serial/copy, e.g. "1", "20x"
+  onOffline?: "online" | "offline"; // when explicitly specified via a/z suffix
 }
 
 export interface ParseResult {
@@ -73,12 +74,13 @@ function resolveMember(text: string): string | null {
 }
 
 // Matches a season-prefix + 3-digit collection number, optional trailing a/z
-const collectionRe = /^([A-Za-z]*)(\d{3})[azAZ]?$/i;
+const collectionRe = /^([A-Za-z]*)(\d{3})([azAZ]?)$/i;
 
 interface ParsedCollection {
   season: string;
   digits: string;
   prefix: string;
+  onOffline: "online" | "offline" | null;
 }
 
 function parseCollectionToken(token: string): ParsedCollection | null {
@@ -86,10 +88,12 @@ function parseCollectionToken(token: string): ParsedCollection | null {
   if (!m) return null;
   const prefix = m[1].toUpperCase();
   const digits = m[2];
+  const suffix = m[3].toLowerCase();
   const season = prefix ? seasonPrefixMap[prefix] : null;
   if (prefix && !season) return null; // unknown prefix
   if (!season) return null;           // bare digits without prefix
-  return { season, digits, prefix };
+  const onOffline = suffix === "a" ? "online" : suffix === "z" ? "offline" : null;
+  return { season, digits, prefix, onOffline };
 }
 
 /**
@@ -144,15 +148,19 @@ function parseQuantityToken(token: string): number | null {
 function parseLine(
   line: string,
   section: "have" | "want",
-): { items: ParsedItem[]; errors: string[]; noteFragments: string[] } {
+  inheritedMember: string | null = null,
+): { items: ParsedItem[]; errors: string[]; noteFragments: string[]; explicitMember: string | null | undefined } {
   let trimmed = line.trim();
-  if (!trimmed) return { items: [], errors: [], noteFragments: [] };
+  if (!trimmed) return { items: [], errors: [], noteFragments: [], explicitMember: undefined };
 
   // Strip Discord list bullets: "* item" and "- item"
   trimmed = trimmed.replace(/^[-*]\s+/, "");
 
-  // Strip Discord underline markdown: "__Member__: ..." → "Member: ..."
-  trimmed = trimmed.replace(/^__([^_]+)__/, "$1");
+  // Strip Discord bold/italic formatting: **text** → text, *text* → text
+  trimmed = trimmed.replace(/\*+/g, "");
+
+  // Strip Discord underline markdown: "__Member__: ..." → "Member: ..." (global)
+  trimmed = trimmed.replace(/__([^_]+)__/g, "$1");
 
   // Strip trailing colon after first word: "Seoyeon: bb101" → "Seoyeon bb101"
   trimmed = trimmed.replace(/^(\S+):/, "$1");
@@ -170,7 +178,7 @@ function parseLine(
 
   if (!trimmed) {
     if (hasOneToOne) noteFragments.push("1:1");
-    return { items, errors, noteFragments };
+    return { items, errors, noteFragments, explicitMember: undefined };
   }
 
   // Check for "Any" prefix (only meaningful in want section)
@@ -187,7 +195,10 @@ function parseLine(
     .map((p) => p.trim())
     .filter(Boolean);
 
-  let leadingMember: string | null = null;
+  // Inherit member from previous line if this line has no leading member.
+  // "Any" lines always clear the inherited member (explicit "no specific member").
+  let leadingMember: string | null = isAnyLine ? null : inheritedMember;
+  let explicitMember: string | null | undefined = undefined; // set only when this line names a member
   let currentSeason: string | null = null; // inherited for bare-number tokens across the line
 
   for (let i = 0; i < commaParts.length; i++) {
@@ -199,6 +210,7 @@ function parseLine(
       const memberCandidate = resolveMember(tokens[0]);
       if (memberCandidate) {
         leadingMember = memberCandidate;
+        explicitMember = memberCandidate;
         startIndex = 1;
       }
     }
@@ -275,6 +287,7 @@ function parseLine(
           collectionNo: parsed.digits,
           raw: leadingMember ? `${leadingMember} ${collToken}` : collToken,
           ...(attachedSerial ? { serial: attachedSerial } : {}),
+          ...(parsed.onOffline ? { onOffline: parsed.onOffline } : {}),
         });
         continue;
       }
@@ -302,7 +315,7 @@ function parseLine(
     noteFragments.push("1:1");
   }
 
-  return { items, errors, noteFragments };
+  return { items, errors, noteFragments, explicitMember };
 }
 
 /**
@@ -319,6 +332,7 @@ export function parsePastedTrade(text: string): ParseResult {
   const errors: string[] = [];
 
   let currentSection: "have" | "want" | null = null;
+  let lastMember: string | null = null; // inherited across lines within a section
 
   const preambleLines: string[] = [];
   const trailingUnmatched: string[] = [];
@@ -336,6 +350,7 @@ export function parsePastedTrade(text: string): ParseResult {
     const headerResult = isSectionHeader(line);
     if (headerResult) {
       currentSection = headerResult.section;
+      lastMember = null; // reset member inheritance on section change
       if (headerResult.hasOneToOne) extractedNoteFragments.add("1:1");
       trailingUnmatched.length = 0;
       inFooter = false;
@@ -355,7 +370,8 @@ export function parsePastedTrade(text: string): ParseResult {
       continue;
     }
 
-    const { items, errors: lineErrors, noteFragments } = parseLine(trimmed, currentSection);
+    const { items, errors: lineErrors, noteFragments, explicitMember } = parseLine(trimmed, currentSection, lastMember);
+    if (explicitMember !== undefined) lastMember = explicitMember;
 
     for (const frag of noteFragments) extractedNoteFragments.add(frag);
 
