@@ -5,7 +5,7 @@ import { useSession } from "@/lib/auth-client";
 import { XIcon } from "lucide-react";
 
 const DISMISS_KEY = "discord-banner-dismissed";
-const DISCORD_INVITE = "https://discord.gg/fFrwwpz4K3";
+const DISCORD_INVITE = "https://discord.gg/SWEm6RbJD3";
 
 export function DiscordBanner() {
   const { data: session } = useSession();
