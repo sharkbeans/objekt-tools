@@ -19,8 +19,33 @@ interface PosterCanvasProps {
   data: PosterData;
   theme: PosterTheme;
   editable?: boolean;
+  groupByMember?: boolean;
   onTextChange?: (field: keyof PosterData | `haveLabel:${number}` | `wantLabel:${number}`, value: string) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
+}
+
+interface MemberGroup {
+  member: string | null;
+  items: ResolvedPosterItem[];
+  indices: number[];
+}
+
+function groupItemsByMember(items: ResolvedPosterItem[]): MemberGroup[] {
+  const groups: MemberGroup[] = [];
+  const seen = new Map<string, MemberGroup>();
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const m = item.entry?.member ?? item.parsed.member ?? null;
+    const key = m ?? "\0any";
+    if (!seen.has(key)) {
+      const g: MemberGroup = { member: m, items: [], indices: [] };
+      groups.push(g);
+      seen.set(key, g);
+    }
+    seen.get(key)!.items.push(item);
+    seen.get(key)!.indices.push(i);
+  }
+  return groups;
 }
 
 function getGridCols(count: number): number {
@@ -324,6 +349,7 @@ function Section({
   theme,
   sectionKey,
   editable,
+  groupByMember,
   onTitleChange,
   onRemoveItem,
   onLabelChange,
@@ -334,6 +360,7 @@ function Section({
   theme: typeof darkTheme;
   sectionKey: "have" | "want";
   editable: boolean;
+  groupByMember?: boolean;
   onTitleChange?: (v: string) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
   onLabelChange?: (field: string, value: string) => void;
@@ -341,26 +368,77 @@ function Section({
 }) {
   if (items.length === 0) return null;
 
-  const cols = getGridCols(items.length);
   const cardWidth = 100;
   const gap = 10;
+
+  const sectionTitle = (
+    <InlineEdit
+      value={title}
+      onChange={(v) => onTitleChange?.(v)}
+      editable={editable}
+      style={{
+        fontSize: 13,
+        fontWeight: 700,
+        color: theme.fg,
+        letterSpacing: 1.5,
+        textTransform: "uppercase" as const,
+        marginBottom: 10,
+      }}
+    />
+  );
+
+  if (groupByMember) {
+    const groups = groupItemsByMember(items);
+    return (
+      <div style={{ width: "100%" }}>
+        {sectionTitle}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {groups.map((group) => (
+            <div key={group.member ?? "\0any"}>
+              {group.member && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: theme.muted,
+                    marginBottom: 6,
+                    textTransform: "uppercase" as const,
+                    letterSpacing: 0.8,
+                  }}
+                >
+                  {group.member}
+                </div>
+              )}
+              <div style={{ display: "flex", flexWrap: "wrap", gap }}>
+                {group.items.map((item, gi) => {
+                  const flatIdx = group.indices[gi];
+                  return (
+                    <ItemCard
+                      key={flatIdx}
+                      item={item}
+                      theme={theme}
+                      cardWidth={cardWidth}
+                      editable={editable}
+                      onRemove={() => onRemoveItem?.(sectionKey, flatIdx)}
+                      onLabelChange={(v) => onLabelChange?.(`${sectionKey}Label:${flatIdx}`, v)}
+                      label={labels[flatIdx] ?? item.parsed.raw}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const cols = getGridCols(items.length);
   const gridWidth = cols * cardWidth + (cols - 1) * gap;
 
   return (
     <div style={{ width: "100%" }}>
-      <InlineEdit
-        value={title}
-        onChange={(v) => onTitleChange?.(v)}
-        editable={editable}
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: theme.fg,
-          letterSpacing: 1.5,
-          textTransform: "uppercase" as const,
-          marginBottom: 10,
-        }}
-      />
+      {sectionTitle}
       <div
         style={{
           display: "grid",
@@ -389,17 +467,31 @@ function Section({
 // ── Main canvas ───────────────────────────────────────────────────────────
 
 export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
-  function PosterCanvas({ data, theme: themeName, editable = false, onTextChange, onRemoveItem }, ref) {
+  function PosterCanvas({ data, theme: themeName, editable = false, groupByMember = false, onTextChange, onRemoveItem }, ref) {
     const theme = themeName === "dark" ? darkTheme : lightTheme;
 
-    const maxCols = Math.max(
-      getGridCols(data.haves.length),
-      getGridCols(data.wants.length),
-      4,
-    );
     const cardWidth = 100;
     const gap = 10;
     const padding = 32;
+
+    let maxCols: number;
+    if (groupByMember) {
+      const haveGroups = groupItemsByMember(data.haves);
+      const wantGroups = groupItemsByMember(data.wants);
+      const maxGroupSize = Math.max(
+        ...haveGroups.map((g) => g.items.length),
+        ...wantGroups.map((g) => g.items.length),
+        4,
+      );
+      maxCols = Math.min(maxGroupSize, 12);
+    } else {
+      maxCols = Math.max(
+        getGridCols(data.haves.length),
+        getGridCols(data.wants.length),
+        4,
+      );
+    }
+
     const posterWidth = maxCols * cardWidth + (maxCols - 1) * gap + padding * 2;
 
     const haveLabels = data.haves.map((item) =>
@@ -477,6 +569,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           theme={theme}
           sectionKey="have"
           editable={editable}
+          groupByMember={groupByMember}
           onTitleChange={(v) => onTextChange?.("haveTitle", v)}
           onRemoveItem={onRemoveItem}
           onLabelChange={(field, value) => onTextChange?.(field as `haveLabel:${number}`, value)}
@@ -493,6 +586,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           theme={theme}
           sectionKey="want"
           editable={editable}
+          groupByMember={groupByMember}
           onTitleChange={(v) => onTextChange?.("wantTitle", v)}
           onRemoveItem={onRemoveItem}
           onLabelChange={(field, value) => onTextChange?.(field as `wantLabel:${number}`, value)}

@@ -98,6 +98,7 @@ export default function CreatePosterPage() {
   const [posterData, setPosterData] = useState<PosterData | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [posterTheme, setPosterTheme] = useState<PosterTheme>("dark");
+  const [groupByMember, setGroupByMember] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -304,29 +305,38 @@ export default function CreatePosterPage() {
         <div className="space-y-4">
 
           {/* Top controls bar */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5">
               <ArrowLeftIcon className="h-4 w-4" />
               Back
             </Button>
 
-            {/* Theme + download on the right */}
-            <div className="flex items-center gap-2 ml-auto">
-              <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <Switch
-                checked={posterTheme === "dark"}
-                onCheckedChange={(checked) => setPosterTheme(checked ? "dark" : "light")}
-              />
-              <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            <div className="flex items-center gap-3 ml-auto flex-wrap justify-end">
+              {/* Group by members toggle */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Group by Members</span>
+                <Switch checked={groupByMember} onCheckedChange={setGroupByMember} />
+              </div>
+
+              {/* Theme toggle */}
+              <div className="flex items-center gap-2">
+                <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <Switch
+                  checked={posterTheme === "dark"}
+                  onCheckedChange={(checked) => setPosterTheme(checked ? "dark" : "light")}
+                />
+                <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+
+              <Button size="sm" onClick={handleDownload} disabled={downloading} className="gap-1.5">
+                {downloading ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <DownloadIcon className="h-4 w-4" />
+                )}
+                Download PNG
+              </Button>
             </div>
-            <Button size="sm" onClick={handleDownload} disabled={downloading} className="gap-1.5">
-              {downloading ? (
-                <Loader2Icon className="h-4 w-4 animate-spin" />
-              ) : (
-                <DownloadIcon className="h-4 w-4" />
-              )}
-              Download PNG
-            </Button>
           </div>
 
           {/* Unresolved warnings */}
@@ -369,6 +379,7 @@ export default function CreatePosterPage() {
                 data={posterData}
                 theme={posterTheme}
                 editable={!downloading}
+                groupByMember={groupByMember}
                 onTextChange={handleTextChange}
                 onRemoveItem={handleRemoveItem}
               />
