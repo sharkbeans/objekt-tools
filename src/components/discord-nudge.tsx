@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 
 const DISMISS_KEY = "discord-banner-dismissed";
-const DISCORD_INVITE = "https://discord.gg/fFrwwpz4K3";
+const DISCORD_INVITE = "https://discord.gg/SWEm6RbJD3";
 
 export function DiscordNudge() {
   const [dismissed, setDismissed] = useState(true); // start hidden to avoid flash

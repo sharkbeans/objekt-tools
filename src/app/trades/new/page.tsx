@@ -703,11 +703,11 @@ export default function NewTradePage() {
                 <div className="rounded-md border border-[#5865F2]/40 bg-[#5865F2]/10 px-3 py-2.5 space-y-1.5">
                   <p className="font-medium text-[#7289da]">Get notified on Discord</p>
                   <p>
-                    Join our server so our bot can DM you when someone sends a trade offer or responds to yours.
+                    Join our server to receive Discord DM you when someone sends a trade offer or responds to yours.
                     Without it, you won&apos;t receive any notifications.
                   </p>
                   <a
-                    href="https://discord.gg/fFrwwpz4K3"
+                    href="https://discord.gg/SWEm6RbJD3"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block font-medium text-[#7289da] underline hover:text-[#5865F2] transition-colors"

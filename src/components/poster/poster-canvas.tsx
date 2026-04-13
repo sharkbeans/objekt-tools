@@ -20,6 +20,7 @@ interface PosterCanvasProps {
   theme: PosterTheme;
   editable?: boolean;
   groupByMember?: boolean;
+  colsPerRow?: number;
   onTextChange?: (field: keyof PosterData | `haveLabel:${number}` | `wantLabel:${number}`, value: string) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
 }
@@ -48,10 +49,8 @@ function groupItemsByMember(items: ResolvedPosterItem[]): MemberGroup[] {
   return groups;
 }
 
-function getGridCols(count: number): number {
-  if (count <= 8) return 4;
-  if (count <= 15) return 5;
-  return 6;
+export function getGridCols(count: number): number {
+  return Math.min(10, Math.max(3, Math.ceil(Math.sqrt(count * 1.5))));
 }
 
 const darkTheme = {
@@ -350,6 +349,7 @@ function Section({
   sectionKey,
   editable,
   groupByMember,
+  colsPerRow,
   onTitleChange,
   onRemoveItem,
   onLabelChange,
@@ -361,6 +361,7 @@ function Section({
   sectionKey: "have" | "want";
   editable: boolean;
   groupByMember?: boolean;
+  colsPerRow: number;
   onTitleChange?: (v: string) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
   onLabelChange?: (field: string, value: string) => void;
@@ -433,7 +434,7 @@ function Section({
     );
   }
 
-  const cols = getGridCols(items.length);
+  const cols = colsPerRow;
   const gridWidth = cols * cardWidth + (cols - 1) * gap;
 
   return (
@@ -467,7 +468,7 @@ function Section({
 // ── Main canvas ───────────────────────────────────────────────────────────
 
 export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
-  function PosterCanvas({ data, theme: themeName, editable = false, groupByMember = false, onTextChange, onRemoveItem }, ref) {
+  function PosterCanvas({ data, theme: themeName, editable = false, groupByMember = false, colsPerRow, onTextChange, onRemoveItem }, ref) {
     const theme = themeName === "dark" ? darkTheme : lightTheme;
 
     const cardWidth = 100;
@@ -475,7 +476,9 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
     const padding = 32;
 
     let maxCols: number;
-    if (groupByMember) {
+    if (colsPerRow) {
+      maxCols = colsPerRow;
+    } else if (groupByMember) {
       const haveGroups = groupItemsByMember(data.haves);
       const wantGroups = groupItemsByMember(data.wants);
       const maxGroupSize = Math.max(
@@ -570,6 +573,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           sectionKey="have"
           editable={editable}
           groupByMember={groupByMember}
+          colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("haveTitle", v)}
           onRemoveItem={onRemoveItem}
           onLabelChange={(field, value) => onTextChange?.(field as `haveLabel:${number}`, value)}
@@ -587,6 +591,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           sectionKey="want"
           editable={editable}
           groupByMember={groupByMember}
+          colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("wantTitle", v)}
           onRemoveItem={onRemoveItem}
           onLabelChange={(field, value) => onTextChange?.(field as `wantLabel:${number}`, value)}

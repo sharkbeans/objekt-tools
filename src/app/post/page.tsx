@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { toPng } from "html-to-image";
+import { toPng, toBlob } from "html-to-image";
 import {
   Loader2Icon,
   AlertCircleIcon,
@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { parsePastedTrade } from "@/lib/paste-parser";
 import { resolveForPoster, type ResolvedPosterItem } from "@/lib/poster-resolver";
-import { PosterCanvas, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
+import { PosterCanvas, getGridCols, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
@@ -100,6 +100,7 @@ export default function CreatePosterPage() {
   const [posterTheme, setPosterTheme] = useState<PosterTheme>("dark");
   const [groupByMember, setGroupByMember] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [colsPerRow, setColsPerRow] = useState(4);
   const posterRef = useRef<HTMLDivElement>(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
 
@@ -132,6 +133,13 @@ export default function CreatePosterPage() {
         day: "numeric",
       });
 
+      const autoCols = Math.max(
+        getGridCols(resolvedHaves.length),
+        getGridCols(resolvedWants.length),
+        3,
+      );
+      setColsPerRow(autoCols);
+
       setPosterData({
         username: cosmoId,
         cosmoId,
@@ -158,16 +166,30 @@ export default function CreatePosterPage() {
     await new Promise((r) => setTimeout(r, 50));
 
     try {
-      const dataUrl = await toPng(posterRef.current, {
-        pixelRatio: 2,
-        cacheBust: true,
-      });
-      const link = document.createElement("a");
-      link.download = `trade-poster-${Date.now()}.png`;
-      link.href = dataUrl;
-      link.click();
-      toast.success("Poster downloaded!");
+      // On mobile (Share API available), use share sheet; otherwise download directly
+      if (navigator.share) {
+        const blob = await toBlob(posterRef.current, {
+          pixelRatio: 2,
+          cacheBust: true,
+        });
+        if (!blob) throw new Error("Failed to generate image blob");
+        const file = new File([blob], `trade-poster-${Date.now()}.png`, { type: "image/png" });
+        await navigator.share({ files: [file] });
+        toast.success("Poster shared!");
+      } else {
+        const dataUrl = await toPng(posterRef.current, {
+          pixelRatio: 2,
+          cacheBust: true,
+        });
+        const link = document.createElement("a");
+        link.download = `trade-poster-${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+        toast.success("Poster downloaded!");
+      }
     } catch (err) {
+      // User cancelling share sheet throws AbortError — don't show error for that
+      if (err instanceof Error && err.name === "AbortError") return;
       console.error("Failed to generate poster:", err);
       toast.error("Failed to generate poster image. Try again.");
     } finally {
@@ -312,6 +334,20 @@ export default function CreatePosterPage() {
             </Button>
 
             <div className="flex items-center gap-3 ml-auto flex-wrap justify-end">
+              {/* Columns per row */}
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={colsPerRow}
+                  onChange={(e) => setColsPerRow(Number(e.target.value))}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-muted-foreground">per row</span>
+              </div>
+
               {/* Group by members toggle */}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Group by Members</span>
@@ -380,6 +416,7 @@ export default function CreatePosterPage() {
                 theme={posterTheme}
                 editable={!downloading}
                 groupByMember={groupByMember}
+                colsPerRow={colsPerRow}
                 onTextChange={handleTextChange}
                 onRemoveItem={handleRemoveItem}
               />
