@@ -24,6 +24,7 @@ import { parsePastedTrade } from "@/lib/paste-parser";
 import { resolveForPoster, type ResolvedPosterItem } from "@/lib/poster-resolver";
 import { PosterCanvas, getGridCols, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
+import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
@@ -95,6 +96,7 @@ export default function CreatePosterPage() {
   const { data: session } = useSession();
   const [text, setText] = useState("");
   const [cosmoId, setCosmoId] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [stage, setStage] = useState<Stage>("input");
   const [posterData, setPosterData] = useState<PosterData | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
@@ -105,12 +107,21 @@ export default function CreatePosterPage() {
   const posterRef = useRef<HTMLDivElement>(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
 
-  // Auto-fill cosmoId from session
+  const [isLinked, setIsLinked] = useState(false);
+
+  // Fetch cosmo status to get the real cosmo nickname and linked state
   useEffect(() => {
-    if (session?.user?.name && !cosmoId) {
-      setCosmoId(session.user.name);
-    }
-  }, [session?.user?.name]);
+    if (!session) return;
+    fetch("/api/cosmo/status")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.nickname) {
+          setCosmoId((prev) => prev || data.nickname);
+          setIsLinked(true);
+        }
+      })
+      .catch(() => {});
+  }, [session]);
 
   const handleGenerate = useCallback(async () => {
     const parsed = parsePastedTrade(text);
@@ -240,6 +251,44 @@ export default function CreatePosterPage() {
     });
   }, []);
 
+  const handlePickerConfirm = useCallback(async (haves: ObjektEntry[], wants: ObjektEntry[], searchedNickname: string) => {
+    setCosmoId(searchedNickname);
+    setStage("resolving");
+    try {
+      const resolvedHaves = haves.map((entry) => makeItem(entry));
+      const resolvedWants = wants.map((entry) => makeItem(entry));
+
+      const now = new Date();
+      const date = now.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+
+      const autoCols = Math.max(
+        getGridCols(resolvedHaves.length),
+        getGridCols(resolvedWants.length),
+        3,
+      );
+      setColsPerRow(autoCols);
+
+      setPosterData({
+        username: searchedNickname,
+        cosmoId: searchedNickname,
+        haves: resolvedHaves,
+        wants: resolvedWants,
+        notes: undefined,
+        date,
+        haveTitle: "Have",
+        wantTitle: "Want",
+      });
+      setStage("preview");
+    } catch {
+      toast.error("Failed to build poster");
+      setStage("input");
+    }
+  }, []);
+
   const handleTextChange = useCallback((field: string, value: string) => {
     setPosterData((prev) => {
       if (!prev) return prev;
@@ -290,7 +339,10 @@ export default function CreatePosterPage() {
               id="poster-cosmoid"
               placeholder="Your Cosmo username (shown on poster)"
               value={cosmoId}
-              onChange={(e) => setCosmoId(e.target.value)}
+              onChange={() => {}}
+              onClick={() => setPickerOpen(true)}
+              readOnly
+              className="cursor-pointer"
             />
           </div>
 
@@ -326,6 +378,14 @@ export default function CreatePosterPage() {
           </Button>
         </div>
       )}
+
+      <CosmoPickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        initialNickname={cosmoId}
+        isLinked={isLinked}
+        onConfirm={handlePickerConfirm}
+      />
 
       {/* ── Resolving stage ── */}
       {stage === "resolving" && (
