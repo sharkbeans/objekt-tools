@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { toPng } from "html-to-image";
+import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import {
   Loader2Icon,
   AlertCircleIcon,
@@ -158,55 +159,29 @@ export default function CreatePosterPage() {
   }, [text, cosmoId]);
 
   const handleDownload = useCallback(async () => {
-    if (!posterRef.current) return;
+    if (!posterRef.current || !posterData) return;
     setShowAddPanel(false);
     setDownloading(true);
 
     // Wait a tick for editable=false to apply (removes inputs/buttons from DOM)
     await new Promise((r) => setTimeout(r, 50));
 
-    // Pre-convert all poster images to data URLs so html-to-image doesn't need
-    // to fetch them itself. This is required for mobile Chrome (SVG foreignObject
-    // canvas taint) and mobile Safari (CORS cache poisoning from crossOrigin img).
-    const imgs = Array.from(posterRef.current.querySelectorAll<HTMLImageElement>("img"));
-    const originalSrcs = imgs.map((img) => img.src);
-    const results = await Promise.allSettled(
-      imgs.map(async (img) => {
-        const src = img.src;
-        if (!src || src.startsWith("data:")) return;
-        const res = await fetch(src, { mode: "cors", cache: "no-store" });
-        if (!res.ok) throw new Error(`fetch ${res.status}`);
-        const blob = await res.blob();
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        img.src = dataUrl;
-        // Wait for the img to settle with the new src before capture
-        if (!img.complete) await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); });
-      }),
-    );
-    results.forEach((r, i) => {
-      if (r.status === "rejected") console.warn(`[poster] img ${i} pre-fetch failed:`, r.reason);
-    });
-
     try {
-      const dataUrl = await toPng(posterRef.current, {
-        pixelRatio: 2,
-        cacheBust: false,
-      });
-
-      // On mobile with Share API file support, share the image; otherwise download
       const canShareFiles = navigator.canShare?.({ files: [new File([], "t.png", { type: "image/png" })] });
+
       if (navigator.share && canShareFiles) {
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
+        // Mobile: draw directly to canvas — bypasses html-to-image's SVG foreignObject
+        // pipeline which is broken on mobile browsers (CORS taint, cache issues).
+        const canvas = await renderPosterToCanvas(posterData, posterTheme, groupByMember, colsPerRow);
+        const blob = await new Promise<Blob>((resolve, reject) =>
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png"),
+        );
         const file = new File([blob], `trade-poster-${Date.now()}.png`, { type: "image/png" });
         await navigator.share({ files: [file] });
         toast.success("Poster shared!");
       } else {
+        // Desktop: html-to-image works fine
+        const dataUrl = await toPng(posterRef.current, { pixelRatio: 2, cacheBust: true });
         const link = document.createElement("a");
         link.download = `trade-poster-${Date.now()}.png`;
         link.href = dataUrl;
@@ -214,16 +189,13 @@ export default function CreatePosterPage() {
         toast.success("Poster downloaded!");
       }
     } catch (err) {
-      // User cancelling share sheet throws AbortError — don't show error for that
       if (err instanceof Error && err.name === "AbortError") return;
       console.error("Failed to generate poster:", err);
       toast.error("Failed to generate poster image. Try again.");
     } finally {
-      // Restore original srcs so the live poster still displays correctly
-      imgs.forEach((img, i) => { img.src = originalSrcs[i]; });
       setDownloading(false);
     }
-  }, []);
+  }, [posterData, posterTheme, groupByMember, colsPerRow]);
 
   const handleBack = useCallback(() => {
     setShowAddPanel(false);
