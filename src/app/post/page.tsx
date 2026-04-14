@@ -162,11 +162,20 @@ export default function CreatePosterPage() {
     setShowAddPanel(false);
     setDownloading(true);
 
-    // Wait a tick for editable=false to apply (removes inputs/buttons from DOM)
+    // Wait 50ms for editable=false to apply (removes inputs/buttons from DOM)
     await new Promise((r) => setTimeout(r, 50));
 
-    // Wait for all images in the poster to finish loading (important on mobile)
+    // Rewrite all img src to go through our same-origin proxy so html-to-image
+    // can fetch them without CORS issues on mobile browsers.
     const imgs = Array.from(posterRef.current.querySelectorAll("img"));
+    imgs.forEach((img) => {
+      const src = img.getAttribute("src");
+      if (src && !src.startsWith("data:") && !src.startsWith("/")) {
+        img.src = `/api/image-proxy?url=${encodeURIComponent(src)}`;
+      }
+    });
+
+    // Wait for rewritten images to load
     await Promise.all(
       imgs.map(
         (img) =>

@@ -21,7 +21,10 @@ interface PosterCanvasProps {
   editable?: boolean;
   groupByMember?: boolean;
   colsPerRow?: number;
-  onTextChange?: (field: keyof PosterData | `haveLabel:${number}` | `wantLabel:${number}`, value: string) => void;
+  onTextChange?: (
+    field: keyof PosterData | `haveLabel:${number}` | `wantLabel:${number}`,
+    value: string,
+  ) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
 }
 
@@ -114,10 +117,14 @@ function InlineEdit({
           minWidth: 20,
         }}
         onMouseEnter={(e) => {
-          if (editable) (e.currentTarget as HTMLDivElement).style.borderBottomColor = style.color as string ?? "#888";
+          if (editable)
+            (e.currentTarget as HTMLDivElement).style.borderBottomColor =
+              (style.color as string) ?? "#888";
         }}
         onMouseLeave={(e) => {
-          if (editable) (e.currentTarget as HTMLDivElement).style.borderBottomColor = "transparent";
+          if (editable)
+            (e.currentTarget as HTMLDivElement).style.borderBottomColor =
+              "transparent";
         }}
       >
         {value || "\u00A0"}
@@ -149,7 +156,9 @@ function InlineEdit({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Escape") commit(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") commit();
+        }}
         style={{ ...baseInputStyle, resize: "none", minHeight: 40 }}
         rows={3}
       />
@@ -162,7 +171,9 @@ function InlineEdit({
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") commit(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === "Escape") commit();
+      }}
       style={baseInputStyle}
     />
   );
@@ -178,6 +189,7 @@ function ItemCard({
   onRemove,
   onLabelChange,
   label,
+  seasonNumber,
 }: {
   item: ResolvedPosterItem;
   theme: typeof darkTheme;
@@ -186,6 +198,7 @@ function ItemCard({
   onRemove?: () => void;
   onLabelChange?: (v: string) => void;
   label: string;
+  seasonNumber?: string;
 }) {
   const quantity = item.parsed.quantity;
   const serial = item.parsed.serial;
@@ -320,7 +333,7 @@ function ItemCard({
         )}
       </div>
 
-      {/* Label */}
+      {/* Label - objekt name */}
       <InlineEdit
         value={label}
         onChange={(v) => onLabelChange?.(v)}
@@ -328,6 +341,22 @@ function ItemCard({
         style={{
           fontSize: 12,
           color: theme.fg,
+          textAlign: "center",
+          maxWidth: cardWidth,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          lineHeight: "1.3",
+        }}
+      />
+      {/* Label - season + number */}
+      <InlineEdit
+        value={seasonNumber ?? ""}
+        onChange={(v) => onLabelChange?.(v)}
+        editable={editable}
+        style={{
+          fontSize: 11,
+          color: theme.muted,
           textAlign: "center",
           maxWidth: cardWidth,
           overflow: "hidden",
@@ -354,6 +383,7 @@ function Section({
   onRemoveItem,
   onLabelChange,
   labels,
+  seasonNumbers,
 }: {
   title: string;
   items: ResolvedPosterItem[];
@@ -366,6 +396,7 @@ function Section({
   onRemoveItem?: (section: "have" | "want", index: number) => void;
   onLabelChange?: (field: string, value: string) => void;
   labels: string[];
+  seasonNumbers: string[];
 }) {
   if (items.length === 0) return null;
 
@@ -421,8 +452,11 @@ function Section({
                       cardWidth={cardWidth}
                       editable={editable}
                       onRemove={() => onRemoveItem?.(sectionKey, flatIdx)}
-                      onLabelChange={(v) => onLabelChange?.(`${sectionKey}Label:${flatIdx}`, v)}
+                      onLabelChange={(v) =>
+                        onLabelChange?.(`${sectionKey}Label:${flatIdx}`, v)
+                      }
                       label={labels[flatIdx] ?? item.parsed.raw}
+                      seasonNumber={seasonNumbers[flatIdx]}
                     />
                   );
                 })}
@@ -458,6 +492,7 @@ function Section({
             onRemove={() => onRemoveItem?.(sectionKey, i)}
             onLabelChange={(v) => onLabelChange?.(`${sectionKey}Label:${i}`, v)}
             label={labels[i] ?? item.parsed.raw}
+            seasonNumber={seasonNumbers[i]}
           />
         ))}
       </div>
@@ -468,7 +503,18 @@ function Section({
 // ── Main canvas ───────────────────────────────────────────────────────────
 
 export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
-  function PosterCanvas({ data, theme: themeName, editable = false, groupByMember = false, colsPerRow, onTextChange, onRemoveItem }, ref) {
+  function PosterCanvas(
+    {
+      data,
+      theme: themeName,
+      editable = false,
+      groupByMember = false,
+      colsPerRow,
+      onTextChange,
+      onRemoveItem,
+    },
+    ref,
+  ) {
     const theme = themeName === "dark" ? darkTheme : lightTheme;
 
     const cardWidth = 100;
@@ -497,15 +543,21 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
 
     const posterWidth = maxCols * cardWidth + (maxCols - 1) * gap + padding * 2;
 
-    const haveLabels = data.haves.map((item) =>
-      item.entry
-        ? `${item.entry.member} ${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`
-        : item.parsed.raw,
+    const haveLabels = data.haves.map(
+      (item) => item.entry?.member ?? item.parsed.raw,
     );
-    const wantLabels = data.wants.map((item) =>
+    const haveSeasonNumbers = data.haves.map((item) =>
       item.entry
-        ? `${item.entry.member} ${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`
-        : item.parsed.raw,
+        ? `${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`
+        : "",
+    );
+    const wantLabels = data.wants.map(
+      (item) => item.entry?.member ?? item.parsed.raw,
+    );
+    const wantSeasonNumbers = data.wants.map((item) =>
+      item.entry
+        ? `${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`
+        : "",
     );
 
     const disclaimerText = data.cosmoId
@@ -576,8 +628,11 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("haveTitle", v)}
           onRemoveItem={onRemoveItem}
-          onLabelChange={(field, value) => onTextChange?.(field as `haveLabel:${number}`, value)}
+          onLabelChange={(field, value) =>
+            onTextChange?.(field as `haveLabel:${number}`, value)
+          }
           labels={haveLabels}
+          seasonNumbers={haveSeasonNumbers}
         />
 
         {/* Want section */}
@@ -594,8 +649,11 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("wantTitle", v)}
           onRemoveItem={onRemoveItem}
-          onLabelChange={(field, value) => onTextChange?.(field as `wantLabel:${number}`, value)}
+          onLabelChange={(field, value) =>
+            onTextChange?.(field as `wantLabel:${number}`, value)
+          }
           labels={wantLabels}
+          seasonNumbers={wantSeasonNumbers}
         />
 
         {/* Notes */}
