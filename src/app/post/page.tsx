@@ -165,27 +165,33 @@ export default function CreatePosterPage() {
     // Wait 50ms for editable=false to apply (removes inputs/buttons from DOM)
     await new Promise((r) => setTimeout(r, 50));
 
-    // Rewrite all img src to go through our same-origin proxy so html-to-image
-    // can fetch them without CORS issues on mobile browsers.
+    // Pre-fetch all images as data URLs via our same-origin proxy, then swap
+    // img.src to the data URL before capture. This sidesteps CORS issues on
+    // mobile where html-to-image's internal fetch() is blocked by the CDN, and
+    // also avoids html-to-image's internal URL cache (which dedupes by path,
+    // not full URL, causing all images to show the same last-cached image).
     const imgs = Array.from(posterRef.current.querySelectorAll("img"));
-    imgs.forEach((img) => {
-      const src = img.getAttribute("src");
-      if (src && !src.startsWith("data:") && !src.startsWith("/")) {
-        img.src = `/api/image-proxy?url=${encodeURIComponent(src)}`;
-      }
-    });
-
-    // Wait for rewritten images to load
+    const originalSrcs: string[] = [];
     await Promise.all(
-      imgs.map(
-        (img) =>
-          img.complete
-            ? Promise.resolve()
-            : new Promise<void>((res) => {
-                img.onload = () => res();
-                img.onerror = () => res();
-              }),
-      ),
+      imgs.map(async (img, i) => {
+        const src = img.getAttribute("src") ?? "";
+        originalSrcs[i] = src;
+        if (!src || src.startsWith("data:")) return;
+        try {
+          const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(src)}`;
+          const res = await fetch(proxyUrl);
+          if (!res.ok) return;
+          const blob = await res.blob();
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          img.src = dataUrl;
+        } catch {
+          // leave original src, better than blank
+        }
+      }),
     );
 
     try {
@@ -216,6 +222,10 @@ export default function CreatePosterPage() {
       console.error("Failed to generate poster:", err);
       toast.error("Failed to generate poster image. Try again.");
     } finally {
+      // Restore original srcs so React's next render isn't confused by data URLs
+      imgs.forEach((img, i) => {
+        if (originalSrcs[i]) img.src = originalSrcs[i];
+      });
       setDownloading(false);
     }
   }, []);
