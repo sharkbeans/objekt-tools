@@ -4,7 +4,6 @@
  */
 
 import type { PosterData, PosterTheme } from "@/components/poster/poster-canvas";
-import { getGridCols } from "@/components/poster/poster-canvas";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
 
@@ -38,14 +37,19 @@ function groupByMemberFn(items: ResolvedPosterItem[]) {
   return groups;
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
+async function loadImage(url: string): Promise<HTMLImageElement> {
+  // Fetch to a blob URL so the image is same-origin — avoids canvas taint
+  // (toBlob SecurityError) while also bypassing the mobile Safari CORS cache
+  // poisoning that occurs with crossOrigin="anonymous" on cached CDN images.
+  const res = await fetch(url, { mode: "cors", cache: "no-store" });
+  if (!res.ok) throw new Error(`fetch ${res.status}: ${url}`);
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load ${url}`));
-    // No crossOrigin — imagedelivery.net is public, and setting crossOrigin
-    // can cause mobile Safari to serve a cached opaque response causing taint.
-    img.src = url;
+    img.onload = () => { URL.revokeObjectURL(blobUrl); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error(`img load failed: ${url}`)); };
+    img.src = blobUrl;
   });
 }
 
