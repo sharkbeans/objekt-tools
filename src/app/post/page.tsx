@@ -170,27 +170,27 @@ export default function CreatePosterPage() {
     // canvas taint) and mobile Safari (CORS cache poisoning from crossOrigin img).
     const imgs = Array.from(posterRef.current.querySelectorAll<HTMLImageElement>("img"));
     const originalSrcs = imgs.map((img) => img.src);
-    await Promise.all(
+    const results = await Promise.allSettled(
       imgs.map(async (img) => {
         const src = img.src;
         if (!src || src.startsWith("data:")) return;
-        try {
-          const res = await fetch(src, { mode: "cors", cache: "no-store" });
-          if (!res.ok) return;
-          const blob = await res.blob();
-          await new Promise<void>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              img.src = reader.result as string;
-              resolve();
-            };
-            reader.readAsDataURL(blob);
-          });
-        } catch {
-          // leave original — better than blank
-        }
+        const res = await fetch(src, { mode: "cors", cache: "no-store" });
+        if (!res.ok) throw new Error(`fetch ${res.status}`);
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        img.src = dataUrl;
+        // Wait for the img to settle with the new src before capture
+        if (!img.complete) await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); });
       }),
     );
+    results.forEach((r, i) => {
+      if (r.status === "rejected") console.warn(`[poster] img ${i} pre-fetch failed:`, r.reason);
+    });
 
     try {
       const dataUrl = await toPng(posterRef.current, {
