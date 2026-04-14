@@ -167,22 +167,30 @@ export default function CreatePosterPage() {
     await new Promise((r) => setTimeout(r, 50));
 
     try {
-      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      const canShareFiles = navigator.canShare?.({ files: [new File([], "t.png", { type: "image/png" })] });
 
-      if (isMobile) {
+      if (canShareFiles) {
         // Mobile: draw directly to canvas — bypasses html-to-image's SVG foreignObject
         // pipeline which is broken on mobile browsers (CORS taint, cache issues).
         const canvas = await renderPosterToCanvas(posterData, posterTheme, groupByMember, colsPerRow);
         const blob = await new Promise<Blob>((resolve, reject) =>
           canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png"),
         );
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.download = `trade-poster-${Date.now()}.png`;
-        link.href = blobUrl;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-        toast.success("Poster downloaded!");
+        const file = new File([blob], `trade-poster-${Date.now()}.png`, { type: "image/png" });
+        try {
+          await navigator.share({ files: [file] });
+          toast.success("Poster shared!");
+        } catch (shareErr) {
+          if (shareErr instanceof Error && shareErr.name === "AbortError") return;
+          // Share API blocked (gesture timeout etc.) — fall back to download
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.download = file.name;
+          link.href = blobUrl;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+          toast.success("Poster downloaded!");
+        }
       } else {
         // Desktop: html-to-image works fine
         const dataUrl = await toPng(posterRef.current, { pixelRatio: 2, cacheBust: true });
