@@ -190,8 +190,9 @@ export default function CreatePosterPage() {
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : String(err);
       console.error("Failed to generate poster:", err);
-      toast.error("Failed to generate poster image. Try again.");
+      toast.error(`Failed: ${msg}`);
     } finally {
       setDownloading(false);
     }
