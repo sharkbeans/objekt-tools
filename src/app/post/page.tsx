@@ -165,56 +165,62 @@ export default function CreatePosterPage() {
     // Wait 50ms for editable=false to apply (removes inputs/buttons from DOM)
     await new Promise((r) => setTimeout(r, 50));
 
-    // Pre-fetch all images as data URLs via our same-origin proxy, then swap
-    // img.src to the data URL before capture. This sidesteps CORS issues on
-    // mobile where html-to-image's internal fetch() is blocked by the CDN, and
-    // also avoids html-to-image's internal URL cache (which dedupes by path,
-    // not full URL, causing all images to show the same last-cached image).
-    const imgs = Array.from(posterRef.current.querySelectorAll("img"));
-    const originalSrcs: string[] = [];
-    await Promise.all(
-      imgs.map(async (img, i) => {
-        const src = img.getAttribute("src") ?? "";
-        originalSrcs[i] = src;
-        if (!src || src.startsWith("data:")) return;
-        try {
-          const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(src)}`;
-          const res = await fetch(proxyUrl);
-          if (!res.ok) return;
-          const blob = await res.blob();
-          const dataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(blob);
-          });
-          img.src = dataUrl;
-        } catch {
-          // leave original src, better than blank
-        }
-      }),
-    );
-
     try {
-      // On mobile (Share API available), use share sheet; otherwise download directly
-      if (navigator.share && navigator.canShare?.({ files: [new File([], "test.png", { type: "image/png" })] })) {
-        const blob = await toBlob(posterRef.current, {
-          pixelRatio: 2,
-          cacheBust: false,
-        });
-        if (!blob) throw new Error("Failed to generate image blob");
-        const file = new File([blob], `trade-poster-${Date.now()}.png`, { type: "image/png" });
-        await navigator.share({ files: [file] });
-        toast.success("Poster shared!");
-      } else {
-        const dataUrl = await toPng(posterRef.current, {
-          pixelRatio: 2,
-          cacheBust: false,
-        });
-        const link = document.createElement("a");
-        link.download = `trade-poster-${Date.now()}.png`;
-        link.href = dataUrl;
-        link.click();
-        toast.success("Poster downloaded!");
+      // Clone the poster DOM so we can mutate it freely without React noticing.
+      // html-to-image is then run on the clone (off-screen), not the live DOM.
+      const clone = posterRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.position = "fixed";
+      clone.style.top = "-9999px";
+      clone.style.left = "-9999px";
+      document.body.appendChild(clone);
+
+      try {
+        // Pre-fetch every image through our same-origin proxy and replace src
+        // with a data URL. This avoids html-to-image's fetch() being blocked by
+        // CORS on mobile, and avoids its internal URL-path cache bug where all
+        // images collapse to the same cached result.
+        const cloneImgs = Array.from(clone.querySelectorAll("img"));
+        await Promise.all(
+          cloneImgs.map(async (img) => {
+            const src = img.getAttribute("src") ?? "";
+            if (!src || src.startsWith("data:")) return;
+            try {
+              const res = await fetch(`/api/image-proxy?url=${encodeURIComponent(src)}`);
+              if (!res.ok) return;
+              const blob = await res.blob();
+              const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+              img.src = dataUrl;
+              // Wait for the image to render in the clone
+              if (!img.complete) {
+                await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); });
+              }
+            } catch {
+              // leave original src — better than blank
+            }
+          }),
+        );
+
+        // On mobile (Share API supports files), use share sheet; otherwise download
+        if (navigator.share && navigator.canShare?.({ files: [new File([], "t.png", { type: "image/png" })] })) {
+          const blob = await toBlob(clone, { pixelRatio: 2, cacheBust: false });
+          if (!blob) throw new Error("Failed to generate image blob");
+          const file = new File([blob], `trade-poster-${Date.now()}.png`, { type: "image/png" });
+          await navigator.share({ files: [file] });
+          toast.success("Poster shared!");
+        } else {
+          const dataUrl = await toPng(clone, { pixelRatio: 2, cacheBust: false });
+          const link = document.createElement("a");
+          link.download = `trade-poster-${Date.now()}.png`;
+          link.href = dataUrl;
+          link.click();
+          toast.success("Poster downloaded!");
+        }
+      } finally {
+        document.body.removeChild(clone);
       }
     } catch (err) {
       // User cancelling share sheet throws AbortError — don't show error for that
@@ -222,10 +228,6 @@ export default function CreatePosterPage() {
       console.error("Failed to generate poster:", err);
       toast.error("Failed to generate poster image. Try again.");
     } finally {
-      // Restore original srcs so React's next render isn't confused by data URLs
-      imgs.forEach((img, i) => {
-        if (originalSrcs[i]) img.src = originalSrcs[i];
-      });
       setDownloading(false);
     }
   }, []);
