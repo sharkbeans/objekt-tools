@@ -165,12 +165,26 @@ export default function CreatePosterPage() {
     // Wait a tick for editable=false to apply (removes inputs/buttons from DOM)
     await new Promise((r) => setTimeout(r, 50));
 
+    // Wait for all images in the poster to finish loading (important on mobile)
+    const imgs = Array.from(posterRef.current.querySelectorAll("img"));
+    await Promise.all(
+      imgs.map(
+        (img) =>
+          img.complete
+            ? Promise.resolve()
+            : new Promise<void>((res) => {
+                img.onload = () => res();
+                img.onerror = () => res();
+              }),
+      ),
+    );
+
     try {
       // On mobile (Share API available), use share sheet; otherwise download directly
-      if (navigator.share) {
+      if (navigator.share && navigator.canShare?.({ files: [new File([], "test.png", { type: "image/png" })] })) {
         const blob = await toBlob(posterRef.current, {
           pixelRatio: 2,
-          cacheBust: true,
+          cacheBust: false,
         });
         if (!blob) throw new Error("Failed to generate image blob");
         const file = new File([blob], `trade-poster-${Date.now()}.png`, { type: "image/png" });
@@ -179,7 +193,7 @@ export default function CreatePosterPage() {
       } else {
         const dataUrl = await toPng(posterRef.current, {
           pixelRatio: 2,
-          cacheBust: true,
+          cacheBust: false,
         });
         const link = document.createElement("a");
         link.download = `trade-poster-${Date.now()}.png`;
