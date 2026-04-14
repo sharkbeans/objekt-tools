@@ -165,10 +165,37 @@ export default function CreatePosterPage() {
     // Wait a tick for editable=false to apply (removes inputs/buttons from DOM)
     await new Promise((r) => setTimeout(r, 50));
 
+    // Pre-convert all poster images to data URLs so html-to-image doesn't need
+    // to fetch them itself. This is required for mobile Chrome (SVG foreignObject
+    // canvas taint) and mobile Safari (CORS cache poisoning from crossOrigin img).
+    const imgs = Array.from(posterRef.current.querySelectorAll<HTMLImageElement>("img"));
+    const originalSrcs = imgs.map((img) => img.src);
+    await Promise.all(
+      imgs.map(async (img) => {
+        const src = img.src;
+        if (!src || src.startsWith("data:")) return;
+        try {
+          const res = await fetch(src, { mode: "cors", cache: "no-store" });
+          if (!res.ok) return;
+          const blob = await res.blob();
+          await new Promise<void>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              img.src = reader.result as string;
+              resolve();
+            };
+            reader.readAsDataURL(blob);
+          });
+        } catch {
+          // leave original — better than blank
+        }
+      }),
+    );
+
     try {
       const dataUrl = await toPng(posterRef.current, {
         pixelRatio: 2,
-        cacheBust: true,
+        cacheBust: false,
       });
 
       // On mobile with Share API file support, share the image; otherwise download
@@ -192,6 +219,8 @@ export default function CreatePosterPage() {
       console.error("Failed to generate poster:", err);
       toast.error("Failed to generate poster image. Try again.");
     } finally {
+      // Restore original srcs so the live poster still displays correctly
+      imgs.forEach((img, i) => { img.src = originalSrcs[i]; });
       setDownloading(false);
     }
   }, []);

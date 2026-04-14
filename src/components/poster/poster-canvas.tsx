@@ -221,7 +221,6 @@ function ItemCard({
           <img
             src={item.imageUrl}
             alt={label}
-            crossOrigin="anonymous"
             style={{
               width: cardWidth,
               aspectRatio: "2 / 3",
