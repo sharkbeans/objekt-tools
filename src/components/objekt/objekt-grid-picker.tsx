@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { getSeasonPrefix } from "@/lib/season-prefix";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 36;
 
@@ -18,6 +19,7 @@ interface ObjektGridPickerProps {
   compareBySerial?: boolean;
   maxSelections?: number;
   emptyMessage?: string;
+  gridClassName?: string;
 }
 
 export function ObjektGridPicker({
@@ -29,6 +31,7 @@ export function ObjektGridPicker({
   compareBySerial = false,
   maxSelections = 10,
   emptyMessage = "No objekts found",
+  gridClassName,
 }: ObjektGridPickerProps) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
@@ -57,7 +60,7 @@ export function ObjektGridPicker({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
+      <div className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}>
         {Array.from({ length: PAGE_SIZE }).map((_, i) => (
           <div key={i} className="aspect-photocard rounded-sm bg-muted animate-pulse" />
         ))}
@@ -75,7 +78,7 @@ export function ObjektGridPicker({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
+      <div className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}>
         {pageItems.map((entry, i) => {
           const sel = isSelected(entry);
           const url = entry.thumbnailImage;

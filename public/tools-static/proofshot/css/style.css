@@ -87,6 +87,28 @@ body {
     box-shadow: none;
 }
 
+.header .container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.header h4 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+
+.header h4 svg {
+    width: 26px;
+    height: 26px;
+    color: var(--primary-color);
+}
+
 .logo {
     font-size: 2rem;
     font-weight: 700;
@@ -376,14 +398,14 @@ body {
    =========================== */
 
 .toolbar {
-    background: linear-gradient(180deg, #1d1d1d 0%, #141414 100%);
+    background: var(--surface-color);
     border-radius: var(--radius-md);
-    border: 1px solid #2a2a2a;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
-    padding: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+    padding: var(--spacing-lg);
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-sm);
+    gap: var(--spacing-lg);
     position: relative;
 }
 
@@ -512,11 +534,11 @@ body {
 }
 
 .section-title {
-    font-size: 0.72rem;
+    font-size: 0.813rem;
     font-weight: 600;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.05em;
     margin-bottom: 0;
     display: flex;
     align-items: center;
@@ -1075,6 +1097,15 @@ input[type="range"]::-moz-range-track {
 
     .header {
         padding: var(--spacing-md) var(--spacing-sm);
+    }
+
+    .header h4 {
+        font-size: 1.15rem;
+    }
+
+    .header h4 svg {
+        width: 20px;
+        height: 20px;
     }
 
     .main-content {

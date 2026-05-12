@@ -154,10 +154,17 @@ export function CosmoPickerDialog({
   }
 
   const inventoryLoaded = searchedNickname !== null && !inventoryLoading;
+  const havesGridClassName = "md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className={
+          step === "haves"
+            ? "max-h-[90vh] overflow-y-auto md:max-w-5xl"
+            : "max-w-lg max-h-[90vh] overflow-y-auto"
+        }
+      >
         {step === "haves" ? (
           <>
             <DialogHeader>
@@ -175,6 +182,14 @@ export function CosmoPickerDialog({
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   onKeyDown={handleNicknameKeyDown}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-bwignore="true"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
                   className="flex-1"
                 />
                 <Button
@@ -206,6 +221,7 @@ export function CosmoPickerDialog({
                   onSelect={() => {}}
                   onDeselect={() => {}}
                   loading
+                  gridClassName={havesGridClassName}
                 />
               )}
 
@@ -216,6 +232,14 @@ export function CosmoPickerDialog({
                     placeholder="Filter... e.g. JiWoo, Atom02"
                     value={haveFilter}
                     onChange={(e) => setHaveFilter(e.target.value)}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    data-bwignore="true"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-form-type="other"
                   />
                   <ObjektGridPicker
                     items={filteredInventory}
@@ -233,6 +257,7 @@ export function CosmoPickerDialog({
                     compareBySerial
                     maxSelections={50}
                     emptyMessage="No matching objekts"
+                    gridClassName={havesGridClassName}
                   />
                   {selectedHaves.length > 0 && (
                     <p className="text-xs text-muted-foreground text-center">

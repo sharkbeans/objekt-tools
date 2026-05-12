@@ -16,7 +16,6 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { parsePastedTrade } from "@/lib/paste-parser";
@@ -337,15 +336,18 @@ export default function CreatePosterPage() {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="poster-cosmoid">Cosmo ID</Label>
-            <Input
+            <button
+              type="button"
               id="poster-cosmoid"
-              placeholder="Your Cosmo username (shown on poster)"
-              value={cosmoId}
-              onChange={() => {}}
               onClick={() => setPickerOpen(true)}
-              readOnly
-              className="cursor-pointer"
-            />
+              aria-haspopup="dialog"
+              aria-expanded={pickerOpen}
+              className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-transparent px-3 py-1 text-left text-base shadow-xs transition-[color,box-shadow] outline-none hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+            >
+              <span className={cosmoId ? undefined : "text-muted-foreground"}>
+                {cosmoId || "Your Cosmo username (shown on poster)"}
+              </span>
+            </button>
           </div>
 
           <div className="space-y-2">
