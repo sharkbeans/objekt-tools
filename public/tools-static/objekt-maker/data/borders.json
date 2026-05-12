@@ -1,0 +1,64 @@
+[
+  {
+    "id": "none",
+    "name": "None",
+    "description": "No border or frame",
+    "type": "none",
+    "emoji": "⬜"
+  },
+  {
+    "id": "classic",
+    "name": "Classic",
+    "description": "Traditional photo frame with even borders",
+    "type": "border",
+    "width": 40,
+    "color": "#ffffff",
+    "emoji": "🖼️"
+  },
+  {
+    "id": "thick",
+    "name": "Thick Frame",
+    "description": "Bold border for emphasis",
+    "type": "border",
+    "width": 60,
+    "color": "#ffffff",
+    "emoji": "⬜"
+  },
+  {
+    "id": "polaroid",
+    "name": "Polaroid",
+    "description": "Vintage instant photo style with thick bottom",
+    "type": "polaroid",
+    "emoji": "📷"
+  },
+  {
+    "id": "rounded",
+    "name": "Rounded",
+    "description": "Soft rounded corners",
+    "type": "rounded",
+    "radius": 30,
+    "emoji": "▢"
+  },
+  {
+    "id": "rounded-large",
+    "name": "Super Rounded",
+    "description": "Large rounded corners",
+    "type": "rounded",
+    "radius": 60,
+    "emoji": "◯"
+  },
+  {
+    "id": "circle",
+    "name": "Circle",
+    "description": "Circular crop",
+    "type": "circle",
+    "emoji": "⭕"
+  },
+  {
+    "id": "heart",
+    "name": "Heart",
+    "description": "Heart-shaped crop",
+    "type": "heart",
+    "emoji": "❤️"
+  }
+]

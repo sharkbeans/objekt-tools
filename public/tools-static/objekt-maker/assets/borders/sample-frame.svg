@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000">
+  <!-- Classic white border frame -->
+  <defs>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Outer border -->
+  <rect x="0" y="0" width="800" height="1000" fill="white" filter="url(#shadow)"/>
+
+  <!-- Image area (transparent) -->
+  <rect x="40" y="40" width="720" height="920" fill="transparent"/>
+
+  <!-- Inner shadow border -->
+  <rect x="40" y="40" width="720" height="920" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+</svg>

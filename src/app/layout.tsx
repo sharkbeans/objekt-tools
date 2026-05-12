@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Objekt Trade",
-  description: "Trade Cosmo Objekts with other collectors",
+  title: "objekt.my",
+  description: "Cosmo objekt tools for collectors",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://objekt.my"),
 };
 
@@ -32,12 +32,12 @@ export default function RootLayout({
         <script defer src="https://cloud.umami.is/script.js" data-website-id="2efbd898-a793-436a-9078-e7e4b6abd77d"></script>
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col h-dvh`}
       >
         <Providers>
           <Navbar />
           <DiscordBanner />
-          <main className="container mx-auto px-4 py-6">{children}</main>
+          <main className="container mx-auto px-4 py-6 flex-1 min-h-0 overflow-y-auto">{children}</main>
         </Providers>
       </body>
     </html>

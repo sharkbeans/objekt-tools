@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Trade Poster | Objekt Trade",
+  title: "Trade Poster | objekt.my",
   description: "Turn your Cosmo trade list into a shareable poster image.",
 };
 

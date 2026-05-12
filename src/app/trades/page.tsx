@@ -36,7 +36,7 @@ export async function generateMetadata({
   const shouldIndex = pageNumber === 1 && !hasQueryFilters;
 
   return {
-    title: "Browse Trades | Objekt Trade",
+    title: "Browse Trades | objekt.my",
     description: "Find someone to trade Objekts with",
     alternates: {
       canonical,

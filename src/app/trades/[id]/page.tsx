@@ -26,8 +26,8 @@ export async function generateMetadata({
 
   const nickname = trade?.user?.cosmoAccount?.nickname;
   const title = nickname
-    ? `View @${nickname}'s Trade | Objekt Trade`
-    : `Trade #${id} | Objekt Trade`;
+    ? `View @${nickname}'s Trade | objekt.my`
+    : `Trade #${id} | objekt.my`;
 
   return {
     title,

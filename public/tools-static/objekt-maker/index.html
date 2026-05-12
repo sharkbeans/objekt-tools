@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    <!-- SEO and Social Meta Tags -->
+    <title>Objektify</title>
+    <meta name="author" content="Objektify">
+    <meta name="description" content="Custom Objekt Maker">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Objektify">
+    <meta property="og:description" content="Custom Objekt Maker">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary">
+    <meta property="twitter:title" content="Objektify">
+    <meta property="twitter:description" content="Custom Objekt Maker">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+    <link rel="alternate icon" href="assets/icons/favicon.ico">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- QR Code Library - Nayuki QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+
+    <!-- JSZip for bulk export -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
+
+    <!-- GIF parsing libraries -->
+    <script src="https://unpkg.com/gifuct-js@2.1.2/dist/gifuct-js.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h4><i data-lucide="codesandbox"></i> Objektify</h4>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Mobile Menu Toggle -->
+            <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
+                <i data-lucide="menu"></i>
+            </button>
+            
+            <!-- Controls Panel -->
+            <aside class="controls-panel" id="controlsPanel">
+                <section class="control-section">
+                    <h2 class="section-title"><i data-lucide="camera"></i> Upload Image</h2>
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="imageUpload" accept="image/png,image/jpeg,image/jpg,image/gif,video/mp4" multiple hidden>
+                        <label for="imageUpload" class="upload-label">
+                            <span class="upload-icon"><i data-lucide="upload"></i></span>
+                            <span class="upload-text">Click to upload or drag images here</span>
+                            <span class="upload-hint">JPG, PNG, GIF or MP4. Images max 5MB, animated max 30MB</span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Presets Section (Phase 4) -->
+                 <h2 class="section-title">
+                        <span>Saved</span>
+                    </h2>
+                <section class="control-section">
+                    <div class="adjustment-controls collapsible-section collapsed">
+                        <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="display: flex; align-items: center; gap: 6px;">
+                                <i data-lucide="bookmark" style="width: 16px; height: 16px;"></i>
+                                <span>PRESETS</span>
+                            </span>
+                            <span class="collapse-icon">−</span>
+                        </h3>
+                        <div class="collapsible-content">
+                            <div id="presetList"></div>
+                            <button id="presetSaveBtn" class="btn btn-primary" style="width: 100%; margin-top: var(--space-sm);">
+                                <i data-lucide="save"></i> Save Preset
+                            </button>
+                            <p class="upload-hint" style="margin-top: var(--space-xs); text-align: center;">Save settings to load later. Images must be re-uploaded.</p>
+
+                            <!-- Share Template (Phase 5) -->
+                            <div style="border-top: 1px solid var(--border-color); margin-top: var(--space-md); padding-top: var(--space-md);">
+                                <button id="shareTemplateBtn" class="btn btn-secondary" style="width: 100%;">
+                                    <i data-lucide="share-2" style="width: 14px; height: 14px;"></i> Copy Share Link
+                                </button>
+                                <div style="margin-top: var(--space-sm); display: flex; gap: var(--space-xs);">
+                                    <input type="text" id="shareCodeInput" class="text-input" placeholder="Paste share link or code..." style="flex: 1; min-width: 0;">
+                                    <button id="importShareCodeBtn" class="btn btn-secondary btn-small" title="Import share code">
+                                        <i data-lucide="download" style="width: 14px; height: 14px;"></i>
+                                    </button>
+                                </div>
+                                <p class="upload-hint" style="margin-top: var(--space-xs); text-align: center;">Share layout settings via link. Images not included.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Collection Section -->
+                <section class="control-section">
+                    <div class="adjustment-controls collapsible-section collapsed">
+                        <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="display: flex; align-items: center; gap: 6px;">
+                                <i data-lucide="folder-open" style="width: 16px; height: 16px;"></i>
+                                <span>COLLECTION</span>
+                            </span>
+                            <span class="collapse-icon">−</span>
+                        </h3>
+                        <div class="collapsible-content">
+                            <div id="savedCardsList" class="saved-cards-list"></div>
+                            <button id="saveToCollectionBtn" class="btn btn-primary" style="width: 100%; margin-top: var(--space-sm);">
+                                <i data-lucide="folder-plus" style="width: 14px; height: 14px;"></i> Save to Collection
+                            </button>
+                            <p class="upload-hint" style="margin-top: var(--space-xs); text-align: center;">Save complete photocards with images for your binder.</p>
+                            <div id="collectionStorageInfo" class="upload-hint" style="text-align: center; margin-top: var(--space-xs);"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- History Panel -->
+                <section class="control-section">
+                    <div class="adjustment-controls collapsible-section collapsed">
+                        <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="display: flex; align-items: center; gap: 6px;">
+                                <i data-lucide="history" style="width: 16px; height: 16px;"></i>
+                                <span>HISTORY</span>
+                            </span>
+                            <span class="collapse-icon">−</span>
+                        </h3>
+                        <div class="collapsible-content">
+                            <div id="historyList" class="history-list"></div>
+                            <p class="upload-hint" style="margin-top: var(--space-xs); text-align: center;">Click an entry to jump to that state. Use Ctrl+Z / Ctrl+Y.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Front Side Controls -->
+                <section class="control-section" id="frontSideSection">
+                    <h2 class="section-title">
+                        <span>Front Side</span>
+                    </h2>
+                    <div id="frontSideContent">
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="brush" style="width: 16px; height: 16px;"></i>
+                                    <span>ADJUSTMENTS</span>
+                                    </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-md);">
+                                    <label style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+                                        <span>Objekt Border</span>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="objektBorderToggle" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </label>
+                                    <label style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+                                        <span>Overflow Border</span>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="overflowBorderToggle">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </label>
+                                </div>
+                                <label id="overflowBorderSliderContainer" style="display: none;">
+                                    <span>Overflow Size:</span>
+                                    <input type="range" id="overflowBorderSlider" min="0.5" max="30" value="2" step="0.5">
+                                    <span id="overflowBorderValue">2%</span>
+                                </label>
+                                <label>
+                                    <span>Zoom:</span>
+                                    <input type="range" id="zoomSlider" min="50" max="200" value="100" step="5">
+                                    <span id="zoomValue">100%</span>
+                                </label>
+                                <label>
+                                    <span>Horizontal:</span>
+                                    <input type="range" id="panXSlider" min="-300" max="300" value="0" step="5">
+                                    <span id="panXValue">0px</span>
+                                </label>
+                                <label>
+                                    <span>Vertical:</span>
+                                    <input type="range" id="panYSlider" min="-300" max="300" value="0" step="5">
+                                    <span id="panYValue">0px</span>
+                                </label>
+                                <label>
+                                    <span>Corner Rounding:</span>
+                                    <input type="range" id="cornerRadiusSlider" min="0" max="80" value="36" step="1">
+                                    <span id="cornerRadiusValue">36px</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="borderColorSection" class="adjustment-controls collapsible-section collapsed objekt-only-control" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="credit-card" style="transform: rotate(90deg); width: 16px; height: 16px;"></i>
+                                    <span>BORDER COLOR</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Category:</span>
+                                    <select id="notchColorGroupSelect" class="dropdown-select"></select>
+                                </label>
+                                <label>
+                                    <span>Color:</span>
+                                    <div class="color-dropdown-wrapper">
+                                        <input type="color" id="notchColorPicker" class="color-picker" value="#FFD400">
+                                        <select id="notchColorSelect" class="dropdown-select dropdown-with-preview">
+                                            <option value="">Select a color</option>
+                                        </select>
+                                    </div>
+                                </label>
+                                <label>
+                                    <span>Custom Hex:</span>
+                                    <input type="text" id="borderColorHex" value="#FFD400" class="text-input color-hex-input" placeholder="#FFD400" maxlength="7">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="borderImageSection" class="adjustment-controls collapsible-section collapsed objekt-only-control" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="credit-card" style="transform: rotate(90deg); width: 16px; height: 16px;"></i>
+                                    <span>BORDER IMAGE</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="border-image-upload">
+                                    <input type="file" id="borderImageUpload" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="borderImageUpload" class="btn btn-secondary btn-small">
+                                        <i data-lucide="folder-open"></i> Upload Border Image
+                                    </label>
+                                    <button id="clearBorderImage" class="btn btn-secondary btn-small" style="display: none;">
+                                        <i data-lucide="x"></i> Clear Image
+                                    </button>
+                                </div>
+                                <p class="upload-hint">Upload an image to replace the colored border</p>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="image" style="width: 16px; height: 16px;"></i>
+                                    <span>LOGO</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="upload-area" id="frontLogoUploadArea">
+                                    <input type="file" id="frontLogoUpload" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="frontLogoUpload" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Logo</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                                    </label>
+                                </div>
+                                <div id="frontLogoControlsContainer" style="display: none;">
+                                    <label>
+                                        <span>Zoom:</span>
+                                        <input type="range" id="frontLogoZoom" min="20" max="300" value="100" step="5">
+                                        <span id="frontLogoZoomValue">100%</span>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <input type="range" id="frontLogoPosX" min="-100" max="100" value="0" step="5">
+                                        <span id="frontLogoPosXValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <input type="range" id="frontLogoPosY" min="-100" max="100" value="0" step="5">
+                                        <span id="frontLogoPosYValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Rotation:</span>
+                                        <input type="range" id="frontLogoRotation" min="0" max="360" value="0" step="5">
+                                        <span id="frontLogoRotationValue">0°</span>
+                                    </label>
+                                    <button id="clearFrontLogoBtn" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Logo</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Custom Frame Section (included in export) -->
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="frame" style="width: 16px; height: 16px;"></i>
+                                    <span>FRAME</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="upload-area" id="frameUploadArea">
+                                    <input type="file" id="frameUpload" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="frameUpload" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Frame (PNG recommended)</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">PNG with transparent background recommended</span>
+                                    </label>
+                                </div>
+                                <div id="frameControlsContainer" style="display: none; margin-top: var(--space-sm);">
+                                    <label>
+                                        <span>Opacity:</span>
+                                        <input type="range" id="frameOpacity" min="0" max="100" value="100" step="5">
+                                        <span id="frameOpacityValue">100%</span>
+                                    </label>
+                                    <label>
+                                        <span>Scale:</span>
+                                        <input type="range" id="frameScale" min="50" max="200" value="100" step="5">
+                                        <span id="frameScaleValue">100%</span>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <input type="range" id="framePosX" min="-300" max="300" value="0" step="5">
+                                        <span id="framePosXValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <input type="range" id="framePosY" min="-300" max="300" value="0" step="5">
+                                        <span id="framePosYValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Rotation:</span>
+                                        <input type="range" id="frameRotation" min="0" max="360" value="0" step="5">
+                                        <span id="frameRotationValue">0°</span>
+                                    </label>
+                                    <button id="clearFrameBtn" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Frame</button>
+                                </div>
+                                <p class="upload-hint">Uploaded frame will be applied to the front photocard and included in downloads.</p>
+                            </div>
+                        </div>
+
+                        <div id="frontTextSection" class="adjustment-controls collapsible-section collapsed objekt-only-control">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="type" style="width: 16px; height: 16px;"></i>
+                                    <span>TEXT</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Top Text:</span>
+                                    <input type="text" id="topText" value="SeoYeon" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Top Text Height:</span>
+                                    <input type="range" id="topTextHeight" min="-100" max="100" value="0" step="1">
+                                    <span id="topTextHeightValue">0px</span>
+                                </label>
+                                <label>
+                                    <span>Middle Text:</span>
+                                    <input type="text" id="middleText" value="100A#00001" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Middle Text Height:</span>
+                                    <input type="range" id="middleTextHeight" min="-100" max="100" value="0" step="1">
+                                    <span id="middleTextHeightValue">0px</span>
+                                </label>
+                                <label>
+                                    <span>Bottom Text:</span>
+                                    <input type="text" id="bottomText" value="tripleS" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Bottom Text Height:</span>
+                                    <input type="range" id="bottomTextHeight" min="-100" max="100" value="0" step="1">
+                                    <span id="bottomTextHeightValue">0px</span>
+                                </label>
+                                <label>
+                                    <span>Text Color:</span>
+                                    <div class="color-input-group">
+                                        <input type="color" id="textColorPicker" value="#000000" class="color-picker">
+                                        <input type="text" id="textColorHex" value="#000000" class="text-input color-hex-input" placeholder="#000000" maxlength="7">
+                                    </div>
+                                </label>
+                                <div class="color-presets">
+                                    <span class="presets-label">Presets:</span>
+                                    <div class="preset-colors">
+                                        <button class="preset-color-text" data-color="#000000" style="background-color: #000000;" title="#000000"></button>
+                                        <button class="preset-color-text" data-color="#FFFFFF" style="background-color: #FFFFFF; border: 1px solid #333;" title="#FFFFFF"></button>
+                                        <button class="preset-color-text" data-color="#FF0000" style="background-color: #FF0000;" title="#FF0000"></button>
+                                        <button class="preset-color-text" data-color="#0000FF" style="background-color: #0000FF;" title="#0000FF"></button>
+                                        <button class="preset-color-text" data-color="#FFD400" style="background-color: #FFD400;" title="#FFD400"></button>
+                                        <button class="preset-color-text" data-color="#FF6B9D" style="background-color: #FF6B9D;" title="#FF6B9D"></button>
+                                    </div>
+                                </div>
+                                <label>
+                                    <span>Font:</span>
+                                    <button type="button" id="fontPickerBtn" class="font-picker-btn">
+                                        <span id="fontPickerPreview" style="font-family: 'Helvetica Neue', sans-serif;">Helvetica Neue (Default)</span>
+                                        <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+                                    </button>
+                                </label>
+                                <label id="fontWeightBorderLabel" style="display: none;">
+                                    <span>Border Weight:</span>
+                                    <input type="range" id="fontWeightBorderSlider" min="100" max="900" value="600" step="50">
+                                    <span id="fontWeightBorderValue">600</span>
+                                </label>
+                                <label id="fontWeightLabel" style="display: none;">
+                                    <span>Body Weight:</span>
+                                    <input type="range" id="fontWeightSlider" min="100" max="900" value="500" step="50">
+                                    <span id="fontWeightValue">500</span>
+                                </label>
+                                <button id="resetFontWeightFront" type="button" class="btn btn-secondary btn-small" style="display: none; margin-top: var(--space-xs);"><i data-lucide="rotate-ccw"></i> Reset Font &amp; Weight</button>
+                            </div>
+                        </div>
+
+                        <!-- Reference Template Section (Phase 3) -->
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="layers" style="width: 16px; height: 16px;"></i>
+                                    <span>TEMPLATE</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="upload-area" id="templateUploadArea">
+                                    <input type="file" id="templateUpload" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="templateUpload" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Template</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                                    </label>
+                                </div>
+                                <div id="templateControlsContainer" style="display: none;">
+                                    <div class="objekt-toggle-wrapper" style="margin-bottom: var(--space-md);">
+                                        <span class="objekt-toggle-label" style="font-size: 0.813rem; text-transform: none; letter-spacing: normal;">
+                                            Show Template
+                                        </span>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="templateToggle" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <label>
+                                        <span>Opacity:</span>
+                                        <input type="range" id="templateOpacity" min="10" max="100" value="50" step="5">
+                                        <span id="templateOpacityValue">50%</span>
+                                    </label>
+                                    <button id="clearTemplateBtn" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Template</button>
+                                </div>
+                                <p class="upload-hint">Overlay a reference image for alignment. Not included in export.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Back Side Controls (Desktop - in sidebar) -->
+                <section class="control-section back-side-controls-desktop" id="backSideSection" style="display: none;">
+                    <h2 class="section-title"><i data-lucide="camera"></i> Upload Image</h2>
+                    <div class="upload-area" id="backUploadArea">
+                        <input type="file" id="backImageUpload" accept="image/png,image/jpeg,image/jpg" hidden>
+                        <label for="backImageUpload" class="upload-label">
+                            <span class="upload-icon"><i data-lucide="upload"></i></span>
+                            <span class="upload-text">Click to upload or drag images here</span>
+                            <span class="upload-hint">JPG or PNG, max 5MB</span>
+                        </label>
+                    </div>
+                    <div id="backSideContent">
+
+                        <!-- Back Image Adjustments -->
+                        <div id="backImageAdjustments" class="adjustment-controls collapsible-section" style="margin-bottom: var(--space-lg); display: none;">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="brush" style="width: 16px; height: 16px;"></i>
+                                    <span>ADJUSTMENTS</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Zoom:</span>
+                                    <input type="range" id="backZoomSlider" min="50" max="200" value="100" step="5">
+                                    <span id="backZoomValue">100%</span>
+                                </label>
+                                <label>
+                                    <span>Horizontal:</span>
+                                    <input type="range" id="backPanXSlider" min="-300" max="300" value="0" step="5">
+                                    <span id="backPanXValue">0px</span>
+                                </label>
+                                <label>
+                                    <span>Vertical:</span>
+                                    <input type="range" id="backPanYSlider" min="-300" max="300" value="0" step="5">
+                                    <span id="backPanYValue">0px</span>
+                                </label>
+                                <button id="clearBackImageBtn" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Back Image</button>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="credit-card" style="transform: rotate(90deg); width: 16px; height: 16px;"></i>
+                                    <span>BORDER</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Category:</span>
+                                    <select id="notchColorGroupSelectBack" class="dropdown-select"></select>
+                                </label>
+                                <label>
+                                    <span>Color:</span>
+                                    <div class="color-dropdown-wrapper">
+                                        <input type="color" id="notchColorPickerBack" class="color-picker" value="#FFD400">
+                                        <select id="notchColorSelectBack" class="dropdown-select dropdown-with-preview">
+                                            <option value="">Select a color</option>
+                                        </select>
+                                    </div>
+                                </label>
+                                <label>
+                                    <span>Custom Hex:</span>
+                                    <input type="text" id="borderColorHexBack" value="#FFD400" class="text-input color-hex-input" placeholder="#FFD400" maxlength="7">
+                                </label>
+                                <div class="border-image-upload" style="margin-top: var(--space-md);">
+                                    <input type="file" id="borderImageUploadBack" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="borderImageUploadBack" class="btn btn-secondary btn-small">
+                                        <i data-lucide="folder-open"></i> Upload Border Image
+                                    </label>
+                                    <button id="clearBorderImageBack" class="btn btn-secondary btn-small" style="display: none;">
+                                        <i data-lucide="x"></i> Clear Image
+                                    </button>
+                                </div>
+                                <p class="upload-hint">Upload an image to replace the colored border</p>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="image" style="width: 16px; height: 16px;"></i>
+                                    <span>TOP LOGO</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="upload-area" id="topLogoUploadArea">
+                                    <input type="file" id="topLogoUpload" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="topLogoUpload" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Logo</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                                    </label>
+                                </div>
+                                <div id="topLogoControlsContainer" style="display: none;">
+                                    <label>
+                                        <span>Zoom:</span>
+                                        <input type="range" id="topLogoZoom" min="20" max="300" value="150" step="5">
+                                        <span id="topLogoZoomValue">100%</span>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <input type="range" id="topLogoPosX" min="-100" max="100" value="0" step="5">
+                                        <span id="topLogoPosXValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <input type="range" id="topLogoPosY" min="-100" max="100" value="0" step="5">
+                                        <span id="topLogoPosYValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Rotation:</span>
+                                        <input type="range" id="topLogoRotation" min="0" max="360" value="0" step="5">
+                                        <span id="topLogoRotationValue">0°</span>
+                                    </label>
+                                    <button id="clearTopLogoBtn" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Logo</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="image" style="width: 16px; height: 16px;"></i>
+                                    <span>BOTTOM LOGO</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="upload-area" id="logoUploadArea">
+                                    <input type="file" id="logoUpload" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="logoUpload" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Logo</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                                    </label>
+                                </div>
+                                <div id="logoControlsContainer" style="display: none;">
+                                    <label>
+                                        <span>Zoom:</span>
+                                        <input type="range" id="logoZoom" min="20" max="300" value="100" step="5">
+                                        <span id="logoZoomValue">100%</span>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <input type="range" id="logoPosX" min="-100" max="100" value="0" step="5">
+                                        <span id="logoPosXValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <input type="range" id="logoPosY" min="-100" max="100" value="0" step="5">
+                                        <span id="logoPosYValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Rotation:</span>
+                                        <input type="range" id="logoRotation" min="0" max="360" value="90" step="5">
+                                        <span id="logoRotationValue">90°</span>
+                                    </label>
+                                    <button id="clearLogoBtn" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Logo</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="type" style="width: 16px; height: 16px;"></i>
+                                    <span>TEXT</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Text Color:</span>
+                                    <div class="color-input-group">
+                                        <input type="color" id="textColorPickerBack" value="#000000" class="color-picker">
+                                        <input type="text" id="textColorHexBack" value="#000000" class="text-input color-hex-input" placeholder="#000000" maxlength="7">
+                                    </div>
+                                </label>
+                                <div class="color-presets">
+                                    <span class="presets-label">Presets:</span>
+                                    <div class="preset-colors">
+                                        <button class="preset-color-text-back" data-color="#000000" style="background-color: #000000;" title="#000000"></button>
+                                        <button class="preset-color-text-back" data-color="#FFFFFF" style="background-color: #FFFFFF; border: 1px solid #333;" title="#FFFFFF"></button>
+                                        <button class="preset-color-text-back" data-color="#FF0000" style="background-color: #FF0000;" title="#FF0000"></button>
+                                        <button class="preset-color-text-back" data-color="#0000FF" style="background-color: #0000FF;" title="#0000FF"></button>
+                                        <button class="preset-color-text-back" data-color="#FFD400" style="background-color: #FFD400;" title="#FFD400"></button>
+                                        <button class="preset-color-text-back" data-color="#FF6B9D" style="background-color: #FF6B9D;" title="#FF6B9D"></button>
+                                    </div>
+                                </div>
+                                <label id="fontWeightBorderLabelBack" style="display: none;">
+                                    <span>Border Weight:</span>
+                                    <input type="range" id="fontWeightBorderSliderBack" min="100" max="900" value="600" step="50">
+                                    <span id="fontWeightBorderValueBack">600</span>
+                                </label>
+                                <label id="fontWeightLabelBack" style="display: none;">
+                                    <span>Main Text Weight:</span>
+                                    <input type="range" id="fontWeightSliderBack" min="100" max="900" value="600" step="50">
+                                    <span id="fontWeightValueBack">600</span>
+                                </label>
+                                <button id="resetFontWeightBack" type="button" class="btn btn-secondary btn-small" style="display: none; margin-top: var(--space-xs);"><i data-lucide="rotate-ccw"></i> Reset Font &amp; Weight</button>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="pen-tool" style="width: 16px; height: 16px;"></i>
+                                    <span>SIGNATURE</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="border-image-upload">
+                                    <button id="openSignatureModal" class="btn btn-secondary btn-small">
+                                        <i data-lucide="pen-tool"></i> Manage Signature
+                                    </button>
+                                    <button id="clearSignatureImage" class="btn btn-secondary btn-small" style="display: none;">
+                                        <i data-lucide="x"></i> Clear Signature
+                                    </button>
+                                </div>
+                                <p class="upload-hint">Upload and adjust signature with zoom control</p>
+                                <div id="signatureToolbarControls" style="display: none; margin-top: var(--space-md);">
+                                    <label>
+                                        <span>Zoom:</span>
+                                        <input type="range" id="signatureZoomToolbar" min="50" max="300" value="100" step="5">
+                                        <span id="signatureZoomToolbarValue">100%</span>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <input type="range" id="signaturePosXToolbar" min="-200" max="200" value="0" step="5">
+                                        <span id="signaturePosXToolbarValue">0px</span>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <input type="range" id="signaturePosYToolbar" min="-200" max="200" value="0" step="5">
+                                        <span id="signaturePosYToolbarValue">0px</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="qr-code" style="width: 16px; height: 16px;"></i>
+                                    <span>QR CODE</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>QR Link:</span>
+                                    <input type="text" id="qrCodeLink" value="https://sharkbeans.github.io/objekt-maker/" class="text-input" placeholder="https://sharkbeans.github.io/objekt-maker/">
+                                </label>
+                                <p class="upload-hint">Click QR code on back side to edit</p>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="text-initial" style="width: 16px; height: 16px;"></i>
+                                    <span>CONTENT</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>CLASS Label:</span>
+                                    <input type="text" id="backClassLabel" value="CLASS" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Class Value:</span>
+                                    <input type="text" id="backClassValue" value="First" class="text-input">
+                                </label>
+                                <label>
+                                    <span>SEASON Label:</span>
+                                    <input type="text" id="backSeasonLabel" value="SEASON" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Season Value:</span>
+                                    <input type="text" id="backSeasonValue" value="Atom02" class="text-input">
+                                </label>
+                                <label>
+                                    <span>NAME Label:</span>
+                                    <input type="text" id="backNameLabel" value="NAME" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Top Text:</span>
+                                    <input type="text" id="backNameValue" value="SeoYeon" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Top Text Height:</span>
+                                    <input type="range" id="backTopTextHeight" min="-100" max="100" value="0" step="1">
+                                    <span id="backTopTextHeightValue">0px</span>
+                                </label>
+                                <label>
+                                    <span>Bottom Text:</span>
+                                    <input type="text" id="backGroupName" value="tripleS" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Bottom Text Height:</span>
+                                    <input type="range" id="backBottomTextHeight" min="-100" max="100" value="0" step="1">
+                                    <span id="backBottomTextHeightValue">0px</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Back Side Template Section -->
+                        <div class="adjustment-controls collapsible-section collapsed">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="layers" style="width: 16px; height: 16px;"></i>
+                                    <span>TEMPLATE</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <!-- Upload area (shown when no template is loaded) -->
+                                <div class="upload-area" id="templateUploadAreaBack">
+                                    <input type="file" id="templateUploadBack" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="templateUploadBack" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Template</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                                    </label>
+                                </div>
+
+                                <!-- Controls (hidden until template is uploaded) -->
+                                <div id="templateControlsContainerBack" style="display: none;">
+                                    <div class="objekt-toggle-wrapper" style="margin-bottom: var(--space-md);">
+                                        <span class="objekt-toggle-label" style="font-size: 0.813rem; text-transform: none; letter-spacing: normal;">
+                                            Show Template
+                                        </span>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="templateToggleBack" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <label>
+                                        <span>Opacity:</span>
+                                        <input type="range" id="templateOpacityBack" min="10" max="100" value="50" step="5">
+                                        <span id="templateOpacityValueBack">50%</span>
+                                    </label>
+                                    <button id="clearTemplateBackBtn" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Template</button>
+                                </div>
+
+                                <p class="upload-hint">Overlay a reference image for alignment. Not included in export.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Card Size Section -->
+                <section class="control-section">
+                    <h2 class="section-title"> Card Size</h2>
+                    <div class="adjustment-controls">
+                        <label>
+                            <select id="cardSizePreset" class="dropdown-select">
+                                <option value="objekt" selected>Objekt Default (768x1186)</option>
+                                <option value="standard">Standard Photocard (638x1016)</option>
+                                <option value="credit">Credit Card (650x1004)</option>
+                                <option value="instax">Instax Mini (673x1051)</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </label>
+                        <div id="customSizeInputs" style="display: none;">
+                            <label>
+                                <span>Width (mm):</span>
+                                <input type="number" id="customWidthMM" class="text-input" placeholder="65" min="10" max="300" step="1">
+                            </label>
+                            <label>
+                                <span>Height (mm):</span>
+                                <input type="number" id="customHeightMM" class="text-input" placeholder="100" min="10" max="300" step="1">
+                            </label>
+                            <div class="upload-hint" style="text-align: center;">
+                                <span id="customSizePixels">Enter dimensions to see pixel size</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="control-section">
+                    <button id="exportBtn" class="btn btn-primary btn-large"><i data-lucide="download"></i> Download Image</button>
+                    <button id="resetBtn" class="btn btn-danger"><i data-lucide="rotate-ccw"></i> Reset</button>
+                </section>
+            </aside>
+
+            <!-- Canvas Area -->
+            <div class="canvas-container" id="canvasContainer">
+                <!-- Bulk Edit Banner (shown when editing a card from bulk mode) -->
+                <div id="bulkEditBanner" class="bulk-edit-banner" style="display:none;">
+                    <div class="bulk-edit-banner-info">
+                        <i data-lucide="layers"></i>
+                        <span id="bulkEditLabel">Editing # 1</span>
+                        <span class="bulk-edit-autosave-hint">Changes save when you return</span>
+                    </div>
+                    <button id="backToBulkBtn" class="btn btn-primary btn-small">
+                        <i data-lucide="check"></i><span class="btn-label-text"> Save & Return to Bulk</span>
+                    </button>
+                </div>
+
+                <!-- Canvas Top Bar: View Toggle + Undo/Redo -->
+                <div class="canvas-top-bar">
+                    <div class="canvas-undo-redo-group">
+                        <button id="undoBtn" class="btn btn-icon" disabled title="Undo (Ctrl+Z)">
+                            <i data-lucide="undo-2"></i>
+                        </button>
+                        <button id="redoBtn" class="btn btn-icon" disabled title="Redo (Ctrl+Y)">
+                            <i data-lucide="redo-2"></i>
+                        </button>
+                    </div>
+                    <div class="canvas-view-toggle" id="canvasViewToggle">
+                        <button class="toggle-btn active" data-view="front">
+                            <i data-lucide="image"></i>
+                            <span>Front Side</span>
+                        </button>
+                        <button class="toggle-btn" data-view="back">
+                            <i data-lucide="layers"></i>
+                            <span>Back Side</span>
+                        </button>
+                    </div>
+                    <button id="resetBtnCanvas" class="btn btn-danger canvas-reset-btn"><i data-lucide="rotate-ccw"></i><span class="reset-btn-label"> Reset</span></button>
+                </div>
+
+                <!-- Mobile Pan Controls Layout (sliders outside canvas) - COMMENTED OUT
+                <div class="mobile-pan-layout hidden" id="mobilePanControls">
+                    <input type="range" id="mobilePanYSlider" class="mobile-pan-slider mobile-pan-y" min="-300" max="300" value="0" step="5">
+                </div>
+                -->
+
+                <div class="bulk-canvas-nav" id="bulkCanvasNav">
+                    <button class="bulk-canvas-side-btn bulk-canvas-side-prev" id="bulkCanvasSidePrev" title="Previous card">
+                        <i data-lucide="chevron-left"></i>
+                    </button>
+                    <div class="canvas-wrapper-container">
+                        <div class="canvas-wrapper active" id="canvasWrapper">
+                            <canvas id="mainCanvas" width="768" height="1186"></canvas>
+                            <!-- Mobile upload placeholder (shown when no image) -->
+                            <div class="canvas-upload-placeholder" id="canvasUploadPlaceholder">
+                                <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                <span class="upload-text">Click to upload or drag images here</span>
+                                <span class="upload-hint">JPG, PNG, GIF or MP4. Images max 5MB, animated max 30MB</span>
+                            </div>
+                            <!-- Tooltip for top text field -->
+                            <div id="topTextTooltip" class="text-field-tooltip" style="display: none;">
+                                <button class="tooltip-close" id="closeTooltip" aria-label="Close tooltip">
+                                    <i data-lucide="x"></i>
+                                </button>
+                                <p class="tooltip-text">Click the 'SeoYeon' text to edit it directly!</p>
+                            </div>
+                        </div>
+                        <div class="canvas-wrapper" id="backCanvasWrapper">
+                            <canvas id="backCanvas" width="768" height="1186"></canvas>
+                        </div>
+                    </div>
+                    <button class="bulk-canvas-side-btn bulk-canvas-side-next" id="bulkCanvasSideNext" title="Next card">
+                        <i data-lucide="chevron-right"></i>
+                    </button>
+                </div>
+                <div id="bulkCanvasCounter" style="display:none;">
+                    <div class="bulk-canvas-counter-row">
+                        <button class="bulk-canvas-nav-btn" id="bulkCanvasPrev" title="Previous card">
+                            <i data-lucide="chevron-left"></i>
+                        </button>
+                        <span class="bulk-canvas-counter-label">1 / 1</span>
+                        <button class="bulk-canvas-nav-btn" id="bulkCanvasNext" title="Next card">
+                            <i data-lucide="chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bulk Edit Banner (bottom clone) -->
+                <div id="bulkEditBannerBottom" class="bulk-edit-banner" style="display:none; margin-top: var(--space-sm); margin-bottom: 0;">
+                    <div class="bulk-edit-banner-info">
+                        <i data-lucide="layers"></i>
+                        <span id="bulkEditLabelBottom">Editing # 1</span>
+                        <span class="bulk-edit-autosave-hint">Changes save when you return</span>
+                    </div>
+                    <button id="backToBulkBtnBottom" class="btn btn-primary btn-small">
+                        <i data-lucide="check"></i><span class="btn-label-text"> Save & Return to Bulk</span>
+                    </button>
+                </div>
+
+                <!-- Mobile Pan X Slider (below canvas) - COMMENTED OUT
+                <div class="mobile-pan-x-container hidden" id="mobilePanXContainer">
+                    <input type="range" id="mobilePanXSlider" class="mobile-pan-slider mobile-pan-x" min="-300" max="300" value="0" step="5">
+                </div>
+                -->
+
+                <!-- Old Mobile Adjustments removed - replaced by floating overlay -->
+
+                <!-- Mobile Front Logo Controls -->
+                <div style="border-top: 1px solid var(--border-color); margin-top: var(--space-md); padding-top: var(--space-md); display: none;" id="frontLogoMobileSection">
+                    <h3 class="mobile-section-title"><i data-lucide="image"></i> Front Logo</h3>
+                    <div class="upload-area" id="frontLogoUploadAreaMobile" style="margin-bottom: var(--space-md);">
+                        <input type="file" id="frontLogoUploadMobile" accept="image/png,image/jpeg,image/jpg" hidden>
+                        <label for="frontLogoUploadMobile" class="upload-label" style="padding: var(--space-sm);">
+                            <span class="upload-icon"><i data-lucide="upload"></i></span>
+                            <span class="upload-text">Upload Logo</span>
+                            <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                        </label>
+                    </div>
+                    <div id="frontLogoControlsContainerMobile" style="display: none;">
+                        <label>
+                            <span>Zoom:</span>
+                            <div class="slider-group">
+                                <input type="range" id="frontLogoZoomMobile" min="20" max="300" value="100" step="5">
+                                <span id="frontLogoZoomValueMobile">100%</span>
+                            </div>
+                        </label>
+                        <label>
+                            <span>Position X:</span>
+                            <div class="slider-group">
+                                <input type="range" id="frontLogoPosXMobile" min="-100" max="100" value="0" step="5">
+                                <span id="frontLogoPosXValueMobile">0px</span>
+                            </div>
+                        </label>
+                        <label>
+                            <span>Position Y:</span>
+                            <div class="slider-group">
+                                <input type="range" id="frontLogoPosYMobile" min="-100" max="100" value="0" step="5">
+                                <span id="frontLogoPosYValueMobile">0px</span>
+                            </div>
+                        </label>
+                        <label>
+                            <span>Rotation:</span>
+                            <div class="slider-group">
+                                <input type="range" id="frontLogoRotationMobile" min="0" max="360" value="0" step="5">
+                                <span id="frontLogoRotationValueMobile">0°</span>
+                            </div>
+                        </label>
+                        <button id="clearFrontLogoBtnMobile" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Logo</button>
+                    </div>
+                </div>
+
+                <!-- Back Side Controls (Mobile - below back canvas) -->
+                <section class="control-section back-side-controls-mobile" id="backSideSectionMobile" style="display: none;">
+                    <h2 class="section-title"><i data-lucide="camera"></i> Upload Image</h2>
+                    <div class="upload-area" id="backUploadAreaMobile">
+                        <input type="file" id="backImageUploadMobile" accept="image/png,image/jpeg,image/jpg" hidden>
+                        <label for="backImageUploadMobile" class="upload-label">
+                            <span class="upload-icon"><i data-lucide="upload"></i></span>
+                            <span class="upload-text">Click to upload or drag images here</span>
+                            <span class="upload-hint">JPG or PNG, max 5MB</span>
+                        </label>
+                    </div>
+                    <div id="backSideContentMobile">
+
+                        <!-- Back Image Adjustments (Mobile) -->
+                        <div id="backImageAdjustmentsMobile" class="adjustment-controls collapsible-section" style="margin-bottom: var(--space-lg); display: none;">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="brush" style="width: 16px; height: 16px;"></i>
+                                    <span>ADJUSTMENTS</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Zoom:</span>
+                                    <div class="slider-group">
+                                        <input type="range" id="backZoomSliderMobile" min="50" max="200" value="100" step="5">
+                                        <span id="backZoomValueMobile">100%</span>
+                                    </div>
+                                </label>
+                                <label>
+                                    <span>Horizontal:</span>
+                                    <div class="slider-group">
+                                        <input type="range" id="backPanXSliderMobile" min="-300" max="300" value="0" step="5">
+                                        <span id="backPanXValueMobile">0px</span>
+                                    </div>
+                                </label>
+                                <label>
+                                    <span>Vertical:</span>
+                                    <div class="slider-group">
+                                        <input type="range" id="backPanYSliderMobile" min="-300" max="300" value="0" step="5">
+                                        <span id="backPanYValueMobile">0px</span>
+                                    </div>
+                                </label>
+                                <button id="clearBackImageBtnMobile" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Back Image</button>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="credit-card" style="transform: rotate(90deg); width: 16px; height: 16px;"></i>
+                                    <span>BORDER</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Custom Hex:</span>
+                                    <input type="text" id="borderColorHexBackMobile" value="#FFD400" class="text-input color-hex-input" placeholder="#FFD400" maxlength="7">
+                                </label>
+                                <div class="border-image-upload" style="margin-top: var(--space-md);">
+                                    <input type="file" id="borderImageUploadBackMobile" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="borderImageUploadBackMobile" class="btn btn-secondary btn-small">
+                                        <i data-lucide="folder-open"></i> Upload Border Image
+                                    </label>
+                                    <button id="clearBorderImageBackMobile" class="btn btn-secondary btn-small" style="display: none;">
+                                        <i data-lucide="x"></i> Clear Image
+                                    </button>
+                                </div>
+                                <p class="upload-hint">Upload an image to replace the colored border</p>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="image" style="width: 16px; height: 16px;"></i>
+                                    <span>LOGO</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="upload-area" id="topLogoUploadAreaMobile">
+                                    <input type="file" id="topLogoUploadMobile" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="topLogoUploadMobile" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Logo</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                                    </label>
+                                </div>
+                                <div id="topLogoControlsContainerMobile" style="display: none;">
+                                    <label>
+                                        <span>Zoom:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="topLogoZoomMobile" min="20" max="300" value="100" step="5">
+                                            <span id="topLogoZoomValueMobile">100%</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="topLogoPosXMobile" min="-100" max="100" value="0" step="5">
+                                            <span id="topLogoPosXValueMobile">0px</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="topLogoPosYMobile" min="-100" max="100" value="0" step="5">
+                                            <span id="topLogoPosYValueMobile">0px</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Rotation:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="topLogoRotationMobile" min="0" max="360" value="0" step="5">
+                                            <span id="topLogoRotationValueMobile">0°</span>
+                                        </div>
+                                    </label>
+                                    <button id="clearTopLogoBtnMobile" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Logo</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="image" style="width: 16px; height: 16px;"></i>
+                                    <span>BOTTOM LOGO</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="upload-area" id="logoUploadAreaMobile">
+                                    <input type="file" id="logoUploadMobile" accept="image/png,image/jpeg,image/jpg" hidden>
+                                    <label for="logoUploadMobile" class="upload-label" style="padding: var(--space-sm);">
+                                        <span class="upload-icon"><i data-lucide="upload"></i></span>
+                                        <span class="upload-text">Upload Logo</span>
+                                        <span class="upload-hint" style="font-size: 0.75em;">JPG or PNG</span>
+                                    </label>
+                                </div>
+                                <div id="logoControlsContainerMobile" style="display: none;">
+                                    <label>
+                                        <span>Zoom:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="logoZoomMobile" min="20" max="300" value="100" step="5">
+                                            <span id="logoZoomValueMobile">100%</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="logoPosXMobile" min="-100" max="100" value="0" step="5">
+                                            <span id="logoPosXValueMobile">0px</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="logoPosYMobile" min="-100" max="100" value="0" step="5">
+                                            <span id="logoPosYValueMobile">0px</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Rotation:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="logoRotationMobile" min="0" max="360" value="90" step="5">
+                                            <span id="logoRotationValueMobile">90°</span>
+                                        </div>
+                                    </label>
+                                    <button id="clearLogoBtnMobile" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-sm);"><i data-lucide="trash-2"></i> Clear Logo</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span>TEXT COLOR</span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>Text Color:</span>
+                                    <div class="color-input-group">
+                                        <input type="color" id="textColorPickerBackMobile" value="#000000" class="color-picker">
+                                        <input type="text" id="textColorHexBackMobile" value="#000000" class="text-input color-hex-input" placeholder="#000000" maxlength="7">
+                                    </div>
+                                </label>
+                                <label>
+                                    <span>Font:</span>
+                                    <button type="button" id="fontPickerBtnMobile" class="font-picker-btn">
+                                        <span id="fontPickerPreviewMobile" style="font-family: 'Helvetica Neue', sans-serif;">Helvetica Neue (Default)</span>
+                                        <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+                                    </button>
+                                </label>
+                                <label id="fontWeightBorderLabelMobile" style="display: none;">
+                                    <span>Border Weight:</span>
+                                    <input type="range" id="fontWeightBorderSliderMobile" min="100" max="900" value="600" step="50">
+                                    <span id="fontWeightBorderValueMobile">600</span>
+                                </label>
+                                <label id="fontWeightLabelMobile" style="display: none;">
+                                    <span>Main Text Weight:</span>
+                                    <input type="range" id="fontWeightSliderMobile" min="100" max="900" value="500" step="50">
+                                    <span id="fontWeightValueMobile">500</span>
+                                </label>
+                                <button id="resetFontWeightMobile" type="button" class="btn btn-secondary btn-small" style="display: none; margin-top: var(--space-xs);"><i data-lucide="rotate-ccw"></i> Reset Font &amp; Weight</button>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="pen" style="width: 16px; height: 16px;"></i>
+                                    <span>SIGNATURE</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <div class="border-image-upload">
+                                    <button id="openSignatureModalMobile" class="btn btn-secondary btn-small">
+                                        <i data-lucide="pen-tool"></i> Manage Signature
+                                    </button>
+                                    <button id="clearSignatureImageMobile" class="btn btn-secondary btn-small" style="display: none;">
+                                        <i data-lucide="x"></i> Clear Signature
+                                    </button>
+                                </div>
+                                <p class="upload-hint">Upload and adjust signature with zoom control</p>
+                                <div id="signatureToolbarControlsMobile" style="display: none; margin-top: var(--space-md);">
+                                    <label>
+                                        <span>Zoom:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="signatureZoomToolbarMobile" min="50" max="300" value="100" step="5">
+                                            <span id="signatureZoomToolbarValueMobile">100%</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Position X:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="signaturePosXToolbarMobile" min="-200" max="200" value="0" step="5">
+                                            <span id="signaturePosXToolbarValueMobile">0px</span>
+                                        </div>
+                                    </label>
+                                    <label>
+                                        <span>Position Y:</span>
+                                        <div class="slider-group">
+                                            <input type="range" id="signaturePosYToolbarMobile" min="-200" max="200" value="0" step="5">
+                                            <span id="signaturePosYToolbarValueMobile">0px</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed" style="margin-bottom: var(--space-lg);">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="qr-code" style="width: 16px; height: 16px;"></i>
+                                    <span>QR CODE</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>QR Link:</span>
+                                    <input type="text" id="qrCodeLinkMobile" value="https://sharkbeans.github.io/objekt-maker/" class="text-input" placeholder="https://sharkbeans.github.io/objekt-maker/">
+                                </label>
+                                <p class="upload-hint">Click QR code on back side to edit</p>
+                            </div>
+                        </div>
+
+                        <div class="adjustment-controls collapsible-section collapsed">
+                            <h3 class="collapsible-header" style="font-size: 0.813rem; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="text-initial" style="width: 16px; height: 16px;"></i>
+                                    <span>CONTENT</span>
+                                </span>
+                                <span class="collapse-icon">−</span>
+                            </h3>
+                            <div class="collapsible-content">
+                                <label>
+                                    <span>CLASS Label:</span>
+                                    <input type="text" id="backClassLabelMobile" value="CLASS" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Class Value:</span>
+                                    <input type="text" id="backClassValueMobile" value="First" class="text-input">
+                                </label>
+                                <label>
+                                    <span>SEASON Label:</span>
+                                    <input type="text" id="backSeasonLabelMobile" value="SEASON" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Season Value:</span>
+                                    <input type="text" id="backSeasonValueMobile" value="Atom02" class="text-input">
+                                </label>
+                                <label>
+                                    <span>NAME Label:</span>
+                                    <input type="text" id="backNameLabelMobile" value="NAME" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Top Text:</span>
+                                    <input type="text" id="backNameValueMobile" value="SeoYeon" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Top Text Height:</span>
+                                    <input type="range" id="backTopTextHeightMobile" min="-100" max="100" value="0" step="1">
+                                    <span id="backTopTextHeightValueMobile">0px</span>
+                                </label>
+                                <label>
+                                    <span>Bottom Text:</span>
+                                    <input type="text" id="backGroupNameMobile" value="tripleS" class="text-input">
+                                </label>
+                                <label>
+                                    <span>Bottom Text Height:</span>
+                                    <input type="range" id="backBottomTextHeightMobile" min="-100" max="100" value="0" step="1">
+                                    <span id="backBottomTextHeightValueMobile">0px</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Mobile Action Buttons (hidden on desktop) -->
+                <div class="mobile-actions">
+                    <button id="exportBtnMobile" class="btn btn-primary"><i data-lucide="download"></i> Download Image</button>
+                    <button id="resetBtnMobile" class="btn btn-secondary"><i data-lucide="rotate-ccw"></i> Reset</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; Objektify | All processing happens in your browser</p>
+        </div>
+    </footer>
+
+    <!-- Media Loading Overlay -->
+    <div id="mediaLoadingOverlay" class="media-loading-overlay" style="display: none;">
+        <div class="media-loading-backdrop"></div>
+        <div class="media-loading-content">
+            <div class="media-loading-spinner"></div>
+            <p class="media-loading-title" id="mediaLoadingTitle">Loading file…</p>
+            <p class="media-loading-sub" id="mediaLoadingSub">Please wait…</p>
+            <div class="media-loading-progress" id="mediaLoadingProgress" style="display: none;">
+                <div class="media-loading-progress-bar">
+                    <div class="media-loading-progress-fill" id="mediaLoadingProgressFill"></div>
+                </div>
+                <span class="media-loading-progress-text" id="mediaLoadingProgressText">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Create Modal -->
+    <div id="bulkModal" class="bulk-modal" style="display: none;">
+        <div class="bulk-modal-backdrop"></div>
+        <div class="bulk-modal-content">
+            <div class="bulk-modal-header">
+                <h3><i data-lucide="layers"></i> Bulk Create</h3>
+                <button class="bulk-modal-close" id="closeBulkModal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="bulk-modal-body">
+                <!-- Upload Zone -->
+                <div class="bulk-upload-zone" id="bulkUploadZone">
+                    <input type="file" id="bulkImageUpload" accept="image/jpeg,image/png" multiple hidden>
+                    <div class="bulk-upload-content">
+                        <i data-lucide="image-plus" style="width: 48px; height: 48px; color: var(--text-secondary);"></i>
+                        <p style="font-weight: 600; margin-top: var(--space-sm);">Drop images here or click to upload</p>
+                        <p class="upload-hint">JPG or PNG, up to 5MB each</p>
+                    </div>
+                </div>
+
+                <!-- Bulk Actions Bar -->
+                <div class="bulk-actions-bar" id="bulkActionsBar" style="display: none;">
+                    <span class="bulk-count" id="bulkCount">0 cards</span>
+                    <div class="bulk-actions-right">
+                        <button id="bulkApplyRow1" class="btn btn-secondary btn-small" title="Copies text fields from Row 1 (template) to all other rows"><i data-lucide="copy"></i> Apply to All</button>
+                        <button id="bulkAddMore" class="btn btn-secondary btn-small"><i data-lucide="plus"></i> Add More</button>
+                        <button id="bulkClearAll" class="btn btn-secondary btn-small"><i data-lucide="trash-2"></i> Clear All</button>
+                    </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="bulk-table-container" id="bulkTableContainer" style="display: none;">
+                    <table class="bulk-table">
+                        <thead>
+                            <tr>
+                                <th class="bulk-col-num">#</th>
+                                <th class="bulk-col-thumb">Image</th>
+                                <th class="bulk-col-text">Top Text</th>
+                                <th class="bulk-col-text">Middle Text</th>
+                                <th class="bulk-col-text">Bottom Text</th>
+                                <th class="bulk-col-text bulk-back-col">Name</th>
+                                <th class="bulk-col-text bulk-back-col">Class</th>
+                                <th class="bulk-col-text bulk-back-col">Season</th>
+                                <th class="bulk-col-actions">Apply to All</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulkTableBody"></tbody>
+                    </table>
+                </div>
+
+            </div>
+            <div class="bulk-modal-footer">
+                <!-- Progress Bar -->
+                <div class="bulk-progress" id="bulkProgress" style="display: none;">
+                    <div class="bulk-progress-bar">
+                        <div class="bulk-progress-fill" id="bulkProgressFill"></div>
+                    </div>
+                    <span class="bulk-progress-text" id="bulkProgressText">0%</span>
+                </div>
+                <div class="bulk-footer-btn-row">
+                    <button id="bulkExportFrontOnly" class="btn btn-secondary" disabled>
+                        <i data-lucide="download"></i>
+                        <span class="bulk-footer-long-label">Front Only</span>
+                        <span class="bulk-footer-short-label">Front</span>
+                    </button>
+                    <button id="bulkExportBackOnly" class="btn btn-secondary bulk-back-col" disabled>
+                        <i data-lucide="download"></i>
+                        <span class="bulk-footer-long-label">Back Only</span>
+                        <span class="bulk-footer-short-label">Back</span>
+                    </button>
+                    <button id="bulkExportAll" class="btn btn-primary" disabled>
+                        <i data-lucide="download"></i>
+                        <span class="bulk-footer-long-label">Download All as ZIP</span>
+                        <span class="bulk-footer-short-label">All</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signature Upload Modal -->
+    <div id="signatureModal" class="signature-modal" style="display: none;">
+        <div class="signature-modal-backdrop"></div>
+        <div class="signature-modal-content">
+            <div class="signature-modal-header">
+                <h3><i data-lucide="pen-tool"></i> Signature Settings</h3>
+                <button class="signature-modal-close" id="closeSignatureModal">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="signature-modal-body">
+                <div class="signature-upload-section">
+                    <input type="file" id="signatureImageUpload" accept="image/png" hidden>
+                    <label for="signatureImageUpload" class="btn btn-primary btn-large" style="width: 100%; margin-bottom: var(--space-md);">
+                        <i data-lucide="upload"></i> Upload Signature Image
+                    </label>
+                    <p class="upload-hint" style="text-align: center; margin-bottom: var(--space-lg);">PNG with transparent background recommended</p>
+                </div>
+
+                <div class="signature-zoom-section" id="signatureZoomSection" style="display: none;">
+                    <label style="display: block; margin-bottom: var(--space-md);">
+                        <span style="font-weight: 600;">Signature Zoom:</span>
+                        <input type="range" id="signatureZoomSlider" min="50" max="300" value="100" step="5" style="width: 100%; margin-top: var(--space-sm);">
+                        <div style="display: flex; justify-content: space-between; margin-top: var(--space-xs);">
+                            <span style="font-size: 0.875rem; color: var(--text-secondary);">50%</span>
+                            <span id="signatureZoomValue" style="font-weight: 600;">100%</span>
+                            <span style="font-size: 0.875rem; color: var(--text-secondary);">300%</span>
+                        </div>
+                    </label>
+                    <label style="display: block; margin-bottom: var(--space-md);">
+                        <span style="font-weight: 600;">Position X:</span>
+                        <input type="range" id="signaturePosXSlider" min="-200" max="200" value="0" step="5" style="width: 100%; margin-top: var(--space-sm);">
+                        <div style="display: flex; justify-content: space-between; margin-top: var(--space-xs);">
+                            <span style="font-size: 0.875rem; color: var(--text-secondary);">-200px</span>
+                            <span id="signaturePosXValue" style="font-weight: 600;">0px</span>
+                            <span style="font-size: 0.875rem; color: var(--text-secondary);">200px</span>
+                        </div>
+                    </label>
+                    <label style="display: block; margin-bottom: var(--space-sm);">
+                        <span style="font-weight: 600;">Position Y:</span>
+                        <input type="range" id="signaturePosYSlider" min="-200" max="200" value="0" step="5" style="width: 100%; margin-top: var(--space-sm);">
+                        <div style="display: flex; justify-content: space-between; margin-top: var(--space-xs);">
+                            <span style="font-size: 0.875rem; color: var(--text-secondary);">-200px</span>
+                            <span id="signaturePosYValue" style="font-weight: 600;">0px</span>
+                            <span style="font-size: 0.875rem; color: var(--text-secondary);">200px</span>
+                        </div>
+                    </label>
+                    <p class="upload-hint" style="text-align: center; margin-top: var(--space-sm);">Signature can overflow and overlap divider lines</p>
+                </div>
+            </div>
+            <div class="signature-modal-footer">
+                <button id="signatureModalDone" class="btn btn-primary">
+                    <i data-lucide="check"></i> Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Adjustment Overlay (Mobile) -->
+    <div id="floatingAdjustOverlay" class="floating-adjust-overlay">
+        <div class="floating-adjust-header">
+            <span><i data-lucide="move"></i> Adjustments</span>
+            <button id="closeFloatingAdjust" class="floating-adjust-close" aria-label="Close">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="floating-adjust-content">
+            <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-md);">
+                <label style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+                    <span style="font-size: 0.75rem;">Objekt Border</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="objektBorderToggleMobile" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+                <label style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+                    <span style="font-size: 0.75rem;">Overflow Border</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="overflowBorderToggleMobile">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+            </div>
+            <label id="overflowBorderSliderContainerMobile" style="display: none;">
+                <span>Overflow Size:</span>
+                <div class="slider-group">
+                    <input type="range" id="overflowBorderSliderMobile" min="0.5" max="30" value="2" step="0.5">
+                    <span id="overflowBorderValueMobile">2%</span>
+                </div>
+            </label>
+            <label>
+                <span>Zoom:</span>
+                <div class="slider-group">
+                    <input type="range" id="zoomSliderFloating" min="50" max="200" value="100" step="5">
+                    <span id="zoomValueFloating">100%</span>
+                </div>
+            </label>
+            <label>
+                <span>Horizontal:</span>
+                <div class="slider-group">
+                    <input type="range" id="panXSliderFloating" min="-300" max="300" value="0" step="5">
+                    <span id="panXValueFloating">0px</span>
+                </div>
+            </label>
+            <label>
+                <span>Vertical:</span>
+                <div class="slider-group">
+                    <input type="range" id="panYSliderFloating" min="-300" max="300" value="0" step="5">
+                    <span id="panYValueFloating">0px</span>
+                </div>
+            </label>
+            <label>
+                <span>Corner Rounding:</span>
+                <div class="slider-group">
+                    <input type="range" id="cornerRadiusSliderFloating" min="0" max="80" value="36" step="1">
+                    <span id="cornerRadiusValueFloating">36px</span>
+                </div>
+            </label>
+            <button id="resetPositionBtn" class="btn btn-secondary btn-small" style="width: 100%; margin-top: var(--space-sm);">
+                <i data-lucide="rotate-ccw"></i> Reset Position
+            </button>
+        </div>
+    </div>
+
+
+
+    <!-- JavaScript Modules -->
+    <script>
+        // Mobile sidebar toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const menuToggle = document.getElementById('mobileMenuToggle');
+            const controlsPanel = document.getElementById('controlsPanel');
+            const overlay = document.createElement('div');
+            overlay.className = 'mobile-sidebar-overlay';
+            document.body.appendChild(overlay);
+
+            function openSidebar() {
+                controlsPanel.classList.add('open');
+                overlay.classList.add('visible');
+                if (menuToggle) menuToggle.style.display = 'none';
+            }
+
+            function closeSidebar() {
+                controlsPanel.classList.remove('open');
+                overlay.classList.remove('visible');
+                // Restore toggle button on mobile
+                if (menuToggle && window.innerWidth <= 768) {
+                    menuToggle.style.display = 'flex';
+                }
+            }
+
+            if (menuToggle) {
+                menuToggle.addEventListener('click', function() {
+                    if (controlsPanel.classList.contains('open')) {
+                        closeSidebar();
+                    } else {
+                        openSidebar();
+                    }
+                });
+            }
+
+            overlay.addEventListener('click', closeSidebar);
+
+            // Swipe left to close the controls panel
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let isSwiping = false;
+
+            controlsPanel.addEventListener('touchstart', function(e) {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                isSwiping = true;
+            }, { passive: true });
+
+            controlsPanel.addEventListener('touchmove', function(e) {
+                if (!isSwiping) return;
+                // Optional: could add visual drag feedback here
+            }, { passive: true });
+
+            controlsPanel.addEventListener('touchend', function(e) {
+                if (!isSwiping) return;
+                isSwiping = false;
+
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+
+                // Swipe left: negative deltaX, and more horizontal than vertical
+                if (deltaX < -60 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                    closeSidebar();
+                }
+            }, { passive: true });
+        });
+    </script>
+    <!-- Font Picker Modal -->
+    <div id="fontPickerModal" class="font-picker-modal" style="display: none;">
+        <div class="font-picker-modal-backdrop"></div>
+        <div class="font-picker-modal-content">
+            <div class="font-picker-modal-header">
+                <h3><i data-lucide="type" style="width: 18px; height: 18px;"></i> Choose Font</h3>
+                <button class="font-picker-modal-close" id="closeFontPicker">
+                    <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+                </button>
+            </div>
+            <div class="font-picker-modal-body">
+                <input type="text" id="fontSearchInput" class="text-input" placeholder="Search fonts..." autocomplete="off">
+                <div class="font-zip-upload-row">
+                    <a href="https://www.dafont.com/" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-small font-zip-upload-btn">
+                        <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+                        Browse Fonts
+                    </a>
+                    <label for="fontZipUpload" class="btn btn-secondary btn-small font-zip-upload-btn">
+                        <i data-lucide="upload" style="width: 14px; height: 14px;"></i>
+                        Upload Custom Font (.zip)
+                    </label>
+                    <input type="file" id="fontZipUpload" accept=".zip" style="display: none;">
+                </div>
+                <div id="fontList" class="font-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/toast.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/presets.js"></script>
+    <script src="js/savedcards.js"></script>
+    <script src="js/overflow-border.js"></script>
+    <script src="js/history.js"></script>
+    <script src="js/bulk.js"></script>
+    <script src="js/main.js"></script>
+
+    <!-- Initialize Lucide Icons -->
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

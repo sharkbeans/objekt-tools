@@ -4,15 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRightIcon,
   BellIcon,
-  HistoryIcon,
   ImageIcon,
   LinkIcon,
   LogInIcon,
   LogOutIcon,
   MenuIcon,
-  PlusIcon,
-  SearchIcon,
   SmartphoneIcon,
+  SparklesIcon,
   UserIcon,
   XIcon,
 } from "lucide-react";
@@ -110,44 +108,32 @@ export function Navbar() {
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-6">
             <Link href="/" className="font-bold text-lg">
-              Objekt Trade
+              objekt.my
             </Link>
             <nav className="flex items-center gap-4 text-sm">
               <Link
                 href="/trades"
+                className="relative text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Trades
+                {matchCount > 0 && (
+                  <span className="absolute -top-2 -right-4 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                    {matchCount > 99 ? "99+" : matchCount}
+                  </span>
+                )}
+              </Link>
+              <Link
+                href="/objekt-maker"
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
-                Browse Trades
+                Objektify
               </Link>
-              {session && (
-                <Link
-                  href="/trades/mine"
-                  className="relative text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  My Trades
-                  {matchCount > 0 && (
-                    <span className="absolute -top-2 -right-4 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
-                      {matchCount > 99 ? "99+" : matchCount}
-                    </span>
-                  )}
-                </Link>
-              )}
-              {session && (
-                <Link
-                  href="/trades/history"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Trade History
-                </Link>
-              )}
-              {session && (
-                <Link
-                  href="/trades/new"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  New Trade
-                </Link>
-              )}
+              <Link
+                href="/proofshot"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Proofshot
+              </Link>
               <Link
                 href="/post"
                 className="text-muted-foreground hover:text-foreground transition-colors"
@@ -307,7 +293,7 @@ function MobileNav({
             className="font-bold text-lg"
             onClick={() => setOpen(false)}
           >
-            Objekt Trade
+            objekt.my
           </Link>
         </div>
       </header>
@@ -339,43 +325,30 @@ function MobileNav({
           >
             <XIcon className="h-5 w-5" />
           </button>
-          <span className="font-bold text-lg">Objekt Trade</span>
+          <span className="font-bold text-lg">objekt.my</span>
         </div>
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
           <MobileNavLink href="/trades" onClick={() => setOpen(false)}>
-            <SearchIcon className="size-4" />
-            Browse Trades
+            <span className="flex items-center gap-2">
+              <ArrowLeftRightIcon className="size-4 shrink-0" />
+              Trades
+              {matchCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+                  {matchCount > 99 ? "99+" : matchCount}
+                </span>
+              )}
+            </span>
           </MobileNavLink>
-          {session && (
-            <MobileNavLink href="/trades/mine" onClick={() => setOpen(false)}>
-              <span className="flex items-center gap-2">
-                <ArrowLeftRightIcon className="size-4 shrink-0" />
-                My Trades
-                {matchCount > 0 && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
-                    {matchCount > 99 ? "99+" : matchCount}
-                  </span>
-                )}
-              </span>
-            </MobileNavLink>
-          )}
-          {session && (
-            <MobileNavLink
-              href="/trades/history"
-              onClick={() => setOpen(false)}
-            >
-              <HistoryIcon className="size-4" />
-              Trade History
-            </MobileNavLink>
-          )}
-          {session && (
-            <MobileNavLink href="/trades/new" onClick={() => setOpen(false)}>
-              <PlusIcon className="size-4" />
-              New Trade
-            </MobileNavLink>
-          )}
+          <MobileNavLink href="/objekt-maker" onClick={() => setOpen(false)}>
+            <SparklesIcon className="size-4" />
+            Objektify
+          </MobileNavLink>
+          <MobileNavLink href="/proofshot" onClick={() => setOpen(false)}>
+            <UserIcon className="size-4" />
+            Proofshot
+          </MobileNavLink>
           <MobileNavLink href="/post" onClick={() => setOpen(false)}>
             <ImageIcon className="size-4" />
             Poster

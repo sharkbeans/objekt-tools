@@ -1,12 +1,22 @@
-# Objekt Trade
+# objekt.my
 
-A peer-to-peer (P2P) trading platform for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the Gate](https://play.google.com/store/apps/details?id=com.modhaus.cosmo)** objekts with trust-minimized trades.
+All-in-one tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the Gate](https://play.google.com/store/apps/details?id=com.modhaus.cosmo)** collectors — trade matching, custom objekt design, and trade list visualization.
 
-**Objekt Trade is not affiliated with, endorsed by, or supported by MODHAUS or its artists.**
+**objekt.my is not affiliated with, endorsed by, or supported by MODHAUS or its artists.**
 
-## Overview
+## Tools
 
-Cosmo only supports one-way transfers, requiring trust between traders. This platform minimizes that risk through trade matching, transfer verification, and ownership monitoring.
+**[Trades](https://objekt.my/trades)** — Browse and match Cosmo objekt trades. Get auto-matched with other collectors and receive instant Discord notifications—no more searching through lists or DMs.
+
+**[Objektify](https://objekt.my/objekt-maker)** — Design custom Objekts with full front/back control. Add borders, text, logos, signatures, QR codes, then save presets and bulk export.
+
+**[Proofshot](https://objekt.my/proofshot)** — Generate photocard proofshot images for trades and collections.
+
+**[Poster](https://objekt.my/post)** — Turn your trade list into a clean, shareable image in seconds. Paste your list and download a structured template instantly.
+
+## Trades Feature Overview
+
+Cosmo only supports one-way transfers, requiring trust between traders. The trades tool minimizes that risk through trade matching, transfer verification, and ownership monitoring.
 
 Cosmo account linking uses a simple status message verification flow: users set a short code such as `verify-123456` in their Cosmo profile status, and the platform reads it to confirm ownership. Cosmo credentials, session tokens, and account access are never requested or stored.
 
@@ -26,6 +36,9 @@ Cosmo account linking uses a simple status message verification flow: users set 
 - Public user profiles at `/user/[nickname]` with completed, cancelled, and defaulted trade stats
 - Trade ban system with automatic lifting after obligations are fulfilled
 - Paste-to-trade importer for bulk objekt entry from community paste formats
+- Objektify tool for custom objekt design with full front/back editor
+- Proofshot tool for generating photocard proofshots
+- Poster tool for converting trade lists into shareable images
 
 ## Stack
 
