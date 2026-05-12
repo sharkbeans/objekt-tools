@@ -55,7 +55,7 @@
             </div>
 
             <!-- Canvas Container -->
-            <div class="canvas-container">
+            <div class="canvas-container aspect-3-4">
                 <canvas id="proofshot-canvas"></canvas>
                 <div class="canvas-overlay hidden" id="canvas-overlay">
                     <p class="upload-prompt">Press + to add Photocard</p>
@@ -125,30 +125,71 @@
                 <button class="toolbar-toggle" id="toolbar-toggle" aria-label="Toggle toolbar">
                     <i data-lucide="chevron-down" id="toolbar-toggle-icon"></i>
                 </button>
-                <!-- Upload Section -->
-                <div class="toolbar-section">
-                    <h3 class="section-title">Upload</h3>
-                    <div class="button-group">
-                        <button class="btn btn-primary" id="upload-bg-btn">
+
+                <div class="toolbar-header">
+                    <div>
+                        <p class="toolbar-kicker">Proofshot</p>
+                        <h2 class="toolbar-title">Adjust layers</h2>
+                    </div>
+                    <div class="aspect-ratio-menu" id="aspect-ratio-menu">
+                        <button class="aspect-ratio-trigger" id="aspect-ratio-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                            <span id="aspect-ratio-label">3:4</span>
+                            <i data-lucide="chevron-down"></i>
+                        </button>
+                        <div class="aspect-ratio-options" id="aspect-ratio-options" role="listbox" aria-label="Canvas aspect ratio">
+                            <button class="aspect-ratio-option active" type="button" role="option" aria-selected="true" data-ratio="3:4">
+                                <span>3:4</span>
+                                <i data-lucide="check"></i>
+                            </button>
+                            <button class="aspect-ratio-option" type="button" role="option" aria-selected="false" data-ratio="9:16">
+                                <span>9:16</span>
+                                <i data-lucide="check"></i>
+                            </button>
+                            <button class="aspect-ratio-option" type="button" role="option" aria-selected="false" data-ratio="1:1">
+                                <span>1:1</span>
+                                <i data-lucide="check"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="toolbar-section layer-tabs-section" aria-label="Layer controls">
+                    <div class="sidebar-tabs" role="tablist" aria-label="Layer controls">
+                        <button class="sidebar-tab active" type="button" role="tab" aria-selected="true" data-control-panel="photocard" id="sidebar-tab-photocard">
+                            <i data-lucide="credit-card"></i>
+                            <span>Photocard</span>
+                        </button>
+                        <button class="sidebar-tab" type="button" role="tab" aria-selected="false" data-control-panel="background" id="sidebar-tab-background">
                             <i data-lucide="image"></i>
                             <span>Background</span>
                         </button>
-                        <button class="btn btn-primary mobile-only" id="camera-btn">
+                    </div>
+                </div>
+
+                <!-- Upload Section -->
+                <div class="toolbar-section upload-section">
+                    <h3 class="section-title">Add Media</h3>
+                    <div class="upload-actions">
+                        <button class="upload-action" id="upload-bg-btn" type="button">
+                            <i data-lucide="image-plus"></i>
+                            <span>Background</span>
+                        </button>
+                        <button class="upload-action mobile-only" id="camera-btn" type="button">
                             <i data-lucide="camera"></i>
                             <span>Camera</span>
                         </button>
-                        <button class="btn btn-primary" id="upload-photocard-btn">
-                            <i data-lucide="credit-card"></i>
+                        <button class="upload-action" id="upload-photocard-btn" type="button">
+                            <i data-lucide="badge-plus"></i>
                             <span>Photocard</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Background Controls Section -->
-                <div class="toolbar-section controls-section" id="background-controls">
+                <div class="toolbar-section controls-section controls-panel" id="background-controls" data-control-panel="background">
                     <h3 class="section-title">
                         <i data-lucide="image"></i>
-                        Background Controls
+                        Background
                     </h3>
 
                     <div class="control-group">
@@ -197,10 +238,10 @@
                 </div>
 
                 <!-- Photocard Controls Section -->
-                <div class="toolbar-section controls-section" id="photocard-controls">
+                <div class="toolbar-section controls-section controls-panel active" id="photocard-controls" data-control-panel="photocard">
                     <h3 class="section-title">
                         <i data-lucide="credit-card"></i>
-                        Photocard Controls
+                        Photocard
                     </h3>
 
                     <div class="control-group">

@@ -45,6 +45,8 @@ const UIManager = {
         this.cacheElements();
         this.attachEventListeners();
         this.initializeLucideIcons();
+        this.updateSidebarControls('photocard');
+        this.updateAspectRatioSelector();
 
         // Show mobile home screen on mobile devices
         if (window.innerWidth <= 767 && this.elements.mobileHome) {
@@ -75,6 +77,10 @@ const UIManager = {
             toolbarToggle: document.getElementById('toolbar-toggle'),
             toolbarToggleIcon: document.getElementById('toolbar-toggle-icon'),
             toolbar: document.getElementById('toolbar'),
+            aspectRatioMenu: document.getElementById('aspect-ratio-menu'),
+            aspectRatioTrigger: document.getElementById('aspect-ratio-trigger'),
+            aspectRatioLabel: document.getElementById('aspect-ratio-label'),
+            aspectRatioOptions: document.querySelectorAll('.aspect-ratio-option'),
 
             // Edit mode hint
             editModeHint: document.getElementById('edit-mode-hint'),
@@ -143,6 +149,10 @@ const UIManager = {
             editModeToggle: document.getElementById('edit-mode-toggle'),
             editModePhotocardBtn: document.getElementById('edit-mode-photocard'),
             editModeBackgroundBtn: document.getElementById('edit-mode-background'),
+            sidebarPhotocardTab: document.getElementById('sidebar-tab-photocard'),
+            sidebarBackgroundTab: document.getElementById('sidebar-tab-background'),
+            photocardControls: document.getElementById('photocard-controls'),
+            backgroundControls: document.getElementById('background-controls'),
 
             // QR Modal
             qrModal: document.getElementById('qr-modal'),
@@ -179,6 +189,26 @@ const UIManager = {
             this.triggerPhotocardFileInput();
         });
 
+        if (this.elements.aspectRatioTrigger) {
+            this.elements.aspectRatioTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleAspectRatioMenu();
+            });
+        }
+
+        if (this.elements.aspectRatioOptions) {
+            this.elements.aspectRatioOptions.forEach((option) => {
+                option.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.setCanvasAspectRatio(option.dataset.ratio);
+                });
+            });
+        }
+
+        document.addEventListener('click', () => {
+            this.closeAspectRatioMenu();
+        });
+
         // Camera button
         if (this.elements.cameraBtn) {
             this.elements.cameraBtn.addEventListener('click', () => {
@@ -197,6 +227,19 @@ const UIManager = {
             this.elements.editModeBackgroundBtn.addEventListener('click', () => {
                 this.handleEditModeChange('background');
                 // Hide hint when user clicks background toggle
+                this.hideEditModeHint();
+            });
+        }
+
+        if (this.elements.sidebarPhotocardTab) {
+            this.elements.sidebarPhotocardTab.addEventListener('click', () => {
+                this.handleEditModeChange('photocard');
+            });
+        }
+
+        if (this.elements.sidebarBackgroundTab) {
+            this.elements.sidebarBackgroundTab.addEventListener('click', () => {
+                this.handleEditModeChange('background');
                 this.hideEditModeHint();
             });
         }
@@ -1255,7 +1298,7 @@ const UIManager = {
      */
     handleEditModeChange(mode) {
         // Update canvas manager edit mode
-        if (this.canvas && this.canvas.setEditMode) {
+        if (this.canvas?.setEditMode) {
             this.canvas.setEditMode(mode);
         }
 
@@ -1263,6 +1306,27 @@ const UIManager = {
         if (this.elements.editModePhotocardBtn && this.elements.editModeBackgroundBtn) {
             this.elements.editModePhotocardBtn.classList.toggle('active', mode === 'photocard');
             this.elements.editModeBackgroundBtn.classList.toggle('active', mode === 'background');
+        }
+
+        this.updateSidebarControls(mode);
+    },
+
+    /**
+     * Sync desktop sidebar tabs and panels with the active edit layer
+     */
+    updateSidebarControls(mode) {
+        const isPhotocard = mode === 'photocard';
+
+        if (this.elements.sidebarPhotocardTab && this.elements.sidebarBackgroundTab) {
+            this.elements.sidebarPhotocardTab.classList.toggle('active', isPhotocard);
+            this.elements.sidebarPhotocardTab.setAttribute('aria-selected', String(isPhotocard));
+            this.elements.sidebarBackgroundTab.classList.toggle('active', !isPhotocard);
+            this.elements.sidebarBackgroundTab.setAttribute('aria-selected', String(!isPhotocard));
+        }
+
+        if (this.elements.photocardControls && this.elements.backgroundControls) {
+            this.elements.photocardControls.classList.toggle('active', isPhotocard);
+            this.elements.backgroundControls.classList.toggle('active', !isPhotocard);
         }
     },
 
@@ -1314,6 +1378,7 @@ const UIManager = {
         try {
             // Save the current aspect ratio
             this.canvasAspectRatio = this.cameraAspectRatio;
+            this.updateAspectRatioSelector();
 
             // Capture the current frame
             this.canvas.captureFrame();
@@ -1638,6 +1703,72 @@ const UIManager = {
             case '1:1':
                 container.classList.add('aspect-1-1');
                 break;
+        }
+    },
+
+    /**
+     * Toggle desktop aspect ratio menu
+     */
+    toggleAspectRatioMenu() {
+        if (!this.elements.aspectRatioMenu || !this.elements.aspectRatioTrigger) return;
+
+        const isOpen = this.elements.aspectRatioMenu.classList.toggle('open');
+        this.elements.aspectRatioTrigger.setAttribute('aria-expanded', String(isOpen));
+    },
+
+    /**
+     * Close desktop aspect ratio menu
+     */
+    closeAspectRatioMenu() {
+        if (!this.elements.aspectRatioMenu || !this.elements.aspectRatioTrigger) return;
+
+        this.elements.aspectRatioMenu.classList.remove('open');
+        this.elements.aspectRatioTrigger.setAttribute('aria-expanded', 'false');
+    },
+
+    /**
+     * Apply selected desktop canvas aspect ratio
+     */
+    setCanvasAspectRatio(ratio) {
+        if (!['3:4', '9:16', '1:1'].includes(ratio)) return;
+
+        this.canvasAspectRatio = ratio;
+        this.cameraAspectRatio = ratio;
+
+        const canvasContainer = document.querySelector('.canvas-container');
+        if (canvasContainer) {
+            canvasContainer.classList.remove('preview-mode');
+            this.applyCanvasAspectRatio(canvasContainer);
+
+            setTimeout(() => {
+                this.canvas.resizeCanvas();
+                this.syncBackgroundSliders();
+                this.syncPhotocardSliders();
+            }, 100);
+        }
+
+        if (this.elements.cameraAspectRatioBtn) {
+            this.elements.cameraAspectRatioBtn.textContent = ratio;
+        }
+
+        this.updateAspectRatioSelector();
+        this.closeAspectRatioMenu();
+    },
+
+    /**
+     * Sync desktop aspect ratio label and selected option
+     */
+    updateAspectRatioSelector() {
+        if (this.elements.aspectRatioLabel) {
+            this.elements.aspectRatioLabel.textContent = this.canvasAspectRatio;
+        }
+
+        if (this.elements.aspectRatioOptions) {
+            this.elements.aspectRatioOptions.forEach((option) => {
+                const isActive = option.dataset.ratio === this.canvasAspectRatio;
+                option.classList.toggle('active', isActive);
+                option.setAttribute('aria-selected', String(isActive));
+            });
         }
     },
 

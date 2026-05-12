@@ -167,6 +167,47 @@ const ToploaderConfig = {
         green: 255,
         blue: 255,
         opacity: 0.02
+    },
+
+    // Photocard inside toploader - inset so card visibly sits inside the sleeve
+    photocardInset: {
+        // Gap between photocard edge and toploader inner frame (in pixels of source-photocard scale)
+        sideGap: 8,
+        topGap: 8,
+        bottomGap: 14,
+
+        // Drop shadow cast by the toploader frame onto the recessed photocard
+        recessShadow: {
+            blur: 22,
+            offsetY: 4,
+            opacity: 0.35
+        }
+    },
+
+    // Diagonal glossy streak across the plastic surface (signature toploader look)
+    glossStreak: {
+        // Angle in degrees (from horizontal)
+        angle: -22,
+        // Width of the streak as fraction of toploader width
+        widthFraction: 0.32,
+        // Position along the card (0 = top, 1 = bottom)
+        position: 0.35,
+        // Peak opacity at the center of the streak
+        peakOpacity: 0.045,
+        // Secondary thinner streak below
+        secondary: {
+            widthFraction: 0.12,
+            position: 0.62,
+            peakOpacity: 0.0225
+        }
+    },
+
+    // Soft inner vignette from frame edges onto the photocard
+    innerVignette: {
+        // Opacity at the corners
+        cornerOpacity: 0.18,
+        // Opacity at the center
+        centerOpacity: 0
     }
 };
 

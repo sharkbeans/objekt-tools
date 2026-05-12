@@ -1631,11 +1631,47 @@ const CanvasManager = {
         // Handle both image and video elements
         const width = this.photocardImage.videoWidth || this.photocardImage.width;
         const height = this.photocardImage.videoHeight || this.photocardImage.height;
-        this.ctx.drawImage(this.photocardImage, -width / 2, -height / 2, width, height);
 
-        // Draw toploader overlay if enabled
-        if (this.photocard.showToploader) {
+        const cfg = window.ToploaderConfig || ToploaderConfig;
+        const showTop = this.photocard.showToploader;
+
+        if (showTop) {
+            // Draw photocard inset inside the toploader sleeve so it visibly sits behind the frame
+            const sideGap = cfg.photocardInset.sideGap;
+            const topGap = cfg.photocardInset.topGap;
+            const bottomGap = cfg.photocardInset.bottomGap;
+            const insetW = width - sideGap * 2;
+            const insetH = height - topGap - bottomGap;
+            const insetX = -width / 2 + sideGap;
+            const insetY = -height / 2 + topGap;
+
+            // Soft drop shadow underneath the photocard inside the sleeve
+            this.ctx.save();
+            this.ctx.shadowColor = `rgba(0, 0, 0, ${cfg.photocardInset.recessShadow.opacity})`;
+            this.ctx.shadowBlur = cfg.photocardInset.recessShadow.blur;
+            this.ctx.shadowOffsetY = cfg.photocardInset.recessShadow.offsetY;
+            // Fill a transparent-corner-rounded rect to cast a shadow shape
+            this.ctx.fillStyle = '#000';
+            this.ctx.beginPath();
+            const sr = 4;
+            this.ctx.moveTo(insetX + sr, insetY);
+            this.ctx.lineTo(insetX + insetW - sr, insetY);
+            this.ctx.arcTo(insetX + insetW, insetY, insetX + insetW, insetY + sr, sr);
+            this.ctx.lineTo(insetX + insetW, insetY + insetH - sr);
+            this.ctx.arcTo(insetX + insetW, insetY + insetH, insetX + insetW - sr, insetY + insetH, sr);
+            this.ctx.lineTo(insetX + sr, insetY + insetH);
+            this.ctx.arcTo(insetX, insetY + insetH, insetX, insetY + insetH - sr, sr);
+            this.ctx.lineTo(insetX, insetY + sr);
+            this.ctx.arcTo(insetX, insetY, insetX + sr, insetY, sr);
+            this.ctx.closePath();
+            this.ctx.fill();
+            this.ctx.restore();
+
+            this.ctx.drawImage(this.photocardImage, insetX, insetY, insetW, insetH);
+
             this.drawToploader(width, height);
+        } else {
+            this.ctx.drawImage(this.photocardImage, -width / 2, -height / 2, width, height);
         }
 
         this.ctx.restore();
@@ -1797,6 +1833,59 @@ const CanvasManager = {
         roundedRect(innerX, innerY, innerWidth, innerHeight * cfg.highlights.top.heightPercent, topCornerRadius - frameThicknessLeft, 0);
         this.ctx.fillStyle = topHighlightGradient;
         this.ctx.fill();
+
+        // Diagonal glossy streak — signature plastic toploader reflection
+        if (cfg.glossStreak) {
+            this.ctx.save();
+            roundedRect(innerX, innerY, innerWidth, innerHeight, topCornerRadius - frameThicknessLeft, bottomCornerRadius - frameThicknessLeft);
+            this.ctx.clip();
+
+            const drawStreak = (widthFraction, position, peakOpacity) => {
+                const streakWidth = innerWidth * widthFraction;
+                const cx = innerX + innerWidth / 2;
+                const cy = innerY + innerHeight * position;
+                const angleRad = (cfg.glossStreak.angle * Math.PI) / 180;
+
+                this.ctx.save();
+                this.ctx.translate(cx, cy);
+                this.ctx.rotate(angleRad);
+                // Build a gradient across the streak width (perpendicular to streak length)
+                const grad = this.ctx.createLinearGradient(-streakWidth / 2, 0, streakWidth / 2, 0);
+                grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                grad.addColorStop(0.4, `rgba(255, 255, 255, ${peakOpacity * 0.5})`);
+                grad.addColorStop(0.5, `rgba(255, 255, 255, ${peakOpacity})`);
+                grad.addColorStop(0.6, `rgba(255, 255, 255, ${peakOpacity * 0.5})`);
+                grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                this.ctx.fillStyle = grad;
+                // Long enough to cover entire inner area at any rotation
+                const longSide = Math.hypot(innerWidth, innerHeight);
+                this.ctx.fillRect(-streakWidth / 2, -longSide, streakWidth, longSide * 2);
+                this.ctx.restore();
+            };
+
+            drawStreak(cfg.glossStreak.widthFraction, cfg.glossStreak.position, cfg.glossStreak.peakOpacity);
+            if (cfg.glossStreak.secondary) {
+                drawStreak(cfg.glossStreak.secondary.widthFraction, cfg.glossStreak.secondary.position, cfg.glossStreak.secondary.peakOpacity);
+            }
+
+            this.ctx.restore();
+        }
+
+        // Soft inner radial vignette — darkens the corners of the viewing area, selling the depth
+        if (cfg.innerVignette) {
+            this.ctx.save();
+            roundedRect(innerX, innerY, innerWidth, innerHeight, topCornerRadius - frameThicknessLeft, bottomCornerRadius - frameThicknessLeft);
+            this.ctx.clip();
+            const vcx = innerX + innerWidth / 2;
+            const vcy = innerY + innerHeight / 2;
+            const vRadius = Math.hypot(innerWidth, innerHeight) / 2;
+            const vignette = this.ctx.createRadialGradient(vcx, vcy, vRadius * 0.55, vcx, vcy, vRadius);
+            vignette.addColorStop(0, `rgba(0, 0, 0, ${cfg.innerVignette.centerOpacity})`);
+            vignette.addColorStop(1, `rgba(0, 0, 0, ${cfg.innerVignette.cornerOpacity})`);
+            this.ctx.fillStyle = vignette;
+            this.ctx.fillRect(innerX, innerY, innerWidth, innerHeight);
+            this.ctx.restore();
+        }
 
         // Inner shadow gradients for 3D depth effect - connecting at corners
         // Shadow spreads all the way to photocard border
@@ -2694,7 +2783,30 @@ const CanvasManager = {
                         exportCtx.clip();
                     }
 
-                    exportCtx.drawImage(this.photocardImage, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+                    // Inset photocard inside toploader to match live preview
+                    if (this.photocard.showToploader) {
+                        const cfg = window.ToploaderConfig || ToploaderConfig;
+                        const insetScale = scaledPcScale;
+                        const sideGap = cfg.photocardInset.sideGap * insetScale;
+                        const topGap = cfg.photocardInset.topGap * insetScale;
+                        const bottomGap = cfg.photocardInset.bottomGap * insetScale;
+                        const insetW = scaledWidth - sideGap * 2;
+                        const insetH = scaledHeight - topGap - bottomGap;
+                        const insetX = -scaledWidth / 2 + sideGap;
+                        const insetY = -scaledHeight / 2 + topGap;
+
+                        exportCtx.save();
+                        exportCtx.shadowColor = `rgba(0, 0, 0, ${cfg.photocardInset.recessShadow.opacity})`;
+                        exportCtx.shadowBlur = cfg.photocardInset.recessShadow.blur * insetScale;
+                        exportCtx.shadowOffsetY = cfg.photocardInset.recessShadow.offsetY * insetScale;
+                        exportCtx.fillStyle = '#000';
+                        exportCtx.fillRect(insetX, insetY, insetW, insetH);
+                        exportCtx.restore();
+
+                        exportCtx.drawImage(this.photocardImage, insetX, insetY, insetW, insetH);
+                    } else {
+                        exportCtx.drawImage(this.photocardImage, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+                    }
                     exportCtx.restore();
 
                     // Draw toploader if enabled (outside the border radius clip)
