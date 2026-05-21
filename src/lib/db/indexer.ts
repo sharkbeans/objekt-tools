@@ -2,38 +2,45 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./indexer-schema";
 
-function createIndexer(pool: Pool) {
-  return drizzle(pool, { schema });
-}
+type IndexerDb = ReturnType<typeof drizzle<typeof schema>>;
 
-function getIndexerDatabaseUrl() {
-  const url = process.env.INDEXER_DATABASE_URL;
-  if (!url) throw new Error("INDEXER_DATABASE_URL is not configured");
-  return url;
-}
-
-const globalForIndexer = globalThis as unknown as {
-  _indexerPool: Pool;
-  indexer: ReturnType<typeof createIndexer>;
+const _g = globalThis as typeof globalThis & {
+  _indexerPool?: Pool;
+  _indexer?: IndexerDb;
 };
 
-if (!globalForIndexer._indexerPool) {
-  const connectionString = getIndexerDatabaseUrl();
-
-  globalForIndexer._indexerPool = new Pool({
-    connectionString,
-    max: 3,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-    ssl: connectionString.includes("sslmode=require")
-      ? { rejectUnauthorized: false }
-      : undefined,
-  });
+function getPool(): Pool {
+  if (!_g._indexerPool) {
+    const url = process.env.INDEXER_DATABASE_URL;
+    if (!url) throw new Error("INDEXER_DATABASE_URL is not configured");
+    _g._indexerPool = new Pool({
+      connectionString: url,
+      max: 3,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+      ssl: url.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
+    });
+  }
+  return _g._indexerPool;
 }
 
-export const indexerPool = globalForIndexer._indexerPool;
+function getIndexer(): IndexerDb {
+  if (!_g._indexer) {
+    _g._indexer = drizzle(getPool(), { schema });
+  }
+  return _g._indexer;
+}
 
-export const indexer =
-  globalForIndexer.indexer ?? createIndexer(globalForIndexer._indexerPool);
+// Proxy objects defer initialization to first use (request time, not import time),
+// which prevents build failures when INDEXER_DATABASE_URL is absent from the build env.
+export const indexerPool: Pool = new Proxy({} as Pool, {
+  get(_, prop) {
+    return Reflect.get(getPool(), prop);
+  },
+});
 
-if (process.env.NODE_ENV !== "production") globalForIndexer.indexer = indexer;
+export const indexer: IndexerDb = new Proxy({} as IndexerDb, {
+  get(_, prop) {
+    return Reflect.get(getIndexer(), prop);
+  },
+});

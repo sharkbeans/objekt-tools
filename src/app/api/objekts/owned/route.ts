@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { eq, and, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";

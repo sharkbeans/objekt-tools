@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { asc, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { indexer } from "@/lib/db/indexer";
