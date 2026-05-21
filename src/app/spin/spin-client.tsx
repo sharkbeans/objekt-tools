@@ -26,6 +26,7 @@ interface SpinCollection {
   season: string;
   class: string;
   frontImage: string;
+  backImage: string;
   thumbnailImage: string;
 }
 
@@ -69,6 +70,12 @@ const fallbackRewardStats: SpinRewardStat[] = [
   { artist: "tripleS", className: "Premier", recipients: 0 },
 ];
 
+const artistDisplayNames: Record<string, string> = {
+  triples: "tripleS",
+  artms: "ARTMS",
+  idntt: "idntt",
+};
+
 const classMap: Record<string, SpinClass | undefined> = {
   First: "First",
   "First Class": "First",
@@ -79,6 +86,10 @@ const classMap: Record<string, SpinClass | undefined> = {
   Premier: "Premier",
   "Premier Class": "Premier",
 };
+
+function artistLabel(artist: string) {
+  return artistDisplayNames[artist.toLowerCase()] ?? artist;
+}
 
 function isIdntt(artist: string) {
   return artist.toLowerCase() === "idntt";
@@ -190,6 +201,14 @@ function pickRandom<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function preloadImage(url: string | null) {
+  if (!url || typeof window === "undefined") return;
+
+  const image = new Image();
+  image.decoding = "async";
+  image.src = url;
+}
+
 function buildResult(
   selected: SpinCollection,
   poolsByArtistSeason: Map<string, Record<SpinClass, SpinCollection[]>>,
@@ -224,6 +243,8 @@ function ObjektCard({
 }
 
 function getObjektBackImage(objekt: SpinCollection) {
+  if (objekt.backImage) return objekt.backImage;
+
   const imageUrl = objekt.frontImage || objekt.thumbnailImage;
   const replacements: Array<[RegExp, string]> = [
     [/\/front\//i, "/back/"],
@@ -278,23 +299,6 @@ function ObjektMark() {
       <span />
       <span />
       <span />
-    </div>
-  );
-}
-
-function BackFace({ objekt }: { objekt?: SpinCollection }) {
-  const [failed, setFailed] = useState(false);
-  const backImage = objekt ? getObjektBackImage(objekt) : null;
-  const showImage = backImage && !failed;
-
-  return (
-    <div className={styles.resultBack}>
-      {showImage ? (
-        // biome-ignore lint/performance/noImgElement: Cosmo card backs use the same static asset host as fronts.
-        <img src={backImage} alt="" onError={() => setFailed(true)} />
-      ) : (
-        <span className={styles.cardLogo} />
-      )}
     </div>
   );
 }
@@ -453,6 +457,10 @@ export function SpinClient() {
 
     window.setTimeout(() => {
       const chosenResult = buildResult(selected, poolsByArtistSeason);
+      if (chosenResult.kind === "objekt" && chosenResult.objekt) {
+        preloadImage(getObjektBackImage(chosenResult.objekt));
+      }
+
       const allResults = mysteryCards.map((_, cardIndex) =>
         cardIndex === index
           ? chosenResult
@@ -461,11 +469,6 @@ export function SpinClient() {
 
       setResult(chosenResult);
       setGridResults(allResults);
-
-      if (chosenResult.kind === "fail") {
-        setStage("done");
-        return;
-      }
 
       setStage("reveal");
       window.setTimeout(() => setStage("done"), 5000);
@@ -485,12 +488,33 @@ export function SpinClient() {
     result?.kind === "objekt" && result.objekt ? (
       <ObjektCard objekt={result.objekt} className={styles.revealedCard} />
     ) : (
-      <EmptyObjekt className={styles.revealedCard} />
+      <EmptyObjekt className={cn(styles.revealedCard, styles.revealedBroken)} />
     );
   const rewardStat = rewardStats[rewardStatIndex] ?? fallbackRewardStats[0];
   const loadingCard = selected ? (
     <ObjektCard objekt={selected} className={styles.loadingObjekt} muted />
   ) : null;
+  const successBackImage =
+    result?.kind === "objekt" && result.objekt
+      ? getObjektBackImage(result.objekt)
+      : null;
+  const successRevealCard =
+    result?.kind === "objekt" && result.objekt ? (
+      <div className={styles.objektInspect}>
+        {/* biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets. */}
+        <img
+          className={cn(styles.inspectFace, styles.inspectFront)}
+          src={result.objekt.frontImage || result.objekt.thumbnailImage}
+          alt=""
+        />
+        {/* biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets. */}
+        <img
+          className={cn(styles.inspectFace, styles.inspectBack)}
+          src={successBackImage ?? result.objekt.backImage}
+          alt=""
+        />
+      </div>
+    ) : null;
 
   return (
     <div className={styles.shell}>
@@ -525,11 +549,11 @@ export function SpinClient() {
             {selected && (
               <div className={styles.selectedCaption}>
                 <span>
-                  {selected.artist} {selected.season}
+                  {artistLabel(selected.artist)} {selected.season}
                 </span>
                 <p>
-                  Spin with the {selected.artist} {selected.season} season
-                  Objekt
+                  Spin with the {artistLabel(selected.artist)} {selected.season}{" "}
+                  season Objekt
                 </p>
               </div>
             )}
@@ -543,7 +567,7 @@ export function SpinClient() {
             <footer className={styles.footer}>
               <p>
                 Today, {rewardStat.recipients.toLocaleString()} people received{" "}
-                {rewardStat.artist} {rewardStat.className} Objekt!
+                {artistLabel(rewardStat.artist)} {rewardStat.className} Objekt!
               </p>
               <Button
                 type="button"
@@ -600,7 +624,7 @@ export function SpinClient() {
                   >
                     <ObjektCard objekt={objekt} />
                     <span>
-                      {objekt.artist} {objekt.season}
+                      {artistLabel(objekt.artist)} {objekt.season}
                     </span>
                     <small>{objekt.member}</small>
                   </button>
@@ -669,20 +693,30 @@ export function SpinClient() {
             )}
 
             {stage === "reveal" && result && (
-              <div className={styles.revealStage}>
+              <div
+                className={cn(
+                  styles.revealStage,
+                  result.kind === "fail" && styles.revealStageBroken,
+                )}
+              >
                 <div className={styles.flare} />
                 <div className={styles.shards} aria-hidden="true">
                   {shardPieces.map((shard) => (
                     <span key={shard} />
                   ))}
                 </div>
-                <div className={styles.revealFlip}>
+                <div
+                  className={cn(
+                    styles.revealFlip,
+                    result.kind === "fail" && styles.revealFlipBroken,
+                  )}
+                >
                   <div className={styles.revealInner}>
                     <PurpleCard className={styles.revealBack} disabled />
-                    <BackFace objekt={result.objekt} />
-                    {resultCard}
+                    {result.kind === "fail" && resultCard}
                   </div>
                 </div>
+                {successRevealCard}
               </div>
             )}
 
@@ -690,7 +724,7 @@ export function SpinClient() {
               result &&
               gridResults.length === 16 &&
               !revealedGridOpen && (
-                <div className={styles.doneStage}>
+                <div className={cn(styles.doneStage, styles.resultDoneStage)}>
                   <div className={styles.successTitle}>
                     {result.kind === "fail" ? (
                       <>
@@ -706,7 +740,7 @@ export function SpinClient() {
                   </div>
                   <p className={styles.resultSummary}>
                     {result.kind === "objekt" && result.objekt
-                      ? `Received ${result.objekt.artist} ${result.objekt.season} ${result.objekt.member} ${result.objekt.collectionNo} Objekt`
+                      ? `Received ${artistLabel(result.objekt.artist)} ${result.objekt.season} ${result.objekt.member} ${result.objekt.collectionNo} Objekt`
                       : "The selected card was Broken"}
                   </p>
                   <div className={styles.doneCard}>{resultCard}</div>
@@ -719,7 +753,7 @@ export function SpinClient() {
                   </button>
                   <Button
                     type="button"
-                    className={styles.primaryButton}
+                    className={cn(styles.primaryButton, styles.doneButton)}
                     onClick={resetSpin}
                   >
                     Done

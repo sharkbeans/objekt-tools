@@ -1,11 +1,11 @@
 import {
-  pgTable,
-  uuid,
-  varchar,
+  boolean,
   integer,
+  pgTable,
   text,
   timestamp,
-  boolean,
+  uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 export const collections = pgTable("collection", {
@@ -18,6 +18,7 @@ export const collections = pgTable("collection", {
   class: text().notNull(),
   thumbnailImage: text("thumbnail_image").notNull(),
   frontImage: text("front_image").notNull(),
+  backImage: text("back_image").notNull(),
   onOffline: text("on_offline").notNull().$type<"online" | "offline">(),
 });
 

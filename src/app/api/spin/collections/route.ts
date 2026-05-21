@@ -25,6 +25,7 @@ export async function GET() {
         season: collections.season,
         class: collections.class,
         frontImage: collections.frontImage,
+        backImage: collections.backImage,
         thumbnailImage: collections.thumbnailImage,
       })
       .from(collections)
