@@ -60,29 +60,53 @@
   font-weight: 700;
 }
 
-.sideCards {
-  position: absolute;
-  inset: 210px -52px auto;
-  display: flex;
-  justify-content: space-between;
+.ghostHeader {
+  min-height: 36px;
+  visibility: hidden;
   pointer-events: none;
 }
 
-.sideCards .cardBack {
-  width: 116px;
-  height: 174px;
-  opacity: 0.55;
+.centerStack {
+  width: 100%;
+  height: 261px;
+  margin: 110px auto 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.sideCards {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1120px;
+  height: 198px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  pointer-events: none;
+  z-index: 0;
+  transform: translate(-50%, -50%);
+  animation: sideCardSweep 4.2s linear infinite;
+}
+
+.sideCards .sideCard {
+  width: 132px;
+  height: 198px;
+  opacity: 0.82;
+  flex: 0 0 132px;
 }
 
 .centerSlot {
   width: 174px;
   height: 261px;
-  margin: 110px auto 0;
+  display: block;
+  margin: 0;
   border: 0;
   background: transparent;
   padding: 0;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .placeholder {
@@ -263,25 +287,57 @@
   letter-spacing: 0;
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: Card sizing is overridden in narrower contexts. */
 .cardBack {
-  border: 1px solid rgb(255 255 255 / 0.12);
+  border: 1px solid rgb(201 193 255 / 0.42);
   width: 76px;
   aspect-ratio: 2 / 3;
-  border-radius: 5px;
+  border-radius: 7px;
   position: relative;
   overflow: hidden;
   display: grid;
   place-items: center;
   background:
-    radial-gradient(circle at 68% 40%, rgb(196 188 255 / 0.55), transparent 7%),
-    linear-gradient(
-      135deg,
-      transparent 0 42%,
-      rgb(255 255 255 / 0.95) 48%,
-      transparent 56%
-    ), linear-gradient(140deg, #17163b, #4030b1 52%, #171538);
-  box-shadow: 0 12px 30px rgb(0 0 0 / 0.42);
+    radial-gradient(
+      ellipse at 28% 25%,
+      rgb(161 150 255 / 0.34),
+      transparent 28%
+    ),
+    radial-gradient(
+      ellipse at 78% 64%,
+      rgb(137 112 255 / 0.38),
+      transparent 31%
+    ),
+    linear-gradient(138deg, #121247 0%, #171457 34%, #31217e 67%, #171146 100%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 10px 12px 26px rgb(255 255 255 / 0.06),
+    inset -12px -14px 24px rgb(0 0 0 / 0.28),
+    0 12px 30px rgb(0 0 0 / 0.42);
+}
+
+.cardBack::before {
+  position: absolute;
+  content: "";
+  inset: -32% -40%;
+  background: linear-gradient(
+    135deg,
+    transparent 36%,
+    rgb(213 207 255 / 0.05) 42%,
+    rgb(226 222 255 / 0.72) 49%,
+    rgb(139 127 255 / 0.34) 54%,
+    transparent 63%
+  );
+  filter: blur(1.5px);
+}
+
+.cardBack::after {
+  position: absolute;
+  content: "";
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.4),
+    inset 0 -1px 2px rgb(0 0 0 / 0.38);
 }
 
 .seasonChoice .objektCard {
@@ -293,24 +349,36 @@
 }
 
 .cardLogo {
-  width: 28px;
-  height: 38px;
+  width: 30px;
+  height: 42px;
   display: block;
-  transform: skewY(-22deg);
-  background:
-    linear-gradient(
-      135deg,
-      transparent 0 35%,
-      rgb(255 255 255 / 0.85) 36% 47%,
-      transparent 48% 100%
-    ),
-    linear-gradient(
-      135deg,
-      transparent 0 58%,
-      rgb(255 255 255 / 0.85) 59% 71%,
-      transparent 72% 100%
-    );
-  opacity: 0.72;
+  position: relative;
+  z-index: 1;
+  opacity: 0.88;
+  filter: drop-shadow(0 0 5px rgb(255 255 255 / 0.36));
+}
+
+.cardLogo::before,
+.cardLogo::after {
+  position: absolute;
+  content: "";
+  left: 4px;
+  width: 24px;
+  height: 13px;
+  transform: skewY(-28deg) rotate(-1deg);
+  border: 1px solid rgb(255 255 255 / 0.46);
+  background: linear-gradient(135deg, #f6f3ff 0%, #bbb2ee 48%, #ffffff 100%);
+  box-shadow:
+    inset 0 1px 2px rgb(255 255 255 / 0.65),
+    0 0 8px rgb(255 255 255 / 0.24);
+}
+
+.cardLogo::before {
+  top: 7px;
+}
+
+.cardLogo::after {
+  top: 25px;
 }
 
 .runStage {
@@ -324,13 +392,73 @@
   inset: 0;
   display: grid;
   place-items: center;
+  background: rgb(0 0 0 / 0.72);
+  perspective: 860px;
+  transform-style: preserve-3d;
+}
+
+.loadingFan {
+  position: absolute;
+  width: 360px;
+  height: 230px;
+  transform-style: preserve-3d;
+  opacity: 0.36;
+  filter: brightness(0.62);
+}
+
+.loadingFanCard {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  width: 94px;
+  transform-origin: center;
+}
+
+.loadingFanCard:nth-child(1) {
+  transform: translate3d(-214px, 18px, -160px) rotateY(78deg);
+}
+
+.loadingFanCard:nth-child(2) {
+  transform: translate3d(-168px, 9px, -116px) rotateY(56deg);
+}
+
+.loadingFanCard:nth-child(3) {
+  transform: translate3d(-119px, 2px, -76px) rotateY(34deg);
+}
+
+.loadingFanCard:nth-child(4) {
+  transform: translate3d(-64px, -3px, -42px) rotateY(12deg);
+}
+
+.loadingFanCard:nth-child(5) {
+  transform: translate3d(-3px, -3px, -42px) rotateY(-12deg);
+}
+
+.loadingFanCard:nth-child(6) {
+  transform: translate3d(52px, 2px, -76px) rotateY(-34deg);
+}
+
+.loadingFanCard:nth-child(7) {
+  transform: translate3d(101px, 9px, -116px) rotateY(-56deg);
+}
+
+.loadingFanCard:nth-child(8) {
+  transform: translate3d(147px, 18px, -160px) rotateY(-78deg);
+}
+
+.loadingObjekt {
+  position: absolute;
+  z-index: 1;
+  transform: translateZ(42px);
 }
 
 .objektMark {
   width: 78px;
   height: 100px;
   position: relative;
-  animation: markPulse 0.2s ease both;
+  z-index: 2;
+  filter: drop-shadow(0 0 14px rgb(255 255 255 / 0.35));
+  animation: markGlyph 0.2s ease both;
 }
 
 .objektMark span {
@@ -344,31 +472,114 @@
 
 .objektMark span:nth-child(1) {
   top: 21px;
+  animation: glyphTop 0.2s steps(1, end) both;
 }
 
 .objektMark span:nth-child(2) {
   top: 43px;
   background: white;
+  animation: glyphMiddle 0.2s steps(1, end) both;
 }
 
 .objektMark span:nth-child(3) {
   top: 65px;
+  animation: glyphBottom 0.2s steps(1, end) both;
 }
 
 .carouselTrack {
   position: absolute;
-  top: 45%;
-  left: 50%;
-  display: flex;
-  gap: 16px;
+  inset: 0;
   transform-style: preserve-3d;
-  animation: carouselSweep 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  perspective: 900px;
 }
 
 .carouselCard {
+  position: absolute;
+  top: 39%;
+  left: 50%;
   width: 92px;
-  transform: rotateY(-24deg) rotateZ(-7deg);
-  flex: 0 0 auto;
+  transform-origin: center;
+  animation: deckThrow 1.7s cubic-bezier(0.18, 0.82, 0.22, 1) both;
+}
+
+.carouselCard:nth-child(1) {
+  --fan-x: -236px;
+  --fan-y: 8px;
+  --fan-z: -120px;
+  --fan-ry: 78deg;
+  --fan-rz: -8deg;
+  --pile-x: -116px;
+  --pile-y: 54px;
+}
+
+.carouselCard:nth-child(2) {
+  --fan-x: -178px;
+  --fan-y: -5px;
+  --fan-z: -82px;
+  --fan-ry: 54deg;
+  --fan-rz: -5deg;
+  --pile-x: -112px;
+  --pile-y: 52px;
+}
+
+.carouselCard:nth-child(3) {
+  --fan-x: -118px;
+  --fan-y: -14px;
+  --fan-z: -38px;
+  --fan-ry: 27deg;
+  --fan-rz: -2deg;
+  --pile-x: -108px;
+  --pile-y: 50px;
+}
+
+.carouselCard:nth-child(4) {
+  --fan-x: -54px;
+  --fan-y: -18px;
+  --fan-z: -10px;
+  --fan-ry: 12deg;
+  --fan-rz: 1deg;
+  --pile-x: -104px;
+  --pile-y: 48px;
+}
+
+.carouselCard:nth-child(5) {
+  --fan-x: 12px;
+  --fan-y: -18px;
+  --fan-z: -10px;
+  --fan-ry: -12deg;
+  --fan-rz: -1deg;
+  --pile-x: -100px;
+  --pile-y: 46px;
+}
+
+.carouselCard:nth-child(6) {
+  --fan-x: 77px;
+  --fan-y: -13px;
+  --fan-z: -38px;
+  --fan-ry: -31deg;
+  --fan-rz: 3deg;
+  --pile-x: -96px;
+  --pile-y: 44px;
+}
+
+.carouselCard:nth-child(7) {
+  --fan-x: 138px;
+  --fan-y: -2px;
+  --fan-z: -82px;
+  --fan-ry: -55deg;
+  --fan-rz: 5deg;
+  --pile-x: -92px;
+  --pile-y: 42px;
+}
+
+.carouselCard:nth-child(8) {
+  --fan-x: 196px;
+  --fan-y: 10px;
+  --fan-z: -120px;
+  --fan-ry: -78deg;
+  --fan-rz: 8deg;
+  --pile-x: -88px;
+  --pile-y: 40px;
 }
 
 .mysteryGridWrap {
@@ -391,11 +602,22 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  perspective: 850px;
 }
 
-.mysteryGrid .cardBack {
+.mysteryCard {
   width: 100%;
   border-radius: 4px;
+  transform-origin: center;
+  animation: stackToGrid 760ms cubic-bezier(0.16, 0.84, 0.22, 1) both;
+  animation-delay: calc(var(--i) * 22ms);
+}
+
+.mysteryCard:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 2px #a58cff,
+    0 0 18px rgb(126 75 255 / 0.82);
 }
 
 .mysteryGrid .cardBack:active {
@@ -442,6 +664,7 @@
   height: 28px;
   background: linear-gradient(135deg, #3327a1, #8d74ff);
   clip-path: polygon(20% 0, 100% 38%, 64% 100%, 0 72%);
+  transform-style: preserve-3d;
 }
 
 .shards span:nth-child(1) {
@@ -541,14 +764,33 @@
   place-items: center;
   border: 1px solid rgb(255 255 255 / 0.12);
   background:
-    radial-gradient(circle at 68% 40%, rgb(196 188 255 / 0.42), transparent 8%),
+    linear-gradient(
+      90deg,
+      transparent 44%,
+      rgb(255 255 255 / 0.45) 45% 55%,
+      transparent 56%
+    ),
+    linear-gradient(
+      0deg,
+      transparent 44%,
+      rgb(255 255 255 / 0.42) 45% 55%,
+      transparent 56%
+    ),
+    radial-gradient(circle at 68% 40%, rgb(210 255 222 / 0.42), transparent 8%),
     linear-gradient(
       135deg,
       transparent 0 42%,
       rgb(255 255 255 / 0.65) 48%,
       transparent 56%
-    ), linear-gradient(140deg, #17163b, #4030b1 52%, #171538);
+    ), linear-gradient(140deg, #0e2b1c, #20b661 52%, #0b2a19);
   animation: revealInfoBack 4.8s linear both;
+}
+
+.resultBack img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .doneStage {
@@ -673,7 +915,7 @@
   font-size: 9px;
 }
 
-@keyframes markPulse {
+@keyframes markGlyph {
   from {
     opacity: 0;
     transform: scale(0.92);
@@ -681,6 +923,60 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes glyphTop {
+  0% {
+    opacity: 0.58;
+    transform: translate3d(-4px, 4px, 0) skewY(-39deg);
+  }
+  35% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) skewY(-39deg);
+  }
+  70%,
+  100% {
+    opacity: 0.78;
+    transform: translate3d(5px, -4px, 0) skewY(-39deg);
+  }
+}
+
+@keyframes glyphMiddle {
+  0% {
+    transform: scaleX(0.54) skewY(-39deg);
+  }
+  35% {
+    transform: scaleX(1.06) skewY(-39deg);
+  }
+  70%,
+  100% {
+    transform: scaleX(0.82) skewY(-39deg);
+  }
+}
+
+@keyframes glyphBottom {
+  0% {
+    opacity: 0.72;
+    transform: translate3d(5px, -2px, 0) skewY(-39deg);
+  }
+  35% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) skewY(-39deg);
+  }
+  70%,
+  100% {
+    opacity: 0.62;
+    transform: translate3d(-5px, 4px, 0) skewY(-39deg);
+  }
+}
+
+@keyframes sideCardSweep {
+  0% {
+    transform: translate(-50%, -50%) translateX(-160px);
+  }
+  100% {
+    transform: translate(-50%, -50%) translateX(0);
   }
 }
 
@@ -699,18 +995,52 @@
   }
 }
 
-@keyframes carouselSweep {
+@keyframes deckThrow {
   0% {
     opacity: 0;
-    transform: translate3d(120px, -50%, -120px) rotateX(0deg);
+    transform: translate3d(-36px, 34px, -180px) rotateY(86deg) rotateZ(-18deg)
+      scale(0.76);
   }
-  45% {
+  22% {
     opacity: 1;
-    transform: translate3d(-160px, -50%, -50px) rotateX(0deg);
+    transform: translate3d(var(--fan-x), var(--fan-y), var(--fan-z))
+      rotateY(var(--fan-ry)) rotateZ(var(--fan-rz)) scale(1.02);
+  }
+  48% {
+    opacity: 1;
+    transform: translate3d(var(--fan-x), var(--fan-y), var(--fan-z))
+      rotateY(var(--fan-ry)) rotateZ(var(--fan-rz)) scale(0.9);
+  }
+  73% {
+    opacity: 0.98;
+    transform: translate3d(var(--pile-x), var(--pile-y), 18px) rotateY(0deg)
+      rotateZ(3deg) scale(0.62);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--pile-x), var(--pile-y), 18px) rotateY(0deg)
+      rotateZ(0deg) scale(0.58);
+  }
+}
+
+@keyframes stackToGrid {
+  0% {
+    opacity: 0;
+    transform: translate3d(-126px, 116px, 70px) rotateY(72deg) rotateZ(-28deg)
+      scale(0.54);
+  }
+  28% {
+    opacity: 1;
+    transform: translate3d(-46px, 44px, 38px) rotateY(-34deg) rotateZ(18deg)
+      scale(0.82);
+  }
+  72% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotateY(7deg) rotateZ(-3deg) scale(1.04);
   }
   100% {
     opacity: 1;
-    transform: translate3d(-70px, -50%, 20px) scale(0.72);
+    transform: translate3d(0, 0, 0) rotateY(0deg) rotateZ(0deg) scale(1);
   }
 }
 

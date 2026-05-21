@@ -35,6 +35,12 @@ interface SpinResult {
   objekt?: SpinCollection;
 }
 
+interface SpinRewardStat {
+  artist: string;
+  className: SpinClass;
+  recipients: number;
+}
+
 const seasonOrder = [
   "Atom",
   "Binary",
@@ -50,11 +56,18 @@ const carouselCards = Array.from(
   { length: 8 },
   (_, index) => `carousel-${index}`,
 );
+const idleCards = Array.from({ length: 14 }, (_, index) => `idle-${index}`);
+const idleTrackCards = [...idleCards, ...idleCards.map((card) => `${card}-b`)];
 const mysteryCards = Array.from(
   { length: 16 },
   (_, index) => `mystery-${index}`,
 );
 const shardPieces = Array.from({ length: 18 }, (_, index) => `shard-${index}`);
+const fallbackRewardStats: SpinRewardStat[] = [
+  { artist: "tripleS", className: "First", recipients: 0 },
+  { artist: "tripleS", className: "Special", recipients: 0 },
+  { artist: "tripleS", className: "Premier", recipients: 0 },
+];
 
 const classMap: Record<string, SpinClass | undefined> = {
   First: "First",
@@ -210,6 +223,21 @@ function ObjektCard({
   );
 }
 
+function getObjektBackImage(objekt: SpinCollection) {
+  const imageUrl = objekt.frontImage || objekt.thumbnailImage;
+  const replacements: Array<[RegExp, string]> = [
+    [/\/front\//i, "/back/"],
+    [/([_-])front(\.[a-z0-9]+(?:\?.*)?)$/i, "$1back$2"],
+    [/\/front(\.[a-z0-9]+(?:\?.*)?)$/i, "/back$1"],
+  ];
+
+  for (const [pattern, replacement] of replacements) {
+    if (pattern.test(imageUrl)) return imageUrl.replace(pattern, replacement);
+  }
+
+  return null;
+}
+
 function EmptyObjekt({ className }: { className?: string }) {
   return (
     <div className={cn(styles.emptyObjekt, className)}>
@@ -221,10 +249,12 @@ function EmptyObjekt({ className }: { className?: string }) {
 
 function PurpleCard({
   className,
+  style,
   onClick,
   disabled,
 }: {
   className?: string;
+  style?: CSSProperties;
   onClick?: () => void;
   disabled?: boolean;
 }) {
@@ -232,6 +262,7 @@ function PurpleCard({
     <button
       type="button"
       className={cn(styles.cardBack, className)}
+      style={style}
       onClick={onClick}
       disabled={disabled}
       aria-label="Pick card"
@@ -251,10 +282,19 @@ function ObjektMark() {
   );
 }
 
-function BackFace() {
+function BackFace({ objekt }: { objekt?: SpinCollection }) {
+  const [failed, setFailed] = useState(false);
+  const backImage = objekt ? getObjektBackImage(objekt) : null;
+  const showImage = backImage && !failed;
+
   return (
     <div className={styles.resultBack}>
-      <span className={styles.cardLogo} />
+      {showImage ? (
+        // biome-ignore lint/performance/noImgElement: Cosmo card backs use the same static asset host as fronts.
+        <img src={backImage} alt="" onError={() => setFailed(true)} />
+      ) : (
+        <span className={styles.cardLogo} />
+      )}
     </div>
   );
 }
@@ -290,6 +330,9 @@ function ResultTile({
 
 export function SpinClient() {
   const [collections, setCollections] = useState<SpinCollection[]>([]);
+  const [rewardStats, setRewardStats] =
+    useState<SpinRewardStat[]>(fallbackRewardStats);
+  const [rewardStatIndex, setRewardStatIndex] = useState(0);
   const [loadingCollections, setLoadingCollections] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [page, setPage] = useState<PageState>("spin");
@@ -321,6 +364,39 @@ export function SpinClient() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRewardStats() {
+      try {
+        const response = await fetch("/api/spin/stats");
+        if (!response.ok) throw new Error("Failed to load spin stats");
+        const data = (await response.json()) as { results: SpinRewardStat[] };
+        if (!cancelled && data.results.length > 0) {
+          setRewardStats(data.results);
+          setRewardStatIndex(0);
+        }
+      } catch {
+        // Keep the fallback copy if the live indexer query is unavailable.
+      }
+    }
+
+    loadRewardStats();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (rewardStats.length <= 1) return;
+
+    const interval = window.setInterval(() => {
+      setRewardStatIndex((index) => (index + 1) % rewardStats.length);
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [rewardStats.length]);
 
   const { spinChoices, poolsByArtistSeason } = useMemo(() => {
     const choices = new Map<string, SpinCollection>();
@@ -385,10 +461,15 @@ export function SpinClient() {
 
       setResult(chosenResult);
       setGridResults(allResults);
-      setStage("reveal");
-    }, 200);
 
-    window.setTimeout(() => setStage("done"), 5000);
+      if (chosenResult.kind === "fail") {
+        setStage("done");
+        return;
+      }
+
+      setStage("reveal");
+      window.setTimeout(() => setStage("done"), 5000);
+    }, 200);
   }
 
   function resetSpin() {
@@ -406,41 +487,40 @@ export function SpinClient() {
     ) : (
       <EmptyObjekt className={styles.revealedCard} />
     );
+  const rewardStat = rewardStats[rewardStatIndex] ?? fallbackRewardStats[0];
+  const loadingCard = selected ? (
+    <ObjektCard objekt={selected} className={styles.loadingObjekt} muted />
+  ) : null;
 
   return (
     <div className={styles.shell}>
       <div className={styles.phone}>
         {page === "spin" && (
           <section className={styles.spinPage}>
-            <header className={styles.header}>
-              <div>
-                <p>Spin Ticket</p>
-                <span>23:54:39</span>
+            <header className={cn(styles.header, styles.ghostHeader)} />
+
+            <div className={styles.centerStack}>
+              <div className={styles.sideCards} aria-hidden="true">
+                {idleTrackCards.map((card) => (
+                  <PurpleCard key={card} className={styles.sideCard} disabled />
+                ))}
               </div>
-              <button type="button" className={styles.pointsButton}>
-                Tap to Charge Points
+
+              <button
+                type="button"
+                className={styles.centerSlot}
+                onClick={() => setPage("select")}
+                aria-label="Select objekt"
+              >
+                {selected ? (
+                  <ObjektCard objekt={selected} />
+                ) : (
+                  <div className={styles.placeholder}>
+                    <PlusIcon className="size-8" />
+                  </div>
+                )}
               </button>
-            </header>
-
-            <div className={styles.sideCards} aria-hidden="true">
-              <PurpleCard disabled />
-              <PurpleCard disabled />
             </div>
-
-            <button
-              type="button"
-              className={styles.centerSlot}
-              onClick={() => setPage("select")}
-              aria-label="Select objekt"
-            >
-              {selected ? (
-                <ObjektCard objekt={selected} />
-              ) : (
-                <div className={styles.placeholder}>
-                  <PlusIcon className="size-8" />
-                </div>
-              )}
-            </button>
 
             {selected && (
               <div className={styles.selectedCaption}>
@@ -461,7 +541,10 @@ export function SpinClient() {
             )}
 
             <footer className={styles.footer}>
-              <p>Today, 70 people received Special Objekt!</p>
+              <p>
+                Today, {rewardStat.recipients.toLocaleString()} people received{" "}
+                {rewardStat.artist} {rewardStat.className} Objekt!
+              </p>
               <Button
                 type="button"
                 className={styles.primaryButton}
@@ -531,16 +614,38 @@ export function SpinClient() {
           <section className={styles.runStage}>
             {stage === "loading" && (
               <div className={styles.stageLoader}>
+                <div className={styles.loadingFan} aria-hidden="true">
+                  {carouselCards.map((card, index) => (
+                    <PurpleCard
+                      key={card}
+                      className={styles.loadingFanCard}
+                      style={
+                        {
+                          "--i": index,
+                          "--mid": (carouselCards.length - 1) / 2,
+                        } as CSSProperties
+                      }
+                      disabled
+                    />
+                  ))}
+                </div>
+                {loadingCard}
                 <ObjektMark />
               </div>
             )}
 
             {stage === "carousel" && (
               <div className={styles.carouselTrack}>
-                {carouselCards.map((card) => (
+                {carouselCards.map((card, index) => (
                   <PurpleCard
                     key={card}
                     className={styles.carouselCard}
+                    style={
+                      {
+                        "--i": index,
+                        "--mid": (carouselCards.length - 1) / 2,
+                      } as CSSProperties
+                    }
                     disabled
                   />
                 ))}
@@ -549,11 +654,13 @@ export function SpinClient() {
 
             {stage === "grid" && (
               <div className={styles.mysteryGridWrap}>
-                <p>Pick a mystery card</p>
+                <p>Select an Objekt</p>
                 <div className={styles.mysteryGrid}>
                   {mysteryCards.map((card, index) => (
                     <PurpleCard
                       key={card}
+                      className={styles.mysteryCard}
+                      style={{ "--i": index } as CSSProperties}
                       onClick={() => pickMysteryCard(index)}
                     />
                   ))}
@@ -572,7 +679,7 @@ export function SpinClient() {
                 <div className={styles.revealFlip}>
                   <div className={styles.revealInner}>
                     <PurpleCard className={styles.revealBack} disabled />
-                    <BackFace />
+                    <BackFace objekt={result.objekt} />
                     {resultCard}
                   </div>
                 </div>
