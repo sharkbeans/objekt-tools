@@ -1,0 +1,839 @@
+.shell {
+  min-height: calc(100dvh - 9rem);
+  display: flex;
+  justify-content: center;
+  color: #f8f7ff;
+}
+
+.phone {
+  width: min(100%, 430px);
+  min-height: min(820px, calc(100dvh - 9rem));
+  overflow: hidden;
+  position: relative;
+  background: #050507;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.45);
+}
+
+.spinPage,
+.selectPage,
+.runStage {
+  min-height: min(820px, calc(100dvh - 9rem));
+  position: relative;
+}
+
+.spinPage {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 16px 16px;
+}
+
+.header,
+.selectHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  z-index: 2;
+}
+
+.header p,
+.header span {
+  margin: 0;
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.62);
+}
+
+.header span {
+  display: block;
+  margin-top: 6px;
+  color: #7d5cff;
+}
+
+.pointsButton {
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.82);
+  color: #2f2463;
+  padding: 10px 13px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sideCards {
+  position: absolute;
+  inset: 210px -52px auto;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.sideCards .cardBack {
+  width: 116px;
+  height: 174px;
+  opacity: 0.55;
+}
+
+.centerSlot {
+  width: 174px;
+  height: 261px;
+  margin: 110px auto 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(255 255 255 / 0.55);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.02)),
+    #191b22;
+}
+
+.selectedCaption {
+  margin-top: 36px;
+  text-align: center;
+  min-height: 72px;
+}
+
+.selectedCaption span {
+  display: inline-flex;
+  border-radius: 6px;
+  background: rgb(0 255 67 / 0.12);
+  color: #19d74a;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.selectedCaption p {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.footer {
+  margin-top: auto;
+  display: grid;
+  gap: 16px;
+}
+
+.footer p {
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.28);
+}
+
+.primaryButton {
+  width: 100%;
+  height: 48px;
+  border-radius: 8px;
+  background: #6d22ff;
+  color: white;
+  font-weight: 700;
+}
+
+.primaryButton:hover {
+  background: #7a35ff;
+}
+
+.selectPage {
+  padding: 24px 14px;
+  overflow-y: auto;
+}
+
+.selectHeader {
+  margin-bottom: 18px;
+}
+
+.selectHeader button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 0.72);
+  display: grid;
+  place-items: center;
+}
+
+.selectHeader h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.selectHeader span {
+  width: 36px;
+}
+
+.selectMessage {
+  display: grid;
+  place-items: center;
+  min-height: 460px;
+  color: rgb(255 255 255 / 0.5);
+  font-size: 13px;
+}
+
+.seasonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.seasonChoice {
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: #0c0c12;
+  border-radius: 8px;
+  padding: 10px;
+  color: white;
+  text-align: left;
+  min-width: 0;
+}
+
+.seasonChoiceSelected {
+  border-color: #7435ff;
+  box-shadow: 0 0 0 1px rgb(116 53 255 / 0.7);
+}
+
+.seasonChoice span,
+.seasonChoice small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seasonChoice span {
+  margin-top: 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.seasonChoice small {
+  margin-top: 2px;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.objektCard,
+.emptyObjekt {
+  width: 174px;
+  aspect-ratio: 2 / 3;
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #e6e6ea;
+  box-shadow: 0 14px 30px rgb(0 0 0 / 0.3);
+}
+
+.objektCard img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.objektMuted {
+  filter: brightness(0.45);
+}
+
+.emptyObjekt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgb(255 255 255 / 0.75);
+  background:
+    radial-gradient(circle at 50% 35%, rgb(125 68 255 / 0.32), transparent 35%),
+    linear-gradient(145deg, #22202b, #0a0a0d);
+  border: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.emptyObjekt span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: Card sizing is overridden in narrower contexts. */
+.cardBack {
+  border: 1px solid rgb(255 255 255 / 0.12);
+  width: 76px;
+  aspect-ratio: 2 / 3;
+  border-radius: 5px;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 68% 40%, rgb(196 188 255 / 0.55), transparent 7%),
+    linear-gradient(
+      135deg,
+      transparent 0 42%,
+      rgb(255 255 255 / 0.95) 48%,
+      transparent 56%
+    ), linear-gradient(140deg, #17163b, #4030b1 52%, #171538);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.42);
+}
+
+.seasonChoice .objektCard {
+  width: 100%;
+}
+
+.cardBack:disabled {
+  cursor: default;
+}
+
+.cardLogo {
+  width: 28px;
+  height: 38px;
+  display: block;
+  transform: skewY(-22deg);
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0 35%,
+      rgb(255 255 255 / 0.85) 36% 47%,
+      transparent 48% 100%
+    ),
+    linear-gradient(
+      135deg,
+      transparent 0 58%,
+      rgb(255 255 255 / 0.85) 59% 71%,
+      transparent 72% 100%
+    );
+  opacity: 0.72;
+}
+
+.runStage {
+  overflow: hidden;
+  background: #030305;
+  perspective: 900px;
+}
+
+.stageLoader {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.objektMark {
+  width: 78px;
+  height: 100px;
+  position: relative;
+  animation: markPulse 0.2s ease both;
+}
+
+.objektMark span {
+  position: absolute;
+  left: 22px;
+  width: 36px;
+  height: 13px;
+  border: 2px solid white;
+  transform: skewY(-39deg);
+}
+
+.objektMark span:nth-child(1) {
+  top: 21px;
+}
+
+.objektMark span:nth-child(2) {
+  top: 43px;
+  background: white;
+}
+
+.objektMark span:nth-child(3) {
+  top: 65px;
+}
+
+.carouselTrack {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  display: flex;
+  gap: 16px;
+  transform-style: preserve-3d;
+  animation: carouselSweep 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.carouselCard {
+  width: 92px;
+  transform: rotateY(-24deg) rotateZ(-7deg);
+  flex: 0 0 auto;
+}
+
+.mysteryGridWrap {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 26px;
+  gap: 18px;
+}
+
+.mysteryGridWrap p {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgb(255 255 255 / 0.8);
+}
+
+.mysteryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mysteryGrid .cardBack {
+  width: 100%;
+  border-radius: 4px;
+}
+
+.mysteryGrid .cardBack:active {
+  transform: scale(0.96);
+}
+
+.revealStage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.flare {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  opacity: 0;
+  background:
+    linear-gradient(
+      135deg,
+      transparent 31%,
+      rgb(255 255 255 / 0.95) 49%,
+      transparent 62%
+    ), radial-gradient(circle, rgb(128 85 255 / 0.55), transparent 52%);
+  filter: blur(2px);
+  animation: flareIn 3.2s ease both;
+}
+
+.shards {
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  opacity: 0;
+  animation: shardsIn 3.2s ease both;
+}
+
+.shards span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 28px;
+  background: linear-gradient(135deg, #3327a1, #8d74ff);
+  clip-path: polygon(20% 0, 100% 38%, 64% 100%, 0 72%);
+}
+
+.shards span:nth-child(1) {
+  transform: rotate(12deg) translate(94px);
+}
+.shards span:nth-child(2) {
+  transform: rotate(38deg) translate(118px);
+}
+.shards span:nth-child(3) {
+  transform: rotate(61deg) translate(85px);
+}
+.shards span:nth-child(4) {
+  transform: rotate(86deg) translate(110px);
+}
+.shards span:nth-child(5) {
+  transform: rotate(118deg) translate(97px);
+}
+.shards span:nth-child(6) {
+  transform: rotate(146deg) translate(122px);
+}
+.shards span:nth-child(7) {
+  transform: rotate(172deg) translate(90px);
+}
+.shards span:nth-child(8) {
+  transform: rotate(205deg) translate(115px);
+}
+.shards span:nth-child(9) {
+  transform: rotate(236deg) translate(96px);
+}
+.shards span:nth-child(10) {
+  transform: rotate(265deg) translate(123px);
+}
+.shards span:nth-child(11) {
+  transform: rotate(292deg) translate(88px);
+}
+.shards span:nth-child(12) {
+  transform: rotate(322deg) translate(116px);
+}
+.shards span:nth-child(13) {
+  transform: rotate(348deg) translate(101px);
+}
+.shards span:nth-child(14) {
+  transform: rotate(74deg) translate(136px);
+}
+.shards span:nth-child(15) {
+  transform: rotate(154deg) translate(137px);
+}
+.shards span:nth-child(16) {
+  transform: rotate(224deg) translate(134px);
+}
+.shards span:nth-child(17) {
+  transform: rotate(284deg) translate(138px);
+}
+.shards span:nth-child(18) {
+  transform: rotate(335deg) translate(132px);
+}
+
+.revealFlip {
+  position: relative;
+  width: 196px;
+  aspect-ratio: 2 / 3;
+  transform-style: preserve-3d;
+  animation: cardRevealMotion 4.8s cubic-bezier(0.18, 0.9, 0.2, 1) both;
+}
+
+.revealInner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.revealBack,
+.revealedCard,
+.resultBack {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+
+.revealBack {
+  animation: hideBack 4.8s linear both;
+}
+
+.revealedCard {
+  opacity: 0;
+  transform: rotateY(180deg);
+  animation: revealFront 4.8s linear both;
+}
+
+.resultBack {
+  opacity: 0;
+  transform: rotateY(180deg);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background:
+    radial-gradient(circle at 68% 40%, rgb(196 188 255 / 0.42), transparent 8%),
+    linear-gradient(
+      135deg,
+      transparent 0 42%,
+      rgb(255 255 255 / 0.65) 48%,
+      transparent 56%
+    ), linear-gradient(140deg, #17163b, #4030b1 52%, #171538);
+  animation: revealInfoBack 4.8s linear both;
+}
+
+.doneStage {
+  min-height: inherit;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 28px 20px 22px;
+  gap: 18px;
+}
+
+.successTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.resultSummary {
+  min-height: 18px;
+  margin: -8px 0 0;
+  color: rgb(255 255 255 / 0.48);
+  font-size: 11px;
+  text-align: center;
+}
+
+.doneCard {
+  width: 214px;
+  aspect-ratio: 2 / 3;
+  position: relative;
+  filter: drop-shadow(0 0 18px rgb(126 75 255 / 0.92));
+}
+
+.doneCard .revealedCard {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+.revealAllButton {
+  border: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 0.54);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.revealAllButton::after {
+  content: " >";
+}
+
+.gridHeader {
+  width: min(100%, 330px);
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.74);
+}
+
+.gridHeader button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 0.75);
+  display: grid;
+  place-items: center;
+}
+
+.gridHeader span {
+  text-align: center;
+}
+
+.revealedGrid {
+  width: min(100%, 330px);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.resultTile {
+  aspect-ratio: 2 / 3;
+  opacity: 0;
+  transform: rotateY(72deg) scale(0.74);
+  transform-style: preserve-3d;
+  animation: tileReveal 520ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: var(--delay);
+}
+
+.resultTileSelected {
+  filter: drop-shadow(0 0 12px rgb(126 75 255 / 0.95));
+}
+
+.resultTilePremier {
+  filter: drop-shadow(0 0 14px rgb(255 255 255 / 0.75))
+    drop-shadow(0 0 18px rgb(126 75 255 / 0.95));
+}
+
+.resultTile .objektCard,
+.resultTile .emptyObjekt {
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.38);
+}
+
+.resultTile .emptyObjekt {
+  gap: 5px;
+}
+
+.resultTile .emptyObjekt svg {
+  width: 24px;
+  height: 24px;
+}
+
+.resultTile .emptyObjekt span {
+  font-size: 9px;
+}
+
+@keyframes markPulse {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tileReveal {
+  0% {
+    opacity: 0;
+    transform: rotateY(72deg) scale(0.74);
+  }
+  64% {
+    opacity: 1;
+    transform: rotateY(-8deg) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1);
+  }
+}
+
+@keyframes carouselSweep {
+  0% {
+    opacity: 0;
+    transform: translate3d(120px, -50%, -120px) rotateX(0deg);
+  }
+  45% {
+    opacity: 1;
+    transform: translate3d(-160px, -50%, -50px) rotateX(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(-70px, -50%, 20px) scale(0.72);
+  }
+}
+
+@keyframes cardRevealMotion {
+  0% {
+    transform: scale(0.36) rotateY(-62deg) rotateZ(-12deg);
+  }
+  18% {
+    transform: scale(0.58) rotateY(18deg) rotateZ(8deg);
+  }
+  34% {
+    transform: scale(0.8) rotateY(88deg) rotateZ(-5deg);
+  }
+  48% {
+    transform: scale(1) rotateY(4deg) rotateZ(0deg);
+  }
+  62% {
+    transform: scale(0.72) rotateY(180deg) rotateZ(0deg);
+    filter: drop-shadow(0 0 22px rgb(133 84 255 / 0.9));
+  }
+  73% {
+    transform: scale(0.86) rotateY(180deg) rotateZ(0deg);
+  }
+  84% {
+    transform: scale(1.08) rotateY(0deg) rotateZ(-8deg);
+  }
+  100% {
+    transform: scale(1) rotateY(0deg) rotateZ(0deg);
+    filter: drop-shadow(0 0 18px rgb(133 84 255 / 0.85));
+  }
+}
+
+@keyframes hideBack {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  49%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes revealFront {
+  0%,
+  53% {
+    opacity: 0;
+    transform: rotateY(180deg);
+  }
+  54%,
+  78% {
+    opacity: 1;
+    transform: rotateY(180deg);
+  }
+  79%,
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg);
+  }
+}
+
+@keyframes revealInfoBack {
+  0%,
+  77% {
+    opacity: 0;
+  }
+  78%,
+  90% {
+    opacity: 1;
+  }
+  91%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes flareIn {
+  0%,
+  42% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  50%,
+  61% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  74%,
+  100% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes shardsIn {
+  0%,
+  49% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0deg);
+  }
+  58% {
+    opacity: 1;
+    transform: scale(1) rotate(18deg);
+  }
+  76%,
+  100% {
+    opacity: 0;
+    transform: scale(1.35) rotate(34deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    min-height: calc(100dvh - 3.5rem);
+    margin: -1.5rem -1rem;
+  }
+
+  .phone,
+  .spinPage,
+  .selectPage,
+  .runStage {
+    width: 100%;
+    min-height: calc(100dvh - 3.5rem);
+    border: 0;
+  }
+}

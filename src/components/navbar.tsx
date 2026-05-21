@@ -140,6 +140,12 @@ export function Navbar() {
               >
                 Poster
               </Link>
+              <Link
+                href="/spin"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Spin
+              </Link>
             </nav>
           </div>
 
@@ -352,6 +358,10 @@ function MobileNav({
           <MobileNavLink href="/post" onClick={() => setOpen(false)}>
             <ImageIcon className="size-4" />
             Poster
+          </MobileNavLink>
+          <MobileNavLink href="/spin" onClick={() => setOpen(false)}>
+            <SparklesIcon className="size-4" />
+            Spin
           </MobileNavLink>
           {session && (
             <MobileNavLink href="/notifications" onClick={() => setOpen(false)}>

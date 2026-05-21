@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 .codex
+.claude/
 trade-system.excalidraw
 
 # debug
@@ -36,6 +37,41 @@ yarn-error.log*
 .env*
 !.env.local.example
 !.env.docker.example
+*.env
+*.env.*
+!.env.*.example
+
+# local secrets / tokens / account exports
+*token*.json
+*tokens*.json
+*credential*.json
+*credentials*.json
+*secret*.json
+cosmo-token*
+cosmo-tokens*
+session-token*
+session-tokens*
+
+# local test/dev scratch files
+/tmp/
+/temp/
+/.tmp/
+/.temp/
+/local/
+/data/
+/exports/
+/screenshots/
+/recordings/
+
+# local indexer/database dumps
+/indexer-data/
+/indexer-dumps/
+/indexer-export*/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.backup
 
 # vercel
 .vercel
