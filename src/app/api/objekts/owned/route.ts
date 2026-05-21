@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { eq, and, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
-import { db } from "@/lib/db";1
+import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
 import { indexer } from "@/lib/db/indexer";
 import { objekts, collections } from "@/lib/db/indexer-schema";
