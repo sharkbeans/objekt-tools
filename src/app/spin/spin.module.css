@@ -1554,4 +1554,8 @@
     min-height: unset;
     border: 0;
   }
+
+  .disclaimer {
+    margin-top: 56px;
+  }
 }
