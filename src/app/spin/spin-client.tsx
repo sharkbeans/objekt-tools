@@ -183,17 +183,6 @@ const fallbackRates: SpinWeight[] = [
   { outcome: "Fail", chance: 9.37 },
 ];
 
-function rollClass(artist: string, season: string): SpinClass | "Fail" {
-  const normalizedArtist = artist.toLowerCase();
-
-  if (normalizedArtist === "idntt") {
-    return rollWeighted(idnttRates);
-  }
-
-  const weights = spinRates[`${normalizedArtist}::${season}`] ?? fallbackRates;
-  return rollWeighted(weights);
-}
-
 function pickRandom<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -206,18 +195,69 @@ function preloadImage(url: string | null) {
   image.src = url;
 }
 
-function buildResult(
+function getWeightsForSelection(artist: string, season: string): SpinWeight[] {
+  const normalizedArtist = artist.toLowerCase();
+  if (normalizedArtist === "idntt") return idnttRates;
+  return spinRates[`${normalizedArtist}::${season}`] ?? fallbackRates;
+}
+
+// Proportionally allocates `count` slots across outcomes using Hamilton's
+// method with fractional remainders distributed by random weighted draw.
+// This ensures the 4x4 grid reflects real spin probabilities as a batch
+// (e.g. ~1-2 fails, 0-1 SCO, very rarely PCO) rather than independent rolls.
+function allocateOutcomes(
+  weights: SpinWeight[],
+  count: number,
+): Map<SpinClass | "Fail", number> {
+  const total = weights.reduce((s, w) => s + w.chance, 0);
+  const alloc = new Map<SpinClass | "Fail", number>();
+  let assigned = 0;
+  const fracs: SpinWeight[] = [];
+
+  for (const w of weights) {
+    const exact = (w.chance / total) * count;
+    const floor = Math.floor(exact);
+    alloc.set(w.outcome, floor);
+    assigned += floor;
+    const frac = exact - floor;
+    if (frac > 0) fracs.push({ outcome: w.outcome, chance: frac });
+  }
+
+  const remainder = count - assigned;
+  for (let i = 0; i < remainder; i++) {
+    const winner = rollWeighted(fracs);
+    alloc.set(winner, (alloc.get(winner) ?? 0) + 1);
+  }
+
+  return alloc;
+}
+
+function buildProportionalGrid(
   selected: SpinCollection,
   poolsByArtistSeason: Map<string, Record<SpinClass, SpinCollection[]>>,
-): SpinResult {
-  const rolled = rollClass(selected.artist, selected.season);
-  if (rolled === "Fail") return { kind: "fail" };
+): SpinResult[] {
+  const weights = getWeightsForSelection(selected.artist, selected.season);
+  const alloc = allocateOutcomes(weights, 16);
+  const pool = poolsByArtistSeason.get(spinKey(selected));
 
-  const pool = poolsByArtistSeason.get(spinKey(selected))?.[rolled] ?? [];
-  const objekt = pickRandom(pool);
+  const outcomes: Array<SpinClass | "Fail"> = [];
+  for (const [outcome, count] of alloc) {
+    for (let i = 0; i < count; i++) outcomes.push(outcome);
+  }
 
-  if (!objekt) return { kind: "fail" };
-  return { kind: "objekt", className: rolled, objekt };
+  for (let i = outcomes.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [outcomes[i], outcomes[j]] = [outcomes[j], outcomes[i]];
+  }
+
+  return outcomes.map((outcome) => {
+    if (outcome === "Fail") return { kind: "fail" as const };
+    const classPool = pool?.[outcome] ?? [];
+    const objekt = pickRandom(classPool);
+    return objekt
+      ? { kind: "objekt" as const, className: outcome, objekt }
+      : { kind: "fail" as const };
+  });
 }
 
 function ObjektCard({
@@ -346,6 +386,7 @@ export function SpinClient() {
   const [selected, setSelected] = useState<SpinCollection | null>(null);
   const [result, setResult] = useState<SpinResult | null>(null);
   const [gridResults, setGridResults] = useState<SpinResult[]>([]);
+  const [preGeneratedResults, setPreGeneratedResults] = useState<SpinResult[] | null>(null);
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
   const [pendingPickIndex, setPendingPickIndex] = useState<number | null>(null);
   const [revealedGridOpen, setRevealedGridOpen] = useState(false);
@@ -486,35 +527,34 @@ export function SpinClient() {
     setStage("loading");
     setResult(null);
     setGridResults([]);
+    setPreGeneratedResults(null);
     setPickedIndex(null);
     setPendingPickIndex(null);
     setRevealedGridOpen(false);
 
     window.setTimeout(() => setStage("carousel"), 200);
-    window.setTimeout(() => setStage("grid"), 1900);
+    window.setTimeout(() => {
+      const all16 = buildProportionalGrid(selected, poolsByArtistSeason);
+      setPreGeneratedResults(all16);
+      setStage("grid");
+    }, 1900);
   }
 
   function pickMysteryCard(index: number) {
-    if (!selected) return;
+    if (!selected || !preGeneratedResults) return;
     setStage("loading");
     setPickedIndex(index);
     setPendingPickIndex(null);
     setRevealedGridOpen(false);
 
     window.setTimeout(() => {
-      const chosenResult = buildResult(selected, poolsByArtistSeason);
+      const chosenResult = preGeneratedResults[index];
       if (chosenResult.kind === "objekt" && chosenResult.objekt) {
         preloadImage(getObjektBackImage(chosenResult.objekt));
       }
 
-      const allResults = mysteryCards.map((_, cardIndex) =>
-        cardIndex === index
-          ? chosenResult
-          : buildResult(selected, poolsByArtistSeason),
-      );
-
       setResult(chosenResult);
-      setGridResults(allResults);
+      setGridResults(preGeneratedResults);
 
       setStage("reveal");
       window.setTimeout(() => setStage("done"), 5000);
@@ -526,6 +566,7 @@ export function SpinClient() {
     setStage("loading");
     setResult(null);
     setGridResults([]);
+    setPreGeneratedResults(null);
     setPickedIndex(null);
     setPendingPickIndex(null);
     setRevealedGridOpen(false);

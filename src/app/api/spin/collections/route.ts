@@ -1,4 +1,4 @@
-import { asc, inArray } from "drizzle-orm";
+import { and, asc, ilike, inArray, not } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { indexer } from "@/lib/db/indexer";
 import { collections } from "@/lib/db/indexer-schema";
@@ -21,7 +21,7 @@ const spinClasses = [
 
 export async function GET() {
   try {
-    const rows = await getCached("spin:collections:v1", 10 * 60_000, () =>
+    const rows = await getCached("spin:collections:v2", 10 * 60_000, () =>
       indexer
         .select({
           collectionId: collections.collectionId,
@@ -35,7 +35,12 @@ export async function GET() {
           thumbnailImage: collections.thumbnailImage,
         })
         .from(collections)
-        .where(inArray(collections.class, spinClasses))
+        .where(
+          and(
+            inArray(collections.class, spinClasses),
+            not(ilike(collections.collectionNo, "%A")),
+          ),
+        )
         .orderBy(
           asc(collections.season),
           asc(collections.class),
