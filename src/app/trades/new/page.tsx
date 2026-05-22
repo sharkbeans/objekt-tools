@@ -73,22 +73,48 @@ function anyWantKey(w: AnyWant): string {
   return [w.artist, w.member, w.season, w.class].join("|");
 }
 
-function useObjektImages(items: { collectionId: string }[]) {
+function useObjektImages(
+  items: {
+    collectionId: string;
+    thumbnailImage?: string | null;
+    frontImage?: string | null;
+  }[],
+) {
   const [images, setImages] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!items.length) return;
-    const unique = [...new Set(items.map((i) => i.collectionId).filter(Boolean))];
-    unique.forEach((collectionId) => {
-      fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          const match = data.results?.find((r: any) => r.collectionId === collectionId);
-          const url = match?.thumbnailImage ?? match?.frontImage;
-          if (url) setImages((prev) => new Map(prev).set(collectionId, url));
-        })
-        .catch(() => {});
-    });
+    const next = new Map<string, string>();
+    const missing = new Set<string>();
+
+    for (const item of items) {
+      const imageUrl = item.thumbnailImage ?? item.frontImage;
+      if (imageUrl) next.set(item.collectionId, imageUrl);
+      else if (item.collectionId) missing.add(item.collectionId);
+    }
+
+    setImages(next);
+
+    if (missing.size === 0) return;
+
+    const params = new URLSearchParams();
+    for (const collectionId of missing) {
+      params.append("collection_id", collectionId);
+    }
+
+    fetch(`/api/objekts/search?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setImages((prev) => {
+          const updated = new Map(prev);
+          for (const match of data.results ?? []) {
+            const url = match.thumbnailImage ?? match.frontImage;
+            if (url) updated.set(match.collectionId, url);
+          }
+          return updated;
+        });
+      })
+      .catch(() => {});
   }, [items.map((i) => i.collectionId).join(",")]);
 
   return images;
@@ -237,6 +263,7 @@ export default function NewTradePage() {
             class: o.class,
             serial: o.serial,
             objektId: o.objektId,
+            thumbnailUrl: o.thumbnailImage,
           })),
           wants: [
             ...wants.map((o) => ({
@@ -245,6 +272,7 @@ export default function NewTradePage() {
               member: o.member,
               season: o.season,
               class: o.class,
+              thumbnailUrl: o.thumbnailImage,
             })),
             ...anyWants.map((w) => ({
               collectionId: "",

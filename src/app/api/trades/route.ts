@@ -13,6 +13,7 @@ import { notify } from "@/lib/notify";
 import { parsePaginationParams } from "@/lib/pagination";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
+import { getCached } from "@/lib/server-cache";
 import { getActiveBan, getBlockingTradeId } from "@/lib/trade-guards";
 import { listTradesPage } from "@/lib/trade-listing";
 
@@ -30,6 +31,16 @@ interface TradeItemInput {
   artist?: string;
 }
 
+function normalizeCacheKey(params: URLSearchParams) {
+  const normalized = new URLSearchParams();
+  for (const key of [...new Set(params.keys())].sort()) {
+    for (const value of params.getAll(key).sort()) {
+      normalized.append(key, value);
+    }
+  }
+  return normalized.toString();
+}
+
 // GET /api/trades — list trades with filters
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -44,20 +55,29 @@ export async function GET(request: NextRequest) {
     | "haves"
     | "wants"
     | "both";
-  const { trades, total } = await listTradesPage({
-    where: eq(tradePost.status, status),
-    filters,
-    filterMode,
-    sort,
-    page,
-    limit,
-  });
+  const { trades: enriched, total } = await getCached(
+    `trades:list:v1:${normalizeCacheKey(params)}`,
+    30_000,
+    async () => {
+      const { trades, total } = await listTradesPage({
+        where: eq(tradePost.status, status),
+        filters,
+        filterMode,
+        sort,
+        page,
+        limit,
+      });
 
-  const enriched = trades.map((t) => ({
-    ...t,
-    cosmoNickname: t.user.cosmoAccount?.nickname ?? null,
-    cosmoAddress: t.user.cosmoAccount?.address ?? null,
-  }));
+      return {
+        total,
+        trades: trades.map((t) => ({
+          ...t,
+          cosmoNickname: t.user.cosmoAccount?.nickname ?? null,
+          cosmoAddress: t.user.cosmoAccount?.address ?? null,
+        })),
+      };
+    },
+  );
 
   return NextResponse.json(
     { trades: enriched, page, limit, total },

@@ -2,6 +2,7 @@
 
 import {
   ChevronLeftIcon,
+  ChevronRightIcon,
   CircleHelpIcon,
   PlusIcon,
   RotateCcwIcon,
@@ -14,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import styles from "./spin.module.css";
 
-type SpinClass = "First" | "Basic" | "Special" | "Premier";
+type SpinClass = "First" | "Basic" | "Special" | "Premier" | "Unit";
 type PageState = "spin" | "select" | "run";
 type RunStage = "loading" | "carousel" | "grid" | "reveal" | "done";
 
@@ -85,6 +86,8 @@ const classMap: Record<string, SpinClass | undefined> = {
   "Special Class": "Special",
   Premier: "Premier",
   "Premier Class": "Premier",
+  Unit: "Unit",
+  "Unit Class": "Unit",
 };
 
 function artistLabel(artist: string) {
@@ -122,16 +125,6 @@ function compareSpinChoices(a: SpinCollection, b: SpinCollection) {
   return a.season.localeCompare(b.season);
 }
 
-function getEra(season: string) {
-  const parsed = parseSeason(season);
-  if (season === "Binary01" || season === "Ever01" || season === "Atom02") {
-    return "mid";
-  }
-  if (parsed.cycle > 2 || (parsed.cycle === 2 && season !== "Atom02")) {
-    return "modern";
-  }
-  return "early";
-}
 
 function spinKey(collection: Pick<SpinCollection, "artist" | "season">) {
   return `${collection.artist}::${collection.season}`;
@@ -151,49 +144,27 @@ function rollWeighted(
   return weights.at(-1)?.outcome ?? "Fail";
 }
 
-function rollClass(artist: string, season: string): SpinClass | "Fail" {
+// Spin class probabilities per artist (all seasons):
+// - tripleS: First 87.5% / Special 3.13% / Premier 0.63% / Fail 8.74%
+// - ARTMS:   First 87.5% / Special 3.13% / Premier 0.63% / Fail 8.74%
+// - idntt:   Basic 87.5% / Special 3.13% / Unit 0.63%    / Fail 8.74%
+function rollClass(artist: string, _season: string): SpinClass | "Fail" {
   const normalizedArtist = artist.toLowerCase();
 
   if (normalizedArtist === "idntt") {
     return rollWeighted([
       { outcome: "Basic", chance: 87.5 },
       { outcome: "Special", chance: 3.13 },
-      { outcome: "Fail", chance: 9.38 },
-    ]);
-  }
-
-  if (normalizedArtist === "artms") {
-    return rollWeighted([
-      { outcome: "First", chance: 87.5 },
-      { outcome: "Fail", chance: 9.38 },
-      { outcome: "Special", chance: 3.13 },
-      { outcome: "Premier", chance: 0.06 },
-    ]);
-  }
-
-  const era = getEra(season);
-
-  if (era === "early") {
-    return rollWeighted([
-      { outcome: "First", chance: 87.5 },
-      { outcome: "Special", chance: 3.13 },
-      { outcome: "Fail", chance: 9.38 },
-    ]);
-  }
-
-  if (era === "mid") {
-    return rollWeighted([
-      { outcome: "First", chance: 87.5 },
-      { outcome: "Special", chance: 3.13 },
-      { outcome: "Premier", chance: 0.06 },
-      { outcome: "Fail", chance: 9.31 },
+      { outcome: "Unit", chance: 0.63 },
+      { outcome: "Fail", chance: 8.74 },
     ]);
   }
 
   return rollWeighted([
-    { outcome: "First", chance: 90.63 },
-    { outcome: "Premier", chance: 0.06 },
-    { outcome: "Fail", chance: 9.31 },
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Premier", chance: 0.63 },
+    { outcome: "Fail", chance: 8.74 },
   ]);
 }
 
@@ -263,7 +234,6 @@ function EmptyObjekt({ className }: { className?: string }) {
   return (
     <div className={cn(styles.emptyObjekt, className)}>
       <XIcon className="size-16" />
-      <span>Broken</span>
     </div>
   );
 }
@@ -273,11 +243,13 @@ function PurpleCard({
   style,
   onClick,
   disabled,
+  ariaPressed,
 }: {
   className?: string;
   style?: CSSProperties;
   onClick?: () => void;
   disabled?: boolean;
+  ariaPressed?: boolean;
 }) {
   return (
     <button
@@ -286,6 +258,7 @@ function PurpleCard({
       style={style}
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={ariaPressed}
       aria-label="Pick card"
     >
       <span className={styles.cardLogo} />
@@ -324,7 +297,10 @@ function ResultTile({
       style={style}
     >
       {result.kind === "objekt" && result.objekt ? (
-        <ObjektCard objekt={result.objekt} />
+        <>
+          {selected && <span className={styles.resultGetBadge}>Get</span>}
+          <ObjektCard objekt={result.objekt} />
+        </>
       ) : (
         <EmptyObjekt />
       )}
@@ -345,6 +321,7 @@ export function SpinClient() {
   const [result, setResult] = useState<SpinResult | null>(null);
   const [gridResults, setGridResults] = useState<SpinResult[]>([]);
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
+  const [pendingPickIndex, setPendingPickIndex] = useState<number | null>(null);
   const [revealedGridOpen, setRevealedGridOpen] = useState(false);
 
   useEffect(() => {
@@ -417,6 +394,7 @@ export function SpinClient() {
           Basic: [],
           Special: [],
           Premier: [],
+          Unit: [],
         });
       }
 
@@ -443,6 +421,7 @@ export function SpinClient() {
     setResult(null);
     setGridResults([]);
     setPickedIndex(null);
+    setPendingPickIndex(null);
     setRevealedGridOpen(false);
 
     window.setTimeout(() => setStage("carousel"), 200);
@@ -453,6 +432,7 @@ export function SpinClient() {
     if (!selected) return;
     setStage("loading");
     setPickedIndex(index);
+    setPendingPickIndex(null);
     setRevealedGridOpen(false);
 
     window.setTimeout(() => {
@@ -481,6 +461,7 @@ export function SpinClient() {
     setResult(null);
     setGridResults([]);
     setPickedIndex(null);
+    setPendingPickIndex(null);
     setRevealedGridOpen(false);
   }
 
@@ -566,8 +547,15 @@ export function SpinClient() {
 
             <footer className={styles.footer}>
               <p>
-                Today, {rewardStat.recipients.toLocaleString()} people received{" "}
-                {artistLabel(rewardStat.artist)} {rewardStat.className} Objekt!
+                Today,{" "}
+                <span className={styles.statAccent}>
+                  {rewardStat.recipients.toLocaleString()}
+                </span>{" "}
+                people received{" "}
+                <span className={styles.statAccent}>
+                  {rewardStat.className} Objekt
+                </span>
+                !
               </p>
               <Button
                 type="button"
@@ -605,7 +593,13 @@ export function SpinClient() {
               </div>
             )}
 
-            {!loadingCollections && !loadError && (
+            {!loadingCollections && !loadError && spinChoices.length === 0 && (
+              <div className={styles.selectMessage}>
+                Spin objekts are unavailable right now.
+              </div>
+            )}
+
+            {!loadingCollections && !loadError && spinChoices.length > 0 && (
               <div className={styles.seasonGrid}>
                 {spinChoices.map((objekt) => (
                   <button
@@ -683,12 +677,29 @@ export function SpinClient() {
                   {mysteryCards.map((card, index) => (
                     <PurpleCard
                       key={card}
-                      className={styles.mysteryCard}
+                      className={cn(
+                        styles.mysteryCard,
+                        pendingPickIndex === index &&
+                          styles.mysteryCardSelected,
+                      )}
                       style={{ "--i": index } as CSSProperties}
-                      onClick={() => pickMysteryCard(index)}
+                      onClick={() => setPendingPickIndex(index)}
+                      ariaPressed={pendingPickIndex === index}
                     />
                   ))}
                 </div>
+                <Button
+                  type="button"
+                  className={cn(styles.primaryButton, styles.pickButton)}
+                  onClick={() => {
+                    if (pendingPickIndex !== null) {
+                      pickMysteryCard(pendingPickIndex);
+                    }
+                  }}
+                  disabled={pendingPickIndex === null}
+                >
+                  Select
+                </Button>
               </div>
             )}
 
@@ -739,9 +750,18 @@ export function SpinClient() {
                     )}
                   </div>
                   <p className={styles.resultSummary}>
-                    {result.kind === "objekt" && result.objekt
-                      ? `Received ${artistLabel(result.objekt.artist)} ${result.objekt.season} ${result.objekt.member} ${result.objekt.collectionNo} Objekt`
-                      : "The selected card was Broken"}
+                    {result.kind === "objekt" && result.objekt ? (
+                      <>
+                        Received the{" "}
+                        <span className={styles.statAccent}>
+                          {result.objekt.season} {result.objekt.member}{" "}
+                          {result.objekt.collectionNo}
+                        </span>{" "}
+                        Objekt.
+                      </>
+                    ) : (
+                      "The selected card was Broken"
+                    )}
                   </p>
                   <div className={styles.doneCard}>{resultCard}</div>
                   <button
@@ -750,6 +770,7 @@ export function SpinClient() {
                     onClick={() => setRevealedGridOpen(true)}
                   >
                     Reveal unchosen Objekts
+                    <ChevronRightIcon className="size-5" />
                   </button>
                   <Button
                     type="button"
@@ -765,7 +786,7 @@ export function SpinClient() {
               result &&
               gridResults.length === 16 &&
               revealedGridOpen && (
-                <div className={styles.doneStage}>
+                <div className={cn(styles.doneStage, styles.revealGridStage)}>
                   <div className={styles.gridHeader}>
                     <button
                       type="button"
@@ -789,7 +810,7 @@ export function SpinClient() {
                   </div>
                   <Button
                     type="button"
-                    className={styles.primaryButton}
+                    className={cn(styles.primaryButton, styles.gridRetryButton)}
                     onClick={resetSpin}
                   >
                     <RotateCcwIcon className="size-4" />

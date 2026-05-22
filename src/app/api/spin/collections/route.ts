@@ -1,42 +1,48 @@
-export const dynamic = 'force-dynamic';
 import { asc, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { indexer } from "@/lib/db/indexer";
 import { collections } from "@/lib/db/indexer-schema";
+import { getCached } from "@/lib/server-cache";
+
+export const dynamic = "force-dynamic";
 
 const spinClasses = [
   "First",
   "Basic",
   "Special",
   "Premier",
+  "Unit",
   "First Class",
   "Basic Class",
   "Special Class",
   "Premier Class",
+  "Unit Class",
 ];
 
 export async function GET() {
   try {
-    const rows = await indexer
-      .select({
-        collectionId: collections.collectionId,
-        artist: collections.artist,
-        member: collections.member,
-        collectionNo: collections.collectionNo,
-        season: collections.season,
-        class: collections.class,
-        frontImage: collections.frontImage,
-        backImage: collections.backImage,
-        thumbnailImage: collections.thumbnailImage,
-      })
-      .from(collections)
-      .where(inArray(collections.class, spinClasses))
-      .orderBy(
-        asc(collections.season),
-        asc(collections.class),
-        asc(collections.member),
-        asc(collections.collectionNo),
-      );
+    const rows = await getCached("spin:collections:v1", 10 * 60_000, () =>
+      indexer
+        .select({
+          collectionId: collections.collectionId,
+          artist: collections.artist,
+          member: collections.member,
+          collectionNo: collections.collectionNo,
+          season: collections.season,
+          class: collections.class,
+          frontImage: collections.frontImage,
+          backImage: collections.backImage,
+          thumbnailImage: collections.thumbnailImage,
+        })
+        .from(collections)
+        .where(inArray(collections.class, spinClasses))
+        .orderBy(
+          asc(collections.season),
+          asc(collections.class),
+          asc(collections.member),
+          asc(collections.collectionNo),
+        ),
+    );
 
     return NextResponse.json(
       { results: rows },
@@ -47,10 +53,14 @@ export async function GET() {
       },
     );
   } catch (error) {
-    console.error("Failed to load spin collections", error);
+    console.warn("Failed to load spin collections", error);
     return NextResponse.json(
       { error: "Failed to load spin collections", results: [] },
-      { status: 500 },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
     );
   }
 }

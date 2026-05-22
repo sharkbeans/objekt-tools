@@ -1,9 +1,11 @@
-export const dynamic = 'force-dynamic';
-import { eq, and, asc } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { indexer } from "@/lib/db/indexer";
-import { objekts, collections } from "@/lib/db/indexer-schema";
+import { collections, objekts } from "@/lib/db/indexer-schema";
+import { getCached } from "@/lib/server-cache";
+
+export const dynamic = "force-dynamic";
 
 // GET /api/objekts/user/[address]
 // Returns transferable objekts owned by the given Cosmo address.
@@ -23,28 +25,28 @@ export async function GET(
     return NextResponse.json({ error: "Invalid address" }, { status: 400 });
   }
 
-  const rows = await indexer
-    .select({
-      collectionId: collections.collectionId,
-      artist: collections.artist,
-      member: collections.member,
-      collectionNo: collections.collectionNo,
-      season: collections.season,
-      class: collections.class,
-      thumbnailImage: collections.thumbnailImage,
-      serial: objekts.serial,
-      objektId: objekts.id,
-    })
-    .from(objekts)
-    .innerJoin(collections, eq(objekts.collectionId, collections.id))
-    .where(
-      and(
-        eq(objekts.owner, address),
-        eq(objekts.transferable, true),
-      ),
-    )
-    .orderBy(asc(collections.member), asc(collections.collectionNo))
-    .limit(500);
+  const rows = await getCached(
+    `objekts:user:v1:${address.toLowerCase()}`,
+    30_000,
+    () =>
+      indexer
+        .select({
+          collectionId: collections.collectionId,
+          artist: collections.artist,
+          member: collections.member,
+          collectionNo: collections.collectionNo,
+          season: collections.season,
+          class: collections.class,
+          thumbnailImage: collections.thumbnailImage,
+          serial: objekts.serial,
+          objektId: objekts.id,
+        })
+        .from(objekts)
+        .innerJoin(collections, eq(objekts.collectionId, collections.id))
+        .where(and(eq(objekts.owner, address), eq(objekts.transferable, true)))
+        .orderBy(asc(collections.member), asc(collections.collectionNo))
+        .limit(500),
+  );
 
   const results = rows.map((r) => ({
     collectionId: r.collectionId,

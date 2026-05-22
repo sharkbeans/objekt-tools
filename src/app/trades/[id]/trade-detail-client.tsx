@@ -44,6 +44,7 @@ interface TradeItem {
   serial?: number | null;
   isAny?: boolean;
   artist?: string | null;
+  thumbnailUrl?: string | null;
 }
 
 function anyWantLabel(item: TradeItem): string {
@@ -91,23 +92,37 @@ function useObjektImages(items: TradeItem[]) {
   useEffect(() => {
     if (!items.length) return;
 
-    const ids = items.map((i) => i.collectionId);
-    const unique = [...new Set(ids)];
+    const next = new Map<string, string>();
+    const missing = new Set<string>();
 
-    unique.forEach((collectionId) => {
-      fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
-        .then((res) => res.json())
-        .then((data) => {
-          const match = data.results?.find(
-            (r: any) => r.collectionId === collectionId
-          );
-          const url = match?.thumbnailImage ?? match?.frontImage;
-          if (url) {
-            setImages((prev) => new Map(prev).set(collectionId, url));
+    for (const item of items) {
+      if (item.isAny) continue;
+      if (item.thumbnailUrl) next.set(item.collectionId, item.thumbnailUrl);
+      else if (item.collectionId) missing.add(item.collectionId);
+    }
+
+    setImages(next);
+
+    if (missing.size === 0) return;
+
+    const params = new URLSearchParams();
+    for (const collectionId of missing) {
+      params.append("collection_id", collectionId);
+    }
+
+    fetch(`/api/objekts/search?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setImages((prev) => {
+          const updated = new Map(prev);
+          for (const match of data.results ?? []) {
+            const url = match.thumbnailImage ?? match.frontImage;
+            if (url) updated.set(match.collectionId, url);
           }
-        })
-        .catch(() => {});
-    });
+          return updated;
+        });
+      })
+      .catch(() => {});
   }, [items]);
 
   return images;
