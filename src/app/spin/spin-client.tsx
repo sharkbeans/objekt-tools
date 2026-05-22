@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import styles from "./spin.module.css";
@@ -77,6 +78,9 @@ const artistDisplayNames: Record<string, string> = {
   idntt: "idntt",
 };
 
+const artistTabs = ["triples", "artms", "idntt"] as const;
+type ArtistTab = (typeof artistTabs)[number];
+
 const classMap: Record<string, SpinClass | undefined> = {
   First: "First",
   "First Class": "First",
@@ -114,15 +118,16 @@ function parseSeason(season: string) {
   };
 }
 
-function compareSpinChoices(a: SpinCollection, b: SpinCollection) {
-  const artistCompare = a.artist.localeCompare(b.artist);
-  if (artistCompare !== 0) return artistCompare;
-
-  const left = parseSeason(a.season);
-  const right = parseSeason(b.season);
-  if (left.cycle !== right.cycle) return left.cycle - right.cycle;
+function compareSeason(a: string, b: string) {
+  const left = parseSeason(a);
+  const right = parseSeason(b);
   if (left.rank !== right.rank) return left.rank - right.rank;
-  return a.season.localeCompare(b.season);
+  return left.cycle - right.cycle;
+}
+
+// Returns the member assigned to a season given 0-based season index and member list.
+function assignedMember(seasonIndex: number, members: string[]): string {
+  return members[seasonIndex] ?? "";
 }
 
 
@@ -323,6 +328,27 @@ export function SpinClient() {
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
   const [pendingPickIndex, setPendingPickIndex] = useState<number | null>(null);
   const [revealedGridOpen, setRevealedGridOpen] = useState(false);
+  const [selectTab, setSelectTab] = useState<ArtistTab>("triples");
+  const [memberOrder, setMemberOrder] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    document.body.dataset.page = "spin";
+    return () => { delete document.body.dataset.page; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/spin/members")
+      .then((r) => r.json())
+      .then((data: { results: { artist: string; members: string[] }[] }) => {
+        if (cancelled) return;
+        const map: Record<string, string[]> = {};
+        for (const { artist, members } of data.results) map[artist] = members;
+        setMemberOrder(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -379,9 +405,10 @@ export function SpinClient() {
     return () => window.clearInterval(interval);
   }, [rewardStats.length]);
 
-  const { spinChoices, poolsByArtistSeason } = useMemo(() => {
-    const choices = new Map<string, SpinCollection>();
+  const { poolsByArtistSeason, primaryByArtistSeason } = useMemo(() => {
     const pools = new Map<string, Record<SpinClass, SpinCollection[]>>();
+    // All primary-class cards grouped by artist::season, preserving all members
+    const primary = new Map<string, SpinCollection[]>();
 
     for (const collection of collections) {
       const normalizedClass = classMap[collection.class];
@@ -389,30 +416,48 @@ export function SpinClient() {
       const key = spinKey(collection);
 
       if (!pools.has(key)) {
-        pools.set(key, {
-          First: [],
-          Basic: [],
-          Special: [],
-          Premier: [],
-          Unit: [],
-        });
+        pools.set(key, { First: [], Basic: [], Special: [], Premier: [], Unit: [] });
       }
-
       pools.get(key)?.[normalizedClass].push(collection);
 
-      if (
-        isPrimarySpinClass(collection.artist, normalizedClass) &&
-        !choices.has(key)
-      ) {
-        choices.set(key, collection);
+      if (isPrimarySpinClass(collection.artist, normalizedClass)) {
+        if (!primary.has(key)) primary.set(key, []);
+        primary.get(key)!.push(collection);
       }
     }
 
-    return {
-      spinChoices: [...choices.values()].sort(compareSpinChoices),
-      poolsByArtistSeason: pools,
-    };
+    return { poolsByArtistSeason: pools, primaryByArtistSeason: primary };
   }, [collections]);
+
+  const sortedSpinChoices = useMemo(() => {
+    if (primaryByArtistSeason.size === 0) return [];
+
+    // Group by artist, sort seasons chronologically, assign member by index
+    const byArtist = new Map<string, string[]>();
+    for (const key of primaryByArtistSeason.keys()) {
+      const [artist] = key.split("::");
+      if (!byArtist.has(artist)) byArtist.set(artist, []);
+      byArtist.get(artist)!.push(key);
+    }
+
+    const result: SpinCollection[] = [];
+    for (const [artistKey, seasonKeys] of byArtist) {
+      const members = memberOrder[artistKey] ?? [];
+      const sorted = seasonKeys.sort((a, b) =>
+        compareSeason(a.split("::")[1], b.split("::")[1]),
+      );
+      for (let i = 0; i < sorted.length; i++) {
+        const candidates = primaryByArtistSeason.get(sorted[i]) ?? [];
+        const expectedName = assignedMember(i, members);
+        const pick =
+          candidates.find(
+            (c) => c.member.toLowerCase() === expectedName.toLowerCase(),
+          ) ?? candidates[0];
+        if (pick) result.push(pick);
+      }
+    }
+    return result;
+  }, [primaryByArtistSeason, memberOrder]);
 
   function startSpin() {
     if (!selected) return;
@@ -502,7 +547,11 @@ export function SpinClient() {
       <div className={styles.phone}>
         {page === "spin" && (
           <section className={styles.spinPage}>
-            <header className={cn(styles.header, styles.ghostHeader)} />
+            <header className={cn(styles.header, styles.ghostHeader)}>
+              <Link href="/" className={styles.backButton} aria-label="Back to home">
+                <ChevronLeftIcon className="size-5" />
+              </Link>
+            </header>
 
             <div className={styles.centerStack}>
               <div className={styles.sideCards} aria-hidden="true">
@@ -514,7 +563,12 @@ export function SpinClient() {
               <button
                 type="button"
                 className={styles.centerSlot}
-                onClick={() => setPage("select")}
+                onClick={() => {
+                  if (selected) {
+                    setSelectTab(selected.artist.toLowerCase() as ArtistTab);
+                  }
+                  setPage("select");
+                }}
                 aria-label="Select objekt"
               >
                 {selected ? (
@@ -583,6 +637,22 @@ export function SpinClient() {
               <span />
             </header>
 
+            <div className={styles.artistTabs}>
+              {artistTabs.map((tab) => (
+                <button
+                  type="button"
+                  key={tab}
+                  className={cn(
+                    styles.artistTab,
+                    selectTab === tab && styles.artistTabActive,
+                  )}
+                  onClick={() => setSelectTab(tab)}
+                >
+                  {artistDisplayNames[tab]}
+                </button>
+              ))}
+            </div>
+
             {loadingCollections && (
               <div className={styles.selectMessage}>Loading objekts</div>
             )}
@@ -593,36 +663,36 @@ export function SpinClient() {
               </div>
             )}
 
-            {!loadingCollections && !loadError && spinChoices.length === 0 && (
+            {!loadingCollections && !loadError && sortedSpinChoices.length === 0 && (
               <div className={styles.selectMessage}>
                 Spin objekts are unavailable right now.
               </div>
             )}
 
-            {!loadingCollections && !loadError && spinChoices.length > 0 && (
+            {!loadingCollections && !loadError && sortedSpinChoices.length > 0 && (
               <div className={styles.seasonGrid}>
-                {spinChoices.map((objekt) => (
-                  <button
-                    type="button"
-                    key={spinKey(objekt)}
-                    className={cn(
-                      styles.seasonChoice,
-                      selected &&
-                        spinKey(selected) === spinKey(objekt) &&
-                        styles.seasonChoiceSelected,
-                    )}
-                    onClick={() => {
-                      setSelected(objekt);
-                      setPage("spin");
-                    }}
-                  >
-                    <ObjektCard objekt={objekt} />
-                    <span>
-                      {artistLabel(objekt.artist)} {objekt.season}
-                    </span>
-                    <small>{objekt.member}</small>
-                  </button>
-                ))}
+                {sortedSpinChoices
+                  .filter((o) => o.artist.toLowerCase() === selectTab)
+                  .map((objekt) => (
+                    <button
+                      type="button"
+                      key={spinKey(objekt)}
+                      className={cn(
+                        styles.seasonChoice,
+                        selected &&
+                          spinKey(selected) === spinKey(objekt) &&
+                          styles.seasonChoiceSelected,
+                      )}
+                      onClick={() => {
+                        setSelected(objekt);
+                        setPage("spin");
+                      }}
+                    >
+                      <ObjektCard objekt={objekt} />
+                      <span>{objekt.season}</span>
+                      <small>{objekt.member}</small>
+                    </button>
+                  ))}
               </div>
             )}
           </section>
@@ -820,6 +890,10 @@ export function SpinClient() {
               )}
           </section>
         )}
+        <p className={styles.disclaimer}>
+          Fan-made simulator · not affiliated with or endorsed by modhaus or
+          COSMO · no real objekts are distributed · for entertainment only
+        </p>
       </div>
     </div>
   );

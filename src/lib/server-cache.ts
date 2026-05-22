@@ -2,6 +2,7 @@ type CacheEntry<T> = {
   expiresAt: number;
   value?: T;
   pending?: Promise<T>;
+  staleValue?: T;
 };
 
 const globalCache = globalThis as typeof globalThis & {
@@ -42,6 +43,8 @@ export async function getCached<T>(
     return existing.pending;
   }
 
+  const stale = existing?.staleValue ?? existing?.value;
+
   const pending = load()
     .then((value) => {
       cache.set(key, { value, expiresAt: Date.now() + ttlMs });
@@ -49,10 +52,15 @@ export async function getCached<T>(
       return value;
     })
     .catch((error) => {
+      if (stale !== undefined) {
+        // Keep stale data so callers aren't broken while the remote is flaky.
+        cache.set(key, { staleValue: stale, expiresAt: now + 60_000 });
+        return stale;
+      }
       cache.delete(key);
       throw error;
     });
 
-  cache.set(key, { pending, expiresAt: now + ttlMs });
+  cache.set(key, { pending, expiresAt: now + ttlMs, staleValue: stale });
   return pending;
 }

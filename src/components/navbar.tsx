@@ -280,7 +280,7 @@ function MobileNav({
   return (
     <>
       {/* Mobile top bar — burger on the left, logo next to it */}
-      <header className="sm:hidden border-b border-border">
+      <header data-mobile-nav className="sm:hidden border-b border-border">
         <div className="flex h-14 items-center gap-3 px-4">
           <button
             type="button"

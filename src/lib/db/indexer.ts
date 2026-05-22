@@ -15,9 +15,9 @@ function getPool(): Pool {
     if (!url) throw new Error("INDEXER_DATABASE_URL is not configured");
     _g._indexerPool = new Pool({
       connectionString: url,
-      max: 3,
+      max: 8,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 15000,
       ssl: url.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
     });
   }

@@ -174,3 +174,15 @@
     @apply text-red-700 dark:text-red-300;
   }
 }
+
+/* Hide mobile navbar on spin page and remove main padding so the full viewport is usable */
+@media (max-width: 639px) {
+  body[data-page="spin"] header[data-mobile-nav] {
+    display: none;
+  }
+  body[data-page="spin"] main {
+    padding: 0;
+    max-width: none;
+    width: 100%;
+  }
+}
