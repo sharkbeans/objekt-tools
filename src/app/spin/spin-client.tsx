@@ -149,28 +149,49 @@ function rollWeighted(
   return weights.at(-1)?.outcome ?? "Fail";
 }
 
-// Spin class probabilities per artist (all seasons):
-// - tripleS: First 87.5% / Special 3.13% / Premier 0.63% / Fail 8.74%
-// - ARTMS:   First 87.5% / Special 3.13% / Premier 0.63% / Fail 8.74%
-// - idntt:   Basic 87.5% / Special 3.13% / Unit 0.63%    / Fail 8.74%
-function rollClass(artist: string, _season: string): SpinClass | "Fail" {
+type SpinWeight = { outcome: SpinClass | "Fail"; chance: number };
+
+// Per-season spin probabilities sourced from official Cosmo spin info.
+// Key format: "artist::Season##" (artist lowercased, season as stored in indexer).
+const spinRates: Record<string, SpinWeight[]> = {
+  "triples::Atom01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
+  "triples::Binary01": [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
+  "triples::Cream01":  [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
+  "triples::Divine01": [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
+  "triples::Ever01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+  "triples::Atom02":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+  "triples::Binary02": [{ outcome: "First", chance: 90.63 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+  "artms::Atom01":     [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
+  "artms::Binary01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
+  "artms::Cream01":    [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+  "artms::Divine01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+  "artms::Ever01":     [{ outcome: "First", chance: 90.63 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+};
+
+// idntt rates are uniform across all seasons.
+const idnttRates: SpinWeight[] = [
+  { outcome: "Basic", chance: 87.5 },
+  { outcome: "Special", chance: 3.13 },
+  { outcome: "Unit", chance: 0.63 },
+  { outcome: "Fail", chance: 8.74 },
+];
+
+// Fallback for seasons not yet in spinRates.
+const fallbackRates: SpinWeight[] = [
+  { outcome: "First", chance: 87.5 },
+  { outcome: "Special", chance: 3.13 },
+  { outcome: "Fail", chance: 9.37 },
+];
+
+function rollClass(artist: string, season: string): SpinClass | "Fail" {
   const normalizedArtist = artist.toLowerCase();
 
   if (normalizedArtist === "idntt") {
-    return rollWeighted([
-      { outcome: "Basic", chance: 87.5 },
-      { outcome: "Special", chance: 3.13 },
-      { outcome: "Unit", chance: 0.63 },
-      { outcome: "Fail", chance: 8.74 },
-    ]);
+    return rollWeighted(idnttRates);
   }
 
-  return rollWeighted([
-    { outcome: "First", chance: 87.5 },
-    { outcome: "Special", chance: 3.13 },
-    { outcome: "Premier", chance: 0.63 },
-    { outcome: "Fail", chance: 8.74 },
-  ]);
+  const weights = spinRates[`${normalizedArtist}::${season}`] ?? fallbackRates;
+  return rollWeighted(weights);
 }
 
 function pickRandom<T>(items: T[]) {
