@@ -98,7 +98,7 @@
 .centerStack {
   width: 100%;
   height: clamp(220px, 42dvh, 336px);
-  margin: clamp(32px, 8dvh, 78px) auto 0;
+  margin: clamp(72px, 13dvh, 116px) auto 0;
   position: relative;
   display: grid;
   place-items: center;
@@ -108,7 +108,7 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 980px;
+  width: max-content;
   height: 162px;
   display: flex;
   align-items: center;
@@ -116,19 +116,19 @@
   pointer-events: none;
   z-index: 0;
   transform: translate(-50%, -50%);
-  animation: sideCardSweep 4.2s linear infinite;
+  animation: sideCardSweep 56s linear infinite;
 }
 
 .sideCards .sideCard {
-  width: 108px;
-  height: 162px;
+  width: 118px;
+  height: 177px;
   opacity: 0.86;
-  flex: 0 0 108px;
+  flex: 0 0 118px;
 }
 
 .centerSlot {
-  width: clamp(140px, 28dvh, 224px);
-  height: clamp(210px, 42dvh, 336px);
+  width: clamp(192px, 50vw, 216px);
+  aspect-ratio: 2 / 3;
   display: grid;
   place-items: center;
   margin: 0;
@@ -176,7 +176,8 @@
 .footer {
   margin-top: auto;
   display: grid;
-  gap: clamp(12px, 3dvh, 28px);
+  gap: 14px;
+  padding-bottom: clamp(28px, 4dvh, 34px);
 }
 
 .footer p {
@@ -197,7 +198,7 @@
 .primaryButton {
   width: 100%;
   height: 56px;
-  border-radius: 14px;
+  border-radius: 13px;
   background: #6d22ff;
   color: white;
   font-size: 18px;
@@ -413,6 +414,10 @@
 }
 
 .seasonChoice .objektCard {
+  width: 100%;
+}
+
+.centerSlot .objektCard {
   width: 100%;
 }
 
@@ -1022,7 +1027,7 @@
   position: absolute;
   left: 20px;
   right: 20px;
-  bottom: 26px;
+  bottom: clamp(28px, 4dvh, 34px);
   width: auto;
 }
 
@@ -1068,10 +1073,17 @@
 }
 
 .gridRetryButton {
-  width: min(100%, 180px);
-  height: 56px;
-  margin-top: 44px;
-  border-radius: 13px;
+  width: min(100%, 148px);
+  height: 44px;
+  margin-top: 24px;
+  border-radius: 11px;
+  font-size: 14px;
+  gap: 7px;
+}
+
+.gridRetryButton svg {
+  width: 14px;
+  height: 14px;
 }
 
 .resultTile {
@@ -1203,10 +1215,10 @@
 
 @keyframes sideCardSweep {
   0% {
-    transform: translate(-50%, -50%) translateX(-160px);
+    transform: translate(-50%, -50%) translateX(0);
   }
   100% {
-    transform: translate(-50%, -50%) translateX(0);
+    transform: translate(-50%, -50%) translateX(calc(-14 * (118px + 34px)));
   }
 }
 
@@ -1522,7 +1534,6 @@
     min-height: unset;
     margin: 0;
   }
-
 
   .phone {
     width: 100%;
