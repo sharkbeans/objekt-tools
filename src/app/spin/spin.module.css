@@ -1530,6 +1530,10 @@
 }
 
 @media (max-width: 640px) {
+  .revealGridStage {
+    padding-bottom: 80px;
+  }
+
   .shell {
     min-height: unset;
     margin: 0;
