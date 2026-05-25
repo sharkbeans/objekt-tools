@@ -3,6 +3,8 @@
  * Handles all canvas drawing operations, image rendering, and export functionality
  */
 
+const DEFAULT_QR_CODE_LINK = 'https://objekt.my/objekt-maker/';
+
 const CanvasManager = {
     canvas: null,
     ctx: null,
@@ -90,7 +92,7 @@ const CanvasManager = {
     backBottomTextHeight: 0,
 
     // QR Code settings
-    qrCodeLink: 'https://sharkbeans.github.io/objekt-maker/',
+    qrCodeLink: DEFAULT_QR_CODE_LINK,
     qrCodeImage: null, // Cached QR code image
     qrCodeCanvas: null, // Cached QR code canvas
 

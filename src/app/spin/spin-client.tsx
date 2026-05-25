@@ -953,7 +953,7 @@ export function SpinClient() {
           </section>
         )}
         <p className={styles.disclaimer}>
-          Fan-made simulator · not affiliated with or endorsed by modhaus or
+          Fan-made simulator · not affiliated with or endorsed by MODHAUS or
           COSMO · no real objekts are distributed · for entertainment only
         </p>
       </div>

@@ -374,6 +374,16 @@ const UIManager = {
             clearFrameBtn: document.getElementById('clearFrameBtn')
         };
 
+        const defaultQrLink = CanvasManager.qrCodeLink;
+        if (this.elements.qrCodeLink) {
+            this.elements.qrCodeLink.value = defaultQrLink;
+            this.elements.qrCodeLink.placeholder = defaultQrLink;
+        }
+        if (this.elements.qrCodeLinkMobile) {
+            this.elements.qrCodeLinkMobile.value = defaultQrLink;
+            this.elements.qrCodeLinkMobile.placeholder = defaultQrLink;
+        }
+
         this.bindEvents();
 
         // Load local fonts from manifest (offline mode) -- async, non-blocking
@@ -4946,7 +4956,7 @@ const UIManager = {
         input.type = 'text';
         input.className = 'text-input';
         input.value = CanvasManager.qrCodeLink || '';
-        input.placeholder = 'https://sharkbeans.github.io/objekt-maker/';
+        input.placeholder = CanvasManager.qrCodeLink || '';
         input.style.width = '100%';
         input.style.marginBottom = 'var(--space-sm)';
 
@@ -7116,4 +7126,3 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize with front view
     updateNavVisibility('front');
 });
-

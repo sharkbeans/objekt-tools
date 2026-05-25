@@ -4,7 +4,11 @@ import { usePathname } from "next/navigation";
 
 function getDisclaimerText(pathname: string | null): string {
   if (!pathname) {
-    return "Fan-made community tool · not affiliated with or endorsed by modhaus or COSMO";
+    return "Fan-made community tool · not affiliated with or endorsed by MODHAUS or COSMO";
+  }
+
+  if (pathname === "/") {
+    return "Fan-made community tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO · all content is user-generated";
   }
 
   if (
@@ -12,27 +16,28 @@ function getDisclaimerText(pathname: string | null): string {
     pathname.startsWith("/active-trades") ||
     pathname.startsWith("/notifications")
   ) {
-    return "Fan-made trade posting and checking tool · not affiliated with or endorsed by modhaus or COSMO · no real objekts are distributed";
+    return "Fan-made trade posting and checking tool · not affiliated with or endorsed by MODHAUS or COSMO · no real objekts are distributed";
   }
 
   if (
     pathname.startsWith("/objekt-maker") ||
     pathname.startsWith("/proofshot")
   ) {
-    return "Fan-made custom objekt and proofshot maker · not affiliated with or endorsed by modhaus or COSMO · no real objekts are distributed";
+    return "Fan-made custom objekt and proofshot maker · not affiliated with or endorsed by MODHAUS or COSMO · no real objekts are distributed";
   }
 
   if (pathname.startsWith("/post")) {
-    return "Fan-made HAVE/WANT poster tool · not affiliated with or endorsed by modhaus or COSMO · no real objekts are distributed";
+    return "Fan-made HAVE/WANT poster tool · not affiliated with or endorsed by MODHAUS or COSMO · no real objekts are distributed";
   }
 
-  return "Fan-made community tool · not affiliated with or endorsed by modhaus or COSMO";
+  return "Fan-made community tool · not affiliated with or endorsed by MODHAUS or COSMO";
 }
 
 export function SiteDisclaimerFooter() {
   const pathname = usePathname();
 
-  if (pathname?.startsWith("/spin")) return null;
+  if (!pathname || pathname?.startsWith("/spin"))
+    return null;
 
   return (
     <footer className="pointer-events-none fixed inset-x-0 bottom-2 z-30 flex justify-center px-4">

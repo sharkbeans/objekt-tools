@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRightIcon,
   BellIcon,
+  ChevronLeftIcon,
   ImageIcon,
   LinkIcon,
   LogInIcon,
@@ -15,9 +16,9 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { LoginCodeDialog } from "@/components/login-code-dialog";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -27,6 +28,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,10 +37,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useUserRealtime } from "@/hooks/use-realtime";
 import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import { useUserRealtime } from "@/hooks/use-realtime";
-import { LoginCodeDialog } from "@/components/login-code-dialog";
 
 interface CosmoLinkStatus {
   address: string;
@@ -123,6 +125,12 @@ export function Navbar() {
                 )}
               </Link>
               <Link
+                href="/post"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Poster
+              </Link>
+              <Link
                 href="/objekt-maker"
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -133,12 +141,6 @@ export function Navbar() {
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Proofshot
-              </Link>
-              <Link
-                href="/post"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Poster
               </Link>
               <Link
                 href="/spin"
@@ -232,7 +234,10 @@ export function Navbar() {
 
       <LoginCodeDialog open={loginCodeOpen} onOpenChange={setLoginCodeOpen} />
 
-      <AlertDialog open={signOutConfirmOpen} onOpenChange={setSignOutConfirmOpen}>
+      <AlertDialog
+        open={signOutConfirmOpen}
+        onOpenChange={setSignOutConfirmOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out?</AlertDialogTitle>
@@ -275,7 +280,46 @@ function MobileNav({
   onLoginCode: () => void;
   onSignOut: () => void;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const isHomeRoute = pathname === "/";
+  const isTradesRoute =
+    pathname === "/trades" || pathname.startsWith("/trades/");
+
+  if (isHomeRoute) {
+    return null;
+  }
+
+  if (!isTradesRoute) {
+    return (
+      <header
+        data-mobile-nav
+        className="sm:hidden border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75"
+      >
+        <div className="flex h-14 items-center px-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                router.back();
+                return;
+              }
+              router.push("/");
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Go back"
+          >
+            <ChevronLeftIcon className="h-7 w-7" strokeWidth={2.5} />
+          </button>
+          <div className="flex-1 px-2 text-center text-sm font-medium text-foreground truncate">
+            {getMobilePageTitle(pathname)}
+          </div>
+          <div className="h-10 w-10" />
+        </div>
+      </header>
+    );
+  }
 
   return (
     <>
@@ -347,6 +391,10 @@ function MobileNav({
               )}
             </span>
           </MobileNavLink>
+          <MobileNavLink href="/post" onClick={() => setOpen(false)}>
+            <ImageIcon className="size-4" />
+            Poster
+          </MobileNavLink>
           <MobileNavLink href="/objekt-maker" onClick={() => setOpen(false)}>
             <SparklesIcon className="size-4" />
             Objektify
@@ -354,10 +402,6 @@ function MobileNav({
           <MobileNavLink href="/proofshot" onClick={() => setOpen(false)}>
             <UserIcon className="size-4" />
             Proofshot
-          </MobileNavLink>
-          <MobileNavLink href="/post" onClick={() => setOpen(false)}>
-            <ImageIcon className="size-4" />
-            Poster
           </MobileNavLink>
           <MobileNavLink href="/spin" onClick={() => setOpen(false)}>
             <SparklesIcon className="size-4" />
@@ -459,4 +503,17 @@ function MobileNavLink({
       {children}
     </Link>
   );
+}
+
+function getMobilePageTitle(pathname: string): string {
+  if (pathname.startsWith("/active-trades")) return "Active Trade";
+  if (pathname.startsWith("/notifications")) return "Notifications";
+  if (pathname.startsWith("/objekt-maker")) return "Objektify";
+  if (pathname.startsWith("/proofshot")) return "Proofshot";
+  if (pathname.startsWith("/post")) return "Poster";
+  if (pathname.startsWith("/spin")) return "Spin";
+  if (pathname.startsWith("/link")) return "Link Cosmo";
+  if (pathname.startsWith("/sign-in")) return "Sign in";
+  if (pathname.startsWith("/@")) return "Profile";
+  return "objekt.my";
 }
