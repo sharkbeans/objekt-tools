@@ -24,6 +24,12 @@
     <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
     <link rel="alternate icon" href="assets/icons/favicon.ico">
 
+    <script>
+        if (new URLSearchParams(window.location.search).has('embedded')) {
+            document.documentElement.classList.add('embedded');
+        }
+    </script>
+
     <!-- Stylesheet -->
     <link rel="stylesheet" href="css/style.css">
 
@@ -41,13 +47,6 @@
     <script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
 </head>
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="container">
-            <h4><i data-lucide="codesandbox"></i> Objektify</h4>
-        </div>
-    </header>
-
     <!-- Main Content -->
     <main class="main-content">
         <div class="container">
@@ -1338,13 +1337,6 @@
             </div>
         </div>
     </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; Objektify | All processing happens in your browser</p>
-        </div>
-    </footer>
 
     <!-- Media Loading Overlay -->
     <div id="mediaLoadingOverlay" class="media-loading-overlay" style="display: none;">

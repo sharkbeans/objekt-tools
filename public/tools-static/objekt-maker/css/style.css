@@ -81,6 +81,11 @@ body {
     overflow-x: hidden;
 }
 
+html.embedded .header,
+html.embedded .footer {
+    display: none;
+}
+
 /* ========================================
    Header
    ======================================== */

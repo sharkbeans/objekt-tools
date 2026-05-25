@@ -65,6 +65,11 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+html.embedded .header,
+html.embedded .footer {
+    display: none;
+}
+
 /* ===========================
    App Container
    =========================== */

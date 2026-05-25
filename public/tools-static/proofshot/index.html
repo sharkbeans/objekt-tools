@@ -6,6 +6,12 @@
     <meta name="description" content="Proofshot - Create custom photocard proofshots">
     <title>Proofshot</title>
 
+    <script>
+        if (new URLSearchParams(window.location.search).has('embedded')) {
+            document.documentElement.classList.add('embedded');
+        }
+    </script>
+
     <!-- Styles -->
     <link rel="stylesheet" href="css/style.css">
 
@@ -35,13 +41,6 @@
 </head>
 <body>
     <div class="app-container">
-
-        <!-- Header -->
-        <header class="header">
-            <div class="container">
-                <h4><i data-lucide="camera"></i> Proofshot</h4>
-            </div>
-        </header>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -329,9 +328,6 @@
             </div>
         </main>
 
-        <!-- Footer -->
-        <footer class="footer">
-        </footer>
     </div>
 
     <!-- Hidden File Inputs -->
