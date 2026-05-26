@@ -26,6 +26,36 @@ import { AddObjektDialog, AddCustomWantDialog } from "@/components/poster/add-ob
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
+import { compareMembers, compareSeasons } from "@/lib/filter-options";
+
+function parseCollectionNo(value: string): number {
+  const n = parseInt(value.replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function sortObjektEntries(entries: ObjektEntry[]): ObjektEntry[] {
+  return [...entries].sort((a, b) => {
+    const seasonCmp = compareSeasons(a.season, b.season);
+    if (seasonCmp !== 0) return seasonCmp;
+    const colCmp = parseCollectionNo(a.collectionNo) - parseCollectionNo(b.collectionNo);
+    if (colCmp !== 0) return colCmp;
+    return compareMembers(a.member, b.member);
+  });
+}
+
+function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
+  const withEntry = items.filter((i) => i.entry);
+  const withoutEntry = items.filter((i) => !i.entry);
+  withEntry.sort((a, b) => {
+    const seasonCmp = compareSeasons(a.entry!.season, b.entry!.season);
+    if (seasonCmp !== 0) return seasonCmp;
+    const colCmp =
+      parseCollectionNo(a.entry!.collectionNo) - parseCollectionNo(b.entry!.collectionNo);
+    if (colCmp !== 0) return colCmp;
+    return compareMembers(a.entry!.member, b.entry!.member);
+  });
+  return [...withEntry, ...withoutEntry];
+}
 
 type Stage = "input" | "resolving" | "preview";
 
@@ -125,8 +155,8 @@ export default function CreatePosterPage() {
       setPosterData({
         username: cosmoId,
         cosmoId,
-        haves: resolvedHaves,
-        wants: resolvedWants,
+        haves: sortResolvedItems(resolvedHaves),
+        wants: sortResolvedItems(resolvedWants),
         notes: parsed.notes,
         date,
         haveTitle: "Have",
@@ -223,8 +253,8 @@ export default function CreatePosterPage() {
       const existing = prev[key];
       // Keep freeform items (custom wants) that have no backing entry
       const freeformItems = existing.filter((h) => !h.entry && h.parsed.freeform);
-      // Build new list: entries in confirmed order, preserving existing items where they match (to keep imageUrl etc.)
-      const newItems = entries.map((e) => {
+      const sortedEntries = sortObjektEntries(entries);
+      const newItems = sortedEntries.map((e) => {
         const existingMatch = existing.find((h) => h.entry?.collectionId === e.collectionId);
         return existingMatch ?? makeItem(e);
       });
@@ -266,8 +296,8 @@ export default function CreatePosterPage() {
     setCosmoId(searchedNickname);
     setStage("resolving");
     try {
-      const resolvedHaves = haves.map((entry) => makeItem(entry));
-      const resolvedWants = wants.map((entry) => makeItem(entry));
+      const resolvedHaves = sortObjektEntries(haves).map((entry) => makeItem(entry));
+      const resolvedWants = sortObjektEntries(wants).map((entry) => makeItem(entry));
 
       const now = new Date();
       const date = now.toLocaleDateString("en-US", {
