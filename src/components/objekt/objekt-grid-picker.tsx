@@ -58,6 +58,26 @@ export function ObjektGridPicker({
     }
   }
 
+  const pageUnselected = pageItems.filter((e) => !isSelected(e));
+  const allPageSelected = pageItems.length > 0 && pageUnselected.length === 0;
+  const remainingCapacity = Math.max(0, maxSelections - selected.length);
+  const selectAllCount = Math.min(pageUnselected.length, remainingCapacity);
+
+  function handleSelectAllPage() {
+    if (allPageSelected) {
+      for (const entry of pageItems) {
+        if (isSelected(entry)) onDeselect(entry);
+      }
+      return;
+    }
+    let added = 0;
+    for (const entry of pageUnselected) {
+      if (added >= remainingCapacity) break;
+      onSelect(entry);
+      added++;
+    }
+  }
+
   if (loading) {
     return (
       <div className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}>
@@ -78,6 +98,21 @@ export function ObjektGridPicker({
 
   return (
     <div className="space-y-2">
+      <div className="flex justify-end">
+        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50">
+          <input
+            type="checkbox"
+            checked={allPageSelected}
+            onChange={handleSelectAllPage}
+            disabled={!allPageSelected && remainingCapacity === 0}
+            className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed"
+          />
+          Select All
+          {allPageSelected
+            ? <span>({pageItems.length})</span>
+            : selectAllCount > 0 && <span>({selectAllCount})</span>}
+        </label>
+      </div>
       <div className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}>
         {pageItems.map((entry, i) => {
           const sel = isSelected(entry);

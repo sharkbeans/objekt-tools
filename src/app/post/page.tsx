@@ -10,6 +10,7 @@ import {
   MoonIcon,
   ArrowLeftIcon,
   ImageIcon,
+  CopyIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { parsePastedTrade } from "@/lib/paste-parser";
 import { resolveForPoster, type ResolvedPosterItem } from "@/lib/poster-resolver";
 import { PosterCanvas, getGridCols, getDisplayCount, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
+import { formatPosterAsText } from "@/lib/poster-text-format";
 import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
 import { AddObjektDialog, AddCustomWantDialog } from "@/components/poster/add-objekt-dialog";
 import { useSession } from "@/lib/auth-client";
@@ -196,6 +198,17 @@ export default function CreatePosterPage() {
       setDownloading(false);
     }
   }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
+
+  const handleCopyText = useCallback(async () => {
+    if (!posterData) return;
+    const text = formatPosterAsText(posterData);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard!");
+    } catch {
+      toast.error("Failed to copy");
+    }
+  }, [posterData]);
 
   const handleBack = useCallback(() => {
     setStage("input");
@@ -441,6 +454,11 @@ export default function CreatePosterPage() {
                 />
                 <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
+
+              <Button size="sm" variant="outline" onClick={handleCopyText} className="gap-1.5">
+                <CopyIcon className="h-4 w-4" />
+                Copy Text
+              </Button>
 
               <Button size="sm" onClick={handleDownload} disabled={downloading} className="gap-1.5">
                 {downloading ? (
