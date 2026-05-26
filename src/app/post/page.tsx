@@ -359,9 +359,9 @@ export default function CreatePosterPage() {
   return (
     <div className="max-w-4xl sm:mx-auto space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Trade Poster</h1>
+        <h1 className="text-2xl font-bold">Objekt Poster</h1>
         <p className="text-muted-foreground">
-          Paste your trade list and generate a shareable poster image
+          Turn your trade list into a clean, shareable image in seconds
         </p>
       </div>
 

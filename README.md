@@ -1,18 +1,19 @@
 # objekt.my
 
-All-in-one tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the Gate](https://play.google.com/store/apps/details?id=com.modhaus.cosmo)** collectors — trade matching, custom objekt design, and trade list visualization.
+All-in-one Cosmo tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the Gate](https://play.google.com/store/apps/details?id=com.modhaus.cosmo)** collectors — trade matching, objekt design, poster generation, and more.
 
 **objekt.my is not affiliated with, endorsed by, or supported by MODHAUS or its artists.**
 
 ## Tools
 
-**[Trades](https://objekt.my/trades)** — Browse and match Cosmo objekt trades. Get auto-matched with other collectors and receive instant Discord notifications—no more searching through lists or DMs.
+**[Objekt Trade](https://objekt.my/trades)** — Browse and match Cosmo objekt trades. Get auto-matched with other collectors and receive instant Discord notifications—no more searching through lists or DMs.
 
-**[Objektify](https://objekt.my/objekt-maker)** — Design custom Objekts with full front/back control. Add borders, text, logos, signatures, QR codes, then save presets and bulk export.
+**[Objekt Maker](https://objekt.my/objekt-maker)** — Design custom Objekts with full front/back control. Add borders, text, logos, signatures, QR codes, then save presets and bulk export.
 
 **[Proofshot](https://objekt.my/proofshot)** — Generate photocard proofshot images for trades and collections.
 
-**[Poster](https://objekt.my/post)** — Turn your trade list into a clean, shareable image in seconds. Paste your list and download a structured template instantly.
+**[Objekt Poster](https://objekt.my/post)** — Turn your trade list into a clean, shareable image in seconds. Paste your list and download a structured template instantly.
+
 
 ## Trades Feature Overview
 
