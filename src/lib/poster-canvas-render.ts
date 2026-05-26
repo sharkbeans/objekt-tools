@@ -368,7 +368,32 @@ export async function renderPosterToCanvas(
           ctx.globalAlpha = isFreeform ? 0.95 : 1;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(item.parsed.raw, x + itemW / 2, y + cardH / 2, itemW - 24);
+          if (isFreeform) {
+            const maxLineW = itemW - 28;
+            const lineH = 20;
+            const wrappedLines: string[] = [];
+            for (const paragraph of item.parsed.raw.split("\n")) {
+              const words = paragraph.split(" ");
+              let current = "";
+              for (const word of words) {
+                const test = current ? `${current} ${word}` : word;
+                if (ctx.measureText(test).width > maxLineW && current) {
+                  wrappedLines.push(current);
+                  current = word;
+                } else {
+                  current = test;
+                }
+              }
+              if (current) wrappedLines.push(current);
+            }
+            const totalH = wrappedLines.length * lineH;
+            const startY = y + cardH / 2 - totalH / 2 + lineH / 2;
+            for (let li = 0; li < wrappedLines.length; li++) {
+              ctx.fillText(wrappedLines[li], x + itemW / 2, startY + li * lineH);
+            }
+          } else {
+            ctx.fillText(item.parsed.raw, x + itemW / 2, y + cardH / 2, itemW - 24);
+          }
           ctx.globalAlpha = 1;
           ctx.textBaseline = "top";
           ctx.textAlign = "left";

@@ -20,7 +20,7 @@ import { parsePastedTrade } from "@/lib/paste-parser";
 import { resolveForPoster, type ResolvedPosterItem } from "@/lib/poster-resolver";
 import { PosterCanvas, getGridCols, getDisplayCount, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
 import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
-import { AddObjektDialog } from "@/components/poster/add-objekt-dialog";
+import { AddObjektDialog, AddCustomWantDialog } from "@/components/poster/add-objekt-dialog";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
@@ -63,6 +63,7 @@ export default function CreatePosterPage() {
   const userSetCols = useRef(false);
   const posterRef = useRef<HTMLDivElement>(null);
   const [addDialogSection, setAddDialogSection] = useState<"have" | "want" | null>(null);
+  const [customWantOpen, setCustomWantOpen] = useState(false);
 
   const [isLinked, setIsLinked] = useState(false);
 
@@ -207,13 +208,34 @@ export default function CreatePosterPage() {
       if (!prev) return prev;
       const key = section === "have" ? "haves" : "wants";
       const existing = prev[key];
-      const toAdd = entries
-        .filter((e) => !existing.some((h) => h.entry?.collectionId === e.collectionId))
-        .map(makeItem);
-      if (toAdd.length === 0) return prev;
-      return { ...prev, [key]: [...existing, ...toAdd] };
+      // Keep freeform items (custom wants) that have no backing entry
+      const freeformItems = existing.filter((h) => !h.entry && h.parsed.freeform);
+      // Build new list: entries in confirmed order, preserving existing items where they match (to keep imageUrl etc.)
+      const newItems = entries.map((e) => {
+        const existingMatch = existing.find((h) => h.entry?.collectionId === e.collectionId);
+        return existingMatch ?? makeItem(e);
+      });
+      return { ...prev, [key]: [...newItems, ...freeformItems] };
     });
     setAddDialogSection(null);
+  }, []);
+
+  const handleAddCustomWant = useCallback((label: string) => {
+    setPosterData((prev) => {
+      if (!prev) return prev;
+      const item: ResolvedPosterItem = {
+        parsed: {
+          member: null,
+          season: "",
+          collectionNo: "",
+          raw: label,
+          freeform: true,
+        },
+        entry: null,
+        imageUrl: null,
+      };
+      return { ...prev, wants: [...prev.wants, item] };
+    });
   }, []);
 
   const handleRemoveItem = useCallback((section: "have" | "want", index: number) => {
@@ -323,7 +345,7 @@ export default function CreatePosterPage() {
             <Label htmlFor="poster-text">Trade List</Label>
             <Textarea
               id="poster-text"
-              placeholder={`HAVE\nsy AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
+              placeholder={`**HAVE**\nsy AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
               value={text}
               onChange={(e) => { setText(e.target.value); setParseErrors([]); }}
               rows={12}
@@ -406,7 +428,7 @@ export default function CreatePosterPage() {
 
               {/* Group by numbers toggle */}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Group by Numbers</span>
+                <span className="text-xs text-muted-foreground">Combine Duplicates</span>
                 <Switch checked={groupByNumbers} onCheckedChange={setGroupByNumbers} />
               </div>
 
@@ -451,10 +473,21 @@ export default function CreatePosterPage() {
               open={!!addDialogSection}
               section={addDialogSection}
               cosmoId={posterData.cosmoId || undefined}
+              initialSelected={
+                (addDialogSection === "have" ? posterData.haves : posterData.wants)
+                  .filter((item) => item.entry != null)
+                  .map((item) => item.entry!)
+              }
               onOpenChange={(open) => { if (!open) setAddDialogSection(null); }}
               onConfirm={handleAddItems}
             />
           )}
+
+          <AddCustomWantDialog
+            open={customWantOpen}
+            onOpenChange={setCustomWantOpen}
+            onConfirm={handleAddCustomWant}
+          />
 
           {/* Poster canvas — always editable (except during download) */}
           <div className="overflow-x-auto rounded-lg border border-border">
@@ -469,6 +502,7 @@ export default function CreatePosterPage() {
               onTextChange={handleTextChange}
               onRemoveItem={handleRemoveItem}
               onAddItem={setAddDialogSection}
+              onAddCustomWant={() => setCustomWantOpen(true)}
             />
           </div>
         </div>

@@ -65,9 +65,15 @@ async function fetchByNickname(nickname: string): Promise<OwnedEntry[]> {
 function FilterBar({
   filters,
   onChange,
+  onCancel,
+  onConfirm,
+  confirmLabel,
 }: {
   filters: ObjektStructuralFilters;
   onChange: (partial: Partial<ObjektStructuralFilters>) => void;
+  onCancel?: () => void;
+  onConfirm?: () => void;
+  confirmLabel?: string;
 }) {
   const filterOptions = useFilterOptions();
 
@@ -106,47 +112,63 @@ function FilterBar({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
-      <MultiSelect
-        options={filterOptions.artists}
-        value={filters.artist}
-        onChange={handleArtistChange}
-        placeholder="Artist"
-        className="w-full sm:w-auto sm:min-w-28"
-      />
-      <MultiSelect
-        options={availableMembers.map((m) => ({ label: m, value: m }))}
-        value={filters.member}
-        onChange={(v) => onChange({ member: v })}
-        placeholder="Member"
-        className="w-full sm:w-auto sm:min-w-32"
-      />
-      <SeasonMultiSelect
-        options={availableSeasons}
-        columns={filterOptions.seasonColumns}
-        value={filters.season}
-        onChange={(v) => onChange({ season: v })}
-        placeholder="Season"
-        className="w-full sm:w-auto sm:min-w-32"
-      />
-      <ClassMultiSelect
-        options={availableClasses}
-        columns={filterOptions.classColumns}
-        value={filters.class}
-        onChange={(v) => onChange({ class: v })}
-        placeholder="Class"
-        className="w-full sm:w-auto sm:min-w-28"
-      />
-      <MultiSelect
-        options={validOnlineTypes.map((t) => ({
-          label: t === "online" ? "Digital" : "Physical",
-          value: t,
-        }))}
-        value={filters.on_offline}
-        onChange={(v) => onChange({ on_offline: v })}
-        placeholder="Type"
-        className="w-full sm:w-auto sm:min-w-24"
-      />
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 flex-1 min-w-0">
+        <MultiSelect
+          options={filterOptions.artists}
+          value={filters.artist}
+          onChange={handleArtistChange}
+          placeholder="Artist"
+          className="w-full sm:w-auto sm:min-w-28"
+        />
+        <MultiSelect
+          options={availableMembers.map((m) => ({ label: m, value: m }))}
+          value={filters.member}
+          onChange={(v) => onChange({ member: v })}
+          placeholder="Member"
+          className="w-full sm:w-auto sm:min-w-32"
+        />
+        <SeasonMultiSelect
+          options={availableSeasons}
+          columns={filterOptions.seasonColumns}
+          value={filters.season}
+          onChange={(v) => onChange({ season: v })}
+          placeholder="Season"
+          className="w-full sm:w-auto sm:min-w-32"
+        />
+        <ClassMultiSelect
+          options={availableClasses}
+          columns={filterOptions.classColumns}
+          value={filters.class}
+          onChange={(v) => onChange({ class: v })}
+          placeholder="Class"
+          className="w-full sm:w-auto sm:min-w-28"
+        />
+        <MultiSelect
+          options={validOnlineTypes.map((t) => ({
+            label: t === "online" ? "Digital" : "Physical",
+            value: t,
+          }))}
+          value={filters.on_offline}
+          onChange={(v) => onChange({ on_offline: v })}
+          placeholder="Type"
+          className="w-full sm:w-auto sm:min-w-24"
+        />
+      </div>
+      {(onCancel || onConfirm) && (
+        <div className="flex items-center gap-2 ml-auto shrink-0">
+          {onCancel && (
+            <Button variant="outline" size="sm" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+          {onConfirm && (
+            <Button size="sm" onClick={onConfirm}>
+              {confirmLabel ?? "Confirm"}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -160,11 +182,17 @@ function InventoryPicker({
   selected,
   onSelect,
   onDeselect,
+  onCancel,
+  onConfirm,
+  confirmLabel,
 }: {
   cosmoId: string;
   selected: ObjektEntry[];
   onSelect: (o: ObjektEntry) => void;
   onDeselect: (o: ObjektEntry) => void;
+  onCancel?: () => void;
+  onConfirm?: () => void;
+  confirmLabel?: string;
 }) {
   const [inventory, setInventory] = useState<OwnedEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -241,6 +269,9 @@ function InventoryPicker({
       <FilterBar
         filters={filters}
         onChange={(partial) => setFilters((prev) => ({ ...prev, ...partial }))}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+        confirmLabel={confirmLabel}
       />
       <ObjektGridPicker
         items={filtered}
@@ -262,10 +293,16 @@ function GlobalPicker({
   selected,
   onSelect,
   onDeselect,
+  onCancel,
+  onConfirm,
+  confirmLabel,
 }: {
   selected: ObjektEntry[];
   onSelect: (o: ObjektEntry) => void;
   onDeselect: (o: ObjektEntry) => void;
+  onCancel?: () => void;
+  onConfirm?: () => void;
+  confirmLabel?: string;
 }) {
   const [filters, setFilters] = useState<ObjektStructuralFilters>(emptyFilters);
 
@@ -274,6 +311,9 @@ function GlobalPicker({
       <FilterBar
         filters={filters}
         onChange={(partial) => setFilters((prev) => ({ ...prev, ...partial }))}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+        confirmLabel={confirmLabel}
       />
       <ObjektPicker
         selected={selected}
@@ -287,12 +327,75 @@ function GlobalPicker({
   );
 }
 
+// ── Add Custom Want dialog ────────────────────────────────────────────────
+
+interface AddCustomWantDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (label: string) => void;
+}
+
+export function AddCustomWantDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+}: AddCustomWantDialogProps) {
+  const [text, setText] = useState("");
+
+  function handleOpen(next: boolean) {
+    if (next) setText("");
+    onOpenChange(next);
+  }
+
+  function handleConfirm() {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    onConfirm(trimmed);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogContent className="md:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Custom Want</DialogTitle>
+          <DialogDescription>
+            e.g. "Any Atom02 FCO"
+          </DialogDescription>
+        </DialogHeader>
+
+        <Input
+          placeholder="Type here..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleConfirm(); }}
+          autoFocus
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirm} disabled={!text.trim()}>
+            Add
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main dialog ───────────────────────────────────────────────────────────
 
 interface AddObjektDialogProps {
   open: boolean;
   section: "have" | "want";
   cosmoId?: string;
+  initialSelected?: ObjektEntry[];
   onOpenChange: (open: boolean) => void;
   onConfirm: (section: "have" | "want", entries: ObjektEntry[]) => void;
 }
@@ -301,18 +404,20 @@ export function AddObjektDialog({
   open,
   section,
   cosmoId,
+  initialSelected = [],
   onOpenChange,
   onConfirm,
 }: AddObjektDialogProps) {
-  const [selected, setSelected] = useState<ObjektEntry[]>([]);
+  const [selected, setSelected] = useState<ObjektEntry[]>(initialSelected);
+  const initialSelectedRef = useRef(initialSelected);
+  initialSelectedRef.current = initialSelected;
 
   function handleOpen(next: boolean) {
-    if (next) setSelected([]);
+    if (next) setSelected(initialSelectedRef.current);
     onOpenChange(next);
   }
 
   function handleConfirm() {
-    if (selected.length === 0) return;
     onConfirm(section, selected);
     onOpenChange(false);
   }
@@ -350,12 +455,18 @@ export function AddObjektDialog({
             selected={selected}
             onSelect={handleSelect}
             onDeselect={handleDeselect}
+            onCancel={() => onOpenChange(false)}
+            onConfirm={handleConfirm}
+            confirmLabel={`Apply (${selected.length})`}
           />
         ) : (
           <GlobalPicker
             selected={selected}
             onSelect={handleSelect}
             onDeselect={handleDeselect}
+            onCancel={() => onOpenChange(false)}
+            onConfirm={handleConfirm}
+            confirmLabel={`Apply (${selected.length})`}
           />
         )}
 
@@ -363,8 +474,8 @@ export function AddObjektDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm} disabled={selected.length === 0}>
-            Add {selected.length > 0 ? `(${selected.length})` : ""}
+          <Button onClick={handleConfirm}>
+            Apply ({selected.length})
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -391,58 +391,72 @@ export function CosmoPickerDialog({
                     data-lpignore="true"
                     data-form-type="other"
                   />
-                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
-                    <MultiSelect
-                      options={filterOptions.artists}
-                      value={inventoryFilters.artist}
-                      onChange={handleArtistFilterChange}
-                      placeholder="Artist"
-                      className="w-full sm:w-auto sm:min-w-28"
-                    />
-                    <MultiSelect
-                      options={availableMembers.map((member) => ({
-                        label: member,
-                        value: member,
-                      }))}
-                      value={inventoryFilters.member}
-                      onChange={(value) =>
-                        updateInventoryFilters({ member: value })
-                      }
-                      placeholder="Member"
-                      className="w-full sm:w-auto sm:min-w-32"
-                    />
-                    <SeasonMultiSelect
-                      options={availableSeasons}
-                      columns={filterOptions.seasonColumns}
-                      value={inventoryFilters.season}
-                      onChange={(value) =>
-                        updateInventoryFilters({ season: value })
-                      }
-                      placeholder="Season"
-                      className="w-full sm:w-auto sm:min-w-32"
-                    />
-                    <ClassMultiSelect
-                      options={availableClasses}
-                      columns={filterOptions.classColumns}
-                      value={inventoryFilters.class}
-                      onChange={(value) =>
-                        updateInventoryFilters({ class: value })
-                      }
-                      placeholder="Class"
-                      className="w-full sm:w-auto sm:min-w-28"
-                    />
-                    <MultiSelect
-                      options={validOnlineTypes.map((type) => ({
-                        label: type === "online" ? "Digital" : "Physical",
-                        value: type,
-                      }))}
-                      value={inventoryFilters.on_offline}
-                      onChange={(value) =>
-                        updateInventoryFilters({ on_offline: value })
-                      }
-                      placeholder="Type"
-                      className="w-full sm:w-auto sm:min-w-24"
-                    />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 flex-1 min-w-0">
+                      <MultiSelect
+                        options={filterOptions.artists}
+                        value={inventoryFilters.artist}
+                        onChange={handleArtistFilterChange}
+                        placeholder="Artist"
+                        className="w-full sm:w-auto sm:min-w-28"
+                      />
+                      <MultiSelect
+                        options={availableMembers.map((member) => ({
+                          label: member,
+                          value: member,
+                        }))}
+                        value={inventoryFilters.member}
+                        onChange={(value) =>
+                          updateInventoryFilters({ member: value })
+                        }
+                        placeholder="Member"
+                        className="w-full sm:w-auto sm:min-w-32"
+                      />
+                      <SeasonMultiSelect
+                        options={availableSeasons}
+                        columns={filterOptions.seasonColumns}
+                        value={inventoryFilters.season}
+                        onChange={(value) =>
+                          updateInventoryFilters({ season: value })
+                        }
+                        placeholder="Season"
+                        className="w-full sm:w-auto sm:min-w-32"
+                      />
+                      <ClassMultiSelect
+                        options={availableClasses}
+                        columns={filterOptions.classColumns}
+                        value={inventoryFilters.class}
+                        onChange={(value) =>
+                          updateInventoryFilters({ class: value })
+                        }
+                        placeholder="Class"
+                        className="w-full sm:w-auto sm:min-w-28"
+                      />
+                      <MultiSelect
+                        options={validOnlineTypes.map((type) => ({
+                          label: type === "online" ? "Digital" : "Physical",
+                          value: type,
+                        }))}
+                        value={inventoryFilters.on_offline}
+                        onChange={(value) =>
+                          updateInventoryFilters({ on_offline: value })
+                        }
+                        placeholder="Type"
+                        className="w-full sm:w-auto sm:min-w-24"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto shrink-0">
+                      <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleConfirmHaves}
+                        disabled={selectedHaves.length === 0}
+                      >
+                        Confirm Haves ({selectedHaves.length}) →
+                      </Button>
+                    </div>
                   </div>
                   <ObjektGridPicker
                     items={filteredInventory}

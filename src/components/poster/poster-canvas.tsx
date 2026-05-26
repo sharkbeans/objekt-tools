@@ -28,6 +28,7 @@ interface PosterCanvasProps {
   ) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
   onAddItem?: (section: "have" | "want") => void;
+  onAddCustomWant?: () => void;
 }
 
 interface MemberGroup {
@@ -521,6 +522,64 @@ function AddCard({
   );
 }
 
+function AddCustomWantCard({
+  theme,
+  cardWidth,
+  cardHeight,
+  onAdd,
+}: {
+  theme: typeof darkTheme;
+  cardWidth: number;
+  cardHeight: number;
+  onAdd: () => void;
+}) {
+  return (
+    <div
+      style={{
+        width: cardWidth * 2 + 10,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onAdd}
+        style={{
+          width: cardWidth * 2 + 10,
+          height: cardHeight,
+          borderRadius: 6,
+          border: `2.5px dashed ${theme.accent}`,
+          opacity: 0.45,
+          backgroundColor: "transparent",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          color: theme.accent,
+          gap: 4,
+          padding: 0,
+          transition: "opacity 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.opacity = "0.85";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.opacity = "0.45";
+        }}
+        aria-label="Add custom want"
+      >
+        <span style={{ fontSize: 22, fontWeight: 400, lineHeight: 1 }}>+</span>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+          Custom Want
+        </span>
+      </button>
+    </div>
+  );
+}
+
 // ── Section ───────────────────────────────────────────────────────────────
 
 function Section({
@@ -536,6 +595,7 @@ function Section({
   onRemoveItem,
   onLabelChange,
   onAddItem,
+  onAddCustomWant,
   labels,
   seasonNumbers,
 }: {
@@ -551,6 +611,7 @@ function Section({
   onRemoveItem?: (section: "have" | "want", index: number) => void;
   onLabelChange?: (field: string, value: string) => void;
   onAddItem?: (section: "have" | "want") => void;
+  onAddCustomWant?: () => void;
   labels: string[];
   seasonNumbers: string[];
 }) {
@@ -636,6 +697,14 @@ function Section({
                 cardHeight={cardHeight}
                 onAdd={() => onAddItem(sectionKey)}
               />
+              {sectionKey === "want" && onAddCustomWant && (
+                <AddCustomWantCard
+                  theme={theme}
+                  cardWidth={cardWidth}
+                  cardHeight={cardHeight}
+                  onAdd={onAddCustomWant}
+                />
+              )}
             </div>
           )}
         </div>
@@ -694,6 +763,16 @@ function Section({
             onAdd={() => onAddItem(sectionKey)}
           />
         )}
+        {editable && sectionKey === "want" && onAddCustomWant && (
+          <div style={{ gridColumn: "span 2" }}>
+            <AddCustomWantCard
+              theme={theme}
+              cardWidth={cardWidth}
+              cardHeight={cardHeight}
+              onAdd={onAddCustomWant}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -713,6 +792,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
       onTextChange,
       onRemoveItem,
       onAddItem,
+      onAddCustomWant,
     },
     ref,
   ) {
@@ -856,6 +936,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           onTitleChange={(v) => onTextChange?.("wantTitle", v)}
           onRemoveItem={onRemoveItem}
           onAddItem={onAddItem}
+          onAddCustomWant={onAddCustomWant}
           onLabelChange={(field, value) =>
             onTextChange?.(field as `wantLabel:${number}`, value)
           }

@@ -98,7 +98,13 @@ export function MultiSelect({
             />
           </div>
         )}
-        <div className="max-h-60 overflow-y-auto p-1">
+        <div
+          className="max-h-60 overflow-y-auto p-1"
+          onWheel={(e) => {
+            e.currentTarget.scrollTop += e.deltaY;
+            e.stopPropagation();
+          }}
+        >
           {filtered.length === 0 ? (
             <p className="py-2 text-center text-xs text-muted-foreground">No options</p>
           ) : (
