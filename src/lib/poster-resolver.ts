@@ -1,5 +1,5 @@
-import type { ParsedItem } from "@/lib/paste-parser";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import type { ParsedItem } from "@/lib/paste-parser";
 
 export interface ResolvedPosterItem {
   parsed: ParsedItem;
@@ -8,7 +8,9 @@ export interface ResolvedPosterItem {
   error?: string;
 }
 
-async function searchObjekts(params: URLSearchParams): Promise<(ObjektEntry & { frontImage?: string })[]> {
+async function searchObjekts(
+  params: URLSearchParams,
+): Promise<(ObjektEntry & { frontImage?: string })[]> {
   const res = await fetch(`/api/objekts/search?${params.toString()}`);
   if (!res.ok) return [];
   const data = await res.json();
@@ -24,16 +26,28 @@ export async function resolveForPoster(
 ): Promise<ResolvedPosterItem[]> {
   if (items.length === 0) return [];
 
+  const resolvedFreeform = new Map<ParsedItem, ResolvedPosterItem>();
+  for (const item of items) {
+    if (item.freeform) {
+      resolvedFreeform.set(item, { parsed: item, entry: null, imageUrl: null });
+    }
+  }
+
   // Deduplicate by season|collectionNo|member|onOffline
   const keyMap = new Map<string, ParsedItem[]>();
   for (const item of items) {
+    if (item.freeform) continue;
     const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}|${item.onOffline ?? ""}`;
-    if (!keyMap.has(key)) keyMap.set(key, []);
-    keyMap.get(key)!.push(item);
+    const group = keyMap.get(key) ?? [];
+    group.push(item);
+    keyMap.set(key, group);
   }
 
   // Search in parallel
-  const searchResults = new Map<string, (ObjektEntry & { frontImage?: string })[]>();
+  const searchResults = new Map<
+    string,
+    (ObjektEntry & { frontImage?: string })[]
+  >();
   await Promise.all(
     [...keyMap.entries()].map(async ([key, group]) => {
       const first = group[0];
@@ -49,23 +63,34 @@ export async function resolveForPoster(
 
   // Map each original item to its resolved entry
   return items.map((item) => {
+    const freeform = resolvedFreeform.get(item);
+    if (freeform) return freeform;
+
     const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}|${item.onOffline ?? ""}`;
     const results = searchResults.get(key) ?? [];
 
     // Filter to exact collectionNo match; if onOffline was specified, require that variant
     const matches = results.filter((r) => {
       const suffix = r.collectionNo.slice(-1).toLowerCase();
-      const digits = /[az]/.test(suffix) ? r.collectionNo.slice(0, -1) : r.collectionNo;
+      const digits = /[az]/.test(suffix)
+        ? r.collectionNo.slice(0, -1)
+        : r.collectionNo;
       if (digits !== item.collectionNo) return false;
       if (item.onOffline) {
-        const rOnOffline = suffix === "a" ? "online" : suffix === "z" ? "offline" : null;
+        const rOnOffline =
+          suffix === "a" ? "online" : suffix === "z" ? "offline" : null;
         return rOnOffline === item.onOffline;
       }
       return true;
     });
 
     if (matches.length === 0) {
-      return { parsed: item, entry: null, imageUrl: null, error: `Not found: ${item.raw}` };
+      return {
+        parsed: item,
+        entry: null,
+        imageUrl: null,
+        error: `Not found: ${item.raw}`,
+      };
     }
 
     // If member specified, find exact match
@@ -77,7 +102,12 @@ export async function resolveForPoster(
     }
 
     if (!match) {
-      return { parsed: item, entry: null, imageUrl: null, error: `Not found: ${item.raw}` };
+      return {
+        parsed: item,
+        entry: null,
+        imageUrl: null,
+        error: `Not found: ${item.raw}`,
+      };
     }
 
     const imageUrl = match.thumbnailImage ?? match.frontImage ?? null;

@@ -1,29 +1,18 @@
 "use client";
 
+import { XIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { XIcon } from "lucide-react";
 import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PasteImportDialog } from "@/components/trades/paste-import-dialog";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { MultiSelect } from "@/components/ui/multi-select";
-import { ClassMultiSelect, SeasonMultiSelect, decodeGroupedValue } from "@/components/ui/class-multi-select";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useSession } from "@/lib/auth-client";
+  defaultFilters,
+  type TradeFilterState,
+  TradeFilters,
+} from "@/components/trades/trade-filters";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,19 +22,31 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { ObjektEntry } from "@/lib/cosmo/types";
-import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
-import { PasteImportDialog } from "@/components/trades/paste-import-dialog";
-import { sanitizeNoteText } from "@/lib/sanitize-text";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  validArtists,
-  validClasses,
-  validSeasons,
-  classArtistMap,
-  seasonArtistMap,
-  membersByArtist,
-  type ValidArtist,
-} from "@/lib/filters";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  ClassMultiSelect,
+  decodeGroupedValue,
+  SeasonMultiSelect,
+} from "@/components/ui/class-multi-select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useFilterOptions } from "@/hooks/use-filter-options";
+import { artistLabel } from "@/lib/artist-utils";
+import { useSession } from "@/lib/auth-client";
+import type { ObjektEntry } from "@/lib/cosmo/types";
+import { sanitizeNoteText } from "@/lib/sanitize-text";
 
 export type AnyWant = {
   isAny: true;
@@ -54,12 +55,6 @@ export type AnyWant = {
   season?: string;
   class?: string;
 };
-
-const ARTIST_DISPLAY: Record<string, string> = { artms: "ARTMS" };
-
-function artistLabel(artist: string) {
-  return ARTIST_DISPLAY[artist] ?? artist;
-}
 
 function anyWantLabel(w: AnyWant): string {
   const prefix = w.artist ? `${artistLabel(w.artist)} ` : "";
@@ -120,36 +115,10 @@ function useObjektImages(
   return images;
 }
 
-function getAvailableSeasons(artists: string[]): string[] {
-  if (!artists.length) return [...validSeasons];
-  const seasons = new Set<string>();
-  for (const a of artists) {
-    const map = seasonArtistMap.find((m) => m.artistId === a);
-    for (const s of map?.seasons ?? []) seasons.add(s);
-  }
-  return [...validSeasons].filter((s) => seasons.has(s));
-}
-
-function getAvailableClasses(artists: string[]): string[] {
-  if (!artists.length) return [...validClasses];
-  const classes = new Set<string>();
-  for (const a of artists) {
-    const map = classArtistMap.find((m) => m.artistId === a);
-    for (const c of map?.classes ?? []) classes.add(c);
-  }
-  return [...validClasses].filter((c) => classes.has(c));
-}
-
-function getAvailableMembers(artists: string[]): string[] {
-  const source = artists.length
-    ? artists.flatMap((a) => membersByArtist[a as ValidArtist] ?? [])
-    : Object.values(membersByArtist).flat();
-  return [...new Set(source)];
-}
-
 export default function NewTradePage() {
   const router = useRouter();
   const { data: session } = useSession();
+  const filterOptions = useFilterOptions();
   const [haves, setHaves] = useState<ObjektEntry[]>([]);
   const [wants, setWants] = useState<ObjektEntry[]>([]);
   const [anyWants, setAnyWants] = useState<AnyWant[]>([]);
@@ -161,7 +130,9 @@ export default function NewTradePage() {
   const [discordDismissed, setDiscordDismissed] = useState(true);
 
   useEffect(() => {
-    setDiscordDismissed(localStorage.getItem("discord-banner-dismissed") === "1");
+    setDiscordDismissed(
+      localStorage.getItem("discord-banner-dismissed") === "1",
+    );
   }, []);
 
   // Auto-disable wantsOnly if all wants are removed
@@ -173,14 +144,24 @@ export default function NewTradePage() {
   // Artist is only used to narrow the member dropdown, never stored as a want chip
   const [anyArtist, setAnyArtist] = useState<string[]>([]);
 
-  const availableAnyMembers = getAvailableMembers(anyArtist);
-  const availableAnySeasons = getAvailableSeasons(anyArtist);
-  const availableAnyClasses = getAvailableClasses(anyArtist);
+  const availableAnyMembers = anyArtist.length
+    ? anyArtist.flatMap((artist) => filterOptions.membersByArtist[artist] ?? [])
+    : filterOptions.allMembers;
+  const availableAnySeasons = anyArtist.length
+    ? anyArtist.flatMap((artist) => filterOptions.seasonsByArtist[artist] ?? [])
+    : filterOptions.allSeasons;
+  const availableAnyClasses = anyArtist.length
+    ? anyArtist.flatMap((artist) => filterOptions.classesByArtist[artist] ?? [])
+    : filterOptions.allClasses;
 
   const haveImages = useObjektImages(haves);
   const wantImages = useObjektImages(wants);
 
-  function handlePasteImport(importedHaves: ObjektEntry[], importedWants: ObjektEntry[], notes?: string) {
+  function handlePasteImport(
+    importedHaves: ObjektEntry[],
+    importedWants: ObjektEntry[],
+    notes?: string,
+  ) {
     if (notes) setDescription(notes);
     setHaves((prev) => {
       const next = [...prev];
@@ -204,20 +185,28 @@ export default function NewTradePage() {
 
   const [activeTab, setActiveTab] = useState<"have" | "want">("have");
   const [anyWantOpen, setAnyWantOpen] = useState(false);
-  const [previewHover, setPreviewHover] = useState<{ image: string; top: number; left: number } | null>(null);
+  const [previewHover, setPreviewHover] = useState<{
+    image: string;
+    top: number;
+    left: number;
+  } | null>(null);
 
-  const handlePreviewMouseEnter = useCallback((e: React.MouseEvent<HTMLElement>, image: string | undefined) => {
-    if (!image) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    // Tooltip image is w-24 (96px) wide, aspect ~2:3 so ~144px tall.
-    // Flip upward if within 160px of the bottom of the viewport to avoid
-    // the tooltip extending off-screen and triggering a scroll feedback loop.
-    const previewHeight = 160;
-    const top = rect.bottom + previewHeight > window.innerHeight
-      ? Math.max(8, rect.bottom - previewHeight)
-      : rect.top;
-    setPreviewHover({ image, top, left: rect.right + 8 });
-  }, []);
+  const handlePreviewMouseEnter = useCallback(
+    (e: React.MouseEvent<HTMLElement>, image: string | undefined) => {
+      if (!image) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      // Tooltip image is w-24 (96px) wide, aspect ~2:3 so ~144px tall.
+      // Flip upward if within 160px of the bottom of the viewport to avoid
+      // the tooltip extending off-screen and triggering a scroll feedback loop.
+      const previewHeight = 160;
+      const top =
+        rect.bottom + previewHeight > window.innerHeight
+          ? Math.max(8, rect.bottom - previewHeight)
+          : rect.top;
+      setPreviewHover({ image, top, left: rect.right + 8 });
+    },
+    [],
+  );
 
   const handlePreviewMouseLeave = useCallback(() => {
     setPreviewHover(null);
@@ -226,7 +215,6 @@ export default function NewTradePage() {
   function handleArtistChange(next: string[]) {
     setAnyArtist(next);
   }
-
 
   if (!session) {
     return (
@@ -316,12 +304,22 @@ export default function NewTradePage() {
         />
       </div>
 
-      <TradeFilters filters={filters} onChange={setFilters} showSort={false} showFilterMode={false} />
+      <TradeFilters
+        filters={filters}
+        onChange={setFilters}
+        showSort={false}
+        showFilterMode={false}
+      />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "have" | "want")}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "have" | "want")}
+      >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="have">Have ({haves.length})</TabsTrigger>
-          <TabsTrigger value="want">Want ({wants.length + anyWants.length})</TabsTrigger>
+          <TabsTrigger value="want">
+            Want ({wants.length + anyWants.length})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="have">
@@ -339,7 +337,9 @@ export default function NewTradePage() {
                 onDeselect={(o) =>
                   setHaves((prev) =>
                     prev.filter((h) =>
-                      o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId,
+                      o.serial != null
+                        ? h.serial !== o.serial
+                        : h.collectionId !== o.collectionId,
                     ),
                   )
                 }
@@ -396,7 +396,8 @@ export default function NewTradePage() {
                 <div>
                   <Label htmlFor="any-want-toggle">Add ANY want</Label>
                   <p className="text-xs text-muted-foreground">
-                    Accept any objekt matching a filter — e.g. &quot;Any HeeJin&quot; or &quot;Any Atom01&quot;
+                    Accept any objekt matching a filter — e.g. &quot;Any
+                    HeeJin&quot; or &quot;Any Atom01&quot;
                   </p>
                 </div>
                 <Switch
@@ -409,23 +410,37 @@ export default function NewTradePage() {
                 <div className="space-y-3 pt-1">
                   <div className="flex flex-wrap gap-2">
                     <MultiSelect
-                      options={validArtists.map((a) => ({ label: a, value: a }))}
+                      options={filterOptions.artists}
                       value={anyArtist}
                       onChange={handleArtistChange}
                       placeholder="Artist"
                       className="min-w-28"
                     />
                     <MultiSelect
-                      options={availableAnyMembers.map((m) => ({ label: m, value: m }))}
-                      value={anyWants.filter((w) => w.member).map((w) => w.member!)}
+                      options={availableAnyMembers.map((m) => ({
+                        label: m,
+                        value: m,
+                      }))}
+                      value={anyWants.flatMap((w) =>
+                        w.member ? [w.member] : [],
+                      )}
                       onChange={(next) => {
-                        const prev = anyWants.filter((w) => w.member).map((w) => w.member!);
+                        const prev = anyWants.flatMap((w) =>
+                          w.member ? [w.member] : [],
+                        );
                         const added = next.filter((v) => !prev.includes(v));
                         const removed = prev.filter((v) => !next.includes(v));
-                        const removedKeys = new Set(removed.map((m) => anyWantKey({ isAny: true, member: m })));
+                        const removedKeys = new Set(
+                          removed.map((m) =>
+                            anyWantKey({ isAny: true, member: m }),
+                          ),
+                        );
                         setAnyWants((ws) => [
                           ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
-                          ...added.map((m) => ({ isAny: true as const, member: m })),
+                          ...added.map((m) => ({
+                            isAny: true as const,
+                            member: m,
+                          })),
                         ]);
                       }}
                       placeholder="Member"
@@ -433,20 +448,41 @@ export default function NewTradePage() {
                     />
                     <SeasonMultiSelect
                       options={availableAnySeasons}
-                      value={anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!)}
+                      columns={filterOptions.seasonColumns}
+                      value={anyWants.flatMap((w) => {
+                        if (!w.season) return [];
+                        return [
+                          w.artist ? `${w.artist}::${w.season}` : w.season,
+                        ];
+                      })}
                       onChange={(next) => {
-                        const prev = anyWants.filter((w) => w.season).map((w) => w.artist ? `${w.artist}::${w.season}` : w.season!);
+                        const prev = anyWants.flatMap((w) => {
+                          if (!w.season) return [];
+                          return [
+                            w.artist ? `${w.artist}::${w.season}` : w.season,
+                          ];
+                        });
                         const added = next.filter((v) => !prev.includes(v));
                         const removed = prev.filter((v) => !next.includes(v));
-                        const removedKeys = new Set(removed.map((s) => {
-                          const d = decodeGroupedValue(s);
-                          return anyWantKey({ isAny: true, artist: d?.artistId, season: d?.item ?? s });
-                        }));
+                        const removedKeys = new Set(
+                          removed.map((s) => {
+                            const d = decodeGroupedValue(s);
+                            return anyWantKey({
+                              isAny: true,
+                              artist: d?.artistId,
+                              season: d?.item ?? s,
+                            });
+                          }),
+                        );
                         setAnyWants((ws) => [
                           ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
                           ...added.map((s) => {
                             const d = decodeGroupedValue(s);
-                            return { isAny: true as const, artist: d?.artistId, season: d?.item ?? s };
+                            return {
+                              isAny: true as const,
+                              artist: d?.artistId,
+                              season: d?.item ?? s,
+                            };
                           }),
                         ]);
                       }}
@@ -455,20 +491,39 @@ export default function NewTradePage() {
                     />
                     <ClassMultiSelect
                       options={availableAnyClasses}
-                      value={anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!)}
+                      columns={filterOptions.classColumns}
+                      value={anyWants.flatMap((w) => {
+                        if (!w.class) return [];
+                        return [w.artist ? `${w.artist}::${w.class}` : w.class];
+                      })}
                       onChange={(next) => {
-                        const prev = anyWants.filter((w) => w.class).map((w) => w.artist ? `${w.artist}::${w.class}` : w.class!);
+                        const prev = anyWants.flatMap((w) => {
+                          if (!w.class) return [];
+                          return [
+                            w.artist ? `${w.artist}::${w.class}` : w.class,
+                          ];
+                        });
                         const added = next.filter((v) => !prev.includes(v));
                         const removed = prev.filter((v) => !next.includes(v));
-                        const removedKeys = new Set(removed.map((c) => {
-                          const d = decodeGroupedValue(c);
-                          return anyWantKey({ isAny: true, artist: d?.artistId, class: d?.item ?? c });
-                        }));
+                        const removedKeys = new Set(
+                          removed.map((c) => {
+                            const d = decodeGroupedValue(c);
+                            return anyWantKey({
+                              isAny: true,
+                              artist: d?.artistId,
+                              class: d?.item ?? c,
+                            });
+                          }),
+                        );
                         setAnyWants((ws) => [
                           ...ws.filter((w) => !removedKeys.has(anyWantKey(w))),
                           ...added.map((c) => {
                             const d = decodeGroupedValue(c);
-                            return { isAny: true as const, artist: d?.artistId, class: d?.item ?? c };
+                            return {
+                              isAny: true as const,
+                              artist: d?.artistId,
+                              class: d?.item ?? c,
+                            };
                           }),
                         ]);
                       }}
@@ -479,11 +534,19 @@ export default function NewTradePage() {
                   {anyWants.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {anyWants.map((w, i) => (
-                        <Badge key={i} variant="secondary" className="gap-1 text-xs">
+                        <Badge
+                          key={i}
+                          variant="secondary"
+                          className="gap-1 text-xs"
+                        >
                           {anyWantLabel(w)}
                           <button
                             type="button"
-                            onClick={() => setAnyWants((prev) => prev.filter((_, j) => j !== i))}
+                            onClick={() =>
+                              setAnyWants((prev) =>
+                                prev.filter((_, j) => j !== i),
+                              )
+                            }
                           >
                             <XIcon className="h-3 w-3" />
                           </button>
@@ -513,37 +576,52 @@ export default function NewTradePage() {
             <div className="flex gap-6">
               {haves.length > 0 && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">HAVE</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    HAVE
+                  </p>
                   <div className="flex flex-wrap gap-2 items-start">
                     {haves.map((item, i) => {
-                      const haveUrl = haveImages.get(item.collectionId) ?? item.thumbnailImage;
+                      const haveUrl =
+                        haveImages.get(item.collectionId) ??
+                        item.thumbnailImage;
                       return (
-                      <div key={i} className="flex flex-col items-center gap-1">
-                        <div className="relative group/thumb">
-                          {haveUrl ? (
-                            <img
-                              src={haveUrl}
-                              alt={item.collectionId}
-                              className="w-20 h-auto rounded-md border"
-                            />
-                          ) : (
-                            <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+                        <div
+                          key={i}
+                          className="flex flex-col items-center gap-1"
+                        >
+                          <div className="relative group/thumb">
+                            {haveUrl ? (
+                              <img
+                                src={haveUrl}
+                                alt={item.collectionId}
+                                className="w-20 h-auto rounded-md border"
+                              />
+                            ) : (
+                              <div className="w-20 h-28 rounded-md border bg-muted animate-pulse" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setHaves((prev) =>
+                                  prev.filter((_, j) => j !== i),
+                                )
+                              }
+                              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-md"
+                            >
+                              <XIcon className="w-6 h-6 text-white" />
+                            </button>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
+                            {item.member && item.collectionNo
+                              ? `${item.member} ${item.collectionNo}`
+                              : item.collectionId}
+                          </span>
+                          {item.serial != null && (
+                            <span className="text-[10px] text-muted-foreground">
+                              #{String(item.serial).padStart(5, "0")}
+                            </span>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setHaves((prev) => prev.filter((_, j) => j !== i))}
-                            className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-md"
-                          >
-                            <XIcon className="w-6 h-6 text-white" />
-                          </button>
                         </div>
-                        <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
-                          {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
-                        </span>
-                        {item.serial != null && (
-                          <span className="text-[10px] text-muted-foreground">#{String(item.serial).padStart(5, "0")}</span>
-                        )}
-                      </div>
                       );
                     })}
                   </div>
@@ -553,15 +631,24 @@ export default function NewTradePage() {
                 <>
                   <Separator orientation="vertical" className="h-auto" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">WANT</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                      WANT
+                    </p>
                     <div className="flex flex-wrap gap-2 items-start">
                       {anyWants.map((w, i) => (
-                        <div key={`any-${i}`} className="flex flex-col items-center gap-1">
+                        <div
+                          key={`any-${i}`}
+                          className="flex flex-col items-center gap-1"
+                        >
                           <div className="relative group/thumb w-20 h-28 rounded-md border bg-muted flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
                             {anyWantLabel(w)}
                             <button
                               type="button"
-                              onClick={() => setAnyWants((prev) => prev.filter((_, j) => j !== i))}
+                              onClick={() =>
+                                setAnyWants((prev) =>
+                                  prev.filter((_, j) => j !== i),
+                                )
+                              }
                               className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-md"
                             >
                               <XIcon className="w-6 h-6 text-white" />
@@ -570,9 +657,14 @@ export default function NewTradePage() {
                         </div>
                       ))}
                       {wants.map((item, i) => {
-                        const url = wantImages.get(item.collectionId) ?? item.thumbnailImage;
+                        const url =
+                          wantImages.get(item.collectionId) ??
+                          item.thumbnailImage;
                         return (
-                          <div key={i} className="flex flex-col items-center gap-1">
+                          <div
+                            key={i}
+                            className="flex flex-col items-center gap-1"
+                          >
                             <div className="relative group/thumb">
                               {url ? (
                                 <img
@@ -585,14 +677,20 @@ export default function NewTradePage() {
                               )}
                               <button
                                 type="button"
-                                onClick={() => setWants((prev) => prev.filter((_, j) => j !== i))}
+                                onClick={() =>
+                                  setWants((prev) =>
+                                    prev.filter((_, j) => j !== i),
+                                  )
+                                }
                                 className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity rounded-md"
                               >
                                 <XIcon className="w-6 h-6 text-white" />
                               </button>
                             </div>
                             <span className="text-[10px] text-muted-foreground text-center max-w-20 truncate">
-                              {item.member && item.collectionNo ? `${item.member} ${item.collectionNo}` : item.collectionId}
+                              {item.member && item.collectionNo
+                                ? `${item.member} ${item.collectionNo}`
+                                : item.collectionId}
                             </span>
                           </div>
                         );
@@ -609,24 +707,39 @@ export default function NewTradePage() {
             <div className="flex gap-6">
               {haves.length > 0 && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">HAVE</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    HAVE
+                  </p>
                   <div className="flex flex-col gap-1">
                     {haves.map((item, i) => (
                       <button
                         key={i}
                         type="button"
                         className="objekt-list-row group/row w-full text-left cursor-pointer hover:border-destructive/50 hover:bg-destructive/5"
-                        onMouseEnter={(e) => handlePreviewMouseEnter(e, haveImages.get(item.collectionId) ?? item.thumbnailImage)}
+                        onMouseEnter={(e) =>
+                          handlePreviewMouseEnter(
+                            e,
+                            haveImages.get(item.collectionId) ??
+                              item.thumbnailImage,
+                          )
+                        }
                         onMouseLeave={handlePreviewMouseLeave}
-                        onClick={() => setHaves((prev) => prev.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setHaves((prev) => prev.filter((_, j) => j !== i))
+                        }
                       >
                         <span>
-                          <span className="text-muted-foreground">{item.artist}</span>{" "}
+                          <span className="text-muted-foreground">
+                            {item.artist}
+                          </span>{" "}
                           {item.member}{" "}
                           <span className="font-mono">{item.collectionNo}</span>
                         </span>
                         <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                          {item.season} · {item.class}{item.serial != null ? ` · #${String(item.serial).padStart(5, "0")}` : ""}
+                          {item.season} · {item.class}
+                          {item.serial != null
+                            ? ` · #${String(item.serial).padStart(5, "0")}`
+                            : ""}
                           <XIcon className="w-3 h-3 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 text-destructive" />
                         </span>
                       </button>
@@ -636,14 +749,18 @@ export default function NewTradePage() {
               )}
               {(wants.length > 0 || anyWants.length > 0) && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">WANT</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    WANT
+                  </p>
                   <div className="flex flex-col gap-1">
                     {anyWants.map((w, i) => (
                       <button
                         key={`any-${i}`}
                         type="button"
                         className="group/row text-sm px-2 py-1 rounded border border-border flex items-center justify-between w-full text-left cursor-pointer hover:border-destructive/50 hover:bg-destructive/5"
-                        onClick={() => setAnyWants((prev) => prev.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setAnyWants((prev) => prev.filter((_, j) => j !== i))
+                        }
                       >
                         {anyWantLabel(w)}
                         <XIcon className="w-3 h-3 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 text-destructive" />
@@ -654,12 +771,22 @@ export default function NewTradePage() {
                         key={i}
                         type="button"
                         className="objekt-list-row group/row w-full text-left cursor-pointer hover:border-destructive/50 hover:bg-destructive/5"
-                        onMouseEnter={(e) => handlePreviewMouseEnter(e, wantImages.get(item.collectionId) ?? item.thumbnailImage)}
+                        onMouseEnter={(e) =>
+                          handlePreviewMouseEnter(
+                            e,
+                            wantImages.get(item.collectionId) ??
+                              item.thumbnailImage,
+                          )
+                        }
                         onMouseLeave={handlePreviewMouseLeave}
-                        onClick={() => setWants((prev) => prev.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setWants((prev) => prev.filter((_, j) => j !== i))
+                        }
                       >
                         <span>
-                          <span className="text-muted-foreground">{item.artist}</span>{" "}
+                          <span className="text-muted-foreground">
+                            {item.artist}
+                          </span>{" "}
                           {item.member}{" "}
                           <span className="font-mono">{item.collectionNo}</span>
                         </span>
@@ -699,7 +826,11 @@ export default function NewTradePage() {
           <div className="flex gap-4 items-center">
             <Button
               onClick={() => setConfirmOpen(true)}
-              disabled={submitting || haves.length === 0 || (wants.length === 0 && anyWants.length === 0)}
+              disabled={
+                submitting ||
+                haves.length === 0 ||
+                (wants.length === 0 && anyWants.length === 0)
+              }
               className="flex-1"
             >
               {submitting ? "Posting..." : "Post Trade"}
@@ -724,15 +855,16 @@ export default function NewTradePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Post this trade?</AlertDialogTitle>
             <div className="space-y-3 text-sm text-muted-foreground">
-              <p>
-                Your trade will be visible to everyone and open for offers.
-              </p>
+              <p>Your trade will be visible to everyone and open for offers.</p>
               {!discordDismissed && (
                 <div className="rounded-md border border-[#5865F2]/40 bg-[#5865F2]/10 px-3 py-2.5 space-y-1.5">
-                  <p className="font-medium text-[#7289da]">Get notified on Discord</p>
+                  <p className="font-medium text-[#7289da]">
+                    Get notified on Discord
+                  </p>
                   <p>
-                    Join our server to receive Discord DM you when someone sends a trade offer or responds to yours.
-                    Without it, you won&apos;t receive any notifications.
+                    Join our server to receive Discord DM you when someone sends
+                    a trade offer or responds to yours. Without it, you
+                    won&apos;t receive any notifications.
                   </p>
                   <a
                     href="https://discord.gg/SWEm6RbJD3"
@@ -752,7 +884,12 @@ export default function NewTradePage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setConfirmOpen(false); handleSubmit(); }}>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                handleSubmit();
+              }}
+            >
               Post Trade
             </AlertDialogAction>
           </AlertDialogFooter>

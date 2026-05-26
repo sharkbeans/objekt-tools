@@ -3,9 +3,14 @@ import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { indexer } from "@/lib/db/indexer";
 import { collections } from "@/lib/db/indexer-schema";
+import { resolveObjektMemberAlias } from "@/lib/objekt-search";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
+
+function toIndexerArtist(artist: string) {
+  return artist === "tripleS" ? "triples" : artist;
+}
 
 function normalizeCacheKey(params: URLSearchParams) {
   const normalized = new URLSearchParams();
@@ -57,9 +62,11 @@ export async function GET(request: NextRequest) {
 
   if (q.trim()) {
     const pattern = `%${q}%`;
+    const memberAlias = resolveObjektMemberAlias(q);
     conditions.push(
       or(
         ilike(collections.member, pattern),
+        ...(memberAlias ? [eq(collections.member, memberAlias)] : []),
         ilike(collections.collectionId, pattern),
         ilike(collections.season, pattern),
         ilike(collections.collectionNo, pattern),
@@ -82,7 +89,9 @@ export async function GET(request: NextRequest) {
   if (collectionIds.length) {
     conditions.push(inArray(collections.collectionId, collectionIds));
   }
-  if (artists.length) conditions.push(inArray(collections.artist, artists));
+  if (artists.length) {
+    conditions.push(inArray(collections.artist, artists.map(toIndexerArtist)));
+  }
   if (members.length) conditions.push(inArray(collections.member, members));
   if (seasons.length) conditions.push(inArray(collections.season, seasons));
   if (classes.length) conditions.push(inArray(collections.class, classes));

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { makeTradeItemTags, searchFilter } from "@/lib/filter-utils";
+import { objektMatchesSearch } from "@/lib/objekt-search";
 import { ObjektGridPicker } from "./objekt-grid-picker";
 
 type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
@@ -51,27 +51,13 @@ export function ObjektUserPicker({
     const searchText = query.trim().toLowerCase();
     if (!searchText) return inventory;
 
-    const queries = searchText
-      .split(",")
-      .map((group) =>
-        group.trim().split(" ").map((t) => t.trim()).filter(Boolean),
-      )
-      .filter((group) => group.length > 0);
-
-    return inventory.filter((o) => {
-      const tags = makeTradeItemTags(o);
-      return queries.some((group) =>
-        group.every((term) =>
-          term.startsWith("!")
-            ? !searchFilter(term.slice(1), o, tags)
-            : searchFilter(term, o, tags),
-        ),
-      );
-    });
+    return inventory.filter((o) => objektMatchesSearch(o, searchText));
   }, [inventory, query]);
 
   function handleSelect(entry: OwnedEntry) {
-    const isSelected = selected.some((s) => s.serial != null && s.serial === entry.serial);
+    const isSelected = selected.some(
+      (s) => s.serial != null && s.serial === entry.serial,
+    );
     if (isSelected || selected.length >= maxSelections) return;
     onSelect({
       collectionId: entry.collectionId,

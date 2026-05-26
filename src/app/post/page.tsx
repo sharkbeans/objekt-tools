@@ -39,6 +39,7 @@ function makeItem(entry: ObjektEntry): ResolvedPosterItem {
       season: entry.season,
       collectionNo: entry.collectionNo.replace(/[A-Za-z]$/, ""),
       raw: `${entry.member} ${getSeasonPrefix(entry.season)}${entry.collectionNo}`,
+      ...(entry.serial != null ? { serial: String(entry.serial) } : {}),
     },
     entry,
     imageUrl,
@@ -98,14 +99,20 @@ export default function CreatePosterPage() {
   const [stage, setStage] = useState<Stage>("input");
   const [posterData, setPosterData] = useState<PosterData | null>(null);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [posterTheme, setPosterTheme] = useState<PosterTheme>("dark");
   const [groupByMember, setGroupByMember] = useState(false);
+  const [groupByNumbers, setGroupByNumbers] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const [colsPerRow, setColsPerRow] = useState(4);
+  const [colsPerRow, setColsPerRow] = useState(5);
   const posterRef = useRef<HTMLDivElement>(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
 
   const [isLinked, setIsLinked] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Fetch cosmo status to get the real cosmo nickname and linked state
   useEffect(() => {
@@ -122,6 +129,8 @@ export default function CreatePosterPage() {
   }, [session]);
 
   const handleGenerate = useCallback(async () => {
+    if (!text.trim()) return;
+
     const parsed = parsePastedTrade(text);
     if (parsed.errors.length > 0 && parsed.haves.length === 0 && parsed.wants.length === 0) {
       setParseErrors(parsed.errors);
@@ -176,7 +185,13 @@ export default function CreatePosterPage() {
     await new Promise((r) => setTimeout(r, 50));
 
     try {
-      const canvas = await renderPosterToCanvas(posterData, posterTheme, groupByMember, colsPerRow);
+      const canvas = await renderPosterToCanvas(
+        posterData,
+        posterTheme,
+        groupByMember,
+        groupByNumbers,
+        colsPerRow,
+      );
       const blob = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png"),
       );
@@ -220,7 +235,7 @@ export default function CreatePosterPage() {
     } finally {
       setDownloading(false);
     }
-  }, [posterData, posterTheme, groupByMember, colsPerRow]);
+  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
 
   const handleBack = useCallback(() => {
     setShowAddPanel(false);
@@ -335,7 +350,7 @@ export default function CreatePosterPage() {
       {stage === "input" && (
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="poster-cosmoid">Cosmo ID</Label>
+            <Label htmlFor="poster-cosmoid">Cosmo ID (optional)</Label>
             <button
               type="button"
               id="poster-cosmoid"
@@ -354,7 +369,7 @@ export default function CreatePosterPage() {
             <Label htmlFor="poster-text">Trade List</Label>
             <Textarea
               id="poster-text"
-              placeholder={`HAVE\nSeoYeon AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
+              placeholder={`HAVE\nsy AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
               value={text}
               onChange={(e) => { setText(e.target.value); setParseErrors([]); }}
               rows={12}
@@ -376,7 +391,11 @@ export default function CreatePosterPage() {
             </p>
           </div>
 
-          <Button onClick={handleGenerate} disabled={!text.trim()} className="gap-1.5">
+          <Button
+            onClick={handleGenerate}
+            disabled={isHydrated ? !text.trim() : undefined}
+            className="gap-1.5"
+          >
             <ImageIcon className="h-4 w-4" />
             Generate Poster
           </Button>
@@ -429,6 +448,12 @@ export default function CreatePosterPage() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Group by Members</span>
                 <Switch checked={groupByMember} onCheckedChange={setGroupByMember} />
+              </div>
+
+              {/* Group by numbers toggle */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Group by Numbers</span>
+                <Switch checked={groupByNumbers} onCheckedChange={setGroupByNumbers} />
               </div>
 
               {/* Theme toggle */}
@@ -493,6 +518,7 @@ export default function CreatePosterPage() {
                 theme={posterTheme}
                 editable={!downloading}
                 groupByMember={groupByMember}
+                groupByNumbers={groupByNumbers}
                 colsPerRow={colsPerRow}
                 onTextChange={handleTextChange}
                 onRemoveItem={handleRemoveItem}

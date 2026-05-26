@@ -2,17 +2,20 @@
 
 import * as React from "react";
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { classArtistMap, seasonArtistMap, validClasses, validSeasons } from "@/lib/filters";
-
-const ARTIST_LABELS: Record<string, string> = {
-  tripleS: "tripleS",
-  artms: "ARTMS",
-  idntt: "idntt",
-};
+import {
+  classArtistMap,
+  seasonArtistMap,
+  validClasses,
+  validSeasons,
+} from "@/lib/filters";
 
 // Values are stored as "artistId::item" to scope selections per-artist.
 // e.g. "tripleS::Atom01", "artms::Special"
@@ -20,14 +23,16 @@ export function encodeGroupedValue(artistId: string, item: string) {
   return `${artistId}::${item}`;
 }
 
-export function decodeGroupedValue(value: string): { artistId: string; item: string } | null {
+export function decodeGroupedValue(
+  value: string,
+): { artistId: string; item: string } | null {
   const idx = value.indexOf("::");
   if (idx === -1) return null;
   return { artistId: value.slice(0, idx), item: value.slice(idx + 2) };
 }
 
 interface GroupedMultiSelectProps {
-  columns: { artistId: string; items: string[] }[];
+  columns: { artistId: string; label?: string; items: string[] }[];
   options: string[];
   value: string[]; // encoded "artistId::item" values
   onChange: (value: string[]) => void;
@@ -78,14 +83,21 @@ function GroupedMultiSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("h-9 min-w-28 justify-between px-3 font-normal", className)}
+          className={cn(
+            "h-9 min-w-28 justify-between px-3 font-normal",
+            className,
+          )}
         >
           <span className="flex items-center gap-1 overflow-hidden">
             {value.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : decodedLabels.length <= 2 ? (
               decodedLabels.map((label, i) => (
-                <Badge key={i} variant="secondary" className="text-xs px-1.5 py-0">
+                <Badge
+                  key={i}
+                  variant="secondary"
+                  className="text-xs px-1.5 py-0"
+                >
                   {label}
                 </Badge>
               ))
@@ -116,11 +128,13 @@ function GroupedMultiSelect({
           {visibleColumns.map((col) => (
             <div key={col.artistId} className="flex flex-col min-w-22.5">
               <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b">
-                {ARTIST_LABELS[col.artistId] ?? col.artistId}
+                {col.label ?? col.artistId}
               </div>
               <div className="p-1">
                 {col.items.map((item) => {
-                  const selected = value.includes(encodeGroupedValue(col.artistId, item));
+                  const selected = value.includes(
+                    encodeGroupedValue(col.artistId, item),
+                  );
                   return (
                     <button
                       key={item}
@@ -179,12 +193,25 @@ interface MultiSelectProps {
   onChange: (value: string[]) => void;
   placeholder?: string;
   className?: string;
+  columns?: { artistId: string; label?: string; items: string[] }[];
 }
 
 export function ClassMultiSelect(props: MultiSelectProps) {
-  return <GroupedMultiSelect columns={CLASS_COLUMNS} {...props} placeholder={props.placeholder ?? "Class"} />;
+  return (
+    <GroupedMultiSelect
+      columns={props.columns ?? CLASS_COLUMNS}
+      {...props}
+      placeholder={props.placeholder ?? "Class"}
+    />
+  );
 }
 
 export function SeasonMultiSelect(props: MultiSelectProps) {
-  return <GroupedMultiSelect columns={SEASON_COLUMNS} {...props} placeholder={props.placeholder ?? "Season"} />;
+  return (
+    <GroupedMultiSelect
+      columns={props.columns ?? SEASON_COLUMNS}
+      {...props}
+      placeholder={props.placeholder ?? "Season"}
+    />
+  );
 }

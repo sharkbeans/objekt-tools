@@ -21,18 +21,66 @@ const GAP = 10;
 const PAD = 32;
 const LABEL_H = 20; // space below card for label text
 
-function groupByMemberFn(items: ResolvedPosterItem[]) {
-  const groups: { member: string | null; items: ResolvedPosterItem[] }[] = [];
+interface DisplayItem {
+  item: ResolvedPosterItem;
+  quantity: number;
+}
+
+function getItemQuantity(item: ResolvedPosterItem): number {
+  return item.parsed.quantity && item.parsed.quantity > 1
+    ? item.parsed.quantity
+    : 1;
+}
+
+function getNumberGroupKey(item: ResolvedPosterItem): string {
+  if (item.entry) return `entry:${item.entry.collectionId}`;
+  return [
+    "parsed",
+    item.parsed.member ?? "",
+    item.parsed.season,
+    item.parsed.collectionNo,
+    item.parsed.onOffline ?? "",
+    item.parsed.raw,
+  ].join("|");
+}
+
+function getDisplayItems(
+  items: ResolvedPosterItem[],
+  groupByNumbers: boolean,
+): DisplayItem[] {
+  if (!groupByNumbers) {
+    return items.map((item) => ({ item, quantity: getItemQuantity(item) }));
+  }
+
+  const grouped: DisplayItem[] = [];
+  const seen = new Map<string, DisplayItem>();
+  for (const item of items) {
+    const key = getNumberGroupKey(item);
+    const existing = seen.get(key);
+    if (existing) {
+      existing.quantity += getItemQuantity(item);
+    } else {
+      const display = { item, quantity: getItemQuantity(item) };
+      grouped.push(display);
+      seen.set(key, display);
+    }
+  }
+  return grouped;
+}
+
+function groupDisplayByMember(items: DisplayItem[]) {
+  const groups: { member: string | null; items: DisplayItem[] }[] = [];
   const seen = new Map<string, typeof groups[0]>();
   for (const item of items) {
-    const m = item.entry?.member ?? item.parsed.member ?? null;
+    const m = item.item.entry?.member ?? item.item.parsed.member ?? null;
     const key = m ?? "\0";
-    if (!seen.has(key)) {
-      const g = { member: m, items: [] as ResolvedPosterItem[] };
-      groups.push(g);
-      seen.set(key, g);
+    let group = seen.get(key);
+    if (!group) {
+      group = { member: m, items: [] };
+      groups.push(group);
+      seen.set(key, group);
     }
-    seen.get(key)!.items.push(item);
+    group.items.push(item);
   }
   return groups;
 }
@@ -59,24 +107,46 @@ function itemLabel(item: ResolvedPosterItem) {
     : item.parsed.raw;
 }
 
+function itemUnits(item: DisplayItem): number {
+  return item.item.parsed.freeform ? 2 : 1;
+}
+
+function rowCountByUnits(items: DisplayItem[], cols: number): number {
+  if (items.length === 0) return 0;
+  let rows = 1;
+  let used = 0;
+
+  for (const item of items) {
+    const units = Math.min(itemUnits(item), cols);
+    if (used > 0 && used + units > cols) {
+      rows++;
+      used = 0;
+    }
+    used += units;
+    if (used >= cols) used = 0;
+  }
+
+  return rows;
+}
+
 /** Returns the canvas height needed to draw a section (flat grid layout) */
-function sectionHeight(count: number, cols: number): number {
-  if (count === 0) return 0;
-  const rows = Math.ceil(count / cols);
+function sectionHeight(items: DisplayItem[], cols: number): number {
+  if (items.length === 0) return 0;
+  const rows = rowCountByUnits(items, cols);
   const cardH = Math.round(CARD_W * 1.5);
   return 20 + rows * (cardH + LABEL_H + GAP); // 20 = section title
 }
 
 /** Returns the canvas height needed to draw a section (group-by-member layout) */
 function sectionHeightGrouped(
-  groups: { member: string | null; items: ResolvedPosterItem[] }[],
+  groups: { member: string | null; items: DisplayItem[] }[],
 ): number {
   if (groups.length === 0) return 0;
   let h = 20; // section title
   const cardH = Math.round(CARD_W * 1.5);
   for (const g of groups) {
     if (g.member) h += 18; // member label
-    const rows = Math.ceil(g.items.length / 12); // wrapped rows (max 12/row)
+    const rows = rowCountByUnits(g.items, 12); // wrapped rows (max 12 units/row)
     h += rows * (cardH + LABEL_H + GAP) + 16; // 16 = group gap
   }
   return h;
@@ -100,6 +170,7 @@ export async function renderPosterToCanvas(
   data: PosterData,
   theme: PosterTheme,
   groupByMember: boolean,
+  groupByNumbers: boolean,
   colsPerRow: number,
   pixelRatio = 2,
 ): Promise<HTMLCanvasElement> {
@@ -109,8 +180,12 @@ export async function renderPosterToCanvas(
   // ── Compute cols ────────────────────────────────────────────────────────────
   let cols: number;
   if (groupByMember) {
-    const haveGroups = groupByMemberFn(data.haves);
-    const wantGroups = groupByMemberFn(data.wants);
+    const haveGroups = groupDisplayByMember(
+      getDisplayItems(data.haves, groupByNumbers),
+    );
+    const wantGroups = groupDisplayByMember(
+      getDisplayItems(data.wants, groupByNumbers),
+    );
     const maxGroupSize = Math.max(
       ...haveGroups.map((g) => g.items.length),
       ...wantGroups.map((g) => g.items.length),
@@ -125,15 +200,17 @@ export async function renderPosterToCanvas(
   const posterW = innerW + PAD * 2;
 
   // ── Compute height ──────────────────────────────────────────────────────────
-  const haveGroups = groupByMemberFn(data.haves);
-  const wantGroups = groupByMemberFn(data.wants);
+  const displayHaves = getDisplayItems(data.haves, groupByNumbers);
+  const displayWants = getDisplayItems(data.wants, groupByNumbers);
+  const haveGroups = groupDisplayByMember(displayHaves);
+  const wantGroups = groupDisplayByMember(displayWants);
 
   const haveH = groupByMember
     ? sectionHeightGrouped(haveGroups)
-    : sectionHeight(data.haves.length, cols);
+    : sectionHeight(displayHaves, cols);
   const wantH = groupByMember
     ? sectionHeightGrouped(wantGroups)
-    : sectionHeight(data.wants.length, cols);
+    : sectionHeight(displayWants, cols);
 
   const notesH = data.notes ? 60 : 0;
   const dividerH = 1 + 20; // 1px line + 20px gap
@@ -154,7 +231,9 @@ export async function renderPosterToCanvas(
   const canvas = document.createElement("canvas");
   canvas.width = posterW * pixelRatio;
   canvas.height = posterH * pixelRatio;
-  const ctx = canvas.getContext("2d")!;
+  const rawCtx = canvas.getContext("2d");
+  if (!rawCtx) throw new Error("Canvas 2D context unavailable");
+  const ctx: CanvasRenderingContext2D = rawCtx;
   ctx.scale(pixelRatio, pixelRatio);
 
   // ── Background ──────────────────────────────────────────────────────────────
@@ -202,8 +281,9 @@ export async function renderPosterToCanvas(
     ctx.letterSpacing = "0px";
     y += 20;
 
+    const displayItems = getDisplayItems(items, groupByNumbers);
     if (groupByMember) {
-      const groups = groupByMemberFn(items);
+      const groups = groupDisplayByMember(displayItems);
       for (const group of groups) {
         if (group.member) {
           ctx.font = "600 11px Helvetica, Arial, sans-serif";
@@ -215,61 +295,118 @@ export async function renderPosterToCanvas(
         y += 16;
       }
     } else {
-      await drawItemRow(items, images);
+      await drawItemRow(displayItems, images);
     }
   }
 
-  async function drawItemRow(items: ResolvedPosterItem[], images: Map<string, HTMLImageElement>) {
-    const batches: ResolvedPosterItem[][] = [];
-    if (groupByMember) {
-      // Wrap freely in groups
-      for (let i = 0; i < items.length; i += 12) batches.push(items.slice(i, i + 12));
-    } else {
-      for (let i = 0; i < items.length; i += cols) batches.push(items.slice(i, i + cols));
+  async function drawItemRow(items: DisplayItem[], images: Map<string, HTMLImageElement>) {
+    const batches: DisplayItem[][] = [];
+    const maxUnits = groupByMember ? 12 : cols;
+    let current: DisplayItem[] = [];
+    let used = 0;
+
+    for (const item of items) {
+      const units = Math.min(itemUnits(item), maxUnits);
+      if (current.length > 0 && used + units > maxUnits) {
+        batches.push(current);
+        current = [];
+        used = 0;
+      }
+      current.push(item);
+      used += units;
+      if (used >= maxUnits) {
+        batches.push(current);
+        current = [];
+        used = 0;
+      }
     }
+    if (current.length > 0) batches.push(current);
 
     for (const row of batches) {
+      let usedUnits = 0;
       for (let i = 0; i < row.length; i++) {
-        const item = row[i];
-        const x = PAD + i * (CARD_W + GAP);
+        const displayItem = row[i];
+        const item = displayItem.item;
+        const isFreeform = item.parsed.freeform === true;
+        const itemW = isFreeform ? CARD_W * 2 + GAP : CARD_W;
+        const x = PAD + usedUnits * (CARD_W + GAP);
         const img = item.imageUrl ? images.get(item.imageUrl) : undefined;
 
         if (img) {
           // Draw card image with rounded corners
           ctx.save();
-          roundRect(ctx, x, y, CARD_W, cardH, 6);
+          roundRect(ctx, x, y, itemW, cardH, 6);
           ctx.clip();
-          ctx.drawImage(img, x, y, CARD_W, cardH);
+          ctx.drawImage(img, x, y, itemW, cardH);
           ctx.restore();
 
           // Border overlay
           ctx.strokeStyle = t.border;
           ctx.lineWidth = 1;
-          roundRect(ctx, x, y, CARD_W, cardH, 6);
+          roundRect(ctx, x, y, itemW, cardH, 6);
           ctx.stroke();
         } else {
           // Placeholder
           ctx.strokeStyle = t.accent;
           ctx.lineWidth = 1;
           ctx.setLineDash([4, 3]);
-          roundRect(ctx, x, y, CARD_W, cardH, 6);
+          roundRect(ctx, x, y, itemW, cardH, 6);
           ctx.stroke();
           ctx.setLineDash([]);
 
-          ctx.font = "10px Helvetica, Arial, sans-serif";
+          ctx.font = isFreeform
+            ? "700 15px Helvetica, Arial, sans-serif"
+            : "10px Helvetica, Arial, sans-serif";
           ctx.fillStyle = t.muted;
+          ctx.globalAlpha = isFreeform ? 0.95 : 1;
           ctx.textAlign = "center";
-          ctx.fillText(item.parsed.raw, x + CARD_W / 2, y + cardH / 2, CARD_W - 8);
+          ctx.textBaseline = "middle";
+          ctx.fillText(item.parsed.raw, x + itemW / 2, y + cardH / 2, itemW - 24);
+          ctx.globalAlpha = 1;
+          ctx.textBaseline = "top";
           ctx.textAlign = "left";
         }
 
-        // Label below card
-        const label = itemLabel(item);
-        ctx.font = "12px Helvetica, Arial, sans-serif";
-        ctx.fillStyle = t.fg;
-        ctx.textAlign = "center";
-        ctx.fillText(label, x + CARD_W / 2, y + cardH + 5, CARD_W);
-        ctx.textAlign = "left";
+        if (displayItem.quantity > 1) {
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(x + 14, y + cardH - 14, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.3)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.font = "700 11px Helvetica, Arial, sans-serif";
+          ctx.fillStyle = "#ffffff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(displayItem.quantity), x + 14, y + cardH - 14);
+          ctx.textBaseline = "top";
+          ctx.textAlign = "left";
+        }
+
+        if (!groupByNumbers && item.parsed.serial) {
+          const text = `#${item.parsed.serial}`;
+          ctx.font = "9px monospace";
+          const badgeW = Math.max(24, ctx.measureText(text).width + 8);
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          roundRect(ctx, x + 4, y + 4, badgeW, 14, 3);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.fillText(text, x + 8, y + 6);
+        }
+
+        if (!isFreeform) {
+          // Label below card
+          const label = itemLabel(item);
+          ctx.font = "12px Helvetica, Arial, sans-serif";
+          ctx.fillStyle = t.fg;
+          ctx.textAlign = "center";
+          ctx.fillText(label, x + CARD_W / 2, y + cardH + 5, CARD_W);
+          ctx.textAlign = "left";
+        }
+        usedUnits += itemUnits(displayItem);
       }
       y += cardH + LABEL_H + GAP;
     }

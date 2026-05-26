@@ -20,6 +20,7 @@ interface PosterCanvasProps {
   theme: PosterTheme;
   editable?: boolean;
   groupByMember?: boolean;
+  groupByNumbers?: boolean;
   colsPerRow?: number;
   onTextChange?: (
     field: keyof PosterData | `haveLabel:${number}` | `wantLabel:${number}`,
@@ -34,6 +35,61 @@ interface MemberGroup {
   indices: number[];
 }
 
+interface DisplayItem {
+  item: ResolvedPosterItem;
+  index: number;
+  quantity: number;
+}
+
+function getItemQuantity(item: ResolvedPosterItem): number {
+  return item.parsed.quantity && item.parsed.quantity > 1
+    ? item.parsed.quantity
+    : 1;
+}
+
+function getNumberGroupKey(item: ResolvedPosterItem): string {
+  if (item.entry) return `entry:${item.entry.collectionId}`;
+  return [
+    "parsed",
+    item.parsed.member ?? "",
+    item.parsed.season,
+    item.parsed.collectionNo,
+    item.parsed.onOffline ?? "",
+    item.parsed.raw,
+  ].join("|");
+}
+
+function getDisplayItems(
+  items: ResolvedPosterItem[],
+  groupByNumbers: boolean,
+): DisplayItem[] {
+  if (!groupByNumbers) {
+    return items.map((item, index) => ({
+      item,
+      index,
+      quantity: getItemQuantity(item),
+    }));
+  }
+
+  const grouped: DisplayItem[] = [];
+  const seen = new Map<string, DisplayItem>();
+
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    const key = getNumberGroupKey(item);
+    const existing = seen.get(key);
+    if (existing) {
+      existing.quantity += getItemQuantity(item);
+    } else {
+      const displayItem = { item, index, quantity: getItemQuantity(item) };
+      grouped.push(displayItem);
+      seen.set(key, displayItem);
+    }
+  }
+
+  return grouped;
+}
+
 function groupItemsByMember(items: ResolvedPosterItem[]): MemberGroup[] {
   const groups: MemberGroup[] = [];
   const seen = new Map<string, MemberGroup>();
@@ -41,14 +97,34 @@ function groupItemsByMember(items: ResolvedPosterItem[]): MemberGroup[] {
     const item = items[i];
     const m = item.entry?.member ?? item.parsed.member ?? null;
     const key = m ?? "\0any";
-    if (!seen.has(key)) {
-      const g: MemberGroup = { member: m, items: [], indices: [] };
-      groups.push(g);
-      seen.set(key, g);
+    let group = seen.get(key);
+    if (!group) {
+      group = { member: m, items: [], indices: [] };
+      groups.push(group);
+      seen.set(key, group);
     }
-    seen.get(key)!.items.push(item);
-    seen.get(key)!.indices.push(i);
+    group.items.push(item);
+    group.indices.push(i);
   }
+  return groups;
+}
+
+function groupDisplayItemsByMember(items: DisplayItem[]) {
+  const groups: { member: string | null; items: DisplayItem[] }[] = [];
+  const seen = new Map<string, (typeof groups)[0]>();
+
+  for (const item of items) {
+    const member = item.item.entry?.member ?? item.item.parsed.member ?? null;
+    const key = member ?? "\0any";
+    let group = seen.get(key);
+    if (!group) {
+      group = { member, items: [] };
+      groups.push(group);
+      seen.set(key, group);
+    }
+    group.items.push(item);
+  }
+
   return groups;
 }
 
@@ -185,23 +261,30 @@ function ItemCard({
   item,
   theme,
   cardWidth,
+  cardHeight,
   editable,
   onRemove,
   onLabelChange,
   label,
   seasonNumber,
+  displayQuantity,
+  showSerial,
 }: {
   item: ResolvedPosterItem;
   theme: typeof darkTheme;
   cardWidth: number;
+  cardHeight: number;
   editable: boolean;
   onRemove?: () => void;
   onLabelChange?: (v: string) => void;
   label: string;
   seasonNumber?: string;
+  displayQuantity?: number;
+  showSerial: boolean;
 }) {
-  const quantity = item.parsed.quantity;
-  const serial = item.parsed.serial;
+  const quantity = displayQuantity ?? item.parsed.quantity;
+  const serial = showSerial ? item.parsed.serial : undefined;
+  const isFreeform = item.parsed.freeform === true;
 
   return (
     <div
@@ -223,7 +306,7 @@ function ItemCard({
             alt={label}
             style={{
               width: cardWidth,
-              aspectRatio: "2 / 3",
+              height: cardHeight,
               objectFit: "cover",
               borderRadius: 6,
               border: `1px solid ${theme.border}`,
@@ -234,22 +317,25 @@ function ItemCard({
           <div
             style={{
               width: cardWidth,
-              aspectRatio: "2 / 3",
+              height: cardHeight,
               borderRadius: 6,
               border: `1px dashed ${theme.accent}`,
               backgroundColor: theme.sectionBg,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              padding: 4,
+              padding: isFreeform ? 14 : 4,
             }}
           >
             <span
               style={{
-                fontSize: 10,
+                fontSize: isFreeform ? 15 : 10,
+                fontWeight: isFreeform ? 700 : 400,
                 color: theme.muted,
+                opacity: isFreeform ? 0.95 : 1,
                 textAlign: "center",
                 wordBreak: "break-word",
+                lineHeight: "1.3",
               }}
             >
               {item.parsed.raw}
@@ -333,37 +419,41 @@ function ItemCard({
       </div>
 
       {/* Label - objekt name */}
-      <InlineEdit
-        value={label}
-        onChange={(v) => onLabelChange?.(v)}
-        editable={editable}
-        style={{
-          fontSize: 12,
-          color: theme.fg,
-          textAlign: "center",
-          maxWidth: cardWidth,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          lineHeight: "1.3",
-        }}
-      />
+      {!isFreeform && (
+        <InlineEdit
+          value={label}
+          onChange={(v) => onLabelChange?.(v)}
+          editable={editable}
+          style={{
+            fontSize: 12,
+            color: theme.fg,
+            textAlign: "center",
+            maxWidth: cardWidth,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            lineHeight: "1.3",
+          }}
+        />
+      )}
       {/* Label - season + number */}
-      <InlineEdit
-        value={seasonNumber ?? ""}
-        onChange={(v) => onLabelChange?.(v)}
-        editable={editable}
-        style={{
-          fontSize: 11,
-          color: theme.muted,
-          textAlign: "center",
-          maxWidth: cardWidth,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          lineHeight: "1.3",
-        }}
-      />
+      {!isFreeform && (
+        <InlineEdit
+          value={seasonNumber ?? ""}
+          onChange={(v) => onLabelChange?.(v)}
+          editable={editable}
+          style={{
+            fontSize: 11,
+            color: theme.muted,
+            textAlign: "center",
+            maxWidth: cardWidth,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            lineHeight: "1.3",
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -377,6 +467,7 @@ function Section({
   sectionKey,
   editable,
   groupByMember,
+  groupByNumbers,
   colsPerRow,
   onTitleChange,
   onRemoveItem,
@@ -390,6 +481,7 @@ function Section({
   sectionKey: "have" | "want";
   editable: boolean;
   groupByMember?: boolean;
+  groupByNumbers?: boolean;
   colsPerRow: number;
   onTitleChange?: (v: string) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
@@ -400,7 +492,9 @@ function Section({
   if (items.length === 0) return null;
 
   const cardWidth = 100;
+  const cardHeight = Math.round(cardWidth * 1.5);
   const gap = 10;
+  const displayItems = getDisplayItems(items, groupByNumbers ?? false);
 
   const sectionTitle = (
     <InlineEdit
@@ -419,12 +513,12 @@ function Section({
   );
 
   if (groupByMember) {
-    const groups = groupItemsByMember(items);
+    const groupedDisplayItems = groupDisplayItemsByMember(displayItems);
     return (
       <div style={{ width: "100%" }}>
         {sectionTitle}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {groups.map((group) => (
+          {groupedDisplayItems.map((group) => (
             <div key={group.member ?? "\0any"}>
               {group.member && (
                 <div
@@ -441,14 +535,19 @@ function Section({
                 </div>
               )}
               <div style={{ display: "flex", flexWrap: "wrap", gap }}>
-                {group.items.map((item, gi) => {
-                  const flatIdx = group.indices[gi];
+                {group.items.map((display) => {
+                  const flatIdx = display.index;
+                  const item = display.item;
+                  const itemWidth = item.parsed.freeform
+                    ? cardWidth * 2 + gap
+                    : cardWidth;
                   return (
                     <ItemCard
                       key={flatIdx}
                       item={item}
                       theme={theme}
-                      cardWidth={cardWidth}
+                      cardWidth={itemWidth}
+                      cardHeight={cardHeight}
                       editable={editable}
                       onRemove={() => onRemoveItem?.(sectionKey, flatIdx)}
                       onLabelChange={(v) =>
@@ -456,6 +555,8 @@ function Section({
                       }
                       label={labels[flatIdx] ?? item.parsed.raw}
                       seasonNumber={seasonNumbers[flatIdx]}
+                      displayQuantity={display.quantity}
+                      showSerial={!groupByNumbers}
                     />
                   );
                 })}
@@ -481,19 +582,35 @@ function Section({
           width: gridWidth,
         }}
       >
-        {items.map((item, i) => (
-          <ItemCard
-            key={i}
-            item={item}
-            theme={theme}
-            cardWidth={cardWidth}
-            editable={editable}
-            onRemove={() => onRemoveItem?.(sectionKey, i)}
-            onLabelChange={(v) => onLabelChange?.(`${sectionKey}Label:${i}`, v)}
-            label={labels[i] ?? item.parsed.raw}
-            seasonNumber={seasonNumbers[i]}
-          />
-        ))}
+        {displayItems.map((display) => {
+          const itemWidth = display.item.parsed.freeform
+            ? cardWidth * 2 + gap
+            : cardWidth;
+          return (
+            <div
+              key={display.index}
+              style={{
+                gridColumn: display.item.parsed.freeform ? "span 2" : undefined,
+              }}
+            >
+              <ItemCard
+                item={display.item}
+                theme={theme}
+                cardWidth={itemWidth}
+                cardHeight={cardHeight}
+                editable={editable}
+                onRemove={() => onRemoveItem?.(sectionKey, display.index)}
+                onLabelChange={(v) =>
+                  onLabelChange?.(`${sectionKey}Label:${display.index}`, v)
+                }
+                label={labels[display.index] ?? display.item.parsed.raw}
+                seasonNumber={seasonNumbers[display.index]}
+                displayQuantity={display.quantity}
+                showSerial={!groupByNumbers}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -508,6 +625,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
       theme: themeName,
       editable = false,
       groupByMember = false,
+      groupByNumbers = false,
       colsPerRow,
       onTextChange,
       onRemoveItem,
@@ -524,8 +642,12 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
     if (colsPerRow) {
       maxCols = colsPerRow;
     } else if (groupByMember) {
-      const haveGroups = groupItemsByMember(data.haves);
-      const wantGroups = groupItemsByMember(data.wants);
+      const haveGroups = groupItemsByMember(
+        getDisplayItems(data.haves, groupByNumbers).map((display) => display.item),
+      );
+      const wantGroups = groupItemsByMember(
+        getDisplayItems(data.wants, groupByNumbers).map((display) => display.item),
+      );
       const maxGroupSize = Math.max(
         ...haveGroups.map((g) => g.items.length),
         ...wantGroups.map((g) => g.items.length),
@@ -534,8 +656,8 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
       maxCols = Math.min(maxGroupSize, 12);
     } else {
       maxCols = Math.max(
-        getGridCols(data.haves.length),
-        getGridCols(data.wants.length),
+        getGridCols(getDisplayItems(data.haves, groupByNumbers).length),
+        getGridCols(getDisplayItems(data.wants, groupByNumbers).length),
         4,
       );
     }
@@ -624,6 +746,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           sectionKey="have"
           editable={editable}
           groupByMember={groupByMember}
+          groupByNumbers={groupByNumbers}
           colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("haveTitle", v)}
           onRemoveItem={onRemoveItem}
@@ -645,6 +768,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           sectionKey="want"
           editable={editable}
           groupByMember={groupByMember}
+          groupByNumbers={groupByNumbers}
           colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("wantTitle", v)}
           onRemoveItem={onRemoveItem}

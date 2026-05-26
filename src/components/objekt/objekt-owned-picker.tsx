@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { ObjektEntry } from "@/lib/cosmo/types";
-import { makeTradeItemTags, searchFilter, getArtistForMember } from "@/lib/filter-utils";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
+import { Input } from "@/components/ui/input";
+import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
+import type { ObjektEntry } from "@/lib/cosmo/types";
+import { getArtistForMember } from "@/lib/filter-utils";
+import { objektMatchesSearch } from "@/lib/objekt-search";
 import { ObjektGridPicker } from "./objekt-grid-picker";
 
 type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
@@ -66,39 +68,43 @@ export function ObjektOwnedPicker({
       .toLowerCase();
 
     if (searchText) {
-      const queries = searchText
-        .split(",")
-        .map((group) =>
-          group.trim().split(" ").map((t) => t.trim()).filter(Boolean),
-        )
-        .filter((group) => group.length > 0);
-
-      result = result.filter((o) => {
-        const tags = makeTradeItemTags(o);
-        return queries.some((group) =>
-          group.every((term) =>
-            term.startsWith("!")
-              ? !searchFilter(term.slice(1), o, tags)
-              : searchFilter(term, o, tags),
-          ),
-        );
-      });
+      result = result.filter((o) => objektMatchesSearch(o, searchText));
     }
 
     if (filters) {
-      if (filters.artist.length) result = result.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
-      if (filters.member.length) result = result.filter((o) => filters.member.includes(o.member));
-      if (filters.season.length) result = result.filter((o) => filters.season.some((s) => {
-        const d = decodeGroupedValue(s);
-        return d ? d.item === o.season && d.artistId === (getArtistForMember(o.member) ?? o.artist) : s === o.season;
-      }));
-      if (filters.class.length) result = result.filter((o) => filters.class.some((c) => {
-        const d = decodeGroupedValue(c);
-        return d ? d.item === o.class && d.artistId === (getArtistForMember(o.member) ?? o.artist) : c === o.class;
-      }));
+      if (filters.artist.length)
+        result = result.filter((o) =>
+          filters.artist.some((a) => artistMatches(a, o.artist)),
+        );
+      if (filters.member.length)
+        result = result.filter((o) => filters.member.includes(o.member));
+      if (filters.season.length)
+        result = result.filter((o) =>
+          filters.season.some((s) => {
+            const d = decodeGroupedValue(s);
+            return d
+              ? d.item === o.season &&
+                  d.artistId ===
+                    normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
+              : s === o.season;
+          }),
+        );
+      if (filters.class.length)
+        result = result.filter((o) =>
+          filters.class.some((c) => {
+            const d = decodeGroupedValue(c);
+            return d
+              ? d.item === o.class &&
+                  d.artistId ===
+                    normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
+              : c === o.class;
+          }),
+        );
       if (filters.on_offline.length) {
         result = result.filter((o) => {
-          const type = o.collectionNo.toLowerCase().endsWith("z") ? "offline" : "online";
+          const type = o.collectionNo.toLowerCase().endsWith("z")
+            ? "offline"
+            : "online";
           return filters.on_offline.includes(type);
         });
       }
@@ -108,7 +114,9 @@ export function ObjektOwnedPicker({
   }, [owned, query, filters]);
 
   function handleSelect(entry: OwnedEntry) {
-    const isSelected = selected.some((s) => s.serial != null && s.serial === entry.serial);
+    const isSelected = selected.some(
+      (s) => s.serial != null && s.serial === entry.serial,
+    );
     if (isSelected || selected.length >= maxSelections) return;
     onSelect({
       collectionId: entry.collectionId,
@@ -146,7 +154,12 @@ export function ObjektOwnedPicker({
       ) : owned.length === 0 ? (
         <div className="text-sm text-muted-foreground text-center py-4 space-y-2">
           <p>No objekts found. Make sure your Cosmo account is linked.</p>
-          <Button variant="ghost" size="sm" asChild className="bg-white! text-black! hover:bg-white/90! hover:text-black!">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="bg-white! text-black! hover:bg-white/90! hover:text-black!"
+          >
             <Link href="/link">Link Cosmo Account</Link>
           </Button>
         </div>

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
-import { Input } from "@/components/ui/input";
-import type { ObjektEntry } from "@/lib/cosmo/types";
-import type { ObjektStructuralFilters } from "./objekt-owned-picker";
-import { shortformMembers, membersByArtist } from "@/lib/filters";
-import { getArtistForMember } from "@/lib/filter-utils";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
+import { Input } from "@/components/ui/input";
+import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
+import type { ObjektEntry } from "@/lib/cosmo/types";
+import { getArtistForMember } from "@/lib/filter-utils";
+import { resolveObjektSearchTerm } from "@/lib/objekt-search";
 import { ObjektGridPicker } from "./objekt-grid-picker";
+import type { ObjektStructuralFilters } from "./objekt-owned-picker";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   if (!filters) return false;
@@ -20,19 +21,25 @@ function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   );
 }
 
-async function fetchByFilters(filters: ObjektStructuralFilters): Promise<ObjektEntry[]> {
+async function fetchByFilters(
+  filters: ObjektStructuralFilters,
+): Promise<ObjektEntry[]> {
   const params = new URLSearchParams();
   for (const a of filters.artist) params.append("artist", a);
   for (const m of filters.member) params.append("member", m);
   for (const s of filters.season) {
     const d = decodeGroupedValue(s);
-    if (d) { params.append("season", d.item); params.append("artist", d.artistId); }
-    else params.append("season", s);
+    if (d) {
+      params.append("season", d.item);
+      params.append("artist", d.artistId);
+    } else params.append("season", s);
   }
   for (const c of filters.class) {
     const d = decodeGroupedValue(c);
-    if (d) { params.append("class", d.item); params.append("artist", d.artistId); }
-    else params.append("class", c);
+    if (d) {
+      params.append("class", d.item);
+      params.append("artist", d.artistId);
+    } else params.append("class", c);
   }
   for (const o of filters.on_offline) params.append("on_offline", o);
   const res = await fetch(`/api/objekts/search?${params.toString()}`);
@@ -41,25 +48,18 @@ async function fetchByFilters(filters: ObjektStructuralFilters): Promise<ObjektE
   return data.results ?? [];
 }
 
-const allMembers = Object.values(membersByArtist).flat();
-
-function resolveShortform(query: string): string {
-  const lower = query.toLowerCase();
-  const shortform = shortformMembers[lower];
-  if (shortform) return shortform;
-  const memberMatch = allMembers.find((m) => m.toLowerCase() === lower);
-  if (memberMatch) return memberMatch;
-  return query;
-}
-
 const seasonPrefixMap: Record<string, string> = {
-  A: "Atom01", AA: "Atom02",
-  B: "Binary01", BB: "Binary02",
+  A: "Atom01",
+  AA: "Atom02",
+  B: "Binary01",
+  BB: "Binary02",
   C: "Cream01",
   D: "Divine01",
   E: "Ever01",
   W: "Winter26",
-  SP: "Spring25", SU: "Summer25", AU: "Autumn25",
+  SP: "Spring25",
+  SU: "Summer25",
+  AU: "Autumn25",
 };
 
 function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
@@ -68,7 +68,7 @@ function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
 
   let seasonPrefix: string | null = null;
   let collectionNoDigits: string | null = null;
-  let memberTerms: string[] = [];
+  const memberTerms: string[] = [];
 
   for (const term of terms) {
     const m = term.match(collectionNoRe);
@@ -95,7 +95,7 @@ function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
   params.append("q", collectionNoDigits);
 
   for (const t of memberTerms) {
-    const resolved = resolveShortform(t);
+    const resolved = resolveObjektSearchTerm(t);
     params.append("member", resolved);
   }
 
@@ -113,8 +113,10 @@ async function searchByQuery(query: string): Promise<ObjektEntry[]> {
     return data.results ?? [];
   }
 
-  const resolved = resolveShortform(trimmed);
-  const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(resolved)}`);
+  const resolved = resolveObjektSearchTerm(trimmed);
+  const res = await fetch(
+    `/api/objekts/search?q=${encodeURIComponent(resolved)}`,
+  );
   if (!res.ok) return [];
   const data = await res.json();
   return data.results ?? [];
@@ -184,19 +186,39 @@ export function ObjektPicker({
     const base = effectiveQuery ? queryResults : filterResults;
     if (!filters || !effectiveQuery) return base;
     let r = base;
-    if (filters.artist.length) r = r.filter((o) => filters.artist.some((a) => a.toLowerCase() === o.artist.toLowerCase()));
-    if (filters.member.length) r = r.filter((o) => filters.member.includes(o.member));
-    if (filters.season.length) r = r.filter((o) => filters.season.some((s) => {
-      const d = decodeGroupedValue(s);
-      return d ? d.item === o.season && d.artistId === (getArtistForMember(o.member) ?? o.artist) : s === o.season;
-    }));
-    if (filters.class.length) r = r.filter((o) => filters.class.some((c) => {
-      const d = decodeGroupedValue(c);
-      return d ? d.item === o.class && d.artistId === (getArtistForMember(o.member) ?? o.artist) : c === o.class;
-    }));
+    if (filters.artist.length)
+      r = r.filter((o) =>
+        filters.artist.some((a) => artistMatches(a, o.artist)),
+      );
+    if (filters.member.length)
+      r = r.filter((o) => filters.member.includes(o.member));
+    if (filters.season.length)
+      r = r.filter((o) =>
+        filters.season.some((s) => {
+          const d = decodeGroupedValue(s);
+          return d
+            ? d.item === o.season &&
+                d.artistId ===
+                  normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
+            : s === o.season;
+        }),
+      );
+    if (filters.class.length)
+      r = r.filter((o) =>
+        filters.class.some((c) => {
+          const d = decodeGroupedValue(c);
+          return d
+            ? d.item === o.class &&
+                d.artistId ===
+                  normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
+            : c === o.class;
+        }),
+      );
     if (filters.on_offline.length) {
       r = r.filter((o) => {
-        const type = o.collectionNo?.toLowerCase().endsWith("z") ? "offline" : "online";
+        const type = o.collectionNo?.toLowerCase().endsWith("z")
+          ? "offline"
+          : "online";
         return filters.on_offline.includes(type);
       });
     }
@@ -204,7 +226,9 @@ export function ObjektPicker({
   }, [query, queryResults, filterResults, filters]);
 
   function handleSelect(entry: ObjektEntry) {
-    const isSelected = selected.some((s) => s.collectionId === entry.collectionId);
+    const isSelected = selected.some(
+      (s) => s.collectionId === entry.collectionId,
+    );
     if (isSelected || selected.length >= maxSelections) return;
     onSelect(entry);
   }

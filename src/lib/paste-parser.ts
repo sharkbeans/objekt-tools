@@ -28,33 +28,47 @@
  *    Bare 3-digit numbers inherit the season prefix from the same line
  */
 
-import { shortformMembers, membersByArtist } from "@/lib/filters";
+import { membersByArtist, shortformMembers } from "@/lib/filters";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
 
 const allMembers = Object.values(membersByArtist).flat();
 
+const seasonBaseByPrefix: Record<string, string> = {
+  A: "Atom",
+  B: "Binary",
+  C: "Cream",
+  D: "Divine",
+  E: "Ever",
+};
+
 const seasonPrefixMap: Record<string, string> = {
-  A: "Atom01",
-  AA: "Atom02",
-  B: "Binary01",
-  BB: "Binary02",
-  C: "Cream01",
-  D: "Divine01",
-  E: "Ever01",
+  ...Object.fromEntries(
+    Object.entries(seasonBaseByPrefix).flatMap(([prefix, season]) =>
+      Array.from({ length: 9 }, (_, i) => [
+        prefix.repeat(i + 1),
+        `${season}${String(i + 1).padStart(2, "0")}`,
+      ]),
+    ),
+  ),
   W: "Winter26",
   SP: "Spring25",
   SU: "Summer25",
   AU: "Autumn25",
 };
 
+const defaultOnOfflineByPrefix: Record<string, "online" | "offline"> = {
+  CC: "offline",
+};
+
 export interface ParsedItem {
   member: string | null; // resolved member name, null for "any member" wants
-  season: string;        // resolved season e.g. "Binary02"
-  collectionNo: string;  // raw digits e.g. "345"
-  raw: string;           // original text for error display
-  quantity?: number;     // e.g. 3 from "x3" or "(3)"
-  serial?: string;       // user-specified serial/copy, e.g. "1", "20x"
+  season: string; // resolved season e.g. "Binary02"
+  collectionNo: string; // raw digits e.g. "345"
+  raw: string; // original text for error display
+  quantity?: number; // e.g. 3 from "x3" or "(3)"
+  serial?: string; // user-specified serial/copy, e.g. "1", "20x"
   onOffline?: "online" | "offline"; // when explicitly specified via a/z suffix
+  freeform?: boolean; // text-only poster item, e.g. "Any E/AA/BB Spin Fuel"
 }
 
 export interface ParseResult {
@@ -73,8 +87,10 @@ function resolveMember(text: string): string | null {
   return exact ?? null;
 }
 
-// Matches a season-prefix + 3-digit collection number, optional trailing a/z
+// Matches a season-prefix + 3-digit collection number, optional trailing a/z.
+// Also supports future generation shorthand like D2101Z -> Divine02 101Z.
 const collectionRe = /^([A-Za-z]*)(\d{3})([azAZ]?)$/i;
+const generatedCollectionRe = /^([A-Za-z])([2-9])(\d{3})([azAZ]?)$/i;
 
 interface ParsedCollection {
   season: string;
@@ -84,6 +100,28 @@ interface ParsedCollection {
 }
 
 function parseCollectionToken(token: string): ParsedCollection | null {
+  const generatedMatch = token.match(generatedCollectionRe);
+  if (generatedMatch) {
+    const basePrefix = generatedMatch[1].toUpperCase();
+    const generation = Number.parseInt(generatedMatch[2], 10);
+    const prefix = basePrefix.repeat(generation);
+    const season = seasonPrefixMap[prefix];
+    if (!season) return null;
+    const suffix = generatedMatch[4].toLowerCase();
+    const onOffline =
+      suffix === "a"
+        ? "online"
+        : suffix === "z"
+          ? "offline"
+          : (defaultOnOfflineByPrefix[prefix] ?? null);
+    return {
+      season,
+      digits: generatedMatch[3],
+      prefix,
+      onOffline,
+    };
+  }
+
   const m = token.match(collectionRe);
   if (!m) return null;
   const prefix = m[1].toUpperCase();
@@ -91,23 +129,34 @@ function parseCollectionToken(token: string): ParsedCollection | null {
   const suffix = m[3].toLowerCase();
   const season = prefix ? seasonPrefixMap[prefix] : null;
   if (prefix && !season) return null; // unknown prefix
-  if (!season) return null;           // bare digits without prefix
-  const onOffline = suffix === "a" ? "online" : suffix === "z" ? "offline" : null;
+  if (!season) return null; // bare digits without prefix
+  const onOffline =
+    suffix === "a"
+      ? "online"
+      : suffix === "z"
+        ? "offline"
+        : (defaultOnOfflineByPrefix[prefix] ?? null);
   return { season, digits, prefix, onOffline };
 }
 
 /**
- * Strip Discord formatting from a line before checking if it's a header.
- * Handles: ## Have, **Have**, [Have], [H], **[Have]**, HAVE:, **HAVE:**, etc.
+ * Strip Discord formatting from a line before checking if it's a header or item.
+ * Handles common Discord markdown wrappers: headings, bold/italic/underline,
+ * strikethrough, spoiler bars, inline code, brackets, and trailing colons.
  */
-function stripFormatting(line: string): string {
+function stripDiscordFormatting(line: string): string {
   return line
     .trim()
-    .replace(/^#+\s*/, "")     // ## heading
-    .replace(/\*\*/g, "")      // **bold**
-    .replace(/__/g, "")        // __underline__
-    .replace(/[[\]]/g, "")     // [brackets]
-    .replace(/:$/, "")         // trailing colon
+    .replace(/^>\s*/, "") // > blockquote
+    .replace(/^#{1,3}\s+/, "") // # heading, ## heading, ### heading
+    .replace(/^[-*]\s+/, "") // list bullets
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\|\|([^|]+)\|\|/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/[_*]+/g, "")
+    .replace(/[[\]]/g, "") // [brackets]
+    .replace(/:$/, "") // trailing colon
     .trim();
 }
 
@@ -117,8 +166,10 @@ function stripFormatting(line: string): string {
  * Extra words (FCO, DCO, "Ever", etc.) are ignored.
  * Returns hasOneToOne=true if "1:1" appears in the header.
  */
-function isSectionHeader(line: string): { section: "have" | "want"; hasOneToOne: boolean } | null {
-  const stripped = stripFormatting(line);
+function isSectionHeader(
+  line: string,
+): { section: "have" | "want"; hasOneToOne: boolean } | null {
+  const stripped = stripDiscordFormatting(line);
   const lower = stripped.toLowerCase();
 
   // Single-letter shorthands [H], [W]
@@ -135,6 +186,11 @@ function isSectionHeader(line: string): { section: "have" | "want"; hasOneToOne:
   return { section, hasOneToOne };
 }
 
+function isIgnorableTradeIntentLine(line: string): boolean {
+  const stripped = stripDiscordFormatting(line).toLowerCase();
+  return /^(wtt|want to trade)$/.test(stripped);
+}
+
 /** Token is a quantity annotation like x3, x10 — returns the number or null */
 function parseQuantityToken(token: string): number | null {
   const m = token.match(/^x(\d+)$/i);
@@ -149,18 +205,20 @@ function parseLine(
   line: string,
   section: "have" | "want",
   inheritedMember: string | null = null,
-): { items: ParsedItem[]; errors: string[]; noteFragments: string[]; explicitMember: string | null | undefined } {
-  let trimmed = line.trim();
-  if (!trimmed) return { items: [], errors: [], noteFragments: [], explicitMember: undefined };
-
-  // Strip Discord list bullets: "* item" and "- item"
-  trimmed = trimmed.replace(/^[-*]\s+/, "");
-
-  // Strip Discord bold/italic formatting: **text** → text, *text* → text
-  trimmed = trimmed.replace(/\*+/g, "");
-
-  // Strip Discord underline markdown: "__Member__: ..." → "Member: ..." (global)
-  trimmed = trimmed.replace(/__([^_]+)__/g, "$1");
+): {
+  items: ParsedItem[];
+  errors: string[];
+  noteFragments: string[];
+  explicitMember: string | null | undefined;
+} {
+  let trimmed = stripDiscordFormatting(line);
+  if (!trimmed)
+    return {
+      items: [],
+      errors: [],
+      noteFragments: [],
+      explicitMember: undefined,
+    };
 
   // Strip trailing colon after first word: "Seoyeon: bb101" → "Seoyeon bb101"
   trimmed = trimmed.replace(/^(\S+):/, "$1");
@@ -198,7 +256,7 @@ function parseLine(
   // Inherit member from previous line if this line has no leading member.
   // "Any" lines always clear the inherited member (explicit "no specific member").
   let leadingMember: string | null = isAnyLine ? null : inheritedMember;
-  let explicitMember: string | null | undefined = undefined; // set only when this line names a member
+  let explicitMember: string | null | undefined; // set only when this line names a member
   let currentSeason: string | null = null; // inherited for bare-number tokens across the line
 
   for (let i = 0; i < commaParts.length; i++) {
@@ -232,7 +290,8 @@ function parseLine(
       // ── Parenthetical quantity: (4), (13) — no # prefix ─────────────────
       const parenQtyMatch = token.match(/^\((\d+)\)$/);
       if (parenQtyMatch) {
-        if (items.length > 0) items[items.length - 1].quantity = parseInt(parenQtyMatch[1], 10);
+        if (items.length > 0)
+          items[items.length - 1].quantity = parseInt(parenQtyMatch[1], 10);
         continue;
       }
 
@@ -246,14 +305,17 @@ function parseLine(
       }
 
       // ── Range expansion: BB117-BB120 or BB117~BB120 ──────────────────────
-      const rangeMatch = token.match(/^([A-Za-z]*)(\d{3})[azAZ]?[-~][A-Za-z]*(\d{3})[azAZ]?$/i);
+      const rangeMatch = token.match(
+        /^([A-Za-z]*)(\d{3})[azAZ]?[-~][A-Za-z]*(\d{3})[azAZ]?$/i,
+      );
       if (rangeMatch) {
         const prefix = rangeMatch[1].toUpperCase();
         const start = parseInt(rangeMatch[2], 10);
         const end = parseInt(rangeMatch[3], 10);
-        const season = (prefix && seasonPrefixMap[prefix])
-          ? seasonPrefixMap[prefix]
-          : currentSeason;
+        const season =
+          prefix && seasonPrefixMap[prefix]
+            ? seasonPrefixMap[prefix]
+            : currentSeason;
         if (season && end >= start && end - start < 50) {
           for (let n = start; n <= end; n++) {
             const digits = String(n).padStart(3, "0");
@@ -261,10 +323,13 @@ function parseLine(
               member: isAnyLine && section === "want" ? null : leadingMember,
               season,
               collectionNo: digits,
-              raw: leadingMember ? `${leadingMember} ${prefix}${digits}` : `${prefix}${digits}`,
+              raw: leadingMember
+                ? `${leadingMember} ${prefix}${digits}`
+                : `${prefix}${digits}`,
             });
           }
-          if (prefix && seasonPrefixMap[prefix]) currentSeason = seasonPrefixMap[prefix];
+          if (prefix && seasonPrefixMap[prefix])
+            currentSeason = seasonPrefixMap[prefix];
         }
         continue;
       }
@@ -302,7 +367,6 @@ function parseLine(
           collectionNo: bareDigitsMatch[1],
           raw: leadingMember ? `${leadingMember} ${token}` : token,
         });
-        continue;
       }
 
       // Unknown token — skip silently (e.g. "unscanned", "available", price annotations)
@@ -313,6 +377,16 @@ function parseLine(
   // Standalone "1:1" lines produce no items and reach trailing notes naturally.
   if (hasOneToOne && items.length > 0) {
     noteFragments.push("1:1");
+  }
+
+  if (items.length === 0 && section === "want" && isAnyLine) {
+    items.push({
+      member: null,
+      season: "",
+      collectionNo: "",
+      raw: trimmed,
+      freeform: true,
+    });
   }
 
   return { items, errors, noteFragments, explicitMember };
@@ -345,7 +419,8 @@ export function parsePastedTrade(text: string): ParseResult {
     const trimmed = line.trim();
 
     // Skip URLs — they appear as context links in trade posts, not as items
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) continue;
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://"))
+      continue;
 
     const headerResult = isSectionHeader(line);
     if (headerResult) {
@@ -365,12 +440,19 @@ export function parsePastedTrade(text: string): ParseResult {
 
     if (!trimmed) continue;
 
+    if (isIgnorableTradeIntentLine(line)) continue;
+
     if (!currentSection) {
       preambleLines.push(trimmed);
       continue;
     }
 
-    const { items, errors: lineErrors, noteFragments, explicitMember } = parseLine(trimmed, currentSection, lastMember);
+    const {
+      items,
+      errors: lineErrors,
+      noteFragments,
+      explicitMember,
+    } = parseLine(trimmed, currentSection, lastMember);
     if (explicitMember !== undefined) lastMember = explicitMember;
 
     for (const frag of noteFragments) extractedNoteFragments.add(frag);
@@ -389,19 +471,23 @@ export function parsePastedTrade(text: string): ParseResult {
   }
 
   if (haves.length === 0 && wants.length === 0 && errors.length === 0) {
-    errors.push("No HAVE or WANT section found. Start with HAVE or WANT on its own line.");
+    errors.push(
+      "No HAVE or WANT section found. Start with HAVE or WANT on its own line.",
+    );
   }
 
   // Build notes: preamble + extracted fragments + trailing unparseable lines
   const noteParts: string[] = [];
   if (preambleLines.length > 0) noteParts.push(preambleLines.join("\n").trim());
-  if (extractedNoteFragments.size > 0) noteParts.push([...extractedNoteFragments].join(", "));
+  if (extractedNoteFragments.size > 0)
+    noteParts.push([...extractedNoteFragments].join(", "));
   if (trailingUnmatched.length > 0) {
     const trailing = trailingUnmatched.join("\n").trim();
     if (trailing) noteParts.push(trailing);
   }
 
-  const rawNotes = noteParts.length > 0 ? noteParts.join("\n\n").trim() : undefined;
+  const rawNotes =
+    noteParts.length > 0 ? noteParts.join("\n\n").trim() : undefined;
   const notes = rawNotes ? sanitizeNoteText(rawNotes) || undefined : undefined;
 
   return { haves, wants, errors, notes };

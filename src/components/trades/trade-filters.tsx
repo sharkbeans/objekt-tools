@@ -1,21 +1,18 @@
 "use client";
 
 import { SearchIcon, XIcon } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MultiSelect } from "@/components/ui/multi-select";
-import { ClassMultiSelect, SeasonMultiSelect, decodeGroupedValue } from "@/components/ui/class-multi-select";
+import { Button } from "@/components/ui/button";
 import {
-  validArtists,
-  validClasses,
-  validOnlineTypes,
-  validSeasons,
-  classArtistMap,
-  seasonArtistMap,
-  membersByArtist,
-  type ValidArtist,
-} from "@/lib/filters";
+  ClassMultiSelect,
+  decodeGroupedValue,
+  SeasonMultiSelect,
+} from "@/components/ui/class-multi-select";
+import { Input } from "@/components/ui/input";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { useFilterOptions } from "@/hooks/use-filter-options";
+import { artistLabel } from "@/lib/artist-utils";
+import { validOnlineTypes } from "@/lib/filters";
 
 export type TradeFilterState = {
   search: string;
@@ -47,33 +44,6 @@ interface TradeFiltersProps {
   showFilterMode?: boolean;
 }
 
-function getAvailableSeasons(selectedArtists: string[]): string[] {
-  if (!selectedArtists.length) return [...validSeasons];
-  const seasons = new Set<string>();
-  for (const a of selectedArtists) {
-    const map = seasonArtistMap.find((m) => m.artistId === a);
-    for (const s of map?.seasons ?? []) seasons.add(s);
-  }
-  return [...validSeasons].filter((s) => seasons.has(s));
-}
-
-function getAvailableClasses(selectedArtists: string[]): string[] {
-  if (!selectedArtists.length) return [...validClasses];
-  const classes = new Set<string>();
-  for (const a of selectedArtists) {
-    const map = classArtistMap.find((m) => m.artistId === a);
-    for (const c of map?.classes ?? []) classes.add(c);
-  }
-  return [...validClasses].filter((c) => classes.has(c));
-}
-
-function getAvailableMembers(selectedArtists: string[]): string[] {
-  const source = selectedArtists.length
-    ? selectedArtists.flatMap((a) => membersByArtist[a as ValidArtist] ?? [])
-    : Object.values(membersByArtist).flat();
-  return [...new Set(source)];
-}
-
 function hasActiveFilters(filters: TradeFilterState): boolean {
   return (
     !!filters.search ||
@@ -85,30 +55,60 @@ function hasActiveFilters(filters: TradeFilterState): boolean {
   );
 }
 
-export function TradeFilters({ filters, onChange, showSearch = true, showSort = true, showFilterMode = true }: TradeFiltersProps) {
+export function TradeFilters({
+  filters,
+  onChange,
+  showSearch = true,
+  showSort = true,
+  showFilterMode = true,
+}: TradeFiltersProps) {
+  const filterOptions = useFilterOptions();
+
   function update(partial: Partial<TradeFilterState>) {
     onChange({ ...filters, ...partial });
   }
 
-  const availableSeasons = getAvailableSeasons(filters.artist);
-  const availableClasses = getAvailableClasses(filters.artist);
-  const availableMembers = getAvailableMembers(filters.artist);
+  const availableSeasons = filters.artist.length
+    ? filters.artist.flatMap(
+        (artist) => filterOptions.seasonsByArtist[artist] ?? [],
+      )
+    : filterOptions.allSeasons;
+  const availableClasses = filters.artist.length
+    ? filters.artist.flatMap(
+        (artist) => filterOptions.classesByArtist[artist] ?? [],
+      )
+    : filterOptions.allClasses;
+  const availableMembers = filters.artist.length
+    ? filters.artist.flatMap(
+        (artist) => filterOptions.membersByArtist[artist] ?? [],
+      )
+    : filterOptions.allMembers;
 
   // When artist changes, drop any member/season/class values that are no longer valid
   function handleArtistChange(artists: string[]) {
-    const newSeasons = getAvailableSeasons(artists);
-    const newClasses = getAvailableClasses(artists);
-    const newMembers = getAvailableMembers(artists);
+    const newSeasons = artists.length
+      ? artists.flatMap((artist) => filterOptions.seasonsByArtist[artist] ?? [])
+      : filterOptions.allSeasons;
+    const newClasses = artists.length
+      ? artists.flatMap((artist) => filterOptions.classesByArtist[artist] ?? [])
+      : filterOptions.allClasses;
+    const newMembers = artists.length
+      ? artists.flatMap((artist) => filterOptions.membersByArtist[artist] ?? [])
+      : filterOptions.allMembers;
     update({
       artist: artists,
       // season/class are scoped "artistId::value" — keep only those whose item is still valid
       season: filters.season.filter((s) => {
         const decoded = decodeGroupedValue(s);
-        return decoded ? newSeasons.includes(decoded.item) : newSeasons.includes(s);
+        return decoded
+          ? newSeasons.includes(decoded.item)
+          : newSeasons.includes(s);
       }),
       class: filters.class.filter((c) => {
         const decoded = decodeGroupedValue(c);
-        return decoded ? newClasses.includes(decoded.item) : newClasses.includes(c);
+        return decoded
+          ? newClasses.includes(decoded.item)
+          : newClasses.includes(c);
       }),
       member: filters.member.filter((m) => newMembers.includes(m)),
     });
@@ -201,7 +201,7 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
         {/* Filter dropdowns: 2-col grid on mobile, inline on desktop */}
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
           <MultiSelect
-            options={validArtists.map((a) => ({ label: a, value: a }))}
+            options={filterOptions.artists}
             value={filters.artist}
             onChange={handleArtistChange}
             placeholder="Artist"
@@ -218,6 +218,7 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
 
           <SeasonMultiSelect
             options={availableSeasons}
+            columns={filterOptions.seasonColumns}
             value={filters.season}
             onChange={(v) => update({ season: v })}
             placeholder="Season"
@@ -226,6 +227,7 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
 
           <ClassMultiSelect
             options={availableClasses}
+            columns={filterOptions.classColumns}
             value={filters.class}
             onChange={(v) => update({ class: v })}
             placeholder="Class"
@@ -261,7 +263,9 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
               {a}
               <button
                 type="button"
-                onClick={() => handleArtistChange(filters.artist.filter((x) => x !== a))}
+                onClick={() =>
+                  handleArtistChange(filters.artist.filter((x) => x !== a))
+                }
               >
                 <XIcon className="h-3 w-3" />
               </button>
@@ -272,7 +276,9 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
               {m}
               <button
                 type="button"
-                onClick={() => update({ member: filters.member.filter((x) => x !== m) })}
+                onClick={() =>
+                  update({ member: filters.member.filter((x) => x !== m) })
+                }
               >
                 <XIcon className="h-3 w-3" />
               </button>
@@ -280,11 +286,18 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
           ))}
           {filters.season.map((s) => {
             const decoded = decodeGroupedValue(s);
-            const label = decoded ? `${decoded.artistId === "artms" ? "ARTMS" : decoded.artistId} ${decoded.item}` : s;
+            const label = decoded
+              ? `${artistLabel(decoded.artistId)} ${decoded.item}`
+              : s;
             return (
               <Badge key={s} variant="secondary" className="gap-1 text-xs">
                 {label}
-                <button type="button" onClick={() => update({ season: filters.season.filter((x) => x !== s) })}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({ season: filters.season.filter((x) => x !== s) })
+                  }
+                >
                   <XIcon className="h-3 w-3" />
                 </button>
               </Badge>
@@ -292,11 +305,18 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
           })}
           {filters.class.map((c) => {
             const decoded = decodeGroupedValue(c);
-            const label = decoded ? `${decoded.artistId === "artms" ? "ARTMS" : decoded.artistId} ${decoded.item}` : c;
+            const label = decoded
+              ? `${artistLabel(decoded.artistId)} ${decoded.item}`
+              : c;
             return (
               <Badge key={c} variant="secondary" className="gap-1 text-xs">
                 {label}
-                <button type="button" onClick={() => update({ class: filters.class.filter((x) => x !== c) })}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({ class: filters.class.filter((x) => x !== c) })
+                  }
+                >
                   <XIcon className="h-3 w-3" />
                 </button>
               </Badge>
@@ -307,7 +327,11 @@ export function TradeFilters({ filters, onChange, showSearch = true, showSort = 
               {t === "online" ? "Digital" : "Physical"}
               <button
                 type="button"
-                onClick={() => update({ on_offline: filters.on_offline.filter((x) => x !== t) })}
+                onClick={() =>
+                  update({
+                    on_offline: filters.on_offline.filter((x) => x !== t),
+                  })
+                }
               >
                 <XIcon className="h-3 w-3" />
               </button>
