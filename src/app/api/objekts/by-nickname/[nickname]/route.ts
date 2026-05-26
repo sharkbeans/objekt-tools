@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 // GET /api/objekts/by-nickname/[nickname]
 // Resolves a Cosmo nickname to a wallet address and returns their transferable objekts.
-// No auth required — rate limited by IP (5 req/min unauthed, 30 req/min authed).
+// No auth required — rate limited by IP (10 req/min unauthed, 60 req/min authed).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ nickname: string }> },
@@ -31,7 +31,7 @@ export async function GET(
     ? `user:${session.user.id}`
     : `ip:${request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown"}`;
   const rateLimitKey = `rate-limit:by-nickname:${rateLimitId}`;
-  const limit = session ? 30 : 5;
+  const limit = session ? 60 : 10;
   const attempts = await redis.incr(rateLimitKey);
   if (attempts === 1) await redis.expire(rateLimitKey, 60);
   if (attempts > limit) {
@@ -64,7 +64,7 @@ export async function GET(
 
   const rows = await getCached(
     `objekts:nickname:v1:${address.toLowerCase()}`,
-    60_000,
+    90_000,
     () =>
       indexer
         .select({

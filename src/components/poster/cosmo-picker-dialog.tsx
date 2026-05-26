@@ -54,7 +54,14 @@ function getInventoryType(entry: ObjektEntry): "online" | "offline" {
   return entry.collectionNo.toLowerCase().endsWith("z") ? "offline" : "online";
 }
 
+const INVENTORY_CACHE_TTL = 90_000;
+const inventoryCache = new Map<string, { data: OwnedEntry[]; expiresAt: number }>();
+
 async function fetchByNickname(nickname: string): Promise<OwnedEntry[]> {
+  const key = nickname.toLowerCase();
+  const cached = inventoryCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
   const res = await fetch(
     `/api/objekts/by-nickname/${encodeURIComponent(nickname)}`,
   );
@@ -64,7 +71,9 @@ async function fetchByNickname(nickname: string): Promise<OwnedEntry[]> {
     throw new Error(`Cosmo user "${nickname}" not found.`);
   if (!res.ok) throw new Error("Failed to load inventory.");
   const data = await res.json();
-  return data.results ?? [];
+  const results: OwnedEntry[] = data.results ?? [];
+  inventoryCache.set(key, { data: results, expiresAt: Date.now() + INVENTORY_CACHE_TTL });
+  return results;
 }
 
 type Step = "haves" | "wants";

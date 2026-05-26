@@ -128,6 +128,7 @@ interface ObjektPickerProps {
   onDeselect: (objekt: ObjektEntry) => void;
   maxSelections?: number;
   filters?: ObjektStructuralFilters;
+  gridClassName?: string;
 }
 
 export function ObjektPicker({
@@ -136,6 +137,7 @@ export function ObjektPicker({
   onDeselect,
   maxSelections = 10,
   filters,
+  gridClassName,
 }: ObjektPickerProps) {
   const [query, setQuery] = useState("");
   const [filterResults, setFilterResults] = useState<ObjektEntry[]>([]);
@@ -256,6 +258,7 @@ export function ObjektPicker({
           loading={loading}
           maxSelections={maxSelections}
           emptyMessage="No results found"
+          gridClassName={gridClassName}
         />
       )}
 

@@ -123,8 +123,15 @@ function rowCountByUnits(items: DisplayItem[], cols: number): number {
       used = 0;
     }
     used += units;
-    if (used >= cols) used = 0;
+    if (used >= cols) {
+      used = 0;
+      rows++;
+    }
   }
+
+  // Undo the final row increment if the last row was exactly full
+  // (the loop counts an extra row when the last item fills the row exactly)
+  if (used === 0) rows--;
 
   return rows;
 }

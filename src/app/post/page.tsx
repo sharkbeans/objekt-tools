@@ -10,8 +10,6 @@ import {
   MoonIcon,
   ArrowLeftIcon,
   ImageIcon,
-  PlusIcon,
-  XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,9 +18,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { parsePastedTrade } from "@/lib/paste-parser";
 import { resolveForPoster, type ResolvedPosterItem } from "@/lib/poster-resolver";
-import { PosterCanvas, getGridCols, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
-import { ObjektPicker } from "@/components/objekt/objekt-picker";
+import { PosterCanvas, getGridCols, getDisplayCount, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
 import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
+import { AddObjektDialog } from "@/components/poster/add-objekt-dialog";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
@@ -46,49 +44,6 @@ function makeItem(entry: ObjektEntry): ResolvedPosterItem {
   };
 }
 
-// ── Side-by-side Add panel ──────────────────────────────────────────────────
-
-interface AddPanelProps {
-  onAdd: (section: "have" | "want", entry: ObjektEntry) => void;
-  posterData: PosterData;
-}
-
-function AddPanel({ onAdd, posterData }: AddPanelProps) {
-  const addedHaves: ObjektEntry[] = posterData.haves
-    .filter((h) => h.entry)
-    .map((h) => h.entry!);
-  const addedWants: ObjektEntry[] = posterData.wants
-    .filter((w) => w.entry)
-    .map((w) => w.entry!);
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <p className="text-sm font-semibold uppercase tracking-wider">
-          Add to Have
-        </p>
-        <ObjektPicker
-          selected={addedHaves}
-          onSelect={(entry) => onAdd("have", entry)}
-          onDeselect={() => {}}
-          maxSelections={999}
-        />
-      </div>
-      <div className="space-y-2">
-        <p className="text-sm font-semibold uppercase tracking-wider">
-          Add to Want
-        </p>
-        <ObjektPicker
-          selected={addedWants}
-          onSelect={(entry) => onAdd("want", entry)}
-          onDeselect={() => {}}
-          maxSelections={999}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function CreatePosterPage() {
@@ -105,14 +60,25 @@ export default function CreatePosterPage() {
   const [groupByNumbers, setGroupByNumbers] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [colsPerRow, setColsPerRow] = useState(5);
+  const userSetCols = useRef(false);
   const posterRef = useRef<HTMLDivElement>(null);
-  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [addDialogSection, setAddDialogSection] = useState<"have" | "want" | null>(null);
 
   const [isLinked, setIsLinked] = useState(false);
 
   useEffect(() => {
     setIsHydrated(true);
   }, []);
+
+  // Auto-assign colsPerRow when items change, unless user has manually set it
+  useEffect(() => {
+    if (!posterData || userSetCols.current) return;
+    const haveCount = getDisplayCount(posterData.haves, groupByNumbers);
+    const wantCount = getDisplayCount(posterData.wants, groupByNumbers);
+    const count = Math.max(haveCount, wantCount);
+    const autoCols = Math.max(getGridCols(count), 3);
+    setColsPerRow(autoCols);
+  }, [posterData, groupByNumbers]);
 
   // Fetch cosmo status to get the real cosmo nickname and linked state
   useEffect(() => {
@@ -152,13 +118,7 @@ export default function CreatePosterPage() {
         day: "numeric",
       });
 
-      const autoCols = Math.max(
-        getGridCols(resolvedHaves.length),
-        getGridCols(resolvedWants.length),
-        3,
-      );
-      setColsPerRow(autoCols);
-
+      userSetCols.current = false;
       setPosterData({
         username: cosmoId,
         cosmoId,
@@ -178,7 +138,6 @@ export default function CreatePosterPage() {
 
   const handleDownload = useCallback(async () => {
     if (!posterRef.current || !posterData) return;
-    setShowAddPanel(false);
     setDownloading(true);
 
     // Wait a tick for editable=false to apply (removes inputs/buttons from DOM)
@@ -238,22 +197,23 @@ export default function CreatePosterPage() {
   }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
 
   const handleBack = useCallback(() => {
-    setShowAddPanel(false);
     setStage("input");
     setPosterData(null);
+    userSetCols.current = false;
   }, []);
 
-  const handleAdd = useCallback((section: "have" | "want", entry: ObjektEntry) => {
+  const handleAddItems = useCallback((section: "have" | "want", entries: ObjektEntry[]) => {
     setPosterData((prev) => {
       if (!prev) return prev;
-      const newItem = makeItem(entry);
-      const list = section === "have" ? prev.haves : prev.wants;
-      if (list.some((h) => h.entry?.collectionId === entry.collectionId)) return prev;
-      return {
-        ...prev,
-        [section === "have" ? "haves" : "wants"]: [...list, newItem],
-      };
+      const key = section === "have" ? "haves" : "wants";
+      const existing = prev[key];
+      const toAdd = entries
+        .filter((e) => !existing.some((h) => h.entry?.collectionId === e.collectionId))
+        .map(makeItem);
+      if (toAdd.length === 0) return prev;
+      return { ...prev, [key]: [...existing, ...toAdd] };
     });
+    setAddDialogSection(null);
   }, []);
 
   const handleRemoveItem = useCallback((section: "have" | "want", index: number) => {
@@ -281,13 +241,7 @@ export default function CreatePosterPage() {
         day: "numeric",
       });
 
-      const autoCols = Math.max(
-        getGridCols(resolvedHaves.length),
-        getGridCols(resolvedWants.length),
-        3,
-      );
-      setColsPerRow(autoCols);
-
+      userSetCols.current = false;
       setPosterData({
         username: searchedNickname,
         cosmoId: searchedNickname,
@@ -434,7 +388,7 @@ export default function CreatePosterPage() {
               <div className="flex items-center gap-1.5">
                 <select
                   value={colsPerRow}
-                  onChange={(e) => setColsPerRow(Number(e.target.value))}
+                  onChange={(e) => { userSetCols.current = true; setColsPerRow(Number(e.target.value)); }}
                   className="h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
@@ -491,39 +445,31 @@ export default function CreatePosterPage() {
             </div>
           )}
 
-          {/* Add panel — side by side */}
-          {showAddPanel && (
-            <div className="rounded-lg border border-border p-4">
-              <AddPanel onAdd={handleAdd} posterData={posterData} />
-            </div>
+          {/* Inline add dialog — opened by clicking the + card in either section */}
+          {addDialogSection && (
+            <AddObjektDialog
+              open={!!addDialogSection}
+              section={addDialogSection}
+              cosmoId={posterData.cosmoId || undefined}
+              onOpenChange={(open) => { if (!open) setAddDialogSection(null); }}
+              onConfirm={handleAddItems}
+            />
           )}
 
           {/* Poster canvas — always editable (except during download) */}
-          <div className="space-y-2">
-            {/* Add Objekts button — right-aligned above canvas */}
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => setShowAddPanel((v) => !v)}
-                className="gap-1.5"
-              >
-                {showAddPanel ? <XIcon className="h-4 w-4" /> : <PlusIcon className="h-4 w-4" />}
-                {showAddPanel ? "Close" : "Add Objekts"}
-              </Button>
-            </div>
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <PosterCanvas
-                ref={posterRef}
-                data={posterData}
-                theme={posterTheme}
-                editable={!downloading}
-                groupByMember={groupByMember}
-                groupByNumbers={groupByNumbers}
-                colsPerRow={colsPerRow}
-                onTextChange={handleTextChange}
-                onRemoveItem={handleRemoveItem}
-              />
-            </div>
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <PosterCanvas
+              ref={posterRef}
+              data={posterData}
+              theme={posterTheme}
+              editable={!downloading}
+              groupByMember={groupByMember}
+              groupByNumbers={groupByNumbers}
+              colsPerRow={colsPerRow}
+              onTextChange={handleTextChange}
+              onRemoveItem={handleRemoveItem}
+              onAddItem={setAddDialogSection}
+            />
           </div>
         </div>
       )}

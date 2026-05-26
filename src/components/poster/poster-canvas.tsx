@@ -27,6 +27,7 @@ interface PosterCanvasProps {
     value: string,
   ) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
+  onAddItem?: (section: "have" | "want") => void;
 }
 
 interface MemberGroup {
@@ -130,6 +131,10 @@ function groupDisplayItemsByMember(items: DisplayItem[]) {
 
 export function getGridCols(count: number): number {
   return Math.min(10, Math.max(3, Math.ceil(Math.sqrt(count * 1.5))));
+}
+
+export function getDisplayCount(items: ResolvedPosterItem[], groupByNumbers: boolean): number {
+  return getDisplayItems(items, groupByNumbers).length;
 }
 
 const darkTheme = {
@@ -458,6 +463,64 @@ function ItemCard({
   );
 }
 
+// ── Add card skeleton ─────────────────────────────────────────────────────
+
+function AddCard({
+  theme,
+  cardWidth,
+  cardHeight,
+  onAdd,
+}: {
+  theme: typeof darkTheme;
+  cardWidth: number;
+  cardHeight: number;
+  onAdd: () => void;
+}) {
+  return (
+    <div
+      style={{
+        width: cardWidth,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onAdd}
+        style={{
+          width: cardWidth,
+          height: cardHeight,
+          borderRadius: 6,
+          border: `2.5px dashed ${theme.fg}`,
+          opacity: 0.45,
+          backgroundColor: "transparent",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          color: theme.fg,
+          fontSize: 28,
+          fontWeight: 400,
+          lineHeight: 1,
+          padding: 0,
+          transition: "border-color 0.15s, color 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.opacity = "0.85";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.opacity = "0.45";
+        }}
+        aria-label="Add objekt"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 // ── Section ───────────────────────────────────────────────────────────────
 
 function Section({
@@ -472,6 +535,7 @@ function Section({
   onTitleChange,
   onRemoveItem,
   onLabelChange,
+  onAddItem,
   labels,
   seasonNumbers,
 }: {
@@ -486,10 +550,11 @@ function Section({
   onTitleChange?: (v: string) => void;
   onRemoveItem?: (section: "have" | "want", index: number) => void;
   onLabelChange?: (field: string, value: string) => void;
+  onAddItem?: (section: "have" | "want") => void;
   labels: string[];
   seasonNumbers: string[];
 }) {
-  if (items.length === 0) return null;
+  if (items.length === 0 && !editable) return null;
 
   const cardWidth = 100;
   const cardHeight = Math.round(cardWidth * 1.5);
@@ -563,6 +628,16 @@ function Section({
               </div>
             </div>
           ))}
+          {editable && onAddItem && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap }}>
+              <AddCard
+                theme={theme}
+                cardWidth={cardWidth}
+                cardHeight={cardHeight}
+                onAdd={() => onAddItem(sectionKey)}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -611,6 +686,14 @@ function Section({
             </div>
           );
         })}
+        {editable && onAddItem && (
+          <AddCard
+            theme={theme}
+            cardWidth={cardWidth}
+            cardHeight={cardHeight}
+            onAdd={() => onAddItem(sectionKey)}
+          />
+        )}
       </div>
     </div>
   );
@@ -629,6 +712,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
       colsPerRow,
       onTextChange,
       onRemoveItem,
+      onAddItem,
     },
     ref,
   ) {
@@ -750,6 +834,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("haveTitle", v)}
           onRemoveItem={onRemoveItem}
+          onAddItem={onAddItem}
           onLabelChange={(field, value) =>
             onTextChange?.(field as `haveLabel:${number}`, value)
           }
@@ -758,9 +843,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
         />
 
         {/* Want section */}
-        {data.wants.length > 0 && data.haves.length > 0 && (
-          <div style={{ height: 1, backgroundColor: theme.border }} />
-        )}
+        <div style={{ height: 1, backgroundColor: theme.border }} />
         <Section
           title={data.wantTitle}
           items={data.wants}
@@ -772,6 +855,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
           colsPerRow={maxCols}
           onTitleChange={(v) => onTextChange?.("wantTitle", v)}
           onRemoveItem={onRemoveItem}
+          onAddItem={onAddItem}
           onLabelChange={(field, value) =>
             onTextChange?.(field as `wantLabel:${number}`, value)
           }
