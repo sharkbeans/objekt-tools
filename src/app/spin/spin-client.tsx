@@ -161,6 +161,7 @@ const spinRates: Record<string, SpinWeight[]> = {
   "triples::Ever01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
   "triples::Atom02":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
   "triples::Binary02": [{ outcome: "First", chance: 90.63 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+  "triples::Cream02":  [{ outcome: "First", chance: 90.63 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
   "artms::Atom01":     [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
   "artms::Binary01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
   "artms::Cream01":    [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
