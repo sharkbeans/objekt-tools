@@ -392,7 +392,7 @@ export function CosmoPickerDialog({
                     data-form-type="other"
                   />
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 flex-1 min-w-0">
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 sm:flex-1 sm:min-w-0">
                       <MultiSelect
                         options={filterOptions.artists}
                         value={inventoryFilters.artist}
@@ -445,7 +445,7 @@ export function CosmoPickerDialog({
                         className="w-full sm:w-auto sm:min-w-24"
                       />
                     </div>
-                    <div className="flex items-center gap-2 ml-auto shrink-0">
+                    <div className="hidden sm:flex items-center gap-2 ml-auto shrink-0">
                       <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
                         Cancel
                       </Button>

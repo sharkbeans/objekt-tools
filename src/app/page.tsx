@@ -13,7 +13,7 @@ import type { LucideIcon } from "lucide-react";
 
 function TradesIcon() {
   return (
-    <div className="relative" style={{ width: 56, height: 56 }}>
+    <div className="relative" style={{ width: 56, height: 56 }} suppressHydrationWarning>
       <RectangleVertical
         className="text-white absolute"
         style={{ width: 67, height: 67, top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
@@ -30,7 +30,7 @@ function TradesIcon() {
 
 function SpinIcon() {
   return (
-    <div className="relative" style={{ width: 56, height: 56 }}>
+    <div className="relative" style={{ width: 56, height: 56 }} suppressHydrationWarning>
       <RectangleVertical
         className="text-white absolute"
         style={{ width: 67, height: 67, top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
