@@ -731,6 +731,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
+  perspective: 900px;
 }
 
 .flare {
@@ -1015,6 +1016,27 @@
   pointer-events: none;
   z-index: 10;
   mix-blend-mode: overlay;
+}
+
+.motionButton {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 999px;
+  background: rgb(10 8 24 / 0.66);
+  backdrop-filter: blur(6px);
+  color: rgb(255 255 255 / 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.4);
 }
 
 .doneCard .revealedCard {
@@ -1304,29 +1326,29 @@
 
 @keyframes cardRevealMotion {
   0% {
-    transform: scale(0.36) rotateY(-62deg) rotateZ(-12deg);
+    transform: scale(0.36) rotateX(12deg) rotateY(-62deg) rotateZ(-12deg);
   }
   18% {
-    transform: scale(0.58) rotateY(18deg) rotateZ(8deg);
+    transform: scale(0.58) rotateX(-8deg) rotateY(18deg) rotateZ(8deg);
   }
   34% {
-    transform: scale(0.8) rotateY(88deg) rotateZ(-5deg);
+    transform: scale(0.8) rotateX(14deg) rotateY(88deg) rotateZ(-5deg);
   }
   48% {
-    transform: scale(1) rotateY(4deg) rotateZ(0deg);
+    transform: scale(1) rotateX(0deg) rotateY(4deg) rotateZ(0deg);
   }
   62% {
-    transform: scale(0.72) rotateY(180deg) rotateZ(0deg);
+    transform: scale(0.72) rotateX(-12deg) rotateY(180deg) rotateZ(0deg);
     filter: drop-shadow(0 0 22px rgb(133 84 255 / 0.9));
   }
   73% {
-    transform: scale(0.86) rotateY(180deg) rotateZ(0deg);
+    transform: scale(0.86) rotateX(0deg) rotateY(180deg) rotateZ(0deg);
   }
   84% {
-    transform: scale(1.08) rotateY(0deg) rotateZ(-8deg);
+    transform: scale(1.08) rotateX(6deg) rotateY(0deg) rotateZ(-8deg);
   }
   100% {
-    transform: scale(1) rotateY(0deg) rotateZ(0deg);
+    transform: scale(1) rotateX(0deg) rotateY(0deg) rotateZ(0deg);
     filter: drop-shadow(0 0 18px rgb(133 84 255 / 0.85));
   }
 }
@@ -1356,38 +1378,38 @@
   75% {
     opacity: 1;
     filter: blur(0) brightness(1);
-    transform: scale(1.04) rotateY(88deg);
+    transform: scale(1.04) rotateX(12deg) rotateY(88deg);
   }
   75.1% {
     opacity: 1;
     filter: blur(0) brightness(1);
-    transform: scale(1.04) rotateY(-88deg);
+    transform: scale(1.04) rotateX(-12deg) rotateY(-88deg);
   }
   79%,
   81% {
     opacity: 1;
     filter: blur(0) brightness(1);
-    transform: scale(1.04) rotateY(0deg);
+    transform: scale(1.04) rotateX(0deg) rotateY(0deg);
   }
   85% {
     opacity: 1;
     filter: blur(0) brightness(1);
-    transform: scale(1.04) rotateY(88deg);
+    transform: scale(1.04) rotateX(12deg) rotateY(88deg);
   }
   85.1% {
     opacity: 1;
     filter: blur(0) brightness(1);
-    transform: scale(1.04) rotateY(-88deg);
+    transform: scale(1.04) rotateX(-12deg) rotateY(-88deg);
   }
   94% {
     opacity: 1;
     filter: blur(0) brightness(1);
-    transform: scale(1.02) rotateY(0deg);
+    transform: scale(1.02) rotateX(0deg) rotateY(0deg);
   }
   100% {
     opacity: 1;
     filter: blur(0) brightness(1);
-    transform: scale(1) rotateY(0deg);
+    transform: scale(1) rotateX(0deg) rotateY(0deg);
   }
 }
 
@@ -1429,26 +1451,26 @@
 
 @keyframes cardRevealMotionBroken {
   0% {
-    transform: scale(0.36) rotateY(-62deg) rotateZ(-12deg);
+    transform: scale(0.36) rotateX(12deg) rotateY(-62deg) rotateZ(-12deg);
   }
   18% {
-    transform: scale(0.58) rotateY(18deg) rotateZ(8deg);
+    transform: scale(0.58) rotateX(-8deg) rotateY(18deg) rotateZ(8deg);
   }
   34% {
-    transform: scale(0.8) rotateY(88deg) rotateZ(-5deg);
+    transform: scale(0.8) rotateX(14deg) rotateY(88deg) rotateZ(-5deg);
   }
   48% {
-    transform: scale(1) rotateY(4deg) rotateZ(0deg);
+    transform: scale(1) rotateX(0deg) rotateY(4deg) rotateZ(0deg);
   }
   62% {
-    transform: scale(0.72) rotateY(180deg) rotateZ(0deg);
+    transform: scale(0.72) rotateX(-12deg) rotateY(180deg) rotateZ(0deg);
     filter: drop-shadow(0 0 22px rgb(133 84 255 / 0.9));
   }
   73% {
-    transform: scale(0.92) rotateY(180deg) rotateZ(0deg);
+    transform: scale(0.92) rotateX(0deg) rotateY(180deg) rotateZ(0deg);
   }
   100% {
-    transform: scale(1) rotateY(180deg) rotateZ(0deg);
+    transform: scale(1) rotateX(0deg) rotateY(180deg) rotateZ(0deg);
     filter: drop-shadow(0 0 18px rgb(133 84 255 / 0.85));
   }
 }

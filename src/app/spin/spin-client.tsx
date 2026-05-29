@@ -10,7 +10,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -305,12 +305,14 @@ function EmptyObjekt({ className }: { className?: string }) {
   );
 }
 
-const MAX_TILT = 24;
-const GYRO_MAX_TILT = 18;
+const MAX_TILT = 40;
+const GYRO_MAX_TILT = 30;
 
 function clampTilt(value: number, limit: number) {
   return Math.max(-limit, Math.min(limit, value));
 }
+
+type MotionState = "idle" | "needs-permission" | "on";
 
 function TiltCard({
   children,
@@ -324,11 +326,17 @@ function TiltCard({
   const [state, setState] = useState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
   // Gyroscope state — drives a subtler ambient tilt while idle.
   const [gyro, setGyro] = useState({ rx: 0, ry: 0 });
+  const [motion, setMotion] = useState<MotionState>("idle");
   // Touch interaction takes priority over gyro; baseline calibrates "flat".
   const interactingRef = useRef(false);
   const baselineRef = useRef<{ beta: number; gamma: number } | null>(null);
+  const listeningRef = useRef(false);
 
-  useEffect(() => {
+  // Attaches the orientation listener. Idempotent — safe to call repeatedly.
+  const startListening = useCallback(() => {
+    if (listeningRef.current) return;
+    listeningRef.current = true;
+
     function onOrient(e: DeviceOrientationEvent) {
       if (e.beta == null || e.gamma == null || interactingRef.current) return;
       if (!baselineRef.current) {
@@ -340,11 +348,28 @@ function TiltCard({
         rx: clampTilt(-dBeta, GYRO_MAX_TILT),
         ry: clampTilt(dGamma, GYRO_MAX_TILT),
       });
+      setMotion("on");
     }
 
     window.addEventListener("deviceorientation", onOrient, true);
-    return () => window.removeEventListener("deviceorientation", onOrient, true);
   }, []);
+
+  // On mount: figure out whether the device exposes orientation and whether it
+  // needs an explicit permission gesture (iOS 13+) or fires automatically.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("DeviceOrientationEvent" in window)) {
+      return;
+    }
+    const DOE = window.DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<string>;
+    };
+    if (typeof DOE.requestPermission === "function") {
+      setMotion("needs-permission");
+    } else {
+      // Android / other: events fire without a prompt (requires HTTPS).
+      startListening();
+    }
+  }, [startListening]);
 
   // iOS 13+ requires an explicit permission request from a user gesture.
   function requestGyroPermission() {
@@ -352,7 +377,16 @@ function TiltCard({
       requestPermission?: () => Promise<string>;
     };
     if (typeof DOE?.requestPermission === "function") {
-      DOE.requestPermission().catch(() => {});
+      DOE.requestPermission()
+        .then((res) => {
+          if (res === "granted") {
+            startListening();
+            setMotion("on");
+          }
+        })
+        .catch(() => {});
+    } else {
+      startListening();
     }
   }
 
@@ -418,7 +452,7 @@ function TiltCard({
         transform: `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) scale(${scale})`,
         transition: state.active
           ? "transform 0.07s linear"
-          : "transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)",
+          : "transform 0.6s cubic-bezier(0.25, 0, 0.25, 1)",
         transformStyle: "preserve-3d",
         willChange: "transform",
         touchAction: "none",
@@ -433,6 +467,19 @@ function TiltCard({
           transition: state.active ? "none" : "background 0.3s ease",
         }}
       />
+      {motion === "needs-permission" && (
+        <button
+          type="button"
+          className={styles.motionButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            requestGyroPermission();
+          }}
+        >
+          <SparklesIcon className="size-3.5" />
+          Enable motion
+        </button>
+      )}
     </div>
   );
 }
