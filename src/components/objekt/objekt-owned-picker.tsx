@@ -6,12 +6,17 @@ import { Button } from "@/components/ui/button";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Input } from "@/components/ui/input";
 import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
+import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { getArtistForMember } from "@/lib/filter-utils";
+import {
+  getArtistForMember,
+  getOnOffline,
+  type ObjektStructuralFilters,
+} from "@/lib/filter-utils";
 import { objektMatchesSearch } from "@/lib/objekt-search";
 import { ObjektGridPicker } from "./objekt-grid-picker";
 
-type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
+export type { ObjektStructuralFilters };
 
 async function fetchOwned(): Promise<OwnedEntry[]> {
   const res = await fetch("/api/objekts/owned");
@@ -19,15 +24,6 @@ async function fetchOwned(): Promise<OwnedEntry[]> {
   const data = await res.json();
   return data.results ?? [];
 }
-
-export type ObjektStructuralFilters = {
-  artist: string[];
-  member: string[];
-  season: string[];
-  class: string[];
-  on_offline: string[];
-  search?: string;
-};
 
 interface ObjektOwnedPickerProps {
   selected: ObjektEntry[];
@@ -101,12 +97,9 @@ export function ObjektOwnedPicker({
           }),
         );
       if (filters.on_offline.length) {
-        result = result.filter((o) => {
-          const type = o.collectionNo.toLowerCase().endsWith("z")
-            ? "offline"
-            : "online";
-          return filters.on_offline.includes(type);
-        });
+        result = result.filter((o) =>
+          filters.on_offline.includes(getOnOffline(o)),
+        );
       }
     }
 

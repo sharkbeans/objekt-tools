@@ -30,6 +30,16 @@ export type TradeFilters = {
   sort?: string | null;
 };
 
+/** Structural filters used by the inventory/global pickers. */
+export type ObjektStructuralFilters = {
+  artist: string[];
+  member: string[];
+  season: string[];
+  class: string[];
+  on_offline: string[];
+  search?: string;
+};
+
 // ============================================================
 // Tag generation — ported from objekt-explorer makeCollectionTags
 // ============================================================
@@ -54,7 +64,7 @@ export function searchFilter(
 // Online/offline detection
 // ============================================================
 
-function getOnOffline(item: TradeFilterItem): "online" | "offline" {
+export function getOnOffline(item: TradeFilterItem): "online" | "offline" {
   if (item.collectionNo) {
     return item.collectionNo.toLowerCase().endsWith("z") ? "offline" : "online";
   }

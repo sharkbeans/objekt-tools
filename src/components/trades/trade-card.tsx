@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRightIcon } from "lucide-react";
 import { membersByArtist } from "@/lib/filters";
-import { getSeasonPrefix } from "@/lib/season-prefix";
+import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
 
 interface TradeItem {
   id: number;
@@ -19,25 +19,6 @@ interface TradeItem {
   isAny?: boolean;
   artist?: string | null;
   thumbnailUrl?: string | null;
-}
-
-function anyWantLabel(item: TradeItem): string {
-  if (item.member) return `Any ${item.member}`;
-  if (item.season && item.artist) return `Any ${item.artist} ${item.season}`;
-  if (item.season) return `Any ${item.season}`;
-  if (item.artist) return `Any ${item.artist}`;
-  if (item.class) return `Any ${item.class}`;
-  return "Any";
-}
-
-/** Compact label: "SeoYeon AA101" — strip trailing type char (Z/A) */
-function shortLabel(item: TradeItem): string {
-  if (item.collectionNo && item.member) {
-    const prefix = getSeasonPrefix(item.season);
-    const num = item.collectionNo.replace(/[A-Za-z]$/, "");
-    return `${item.member} ${prefix}${num}`;
-  }
-  return item.collectionId;
 }
 
 function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; season?: string | null; artist?: string | null; class?: string | null; serial?: number | null }, showSerial?: boolean) {
@@ -175,7 +156,7 @@ function CompactItem({ item }: { item: TradeItem }) {
     <div className="flex items-center gap-2 min-w-0">
       <ObjektThumb item={item} />
       <div className="min-w-0">
-        <p className="text-xs truncate">{shortLabel(item)}</p>
+        <p className="text-xs truncate">{formatShortLabel(item)}</p>
         {item.serial != null && (
           <p className="text-[11px] text-muted-foreground">#{String(item.serial).padStart(5, "0")}</p>
         )}

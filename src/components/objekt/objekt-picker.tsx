@@ -5,10 +5,13 @@ import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Input } from "@/components/ui/input";
 import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { getArtistForMember } from "@/lib/filter-utils";
+import {
+  getArtistForMember,
+  getOnOffline,
+  type ObjektStructuralFilters,
+} from "@/lib/filter-utils";
 import { resolveObjektSearchTerm } from "@/lib/objekt-search";
 import { ObjektGridPicker } from "./objekt-grid-picker";
-import type { ObjektStructuralFilters } from "./objekt-owned-picker";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   if (!filters) return false;
@@ -217,12 +220,7 @@ export function ObjektPicker({
         }),
       );
     if (filters.on_offline.length) {
-      r = r.filter((o) => {
-        const type = o.collectionNo?.toLowerCase().endsWith("z")
-          ? "offline"
-          : "online";
-        return filters.on_offline.includes(type);
-      });
+      r = r.filter((o) => filters.on_offline.includes(getOnOffline(o)));
     }
     return r;
   }, [query, queryResults, filterResults, filters]);

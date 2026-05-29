@@ -4,7 +4,6 @@ import { SearchIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ObjektGridPicker } from "@/components/objekt/objekt-grid-picker";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
-import type { ObjektStructuralFilters } from "@/components/objekt/objekt-owned-picker";
 import { Button } from "@/components/ui/button";
 import {
   ClassMultiSelect,
@@ -22,43 +21,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
-import { normalizeArtistId } from "@/lib/artist-utils";
+import {
+  fetchInventoryByNickname,
+  getInventoryArtist,
+  getInventoryType,
+  type OwnedEntry,
+} from "@/lib/cosmo-inventory";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { getArtistForMember } from "@/lib/filter-utils";
+import type { ObjektStructuralFilters } from "@/lib/filter-utils";
 import { validOnlineTypes } from "@/lib/filters";
 import { objektMatchesSearch } from "@/lib/objekt-search";
-
-type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
 
 const emptyFilters: ObjektStructuralFilters = {
   artist: [], member: [], season: [], class: [], on_offline: [],
 };
-
-function getInventoryArtist(entry: ObjektEntry): string | null {
-  return normalizeArtistId(getArtistForMember(entry.member) ?? entry.artist);
-}
-
-function getInventoryType(entry: ObjektEntry): "online" | "offline" {
-  return entry.collectionNo.toLowerCase().endsWith("z") ? "offline" : "online";
-}
-
-const INVENTORY_CACHE_TTL = 90_000;
-const inventoryCache = new Map<string, { data: OwnedEntry[]; expiresAt: number }>();
-
-async function fetchByNickname(nickname: string): Promise<OwnedEntry[]> {
-  const key = nickname.toLowerCase();
-  const cached = inventoryCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.data;
-
-  const res = await fetch(`/api/objekts/by-nickname/${encodeURIComponent(nickname)}`);
-  if (res.status === 429) throw new Error("Too many requests. Try again later.");
-  if (res.status === 404) throw new Error(`Cosmo user "${nickname}" not found.`);
-  if (!res.ok) throw new Error("Failed to load inventory.");
-  const data = await res.json();
-  const results: OwnedEntry[] = data.results ?? [];
-  inventoryCache.set(key, { data: results, expiresAt: Date.now() + INVENTORY_CACHE_TTL });
-  return results;
-}
 
 // ── Shared filter bar ─────────────────────────────────────────────────────
 
@@ -206,7 +182,7 @@ function InventoryPicker({
     lastFetchedRef.current = cosmoId;
     setLoading(true);
     setError(null);
-    fetchByNickname(cosmoId)
+    fetchInventoryByNickname(cosmoId)
       .then(setInventory)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load inventory."))
       .finally(() => setLoading(false));

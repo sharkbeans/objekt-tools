@@ -22,7 +22,7 @@ import { DiscordNudge } from "@/components/discord-nudge";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
-import { getSeasonPrefix } from "@/lib/season-prefix";
+import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,26 +46,6 @@ interface TradeItem {
   artist?: string | null;
   thumbnailUrl?: string | null;
 }
-
-function anyWantLabel(item: TradeItem): string {
-  if (item.member) return `Any ${item.member}`;
-  if (item.season && item.artist) return `Any ${item.artist} ${item.season}`;
-  if (item.season) return `Any ${item.season}`;
-  if (item.artist) return `Any ${item.artist}`;
-  if (item.class) return `Any ${item.class}`;
-  return "Any";
-}
-
-/** Compact label: "HeeJin A108" — strip trailing type char (Z/A) */
-function formatLabel(item: TradeItem): string {
-  if (item.collectionNo && item.member) {
-    const prefix = getSeasonPrefix(item.season);
-    const num = item.collectionNo.replace(/[A-Za-z]$/, "");
-    return `${item.member} ${prefix}${num}`;
-  }
-  return item.collectionId;
-}
-
 
 function formatSerial(serial: number) {
   return `#${String(serial).padStart(5, "0")}`;
@@ -176,7 +156,7 @@ function ObjektImages({
                 </a>
               ) : imgEl}
               <span className="text-xs text-muted-foreground text-center max-w-20 truncate">
-                {formatLabel(item)}
+                {formatShortLabel(item)}
               </span>
               {showSerial && item.serial != null && (
                 <span className="text-xs text-muted-foreground">{formatSerial(item.serial)}</span>
@@ -203,7 +183,7 @@ function ObjektList({ items, label, showSerial, images }: { items: TradeItem[]; 
             const imgUrl = !item.isAny ? images?.get(item.collectionId) : undefined;
             const rowContent = (
               <>
-                <span className="text-sm">{item.isAny ? anyWantLabel(item) : formatLabel(item)}</span>
+                <span className="text-sm">{item.isAny ? anyWantLabel(item) : formatShortLabel(item)}</span>
                 {right && (
                   <span className="text-sm text-muted-foreground ml-4 shrink-0">{right}</span>
                 )}

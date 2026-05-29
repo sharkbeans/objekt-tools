@@ -13,15 +13,15 @@ import type { LucideIcon } from "lucide-react";
 
 function TradesIcon() {
   return (
-    <div className="relative" style={{ width: 56, height: 56 }} suppressHydrationWarning>
+    <div className="relative" style={{ width: "56px", height: "56px" }} suppressHydrationWarning>
       <RectangleVertical
         className="text-white absolute"
-        style={{ width: 67, height: 67, top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+        style={{ width: "67px", height: "67px", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
         strokeWidth={1.25}
       />
       <ArrowLeftRight
         className="text-white absolute"
-        style={{ width: 28, height: 28, top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+        style={{ width: "28px", height: "28px", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
         strokeWidth={2.5}
       />
     </div>
@@ -30,15 +30,15 @@ function TradesIcon() {
 
 function SpinIcon() {
   return (
-    <div className="relative" style={{ width: 56, height: 56 }} suppressHydrationWarning>
+    <div className="relative" style={{ width: "56px", height: "56px" }} suppressHydrationWarning>
       <RectangleVertical
         className="text-white absolute"
-        style={{ width: 67, height: 67, top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+        style={{ width: "67px", height: "67px", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
         strokeWidth={1.25}
       />
       <RefreshCcw
         className="text-white absolute"
-        style={{ width: 28, height: 28, top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+        style={{ width: "28px", height: "28px", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
         strokeWidth={2.5}
       />
     </div>
@@ -103,8 +103,8 @@ export default function HomePage() {
                 <Icon
                   className="text-white transition-colors"
                   style={{
-                    width: 56,
-                    height: 56,
+                    width: "56px",
+                    height: "56px",
                     transform: iconRotate ? `rotate(${iconRotate}deg)` : undefined,
                   }}
                   strokeWidth={1.25}
