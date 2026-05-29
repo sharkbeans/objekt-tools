@@ -305,6 +305,13 @@ function EmptyObjekt({ className }: { className?: string }) {
   );
 }
 
+const MAX_TILT = 24;
+const GYRO_MAX_TILT = 18;
+
+function clampTilt(value: number, limit: number) {
+  return Math.max(-limit, Math.min(limit, value));
+}
+
 function TiltCard({
   children,
   className,
@@ -313,34 +320,108 @@ function TiltCard({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState({ rx: 0, ry: 0, gx: 50, gy: 50, hover: false });
+  // Pointer / touch drag state — drives the strong, responsive tilt.
+  const [state, setState] = useState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
+  // Gyroscope state — drives a subtler ambient tilt while idle.
+  const [gyro, setGyro] = useState({ rx: 0, ry: 0 });
+  // Touch interaction takes priority over gyro; baseline calibrates "flat".
+  const interactingRef = useRef(false);
+  const baselineRef = useRef<{ beta: number; gamma: number } | null>(null);
 
-  function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+  useEffect(() => {
+    function onOrient(e: DeviceOrientationEvent) {
+      if (e.beta == null || e.gamma == null || interactingRef.current) return;
+      if (!baselineRef.current) {
+        baselineRef.current = { beta: e.beta, gamma: e.gamma };
+      }
+      const dBeta = e.beta - baselineRef.current.beta;
+      const dGamma = e.gamma - baselineRef.current.gamma;
+      setGyro({
+        rx: clampTilt(-dBeta, GYRO_MAX_TILT),
+        ry: clampTilt(dGamma, GYRO_MAX_TILT),
+      });
+    }
+
+    window.addEventListener("deviceorientation", onOrient, true);
+    return () => window.removeEventListener("deviceorientation", onOrient, true);
+  }, []);
+
+  // iOS 13+ requires an explicit permission request from a user gesture.
+  function requestGyroPermission() {
+    const DOE = window.DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<string>;
+    };
+    if (typeof DOE?.requestPermission === "function") {
+      DOE.requestPermission().catch(() => {});
+    }
+  }
+
+  function applyFromPoint(clientX: number, clientY: number) {
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width;
-    const y = (e.clientY - r.top) / r.height;
-    setState({ rx: (0.5 - y) * 24, ry: (x - 0.5) * 24, gx: x * 100, gy: y * 100, hover: true });
+    const x = (clientX - r.left) / r.width;
+    const y = (clientY - r.top) / r.height;
+    setState({
+      rx: (0.5 - y) * MAX_TILT,
+      ry: (x - 0.5) * MAX_TILT,
+      gx: x * 100,
+      gy: y * 100,
+      active: true,
+    });
   }
 
-  function onMouseLeave() {
-    setState({ rx: 0, ry: 0, gx: 50, gy: 50, hover: false });
+  function release() {
+    interactingRef.current = false;
+    // Recalibrate gyro neutral to wherever the phone is now, so it settles smoothly.
+    baselineRef.current = null;
+    setGyro({ rx: 0, ry: 0 });
+    setState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
   }
+
+  function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    applyFromPoint(e.clientX, e.clientY);
+  }
+
+  function onTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    interactingRef.current = true;
+    requestGyroPermission();
+    const t = e.touches[0];
+    if (t) applyFromPoint(t.clientX, t.clientY);
+  }
+
+  function onTouchMove(e: React.TouchEvent<HTMLDivElement>) {
+    const t = e.touches[0];
+    if (t) applyFromPoint(t.clientX, t.clientY);
+  }
+
+  // Effective tilt: drag wins; otherwise the gyro provides ambient motion.
+  const rx = state.active ? state.rx : gyro.rx;
+  const ry = state.active ? state.ry : gyro.ry;
+  const scale = state.active ? 1.04 : 1;
+  const gyroTilting = Math.abs(gyro.rx) + Math.abs(gyro.ry) > 0.5;
+  const gx = state.active ? state.gx : 50 + ry * 2.2;
+  const gy = state.active ? state.gy : 50 - rx * 2.2;
+  const glareOpacity = state.active ? 0.22 : gyroTilting ? 0.12 : 0;
 
   return (
     <div
       ref={ref}
       className={className}
       onMouseMove={onMouseMove}
-      onMouseLeave={onMouseLeave}
+      onMouseLeave={release}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={release}
+      onTouchCancel={release}
       style={{
-        transform: `perspective(900px) rotateX(${state.rx}deg) rotateY(${state.ry}deg) scale(${state.hover ? 1.04 : 1})`,
-        transition: state.hover
+        transform: `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) scale(${scale})`,
+        transition: state.active
           ? "transform 0.07s linear"
-          : "transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1)",
+          : "transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)",
         transformStyle: "preserve-3d",
         willChange: "transform",
+        touchAction: "none",
       }}
     >
       {children}
@@ -348,8 +429,8 @@ function TiltCard({
         aria-hidden="true"
         className={styles.tiltGlare}
         style={{
-          background: `radial-gradient(circle at ${state.gx}% ${state.gy}%, rgb(255 255 255 / ${state.hover ? 0.22 : 0}), transparent 65%)`,
-          transition: state.hover ? "none" : "background 0.55s ease",
+          background: `radial-gradient(circle at ${gx}% ${gy}%, rgb(255 255 255 / ${glareOpacity}), transparent 65%)`,
+          transition: state.active ? "none" : "background 0.3s ease",
         }}
       />
     </div>
