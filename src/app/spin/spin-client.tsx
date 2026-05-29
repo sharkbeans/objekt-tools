@@ -384,7 +384,16 @@ function TiltCard({
             setMotion("on");
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        // The native permission dialog can swallow the touchend that would
+        // normally call release(), leaving interaction state stuck. Reset it
+        // so the gyro listener isn't permanently short-circuited.
+        .finally(() => {
+          interactingRef.current = false;
+          baselineRef.current = null;
+          setGyro({ rx: 0, ry: 0 });
+          setState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
+        });
     } else {
       startListening();
     }
@@ -419,7 +428,6 @@ function TiltCard({
 
   function onTouchStart(e: React.TouchEvent<HTMLDivElement>) {
     interactingRef.current = true;
-    requestGyroPermission();
     const t = e.touches[0];
     if (t) applyFromPoint(t.clientX, t.clientY);
   }
@@ -471,6 +479,9 @@ function TiltCard({
         <button
           type="button"
           className={styles.motionButton}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             requestGyroPermission();
