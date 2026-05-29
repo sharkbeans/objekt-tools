@@ -1018,27 +1018,6 @@
   mix-blend-mode: overlay;
 }
 
-.motionButton {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  z-index: 12;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 13px;
-  border: 1px solid rgb(255 255 255 / 0.22);
-  border-radius: 999px;
-  background: rgb(10 8 24 / 0.66);
-  backdrop-filter: blur(6px);
-  color: rgb(255 255 255 / 0.92);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.4);
-}
-
 .doneCard .revealedCard {
   opacity: 1;
   transform: none;
@@ -1345,7 +1324,8 @@
     transform: scale(0.86) rotateX(0deg) rotateY(180deg) rotateZ(0deg);
   }
   84% {
-    transform: scale(1.08) rotateX(6deg) rotateY(0deg) rotateZ(-8deg);
+    transform: scale(1.06) rotateX(4deg) rotateY(0deg) rotateZ(-5deg);
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
   100% {
     transform: scale(1) rotateX(0deg) rotateY(0deg) rotateZ(0deg);
@@ -1357,13 +1337,15 @@
   0%,
   58% {
     opacity: 0;
-    filter: blur(10px) brightness(1.8);
-    transform: scale(0.9) rotateY(0deg);
+    filter: blur(7px) brightness(1.45);
+    transform: scale(0.94) rotateY(0deg);
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
   63% {
     opacity: 1;
-    filter: blur(4px) brightness(1.28);
+    filter: blur(2px) brightness(1.16);
     transform: scale(1.04) rotateY(0deg);
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
   69% {
     opacity: 1;
@@ -1374,6 +1356,8 @@
     opacity: 1;
     filter: blur(0) brightness(1);
     transform: scale(1.04) rotateY(0deg);
+    /* accelerate into the edge-on flip */
+    animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.2);
   }
   75% {
     opacity: 1;
@@ -1384,12 +1368,19 @@
     opacity: 1;
     filter: blur(0) brightness(1);
     transform: scale(1.04) rotateX(-12deg) rotateY(-88deg);
+    /* decelerate out of the flip to a flat rest */
+    animation-timing-function: cubic-bezier(0.16, 0.84, 0.3, 1);
   }
-  79%,
+  79% {
+    opacity: 1;
+    filter: blur(0) brightness(1);
+    transform: scale(1.04) rotateX(0deg) rotateY(0deg);
+  }
   81% {
     opacity: 1;
     filter: blur(0) brightness(1);
     transform: scale(1.04) rotateX(0deg) rotateY(0deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.2);
   }
   85% {
     opacity: 1;
@@ -1400,6 +1391,7 @@
     opacity: 1;
     filter: blur(0) brightness(1);
     transform: scale(1.04) rotateX(-12deg) rotateY(-88deg);
+    animation-timing-function: cubic-bezier(0.16, 0.84, 0.3, 1);
   }
   94% {
     opacity: 1;

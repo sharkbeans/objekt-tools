@@ -10,7 +10,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -306,18 +306,6 @@ function EmptyObjekt({ className }: { className?: string }) {
 }
 
 const MAX_TILT = 40;
-const GYRO_MAX_TILT = 30;
-// Card degrees of tilt per degree of recent device rotation.
-const GYRO_SENSITIVITY = 2;
-// How fast the neutral pose chases the current pose. Higher = returns to
-// flat sooner after you stop moving the phone (0 = absolute, never returns).
-const GYRO_RECENTER = 0.06;
-
-function clampTilt(value: number, limit: number) {
-  return Math.max(-limit, Math.min(limit, value));
-}
-
-type MotionState = "idle" | "needs-permission" | "on";
 
 function TiltCard({
   children,
@@ -327,89 +315,7 @@ function TiltCard({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  // Pointer / touch drag state — drives the strong, responsive tilt.
   const [state, setState] = useState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
-  // Gyroscope state — drives a subtler ambient tilt while idle.
-  const [gyro, setGyro] = useState({ rx: 0, ry: 0 });
-  const [motion, setMotion] = useState<MotionState>("idle");
-  // Touch interaction takes priority over gyro; baseline calibrates "flat".
-  const interactingRef = useRef(false);
-  const baselineRef = useRef<{ beta: number; gamma: number } | null>(null);
-  const listeningRef = useRef(false);
-
-  // Attaches the orientation listener. Idempotent — safe to call repeatedly.
-  const startListening = useCallback(() => {
-    if (listeningRef.current) return;
-    listeningRef.current = true;
-
-    function onOrient(e: DeviceOrientationEvent) {
-      if (e.beta == null || e.gamma == null || interactingRef.current) return;
-      if (!baselineRef.current) {
-        baselineRef.current = { beta: e.beta, gamma: e.gamma };
-      }
-      const base = baselineRef.current;
-      // beta = front/back tilt (→ rotateX), gamma = left/right tilt (→ rotateY).
-      // Each axis is independent, so pure edge tilts work as well as corners.
-      const dBeta = e.beta - base.beta;
-      const dGamma = e.gamma - base.gamma;
-      setGyro({
-        rx: clampTilt(dBeta * GYRO_SENSITIVITY, GYRO_MAX_TILT),
-        ry: clampTilt(-dGamma * GYRO_SENSITIVITY, GYRO_MAX_TILT),
-      });
-      // Drift the neutral pose toward the current one so the card eases back to
-      // flat when the phone is held still, instead of staying stuck at a tilt.
-      base.beta += dBeta * GYRO_RECENTER;
-      base.gamma += dGamma * GYRO_RECENTER;
-      setMotion("on");
-    }
-
-    window.addEventListener("deviceorientation", onOrient, true);
-  }, []);
-
-  // On mount: figure out whether the device exposes orientation and whether it
-  // needs an explicit permission gesture (iOS 13+) or fires automatically.
-  useEffect(() => {
-    if (typeof window === "undefined" || !("DeviceOrientationEvent" in window)) {
-      return;
-    }
-    const DOE = window.DeviceOrientationEvent as unknown as {
-      requestPermission?: () => Promise<string>;
-    };
-    if (typeof DOE.requestPermission === "function") {
-      setMotion("needs-permission");
-    } else {
-      // Android / other: events fire without a prompt (requires HTTPS).
-      startListening();
-    }
-  }, [startListening]);
-
-  // iOS 13+ requires an explicit permission request from a user gesture.
-  function requestGyroPermission() {
-    const DOE = window.DeviceOrientationEvent as unknown as {
-      requestPermission?: () => Promise<string>;
-    };
-    if (typeof DOE?.requestPermission === "function") {
-      DOE.requestPermission()
-        .then((res) => {
-          if (res === "granted") {
-            startListening();
-            setMotion("on");
-          }
-        })
-        .catch(() => {})
-        // The native permission dialog can swallow the touchend that would
-        // normally call release(), leaving interaction state stuck. Reset it
-        // so the gyro listener isn't permanently short-circuited.
-        .finally(() => {
-          interactingRef.current = false;
-          baselineRef.current = null;
-          setGyro({ rx: 0, ry: 0 });
-          setState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
-        });
-    } else {
-      startListening();
-    }
-  }
 
   function applyFromPoint(clientX: number, clientY: number) {
     const el = ref.current;
@@ -427,10 +333,6 @@ function TiltCard({
   }
 
   function release() {
-    interactingRef.current = false;
-    // Recalibrate gyro neutral to wherever the phone is now, so it settles smoothly.
-    baselineRef.current = null;
-    setGyro({ rx: 0, ry: 0 });
     setState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
   }
 
@@ -439,7 +341,6 @@ function TiltCard({
   }
 
   function onTouchStart(e: React.TouchEvent<HTMLDivElement>) {
-    interactingRef.current = true;
     const t = e.touches[0];
     if (t) applyFromPoint(t.clientX, t.clientY);
   }
@@ -448,15 +349,6 @@ function TiltCard({
     const t = e.touches[0];
     if (t) applyFromPoint(t.clientX, t.clientY);
   }
-
-  // Effective tilt: drag wins; otherwise the gyro provides ambient motion.
-  const rx = state.active ? state.rx : gyro.rx;
-  const ry = state.active ? state.ry : gyro.ry;
-  const scale = state.active ? 1.04 : 1;
-  const gyroTilting = Math.abs(gyro.rx) + Math.abs(gyro.ry) > 0.5;
-  const gx = state.active ? state.gx : 50 + ry * 2.2;
-  const gy = state.active ? state.gy : 50 - rx * 2.2;
-  const glareOpacity = state.active ? 0.22 : gyroTilting ? 0.12 : 0;
 
   return (
     <div
@@ -469,12 +361,10 @@ function TiltCard({
       onTouchEnd={release}
       onTouchCancel={release}
       style={{
-        transform: `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) scale(${scale})`,
+        transform: `perspective(900px) rotateX(${state.rx}deg) rotateY(${state.ry}deg) scale(${state.active ? 1.04 : 1})`,
         transition: state.active
           ? "transform 0.07s linear"
-          : motion === "on"
-            ? "transform 0.12s ease-out"
-            : "transform 0.6s cubic-bezier(0.25, 0, 0.25, 1)",
+          : "transform 0.6s cubic-bezier(0.25, 0, 0.25, 1)",
         transformStyle: "preserve-3d",
         willChange: "transform",
         touchAction: "none",
@@ -485,26 +375,10 @@ function TiltCard({
         aria-hidden="true"
         className={styles.tiltGlare}
         style={{
-          background: `radial-gradient(circle at ${gx}% ${gy}%, rgb(255 255 255 / ${glareOpacity}), transparent 65%)`,
+          background: `radial-gradient(circle at ${state.gx}% ${state.gy}%, rgb(255 255 255 / ${state.active ? 0.22 : 0}), transparent 65%)`,
           transition: state.active ? "none" : "background 0.3s ease",
         }}
       />
-      {motion === "needs-permission" && (
-        <button
-          type="button"
-          className={styles.motionButton}
-          onTouchStart={(e) => e.stopPropagation()}
-          onTouchMove={(e) => e.stopPropagation()}
-          onTouchEnd={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            requestGyroPermission();
-          }}
-        >
-          <SparklesIcon className="size-3.5" />
-          Enable motion
-        </button>
-      )}
     </div>
   );
 }
