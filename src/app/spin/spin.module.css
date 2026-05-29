@@ -1001,6 +1001,22 @@
   filter: drop-shadow(0 0 18px rgb(126 75 255 / 0.92));
 }
 
+.tiltWrapper {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tiltGlare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
+  mix-blend-mode: overlay;
+}
+
 .doneCard .revealedCard {
   opacity: 1;
   transform: none;

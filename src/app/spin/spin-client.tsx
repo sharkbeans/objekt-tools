@@ -10,7 +10,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -301,6 +301,57 @@ function EmptyObjekt({ className }: { className?: string }) {
   return (
     <div className={cn(styles.emptyObjekt, className)}>
       <XIcon className="size-16" />
+    </div>
+  );
+}
+
+function TiltCard({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [state, setState] = useState({ rx: 0, ry: 0, gx: 50, gy: 50, hover: false });
+
+  function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top) / r.height;
+    setState({ rx: (0.5 - y) * 24, ry: (x - 0.5) * 24, gx: x * 100, gy: y * 100, hover: true });
+  }
+
+  function onMouseLeave() {
+    setState({ rx: 0, ry: 0, gx: 50, gy: 50, hover: false });
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+      style={{
+        transform: `perspective(900px) rotateX(${state.rx}deg) rotateY(${state.ry}deg) scale(${state.hover ? 1.04 : 1})`,
+        transition: state.hover
+          ? "transform 0.07s linear"
+          : "transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1)",
+        transformStyle: "preserve-3d",
+        willChange: "transform",
+      }}
+    >
+      {children}
+      <div
+        aria-hidden="true"
+        className={styles.tiltGlare}
+        style={{
+          background: `radial-gradient(circle at ${state.gx}% ${state.gy}%, rgb(255 255 255 / ${state.hover ? 0.22 : 0}), transparent 65%)`,
+          transition: state.hover ? "none" : "background 0.55s ease",
+        }}
+      />
     </div>
   );
 }
@@ -896,7 +947,11 @@ export function SpinClient() {
                       "The selected card was Broken"
                     )}
                   </p>
-                  <div className={styles.doneCard}>{resultCard}</div>
+                  <div className={styles.doneCard}>
+                    <TiltCard className={styles.tiltWrapper}>
+                      {resultCard}
+                    </TiltCard>
+                  </div>
                   <button
                     type="button"
                     className={styles.revealAllButton}
