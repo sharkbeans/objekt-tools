@@ -307,6 +307,11 @@ function EmptyObjekt({ className }: { className?: string }) {
 
 const MAX_TILT = 40;
 const GYRO_MAX_TILT = 30;
+// Card degrees of tilt per degree of recent device rotation.
+const GYRO_SENSITIVITY = 2;
+// How fast the neutral pose chases the current pose. Higher = returns to
+// flat sooner after you stop moving the phone (0 = absolute, never returns).
+const GYRO_RECENTER = 0.06;
 
 function clampTilt(value: number, limit: number) {
   return Math.max(-limit, Math.min(limit, value));
@@ -342,12 +347,19 @@ function TiltCard({
       if (!baselineRef.current) {
         baselineRef.current = { beta: e.beta, gamma: e.gamma };
       }
-      const dBeta = e.beta - baselineRef.current.beta;
-      const dGamma = e.gamma - baselineRef.current.gamma;
+      const base = baselineRef.current;
+      // beta = front/back tilt (→ rotateX), gamma = left/right tilt (→ rotateY).
+      // Each axis is independent, so pure edge tilts work as well as corners.
+      const dBeta = e.beta - base.beta;
+      const dGamma = e.gamma - base.gamma;
       setGyro({
-        rx: clampTilt(-dBeta, GYRO_MAX_TILT),
-        ry: clampTilt(dGamma, GYRO_MAX_TILT),
+        rx: clampTilt(dBeta * GYRO_SENSITIVITY, GYRO_MAX_TILT),
+        ry: clampTilt(-dGamma * GYRO_SENSITIVITY, GYRO_MAX_TILT),
       });
+      // Drift the neutral pose toward the current one so the card eases back to
+      // flat when the phone is held still, instead of staying stuck at a tilt.
+      base.beta += dBeta * GYRO_RECENTER;
+      base.gamma += dGamma * GYRO_RECENTER;
       setMotion("on");
     }
 
@@ -460,7 +472,9 @@ function TiltCard({
         transform: `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) scale(${scale})`,
         transition: state.active
           ? "transform 0.07s linear"
-          : "transform 0.6s cubic-bezier(0.25, 0, 0.25, 1)",
+          : motion === "on"
+            ? "transform 0.12s ease-out"
+            : "transform 0.6s cubic-bezier(0.25, 0, 0.25, 1)",
         transformStyle: "preserve-3d",
         willChange: "transform",
         touchAction: "none",
