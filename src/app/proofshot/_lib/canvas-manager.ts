@@ -46,6 +46,7 @@ export class CanvasManager {
   editMode: EditMode = "photocard";
 
   private animation = { active: false, velocityX: 0, velocityY: 0 };
+  private photocardSavedPos = { x: 0, y: 0 };
   private gesture: GestureState = {
     active: false, startDistance: 0, startAngle: 0, startScale: 1,
     startRotation: 0, lastX: 0, lastY: 0, pointers: [],
@@ -206,6 +207,9 @@ export class CanvasManager {
     this.gesture.pointers.push({ id: e.pointerId, x: e.clientX, y: e.clientY });
 
     if (this.gesture.pointers.length === 1) {
+      if (this.editMode === "photocard") {
+        this.photocardSavedPos = { x: this.photocard.x, y: this.photocard.y };
+      }
       this.gesture.lastX = e.clientX;
       this.gesture.lastY = e.clientY;
     } else if (this.gesture.pointers.length === 2) {
@@ -285,6 +289,8 @@ export class CanvasManager {
       this.gesture.lastCenterY = undefined;
       if (Math.abs(this.animation.velocityX) > 1 || Math.abs(this.animation.velocityY) > 1) {
         this.startInertia();
+      } else if (this.editMode === "photocard" && !this.isPhotocardVisible()) {
+        this.snapPhotocardBack();
       }
     } else if (this.gesture.pointers.length === 1) {
       const p = this.gesture.pointers[0];
@@ -321,12 +327,49 @@ export class CanvasManager {
       this.animation.velocityY *= 0.9;
       if (Math.abs(this.animation.velocityX) < 0.1 && Math.abs(this.animation.velocityY) < 0.1) {
         this.animation.active = false;
+        if (this.editMode === "photocard" && !this.isPhotocardVisible()) {
+          this.snapPhotocardBack();
+        }
         return;
       }
       this.render();
       requestAnimationFrame(animate);
     };
     animate();
+  }
+
+  private isPhotocardVisible(): boolean {
+    if (!this.photocardImage) return false;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = this.canvas.width / dpr;
+    const ch = this.canvas.height / dpr;
+    const img = this.photocardImage as HTMLImageElement & HTMLVideoElement;
+    const iw = (img.videoWidth ?? img.width) * this.photocard.scale;
+    const ih = (img.videoHeight ?? img.height) * this.photocard.scale;
+    const cos = Math.abs(Math.cos(this.photocard.rotation));
+    const sin = Math.abs(Math.sin(this.photocard.rotation));
+    const hw = (iw * cos + ih * sin) / 2;
+    const hh = (iw * sin + ih * cos) / 2;
+    const { x, y } = this.photocard;
+    return x + hw > 0 && x - hw < cw && y + hh > 0 && y - hh < ch;
+  }
+
+  private snapPhotocardBack() {
+    const startX = this.photocard.x;
+    const startY = this.photocard.y;
+    const targetX = this.photocardSavedPos.x;
+    const targetY = this.photocardSavedPos.y;
+    const duration = 300;
+    const start = performance.now();
+    const animate = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      this.photocard.x = startX + (targetX - startX) * ease;
+      this.photocard.y = startY + (targetY - startY) * ease;
+      this.render();
+      if (t < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
   }
 
   private getDistance(p1: { x: number; y: number }, p2: { x: number; y: number }) {
@@ -758,7 +801,21 @@ export class CanvasManager {
       this.ctx.closePath();
       this.ctx.fill();
       this.ctx.restore();
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.moveTo(ix + sr, iy);
+      this.ctx.lineTo(ix + iw - sr, iy);
+      this.ctx.arcTo(ix + iw, iy, ix + iw, iy + sr, sr);
+      this.ctx.lineTo(ix + iw, iy + ih - sr);
+      this.ctx.arcTo(ix + iw, iy + ih, ix + iw - sr, iy + ih, sr);
+      this.ctx.lineTo(ix + sr, iy + ih);
+      this.ctx.arcTo(ix, iy + ih, ix, iy + ih - sr, sr);
+      this.ctx.lineTo(ix, iy + sr);
+      this.ctx.arcTo(ix, iy, ix + sr, iy, sr);
+      this.ctx.closePath();
+      this.ctx.clip();
       this.ctx.drawImage(img, ix, iy, iw, ih);
+      this.ctx.restore();
       this.drawToploader(w, h);
     } else {
       this.ctx.drawImage(img, -w / 2, -h / 2, w, h);
