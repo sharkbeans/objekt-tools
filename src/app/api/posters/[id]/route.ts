@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth-server";
+import { getSession, requireSession } from "@/lib/auth-server";
 import { getClientIp } from "@/lib/client-ip";
 import { db } from "@/lib/db";
 import { poster, posterHave, posterWant } from "@/lib/db/schema";
@@ -237,4 +237,33 @@ export async function PATCH(
   await redis.del(posterCacheKey(id));
 
   return NextResponse.json({ id, version: updated?.version ?? 1 });
+}
+
+// DELETE /api/posters/[id] — delete own poster
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  let session;
+  try {
+    session = await requireSession();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  const row = await db.query.poster.findFirst({
+    where: eq(poster.id, id),
+    columns: { id: true, userId: true },
+  });
+
+  if (!row || row.userId !== session.user.id) {
+    return NextResponse.json({ error: "Not found or not yours" }, { status: 404 });
+  }
+
+  await db.delete(poster).where(eq(poster.id, id));
+  await redis.del(posterCacheKey(id));
+
+  return NextResponse.json({ success: true });
 }

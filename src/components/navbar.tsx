@@ -195,6 +195,12 @@ export function Navbar() {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
+                    <Link href="/list/mine">
+                      <ImageIcon className="size-4 mr-2" />
+                      My Lists
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <Link href="/link">
                       <LinkIcon className="size-4 mr-2" />
                       Link Cosmo
@@ -451,6 +457,10 @@ function MobileNav({
                 <UserIcon className="size-4" />
                 Profile
               </MobileNavLink>
+              <MobileNavLink href="/list/mine" onClick={() => setOpen(false)}>
+                <ImageIcon className="size-4" />
+                My Lists
+              </MobileNavLink>
               <MobileNavLink href="/link" onClick={() => setOpen(false)}>
                 <LinkIcon className="size-4" />
                 Link Cosmo
@@ -510,6 +520,7 @@ function getMobilePageTitle(pathname: string): string {
   if (pathname.startsWith("/notifications")) return "Notifications";
   if (pathname.startsWith("/objekt-maker")) return "Objektify";
   if (pathname.startsWith("/proofshot")) return "Proofshot";
+  if (pathname.startsWith("/list/mine")) return "My Lists";
   if (pathname.startsWith("/post")) return "Poster";
   if (pathname.startsWith("/spin")) return "Spin";
   if (pathname.startsWith("/link")) return "Link Cosmo";

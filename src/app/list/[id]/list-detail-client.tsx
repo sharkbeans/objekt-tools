@@ -142,7 +142,25 @@ export default function ListDetailClient({
         return r.json();
       })
       .then((data) => {
-        if (data) setPosterRow(data as StoredPoster);
+        if (data) {
+          setPosterRow(data as StoredPoster);
+          // Trigger availability check after loading; server rate-limits to once per 5 min
+          fetch(`/api/posters/${id}/check-availability`, { method: "POST" })
+            .then((r) => r.json())
+            .then((result) => {
+              if (result.deleted) {
+                setNotFound(true);
+                setPosterRow(null);
+              } else if (result.removed > 0) {
+                // Re-fetch to reflect pruned haves
+                fetch(`/api/posters/${id}`)
+                  .then((r) => r.json())
+                  .then((fresh) => { if (fresh) setPosterRow(fresh as StoredPoster); })
+                  .catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => toast.error("Failed to load poster"))
       .finally(() => setLoading(false));

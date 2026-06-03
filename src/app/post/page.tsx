@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import {
@@ -13,12 +14,30 @@ import {
   ImageIcon,
   CopyIcon,
   ShareIcon,
+  ListIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { parsePastedTrade } from "@/lib/paste-parser";
 import { resolveForPoster, type ResolvedPosterItem } from "@/lib/poster-resolver";
 import { PosterCanvas, getGridCols, getDisplayCount, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
@@ -26,6 +45,7 @@ import { formatPosterAsText } from "@/lib/poster-text-format";
 import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
 import { AddObjektDialog, AddCustomWantDialog } from "@/components/poster/add-objekt-dialog";
 import { useSession, signIn } from "@/lib/auth-client";
+import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { compareMembers, compareSeasons } from "@/lib/filter-options";
@@ -198,7 +218,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [customWantOpen, setCustomWantOpen] = useState(false);
 
   const [isLinked, setIsLinked] = useState(false);
+  const [linkedNickname, setLinkedNickname] = useState<string | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
+  const [inventoryWarningOpen, setInventoryWarningOpen] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -288,6 +311,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       .then((data) => {
         if (data?.nickname) {
           setCosmoId((prev) => prev || data.nickname);
+          setLinkedNickname(data.nickname);
           setIsLinked(true);
         }
       })
@@ -488,21 +512,62 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const handleSaveAndShare = useCallback(async () => {
     if (!posterData) return;
 
-    // For new posters, require Discord login
+    // For new posters, require Discord login — show dialog instead of redirecting
     if (!editId && !session) {
-      sessionStorage.setItem(STASH_KEY, JSON.stringify({
-        posterData,
-        posterTheme,
-        groupByMember,
-        groupByNumbers,
-        colsPerRow,
-      }));
-      await signIn.social({ provider: "discord", callbackURL: `${window.location.origin}/post?restore=1` });
+      setSignInOpen(true);
       return;
     }
 
+    // Pre-save guard: if the poster's cosmoId matches the linked account, check
+    // that the owner actually holds at least one have. If zero are owned the
+    // availability check on the list view would immediately delete it.
+    if (linkedNickname && posterData.cosmoId) {
+      const isOwnList =
+        posterData.cosmoId.toLowerCase() === linkedNickname.toLowerCase();
+      if (isOwnList) {
+        const checkableHaves = posterData.haves.filter(
+          (h) => !h.parsed.freeform && h.entry?.collectionId,
+        );
+        if (checkableHaves.length > 0) {
+          try {
+            const inventory = await fetchInventoryByNickname(posterData.cosmoId);
+            const ownedCollections = new Set(inventory.map((i) => i.collectionId));
+            const ownedSet = new Set(
+              inventory.map((i) => `${i.collectionId}:${i.serial}`),
+            );
+            const anyOwned = checkableHaves.some((h) => {
+              const colId = h.entry!.collectionId;
+              const serial =
+                h.parsed.serial != null ? parseInt(h.parsed.serial, 10) : null;
+              return serial != null
+                ? ownedSet.has(`${colId}:${serial}`)
+                : ownedCollections.has(colId);
+            });
+            if (!anyOwned) {
+              setInventoryWarningOpen(true);
+              return;
+            }
+          } catch {
+            // Inventory fetch failed — let the save proceed rather than blocking
+          }
+        }
+      }
+    }
+
     await doSaveAndShare(posterData);
-  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, session, doSaveAndShare]);
+  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, session, doSaveAndShare, linkedNickname]);
+
+  const handleSignInForSave = useCallback(() => {
+    if (!posterData) return;
+    sessionStorage.setItem(STASH_KEY, JSON.stringify({
+      posterData,
+      posterTheme,
+      groupByMember,
+      groupByNumbers,
+      colsPerRow,
+    }));
+    signIn.social({ provider: "discord", callbackURL: `${window.location.origin}/post?restore=1` });
+  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
 
   const handleAddItems = useCallback((section: "have" | "want", entries: ObjektEntry[]) => {
     setPosterData((prev) => {
@@ -616,11 +681,21 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   return (
     <div className="max-w-4xl sm:mx-auto space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Objekt Poster</h1>
-        <p className="text-muted-foreground">
-          Turn your trade list into a clean, shareable image in seconds
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Objekt Poster</h1>
+          <p className="text-muted-foreground">
+            Turn your trade list into a clean, shareable image in seconds
+          </p>
+        </div>
+        {session && (
+          <Button asChild variant="outline" size="sm" className="gap-1.5 shrink-0 mt-1">
+            <Link href="/list/mine">
+              <ListIcon className="h-4 w-4" />
+              My Lists
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* ── Input stage ── */}
@@ -629,18 +704,20 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           <div className="space-y-2">
             <Label htmlFor="poster-cosmoid">Cosmo ID (optional)</Label>
             <div className="flex gap-2">
-              <button
-                type="button"
+              <Input
                 id="poster-cosmoid"
-                onClick={() => setPickerOpen(true)}
-                aria-haspopup="dialog"
-                aria-expanded={pickerOpen}
-                className="flex h-9 w-48 shrink-0 items-center rounded-md border border-input bg-transparent px-3 py-1 text-left text-base shadow-xs transition-[color,box-shadow] outline-none hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                <span className={`truncate ${cosmoId ? "" : "text-muted-foreground"}`}>
-                  {cosmoId || "Cosmo username"}
-                </span>
-              </button>
+                placeholder="Cosmo username"
+                value={cosmoId}
+                onChange={(e) => setCosmoId(e.target.value)}
+                onBlur={() => { if (cosmoId.trim()) setPickerOpen(true); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && cosmoId.trim()) {
+                    e.preventDefault();
+                    setPickerOpen(true);
+                  }
+                }}
+                className="w-48 shrink-0"
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -651,6 +728,9 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 Add Objekts
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Press Enter to open the objekt picker for that username.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -745,7 +825,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   ) : (
                     <ShareIcon className="h-4 w-4" />
                   )}
-                  {linkCopied ? "Link Copied!" : editId ? "Save Changes" : "Save"}
+                  {linkCopied ? "Link Copied!" : editId ? "Save Changes" : "Share Link"}
                 </Button>
               </div>
             </div>
@@ -844,6 +924,43 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           </div>
         </div>
       )}
+      <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Sign in to save</DialogTitle>
+            <DialogDescription>
+              A Discord account is required to save and share your list.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white gap-2"
+            onClick={handleSignInForSave}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.003.02.014.04.03.052a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
+            </svg>
+            Continue with Discord
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={inventoryWarningOpen} onOpenChange={setInventoryWarningOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Inventory mismatch</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>@{posterData?.cosmoId}</strong>{" "}doesn&apos;t own any of
+              these objekts in their inventory. Either enter a different Cosmo
+              username, or use Download PNG only.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setInventoryWarningOpen(false)}>
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
