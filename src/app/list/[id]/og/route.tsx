@@ -23,7 +23,6 @@ const LIGHT = {
   sectionBg: "#f4f4f5",
 };
 
-const MAX_CARDS = 20;
 
 function readFont(filename: string): Buffer {
   return fs.readFileSync(path.join(process.cwd(), "public", filename));
@@ -48,15 +47,23 @@ export async function GET(
   }
 
   const pal = row.theme === "light" ? LIGHT : DARK;
-  const haves = row.haves.slice(0, MAX_CARDS);
-  const wants = row.wants.slice(0, MAX_CARDS);
+
+  const PAD = 40;
+  const HEADER_H = 22 + 1 + 16 + 16; // username + divider + gaps
+  const NOTES_H = row.notes ? 12 + 12 : 0; // line height + margin
+  const SECTION_LABEL_H = 15 + 10; // label + gap below
+  const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - 16; // 16 = gap between header and body
+  const GAP = 8;
+  const CARD_W = 80;
+  const CARD_H = CARD_W + 3 + 12; // image + margin + label
+  const cols = Math.min(row.colsPerRow, 6);
+  const maxRows = Math.max(1, Math.floor((BODY_H - SECTION_LABEL_H) / (CARD_H + GAP)));
+
+  const maxItems = maxRows * cols;
+  const haves = row.haves.slice(0, maxItems);
+  const wants = row.wants.slice(0, maxItems);
   const haveExtra = row.haves.length - haves.length;
   const wantExtra = row.wants.length - wants.length;
-
-  const CARD_W = 96;
-  const CARD_H = 136;
-  const GAP = 8;
-  const cols = Math.min(row.colsPerRow, 10);
 
   let regularFont: Buffer;
   let boldFont: Buffer;
@@ -196,6 +203,9 @@ export async function GET(
     );
   }
 
+  const INNER_W = 1200 - PAD * 2; // 1120
+  const COL_W = (INNER_W - 1 - 32) / 2; // subtract divider + gap, split evenly
+
   const html = (
     <div
       style={{
@@ -204,9 +214,8 @@ export async function GET(
         width: 1200,
         height: 630,
         background: pal.bg,
-        padding: 40,
+        padding: PAD,
         gap: 16,
-        overflow: "hidden",
       }}
     >
       {/* Header */}
@@ -215,21 +224,18 @@ export async function GET(
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          width: INNER_W,
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {row.username && (
-            <div
-              style={{
-                display: "flex",
-                fontSize: 22,
-                fontFamily: "Bold",
-                color: pal.fg,
-              }}
-            >
-              @{row.username}
-            </div>
-          )}
+        <div
+          style={{
+            display: "flex",
+            fontSize: 22,
+            fontFamily: "Bold",
+            color: pal.fg,
+          }}
+        >
+          {row.username ? `@${row.username}` : "Trade List"}
         </div>
         <div
           style={{
@@ -249,23 +255,22 @@ export async function GET(
           display: "flex",
           height: 1,
           background: pal.border,
-          width: "100%",
+          width: INNER_W,
         }}
       />
 
-      {/* Body — two columns */}
+      {/* Body — two explicit-width columns */}
       <div
         style={{
           display: "flex",
           flexDirection: "row",
           gap: 32,
-          flex: 1,
-          overflow: "hidden",
+          width: INNER_W,
         }}
       >
         {/* HAVE */}
         <div
-          style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}
+          style={{ display: "flex", flexDirection: "column", gap: 10, width: COL_W }}
         >
           <div
             style={{
@@ -285,7 +290,7 @@ export async function GET(
 
         {/* WANT */}
         <div
-          style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}
+          style={{ display: "flex", flexDirection: "column", gap: 10, width: COL_W }}
         >
           <div
             style={{
@@ -310,9 +315,10 @@ export async function GET(
             color: pal.muted,
             fontFamily: "Regular",
             marginTop: 4,
+            width: INNER_W,
           }}
         >
-          {row.notes.slice(0, 200)}
+          {row.notes.slice(0, 160)}
         </div>
       )}
     </div>
