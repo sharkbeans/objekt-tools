@@ -54,8 +54,9 @@ export async function GET(
   const SECTION_LABEL_H = 15 + 10; // label + gap below
   const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - 16; // 16 = gap between header and body
   const GAP = 8;
-  const CARD_W = 80;
-  const CARD_H = CARD_W + 3 + 12; // image + margin + label
+  const CARD_W = 72;
+  const CARD_IMG_H = Math.round(CARD_W * 4 / 3); // 3:4 portrait
+  const CARD_H = CARD_IMG_H + 3 + 12; // image + margin + label
   const cols = Math.min(row.colsPerRow, 6);
   const maxRows = Math.max(1, Math.floor((BODY_H - SECTION_LABEL_H) / (CARD_H + GAP)));
 
@@ -99,7 +100,7 @@ export async function GET(
                     style={{
                       display: "flex",
                       width: CARD_W,
-                      height: CARD_H,
+                      height: CARD_IMG_H,
                       borderRadius: 8,
                       background: pal.sectionBg,
                       border: `1px solid ${pal.border}`,
@@ -133,7 +134,7 @@ export async function GET(
                     style={{
                       display: "flex",
                       width: CARD_W,
-                      height: CARD_W,
+                      height: CARD_IMG_H,
                       borderRadius: 8,
                       overflow: "hidden",
                       background: pal.sectionBg,
@@ -146,7 +147,7 @@ export async function GET(
                       <img
                         src={item.thumbnailUrl}
                         width={CARD_W}
-                        height={CARD_W}
+                        height={CARD_IMG_H}
                         style={{ objectFit: "cover", borderRadius: 8 }}
                         alt=""
                       />
@@ -155,7 +156,7 @@ export async function GET(
                         style={{
                           display: "flex",
                           width: CARD_W,
-                          height: CARD_W,
+                          height: CARD_IMG_H,
                           background: pal.sectionBg,
                         }}
                       />
