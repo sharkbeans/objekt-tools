@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import {
   Loader2Icon,
@@ -11,6 +12,7 @@ import {
   ArrowLeftIcon,
   ImageIcon,
   CopyIcon,
+  ShareIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,10 +25,89 @@ import { PosterCanvas, getGridCols, getDisplayCount, type PosterData, type Poste
 import { formatPosterAsText } from "@/lib/poster-text-format";
 import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
 import { AddObjektDialog, AddCustomWantDialog } from "@/components/poster/add-objekt-dialog";
-import { useSession } from "@/lib/auth-client";
+import { useSession, signIn } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { compareMembers, compareSeasons } from "@/lib/filter-options";
+
+interface StoredItem {
+  id: number;
+  collectionId: string | null;
+  collectionNo: string | null;
+  member: string | null;
+  season: string | null;
+  class: string | null;
+  thumbnailUrl: string | null;
+  serial: number | null;
+  objektId: string | null;
+  quantity: number;
+  freeform: boolean;
+  rawLabel: string | null;
+  onOffline: string | null;
+  position: number;
+}
+
+interface StoredPoster {
+  id: string;
+  userId: string | null;
+  version: number;
+  username: string | null;
+  cosmoId: string | null;
+  notes: string | null;
+  haveTitle: string;
+  wantTitle: string;
+  theme: string;
+  groupByMember: boolean;
+  groupByNumbers: boolean;
+  colsPerRow: number;
+  haves: StoredItem[];
+  wants: StoredItem[];
+}
+
+function storedItemToResolved(item: StoredItem): ResolvedPosterItem {
+  return {
+    parsed: {
+      member: item.member ?? null,
+      season: item.season ?? "",
+      collectionNo: item.collectionNo ?? "",
+      raw: item.rawLabel ?? `${item.member ?? ""} ${item.collectionNo ?? ""}`.trim(),
+      ...(item.serial != null ? { serial: String(item.serial) } : {}),
+      ...(item.quantity > 1 ? { quantity: item.quantity } : {}),
+      ...(item.freeform ? { freeform: true as const } : {}),
+      ...(item.onOffline ? { onOffline: item.onOffline as "online" | "offline" } : {}),
+    },
+    entry: item.collectionId
+      ? {
+          collectionId: item.collectionId,
+          collectionNo: item.collectionNo ?? "",
+          member: item.member ?? "",
+          season: item.season ?? "",
+          class: item.class ?? "",
+          thumbnailImage: item.thumbnailUrl ?? undefined,
+          artist: "",
+        }
+      : null,
+    imageUrl: item.thumbnailUrl ?? null,
+  };
+}
+
+function resolvedToApiItem(item: ResolvedPosterItem, position: number) {
+  return {
+    collectionId: item.entry?.collectionId ?? null,
+    collectionNo: item.entry?.collectionNo ?? item.parsed.collectionNo ?? null,
+    member: item.entry?.member ?? item.parsed.member ?? null,
+    season: item.entry?.season ?? item.parsed.season ?? null,
+    class: item.entry?.class ?? null,
+    thumbnailUrl: item.imageUrl ?? null,
+    serial: item.parsed.serial ? parseInt(item.parsed.serial, 10) : null,
+    objektId: (item.entry as ObjektEntry & { objektId?: string })?.objektId ?? null,
+    quantity: item.parsed.quantity ?? 1,
+    freeform: item.parsed.freeform ?? false,
+    rawLabel: item.parsed.raw ?? null,
+    onOffline: item.parsed.onOffline ?? null,
+    position,
+  };
+}
 
 function parseCollectionNo(value: string): number {
   const n = parseInt(value.replace(/[^0-9]/g, ""), 10);
@@ -59,6 +140,8 @@ function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
 
 type Stage = "input" | "resolving" | "preview";
 
+const STASH_KEY = "poster-draft-stash";
+
 function makeItem(entry: ObjektEntry): ResolvedPosterItem {
   const imageUrl = (entry as ObjektEntry & { frontImage?: string }).thumbnailImage
     ?? (entry as ObjektEntry & { frontImage?: string }).frontImage
@@ -76,10 +159,16 @@ function makeItem(entry: ObjektEntry): ResolvedPosterItem {
   };
 }
 
+import { Suspense } from "react";
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
-export default function CreatePosterPage() {
+function CreatePosterPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const editId = searchParams.get("edit");
+
   const [text, setText] = useState("");
   const [cosmoId, setCosmoId] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -91,6 +180,7 @@ export default function CreatePosterPage() {
   const [groupByMember, setGroupByMember] = useState(false);
   const [groupByNumbers, setGroupByNumbers] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [colsPerRow, setColsPerRow] = useState(5);
   const userSetCols = useRef(false);
   const posterRef = useRef<HTMLDivElement>(null);
@@ -98,10 +188,77 @@ export default function CreatePosterPage() {
   const [customWantOpen, setCustomWantOpen] = useState(false);
 
   const [isLinked, setIsLinked] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
 
   useEffect(() => {
     setIsHydrated(true);
   }, []);
+
+  // Restore stashed draft after Discord login redirect
+  useEffect(() => {
+    const restore = searchParams.get("restore");
+    if (!restore || !session) return;
+    const raw = sessionStorage.getItem(STASH_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(STASH_KEY);
+    try {
+      const stash = JSON.parse(raw) as {
+        posterData: PosterData;
+        posterTheme: PosterTheme;
+        groupByMember: boolean;
+        groupByNumbers: boolean;
+        colsPerRow: number;
+      };
+      userSetCols.current = true;
+      setPosterTheme(stash.posterTheme);
+      setGroupByMember(stash.groupByMember);
+      setGroupByNumbers(stash.groupByNumbers);
+      setColsPerRow(stash.colsPerRow);
+      setPosterData(stash.posterData);
+      setStage("preview");
+      setAutoSaving(true);
+    } catch {
+      toast.error("Could not restore your draft");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  // Pre-load a stored poster when ?edit=id is in the URL
+  useEffect(() => {
+    if (!editId) return;
+    setStage("resolving");
+    fetch(`/api/posters/${editId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: StoredPoster | null) => {
+        if (!data) {
+          toast.error("Could not load poster for editing");
+          setStage("input");
+          return;
+        }
+        userSetCols.current = true;
+        setPosterTheme((data.theme as PosterTheme) ?? "dark");
+        setGroupByMember(data.groupByMember);
+        setGroupByNumbers(data.groupByNumbers);
+        setColsPerRow(data.colsPerRow);
+        if (data.cosmoId) setCosmoId(data.cosmoId);
+        setPosterData({
+          username: data.username ?? "",
+          cosmoId: data.cosmoId ?? "",
+          haves: data.haves.map(storedItemToResolved),
+          wants: data.wants.map(storedItemToResolved),
+          notes: data.notes ?? undefined,
+          date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+          haveTitle: data.haveTitle,
+          wantTitle: data.wantTitle,
+        });
+        setStage("preview");
+      })
+      .catch(() => {
+        toast.error("Failed to load poster");
+        setStage("input");
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
 
   // Auto-assign colsPerRow when items change, unless user has manually set it
   useEffect(() => {
@@ -245,6 +402,89 @@ export default function CreatePosterPage() {
     setPosterData(null);
     userSetCols.current = false;
   }, []);
+
+  const doSaveAndShare = useCallback(async (data: PosterData) => {
+    setSaving(true);
+    try {
+      const body = {
+        username: data.username,
+        cosmoId: data.cosmoId,
+        notes: data.notes,
+        theme: posterTheme,
+        groupByMember,
+        groupByNumbers,
+        colsPerRow,
+        haveTitle: data.haveTitle,
+        wantTitle: data.wantTitle,
+        haves: data.haves.map((item, i) => resolvedToApiItem(item, i)),
+        wants: data.wants.map((item, i) => resolvedToApiItem(item, i)),
+      };
+
+      if (editId) {
+        const token = localStorage.getItem(`poster-edit-token:${editId}`);
+        const headers: HeadersInit = { "Content-Type": "application/json" };
+        if (token) headers["x-poster-edit-token"] = token;
+        const res = await fetch(`/api/posters/${editId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err as { error?: string }).error ?? "Failed to save");
+        }
+        try { await navigator.clipboard.writeText(`${window.location.origin}/list/${editId}`); } catch {}
+        toast.success("Saved! Link copied.");
+        router.push(`/list/${editId}`);
+      } else {
+        const res = await fetch("/api/posters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err as { error?: string }).error ?? "Failed to save");
+        }
+        const { id } = (await res.json()) as { id: string };
+        const listUrl = `${window.location.origin}/list/${id}`;
+        try { await navigator.clipboard.writeText(listUrl); } catch {}
+        toast.success("Link copied! Saved at /list/" + id);
+        router.push(`/list/${id}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Failed to save: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, router]);
+
+  // Auto-save after restoring a stashed draft post-login
+  useEffect(() => {
+    if (!autoSaving || !posterData) return;
+    setAutoSaving(false);
+    doSaveAndShare(posterData);
+  }, [autoSaving, posterData, doSaveAndShare]);
+
+  const handleSaveAndShare = useCallback(async () => {
+    if (!posterData) return;
+
+    // For new posters, require Discord login
+    if (!editId && !session) {
+      sessionStorage.setItem(STASH_KEY, JSON.stringify({
+        posterData,
+        posterTheme,
+        groupByMember,
+        groupByNumbers,
+        colsPerRow,
+      }));
+      await signIn.social({ provider: "discord", callbackURL: `${window.location.origin}/post?restore=1` });
+      return;
+    }
+
+    await doSaveAndShare(posterData);
+  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, session, doSaveAndShare]);
 
   const handleAddItems = useCallback((section: "have" | "want", entries: ObjektEntry[]) => {
     setPosterData((prev) => {
@@ -498,6 +738,15 @@ export default function CreatePosterPage() {
                 )}
                 Download PNG
               </Button>
+
+              <Button size="sm" variant="default" onClick={handleSaveAndShare} disabled={saving} className="gap-1.5">
+                {saving ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShareIcon className="h-4 w-4" />
+                )}
+                {editId ? "Save Changes" : "Save & Share"}
+              </Button>
             </div>
           </div>
 
@@ -556,5 +805,13 @@ export default function CreatePosterPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CreatePosterPageWrapper() {
+  return (
+    <Suspense>
+      <CreatePosterPage />
+    </Suspense>
   );
 }

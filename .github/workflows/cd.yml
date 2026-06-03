@@ -19,4 +19,5 @@ jobs:
             cd ~/objekt-trade
             git pull
             docker compose build
+            docker compose run --rm app npm run db:migrate
             docker compose up -d --remove-orphans --force-recreate

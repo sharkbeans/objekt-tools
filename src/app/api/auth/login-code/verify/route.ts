@@ -2,17 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { redis } from "@/lib/redis";
 import { db } from "@/lib/db";
 import { session as sessionTable } from "@/lib/db/schema";
+import { getClientIp } from "@/lib/client-ip";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
-  // Use the rightmost IP in x-forwarded-for — the leftmost entry is
-  // attacker-controlled (they can prepend arbitrary values), but the
-  // rightmost is appended by the outermost trusted proxy (e.g. Vercel).
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const ip =
-    forwardedFor?.split(",").at(-1)?.trim() ??
-    request.headers.get("x-real-ip") ??
-    "unknown";
+  const ip = getClientIp(request);
 
   // Rate limit: max 5 failed attempts per IP per 10 minutes
   const failKey = `login-code-fail:${ip}`;

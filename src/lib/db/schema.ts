@@ -249,6 +249,67 @@ export const tradeTransferLog = pgTable("trade_transfer_log", {
   index("trade_transfer_log_trade_idx").on(t.activeTradeId),
 ]);
 
+export const poster = pgTable("poster", {
+  id:             text("id").primaryKey().$defaultFn(generateId),
+  userId:         text("user_id").references(() => user.id, { onDelete: "cascade" }),
+  editToken:      text("edit_token"),
+  createdByIp:    text("created_by_ip"),
+  version:        integer("version").notNull().default(1),
+  username:       text("username"),
+  cosmoId:        text("cosmo_id"),
+  notes:          text("notes"),
+  haveTitle:      text("have_title").notNull().default("Have"),
+  wantTitle:      text("want_title").notNull().default("Want"),
+  theme:          text("theme").notNull().default("dark"),
+  groupByMember:  boolean("group_by_member").notNull().default(false),
+  groupByNumbers: boolean("group_by_numbers").notNull().default(true),
+  colsPerRow:     integer("cols_per_row").notNull().default(5),
+  createdAt:      timestamp("created_at").notNull().defaultNow(),
+  updatedAt:      timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  index("poster_user_id_idx").on(t.userId),
+]);
+
+export const posterHave = pgTable("poster_have", {
+  id:           serial("id").primaryKey(),
+  posterId:     text("poster_id").notNull().references(() => poster.id, { onDelete: "cascade" }),
+  collectionId: text("collection_id"),
+  collectionNo: text("collection_no"),
+  member:       text("member"),
+  season:       text("season"),
+  class:        text("class"),
+  thumbnailUrl: text("thumbnail_url"),
+  serial:       integer("serial"),
+  objektId:     text("objekt_id"),
+  quantity:     integer("quantity").notNull().default(1),
+  freeform:     boolean("freeform").notNull().default(false),
+  rawLabel:     text("raw_label"),
+  onOffline:    text("on_offline"),
+  position:     integer("position").notNull().default(0),
+}, (t) => [
+  index("poster_have_poster_id_idx").on(t.posterId),
+]);
+
+export const posterWant = pgTable("poster_want", {
+  id:           serial("id").primaryKey(),
+  posterId:     text("poster_id").notNull().references(() => poster.id, { onDelete: "cascade" }),
+  collectionId: text("collection_id"),
+  collectionNo: text("collection_no"),
+  member:       text("member"),
+  season:       text("season"),
+  class:        text("class"),
+  thumbnailUrl: text("thumbnail_url"),
+  serial:       integer("serial"),
+  objektId:     text("objekt_id"),
+  quantity:     integer("quantity").notNull().default(1),
+  freeform:     boolean("freeform").notNull().default(false),
+  rawLabel:     text("raw_label"),
+  onOffline:    text("on_offline"),
+  position:     integer("position").notNull().default(0),
+}, (t) => [
+  index("poster_want_poster_id_idx").on(t.posterId),
+]);
+
 export const tradeBan = pgTable("trade_ban", {
   id: serial("id").primaryKey(),
   cosmoId: text("cosmo_id").notNull(),
@@ -276,6 +337,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
   }),
   tradePosts: many(tradePost),
   tradeNotifications: many(tradeNotification),
+  posters: many(poster),
 }));
 
 export const cosmoAccountRelations = relations(cosmoAccount, ({ one }) => ({
@@ -333,6 +395,29 @@ export const tradeTransferLogRelations = relations(tradeTransferLog, ({ one }) =
     fields: [tradeTransferLog.recipientUserId],
     references: [user.id],
     relationName: "logRecipient",
+  }),
+}));
+
+export const posterRelations = relations(poster, ({ one, many }) => ({
+  user: one(user, {
+    fields: [poster.userId],
+    references: [user.id],
+  }),
+  haves: many(posterHave),
+  wants: many(posterWant),
+}));
+
+export const posterHaveRelations = relations(posterHave, ({ one }) => ({
+  poster: one(poster, {
+    fields: [posterHave.posterId],
+    references: [poster.id],
+  }),
+}));
+
+export const posterWantRelations = relations(posterWant, ({ one }) => ({
+  poster: one(poster, {
+    fields: [posterWant.posterId],
+    references: [poster.id],
   }),
 }));
 
