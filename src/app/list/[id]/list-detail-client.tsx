@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon, LinkIcon, Loader2Icon, PencilIcon } from "lucide-react";
+import { DownloadIcon, LinkIcon, Loader2Icon, PencilIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
@@ -270,6 +270,20 @@ export default function ListDetailClient({
             )}
             Download PNG
           </Button>
+
+          {!canEdit && (
+            <Button
+              size="sm"
+              variant="default"
+              asChild
+              className="gap-1.5"
+            >
+              <Link href="/post">
+                <PlusIcon className="h-4 w-4" />
+                Create List
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -286,17 +300,6 @@ export default function ListDetailClient({
         />
       </div>
 
-      {!canEdit && (
-        <p className="text-center text-sm text-muted-foreground">
-          Want to make your own?{" "}
-          <Link
-            href="/post"
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            Create a poster
-          </Link>
-        </p>
-      )}
 
       {anonOwner && (
         <p className="text-center text-xs text-muted-foreground">

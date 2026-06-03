@@ -619,18 +619,29 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="poster-cosmoid">Cosmo ID (optional)</Label>
-            <button
-              type="button"
-              id="poster-cosmoid"
-              onClick={() => setPickerOpen(true)}
-              aria-haspopup="dialog"
-              aria-expanded={pickerOpen}
-              className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-transparent px-3 py-1 text-left text-base shadow-xs transition-[color,box-shadow] outline-none hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-            >
-              <span className={cosmoId ? undefined : "text-muted-foreground"}>
-                {cosmoId || "Your Cosmo username (shown on poster)"}
-              </span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                id="poster-cosmoid"
+                onClick={() => setPickerOpen(true)}
+                aria-haspopup="dialog"
+                aria-expanded={pickerOpen}
+                className="flex h-9 w-48 shrink-0 items-center rounded-md border border-input bg-transparent px-3 py-1 text-left text-base shadow-xs transition-[color,box-shadow] outline-none hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <span className={`truncate ${cosmoId ? "" : "text-muted-foreground"}`}>
+                  {cosmoId || "Cosmo username"}
+                </span>
+              </button>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-1.5 flex-1"
+                onClick={() => setPickerOpen(true)}
+              >
+                <ImageIcon className="h-4 w-4" />
+                Add Objekts from Inventory
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
