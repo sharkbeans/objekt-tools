@@ -40,7 +40,7 @@ export async function GET(
   // Step 1: fetch metadata only (no items) to compute maxSlots
   const meta = await db.query.poster.findFirst({
     where: eq(poster.id, id),
-    columns: { id: true, userId: true, version: true, username: true, notes: true, theme: true, colsPerRow: true, haveTitle: true, wantTitle: true, groupByNumbers: true },
+    columns: { id: true, userId: true, version: true, username: true, cosmoId: true, notes: true, theme: true, colsPerRow: true, haveTitle: true, wantTitle: true, groupByNumbers: true },
   });
 
   if (!meta) {
@@ -52,8 +52,9 @@ export async function GET(
   const PAD = 40;
   const HEADER_H = 22 + 1 + 16 + 16;
   const NOTES_H = meta.notes ? 12 + 12 : 0;
+  const FOOTER_H = 11 + 10; // disclaimer line height + top gap
   const SECTION_LABEL_H = 15 + 10;
-  const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - 16;
+  const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - FOOTER_H - 16;
   const GAP = 8;
   const CARD_W = 72;
   const CARD_IMG_H = Math.round(CARD_W * 4 / 3);
@@ -397,6 +398,22 @@ export async function GET(
           {row.notes.slice(0, 160)}
         </div>
       )}
+
+      {/* Disclaimer */}
+      <div
+        style={{
+          display: "flex",
+          marginTop: "auto",
+          fontSize: 11,
+          color: pal.muted,
+          fontFamily: "Regular",
+          width: INNER_W,
+        }}
+      >
+        {row.cosmoId
+          ? `Users self-claim what they have. Please verify at objekt.top/@${row.cosmoId}`
+          : "Users self-claim what they have. Please verify before trading."}
+      </div>
     </div>
   );
 

@@ -190,6 +190,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [groupByNumbers, setGroupByNumbers] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [colsPerRow, setColsPerRow] = useState(5);
   const userSetCols = useRef(false);
   const posterRef = useRef<HTMLDivElement>(null);
@@ -442,8 +443,12 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           const err = await res.json().catch(() => ({}));
           throw new Error((err as { error?: string }).error ?? "Failed to save");
         }
-        try { await navigator.clipboard.writeText(`${window.location.origin}/list/${editId}`); } catch {}
-        toast.success("Saved! Link copied.");
+        toast.success("Saved!");
+        try {
+          await navigator.clipboard.writeText(`${window.location.origin}/list/${editId}`);
+          setLinkCopied(true);
+          toast.success("Link copied!");
+        } catch {}
         router.push(`/list/${editId}`);
       } else {
         const res = await fetch("/api/posters", {
@@ -457,8 +462,12 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         }
         const { id } = (await res.json()) as { id: string };
         const listUrl = `${window.location.origin}/list/${id}`;
-        try { await navigator.clipboard.writeText(listUrl); } catch {}
-        toast.success("Link copied! Saved at /list/" + id);
+        toast.success("Saved!");
+        try {
+          await navigator.clipboard.writeText(listUrl);
+          setLinkCopied(true);
+          toast.success("Link copied!");
+        } catch {}
         router.push(`/list/${id}`);
       }
     } catch (err) {
@@ -639,7 +648,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 onClick={() => setPickerOpen(true)}
               >
                 <ImageIcon className="h-4 w-4" />
-                Add Objekts from Inventory
+                Add Objekts
               </Button>
             </div>
           </div>
@@ -702,13 +711,47 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         <div className="space-y-4">
 
           {/* Top controls bar */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5">
-              <ArrowLeftIcon className="h-4 w-4" />
-              Back
-            </Button>
+          <div className="flex flex-col gap-2">
+            {/* Row 1: navigation + actions */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5">
+                <ArrowLeftIcon className="h-4 w-4" />
+                Back
+              </Button>
 
-            <div className="flex items-center gap-3 ml-auto flex-wrap justify-end">
+              <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
+                <Button size="sm" variant="outline" onClick={handleCopyText} className="gap-1.5">
+                  <CopyIcon className="h-4 w-4" />
+                  Copy Text
+                </Button>
+
+                <Button size="sm" variant="outline" onClick={handleDownload} disabled={downloading} className="gap-1.5">
+                  {downloading ? (
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <DownloadIcon className="h-4 w-4" />
+                  )}
+                  Download PNG
+                </Button>
+
+                <Button
+                  size="sm"
+                  onClick={handleSaveAndShare}
+                  disabled={saving}
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {saving ? (
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShareIcon className="h-4 w-4" />
+                  )}
+                  {linkCopied ? "Link Copied!" : editId ? "Save Changes" : "Save"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Row 2: poster settings */}
+            <div className="flex items-center gap-3 flex-wrap">
               {/* Columns per row */}
               <div className="flex items-center gap-1.5">
                 <select
@@ -744,29 +787,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 />
                 <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
               </div>
-
-              <Button size="sm" variant="outline" onClick={handleCopyText} className="gap-1.5">
-                <CopyIcon className="h-4 w-4" />
-                Copy Text
-              </Button>
-
-              <Button size="sm" onClick={handleDownload} disabled={downloading} className="gap-1.5">
-                {downloading ? (
-                  <Loader2Icon className="h-4 w-4 animate-spin" />
-                ) : (
-                  <DownloadIcon className="h-4 w-4" />
-                )}
-                Download PNG
-              </Button>
-
-              <Button size="sm" variant="default" onClick={handleSaveAndShare} disabled={saving} className="gap-1.5">
-                {saving ? (
-                  <Loader2Icon className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ShareIcon className="h-4 w-4" />
-                )}
-                {editId ? "Save Changes" : "Save & Share"}
-              </Button>
             </div>
           </div>
 

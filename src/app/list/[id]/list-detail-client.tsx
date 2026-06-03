@@ -271,19 +271,16 @@ export default function ListDetailClient({
             Download PNG
           </Button>
 
-          {!canEdit && (
-            <Button
-              size="sm"
-              variant="default"
-              asChild
-              className="gap-1.5"
-            >
-              <Link href="/post">
-                <PlusIcon className="h-4 w-4" />
-                Create List
-              </Link>
-            </Button>
-          )}
+          <Button
+            size="sm"
+            asChild
+            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <Link href="/post">
+              <PlusIcon className="h-4 w-4" />
+              Create List
+            </Link>
+          </Button>
         </div>
       </div>
 
