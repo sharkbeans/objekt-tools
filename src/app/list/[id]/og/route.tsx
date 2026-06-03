@@ -56,13 +56,17 @@ export async function GET(
   const GAP = 8;
   const CARD_W = 72;
   const CARD_IMG_H = Math.round(CARD_W * 4 / 3); // 3:4 portrait
-  const CARD_H = CARD_IMG_H + 3 + 12; // image + margin + label
+  const LABEL_H = 4 + 11 + 2 + 11; // margin-top + line1 + gap + line2
+  const CARD_H = CARD_IMG_H + LABEL_H;
   const cols = Math.min(row.colsPerRow, 6);
   const maxRows = Math.max(1, Math.floor((BODY_H - SECTION_LABEL_H) / (CARD_H + GAP)));
 
-  const maxItems = maxRows * cols;
-  const haves = row.haves.slice(0, maxItems);
-  const wants = row.wants.slice(0, maxItems);
+  const maxSlots = maxRows * cols;
+  // Reserve last slot for the +N chip when items overflow
+  const haveSlots = row.haves.length > maxSlots ? maxSlots - 1 : maxSlots;
+  const wantSlots = row.wants.length > maxSlots ? maxSlots - 1 : maxSlots;
+  const haves = row.haves.slice(0, haveSlots);
+  const wants = row.wants.slice(0, wantSlots);
   const haveExtra = row.haves.length - haves.length;
   const wantExtra = row.wants.length - wants.length;
 
@@ -115,11 +119,8 @@ export async function GET(
                   </div>
                 );
               }
-              const label =
-                item.rawLabel ??
-                (item.member && item.collectionNo
-                  ? `${item.member} ${item.collectionNo}`
-                  : (item.collectionNo ?? ""));
+              const labelLine1 = item.member ?? item.rawLabel ?? "";
+              const labelLine2 = item.member ? (item.collectionNo ?? "") : "";
               return (
                 <div
                   // biome-ignore lint/suspicious/noArrayIndexKey: static layout for OG image
@@ -183,17 +184,38 @@ export async function GET(
                   <div
                     style={{
                       display: "flex",
-                      marginTop: 3,
-                      fontSize: 10,
-                      color: pal.muted,
-                      fontFamily: "Regular",
-                      maxWidth: CARD_W,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      flexDirection: "column",
+                      marginTop: 4,
+                      gap: 2,
+                      width: CARD_W,
                     }}
                   >
-                    {label}
+                    <div
+                      style={{
+                        display: "flex",
+                        fontSize: 11,
+                        color: pal.fg,
+                        fontFamily: "Regular",
+                        overflow: "hidden",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {labelLine1}
+                    </div>
+                    {labelLine2 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          fontSize: 11,
+                          color: pal.muted,
+                          fontFamily: "Regular",
+                          overflow: "hidden",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {labelLine2}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
