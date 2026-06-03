@@ -119,8 +119,12 @@ export async function GET(
                   </div>
                 );
               }
-              const labelLine1 = item.member ?? item.rawLabel ?? "";
-              const labelLine2 = item.member ? (item.collectionNo ?? "") : "";
+              // split rawlabel to get the season-prefixed collectionNo
+              const rawParts = item.rawLabel?.split(" ") ?? [];
+              const labelLine1 = item.member ?? rawParts[0] ?? "";
+              const labelLine2 = item.member
+                ? (rawParts.length >= 2 ? rawParts.slice(1).join(" ") : (item.collectionNo ?? ""))
+                : "";
               return (
                 <div
                   // biome-ignore lint/suspicious/noArrayIndexKey: static layout for OG image
