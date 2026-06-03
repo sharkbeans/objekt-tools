@@ -2,7 +2,7 @@
 
 import { DownloadIcon, LinkIcon, Loader2Icon, PencilIcon } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -108,6 +108,7 @@ export default function ListDetailClient({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [posterRow, setPosterRow] = useState<StoredPoster | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,6 +118,13 @@ export default function ListDetailClient({
   const [anonOwner, setAnonOwner] = useState(false);
 
   const posterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (searchParams.get("error") === "not-owner") {
+      toast.error("That's not your list.");
+      router.replace(`/list/${id}`);
+    }
+  }, [searchParams, id, router]);
 
   useEffect(() => {
     // Check anon edit token
@@ -185,7 +193,7 @@ export default function ListDetailClient({
   }, []);
 
   const handleEdit = useCallback(() => {
-    router.push(`/post?edit=${id}`);
+    router.push(`/post/${id}/edit`);
   }, [router, id]);
 
   if (loading) {

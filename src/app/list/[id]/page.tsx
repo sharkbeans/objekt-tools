@@ -1,19 +1,25 @@
-import { cache } from "react";
-import { eq } from "drizzle-orm";
+import { cache, Suspense } from "react";
+import { count, eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { poster } from "@/lib/db/schema";
+import { poster, posterHave, posterWant } from "@/lib/db/schema";
 import ListDetailClient from "./list-detail-client";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my";
 
 // Deduped per request — generateMetadata and the page component share one DB fetch
 const getPosterMeta = cache(async (id: string) => {
-  return db.query.poster.findFirst({
-    where: eq(poster.id, id),
-    columns: { id: true, userId: true, username: true, version: true },
-  });
+  const [row, [haveCount], [wantCount]] = await Promise.all([
+    db.query.poster.findFirst({
+      where: eq(poster.id, id),
+      columns: { id: true, userId: true, username: true, version: true, notes: true },
+    }),
+    db.select({ n: count() }).from(posterHave).where(eq(posterHave.posterId, id)),
+    db.select({ n: count() }).from(posterWant).where(eq(posterWant.posterId, id)),
+  ]);
+  if (!row) return null;
+  return { ...row, haveCount: haveCount?.n ?? 0, wantCount: wantCount?.n ?? 0 };
 });
 
 export async function generateMetadata({
@@ -29,22 +35,28 @@ export async function generateMetadata({
   }
 
   const title = row.username
-    ? `@${row.username}'s list | objekt.my`
-    : `Trade list | objekt.my`;
+    ? `View @${row.username}'s List | objekt.my`
+    : `View Trade List | objekt.my`;
+
+  const rawNotes = row.notes?.trim();
+  const description = rawNotes
+    ? rawNotes.length > 200 ? rawNotes.slice(0, 197) + "…" : rawNotes
+    : `${row.haveCount} Have · ${row.wantCount} Want`;
 
   const ogUrl = `${APP_URL}/list/${id}/og?v=${row.version}`;
 
   return {
     title,
-    description: "",
+    description,
     openGraph: {
       title,
-      description: "",
+      description,
       images: [ogUrl],
     },
     twitter: {
       card: "summary_large_image",
       title,
+      description,
       images: [ogUrl],
     },
   };
@@ -61,5 +73,9 @@ export default async function ListDetailPage({
   // Server-side owner check for authed users
   const isOwner = !!(session && row?.userId && session.user.id === row.userId);
 
-  return <ListDetailClient params={params} isOwner={isOwner} />;
+  return (
+    <Suspense>
+      <ListDetailClient params={params} isOwner={isOwner} />
+    </Suspense>
+  );
 }

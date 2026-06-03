@@ -163,11 +163,20 @@ import { Suspense } from "react";
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
-function CreatePosterPage() {
+export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const editId = searchParams.get("edit");
+  const editId = editIdProp ?? searchParams.get("edit");
+
+  // Redirect legacy ?edit=id URLs to the canonical /post/[id]/edit route
+  useEffect(() => {
+    const legacyId = searchParams.get("edit");
+    if (legacyId && !editIdProp) {
+      router.replace(`/post/${legacyId}/edit`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [text, setText] = useState("");
   const [cosmoId, setCosmoId] = useState("");
@@ -808,10 +817,12 @@ function CreatePosterPage() {
   );
 }
 
-export default function CreatePosterPageWrapper() {
+export function CreatePosterPageWrapper({ editId }: { editId?: string }) {
   return (
     <Suspense>
-      <CreatePosterPage />
+      <CreatePosterPage editId={editId} />
     </Suspense>
   );
 }
+
+export default CreatePosterPageWrapper;
