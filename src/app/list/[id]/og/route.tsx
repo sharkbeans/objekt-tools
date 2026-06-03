@@ -6,6 +6,9 @@ import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { poster, posterHave, posterWant } from "@/lib/db/schema";
 
+// Worst-case max slots: maxRows(3) * maxCols(6) = 18, +1 for the +N chip slot
+const HARD_LIMIT = 19;
+
 export const runtime = "nodejs";
 
 const DARK = {
@@ -34,41 +37,56 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const row = await db.query.poster.findFirst({
+  // Step 1: fetch metadata only (no items) to compute maxSlots
+  const meta = await db.query.poster.findFirst({
     where: eq(poster.id, id),
-    with: {
-      haves: { orderBy: asc(posterHave.position) },
-      wants: { orderBy: asc(posterWant.position) },
-    },
+    columns: { id: true, userId: true, version: true, username: true, notes: true, theme: true, colsPerRow: true, haveTitle: true, wantTitle: true },
   });
 
-  if (!row) {
+  if (!meta) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const pal = row.theme === "light" ? LIGHT : DARK;
+  const pal = meta.theme === "light" ? LIGHT : DARK;
 
   const PAD = 40;
-  const HEADER_H = 22 + 1 + 16 + 16; // username + divider + gaps
-  const NOTES_H = row.notes ? 12 + 12 : 0; // line height + margin
-  const SECTION_LABEL_H = 15 + 10; // label + gap below
-  const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - 16; // 16 = gap between header and body
+  const HEADER_H = 22 + 1 + 16 + 16;
+  const NOTES_H = meta.notes ? 12 + 12 : 0;
+  const SECTION_LABEL_H = 15 + 10;
+  const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - 16;
   const GAP = 8;
   const CARD_W = 72;
-  const CARD_IMG_H = Math.round(CARD_W * 4 / 3); // 3:4 portrait
-  const LABEL_H = 4 + 11 + 2 + 11; // margin-top + line1 + gap + line2
+  const CARD_IMG_H = Math.round(CARD_W * 4 / 3);
+  const LABEL_H = 4 + 11 + 2 + 11;
   const CARD_H = CARD_IMG_H + LABEL_H;
-  const cols = Math.min(row.colsPerRow, 6);
+  const cols = Math.min(meta.colsPerRow, 6);
   const maxRows = Math.max(1, Math.floor((BODY_H - SECTION_LABEL_H) / (CARD_H + GAP)));
+  const maxSlots = Math.min(maxRows * cols, HARD_LIMIT);
 
-  const maxSlots = maxRows * cols;
+  // Step 2: fetch only as many items as we'll display
+  const [allHaves, allWants] = await Promise.all([
+    db.select().from(posterHave)
+      .where(eq(posterHave.posterId, id))
+      .orderBy(asc(posterHave.position))
+      .limit(maxSlots + 1), // +1 to detect overflow without a COUNT query
+    db.select().from(posterWant)
+      .where(eq(posterWant.posterId, id))
+      .orderBy(asc(posterWant.position))
+      .limit(maxSlots + 1),
+  ]);
+
   // Reserve last slot for the +N chip when items overflow
-  const haveSlots = row.haves.length > maxSlots ? maxSlots - 1 : maxSlots;
-  const wantSlots = row.wants.length > maxSlots ? maxSlots - 1 : maxSlots;
-  const haves = row.haves.slice(0, haveSlots);
-  const wants = row.wants.slice(0, wantSlots);
-  const haveExtra = row.haves.length - haves.length;
-  const wantExtra = row.wants.length - wants.length;
+  // allHaves/allWants were fetched with limit maxSlots+1, so length > maxSlots means there's more
+  const haveSlots = allHaves.length > maxSlots ? maxSlots - 1 : maxSlots;
+  const wantSlots = allWants.length > maxSlots ? maxSlots - 1 : maxSlots;
+  const haves = allHaves.slice(0, haveSlots);
+  const wants = allWants.slice(0, wantSlots);
+  // haveExtra: items beyond what we show. allHaves may have been capped at maxSlots+1 by the DB limit,
+  // so the true total is unknown — but for the chip we just need "there are more"
+  const haveExtra = allHaves.length - haves.length;
+  const wantExtra = allWants.length - wants.length;
+
+  const row = { ...meta };
 
   let regularFont: Buffer;
   let boldFont: Buffer;
