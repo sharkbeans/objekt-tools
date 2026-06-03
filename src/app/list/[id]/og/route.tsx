@@ -40,7 +40,7 @@ export async function GET(
   // Step 1: fetch metadata only (no items) to compute maxSlots
   const meta = await db.query.poster.findFirst({
     where: eq(poster.id, id),
-    columns: { id: true, userId: true, version: true, username: true, notes: true, theme: true, colsPerRow: true, haveTitle: true, wantTitle: true },
+    columns: { id: true, userId: true, version: true, username: true, notes: true, theme: true, colsPerRow: true, haveTitle: true, wantTitle: true, groupByNumbers: true },
   });
 
   if (!meta) {
@@ -63,28 +63,55 @@ export async function GET(
   const maxRows = Math.max(1, Math.floor((BODY_H - SECTION_LABEL_H) / (CARD_H + GAP)));
   const maxSlots = Math.min(maxRows * cols, HARD_LIMIT);
 
-  // Step 2: fetch only as many items as we'll display
+  // Step 2: fetch ALL rows (cheap, small rows) so we can group duplicates before
+  // truncating. We only render maxSlots images, so Satori stays bounded regardless
+  // of how many rows exist.
   const [allHaves, allWants] = await Promise.all([
     db.select().from(posterHave)
       .where(eq(posterHave.posterId, id))
-      .orderBy(asc(posterHave.position))
-      .limit(maxSlots + 1), // +1 to detect overflow without a COUNT query
+      .orderBy(asc(posterHave.position)),
     db.select().from(posterWant)
       .where(eq(posterWant.posterId, id))
-      .orderBy(asc(posterWant.position))
-      .limit(maxSlots + 1),
+      .orderBy(asc(posterWant.position)),
   ]);
 
-  // Reserve last slot for the +N chip when items overflow
-  // allHaves/allWants were fetched with limit maxSlots+1, so length > maxSlots means there's more
-  const haveSlots = allHaves.length > maxSlots ? maxSlots - 1 : maxSlots;
-  const wantSlots = allWants.length > maxSlots ? maxSlots - 1 : maxSlots;
-  const haves = allHaves.slice(0, haveSlots);
-  const wants = allWants.slice(0, wantSlots);
-  // haveExtra: items beyond what we show. allHaves may have been capped at maxSlots+1 by the DB limit,
-  // so the true total is unknown — but for the chip we just need "there are more"
-  const haveExtra = allHaves.length - haves.length;
-  const wantExtra = allWants.length - wants.length;
+  // Group duplicate objekts into a single slot, accumulating quantity — mirrors the
+  // canvas getNumberGroupKey/getDisplayItems logic so the embed matches the poster.
+  type Row = (typeof allHaves)[number];
+  function groupRows(rows: Row[]): Row[] {
+    if (!meta?.groupByNumbers) {
+      return rows.map((r) => ({ ...r, quantity: r.quantity ?? 1 }));
+    }
+    const out: Row[] = [];
+    const seen = new Map<string, Row>();
+    for (const r of rows) {
+      const key = r.collectionId
+        ? `c:${r.collectionId}`
+        : `p:${r.member ?? ""}|${r.season ?? ""}|${r.collectionNo ?? ""}|${r.onOffline ?? ""}|${r.rawLabel ?? ""}`;
+      const qty = r.quantity ?? 1;
+      const existing = seen.get(key);
+      if (existing) {
+        existing.quantity += qty;
+      } else {
+        const item = { ...r, quantity: qty };
+        out.push(item);
+        seen.set(key, item);
+      }
+    }
+    return out;
+  }
+
+  const groupedHaves = groupRows(allHaves);
+  const groupedWants = groupRows(allWants);
+
+  // Reserve last slot for the +N chip when grouped items overflow the grid.
+  const haveSlots = groupedHaves.length > maxSlots ? maxSlots - 1 : maxSlots;
+  const wantSlots = groupedWants.length > maxSlots ? maxSlots - 1 : maxSlots;
+  const haves = groupedHaves.slice(0, haveSlots);
+  const wants = groupedWants.slice(0, wantSlots);
+  // True count of grouped items not shown — each duplicate group counts once.
+  const haveExtra = groupedHaves.length - haves.length;
+  const wantExtra = groupedWants.length - wants.length;
 
   const row = { ...meta };
 
@@ -189,17 +216,21 @@ export async function GET(
                         style={{
                           display: "flex",
                           position: "absolute",
-                          top: 4,
-                          right: 4,
-                          background: "#3b82f6",
-                          color: "#fff",
-                          borderRadius: 4,
+                          bottom: 4,
+                          left: 4,
+                          width: 20,
+                          height: 20,
+                          borderRadius: "50%",
+                          background: "#000000",
+                          color: "#ffffff",
                           fontSize: 11,
                           fontFamily: "Bold",
-                          padding: "1px 4px",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: "2px solid rgba(255,255,255,0.3)",
                         }}
                       >
-                        x{item.quantity}
+                        {item.quantity}
                       </div>
                     )}
                   </div>
