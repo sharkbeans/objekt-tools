@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -6,7 +6,7 @@ import { poster, posterHave, posterWant } from "@/lib/db/schema";
 
 // GET /api/posters/mine — authenticated user's posters
 export async function GET(request: NextRequest) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -26,12 +26,12 @@ export async function GET(request: NextRequest) {
       offset,
       with: {
         haves: {
-          columns: { id: true, thumbnailUrl: true },
-          limit: 6,
+          columns: { id: true, thumbnailUrl: true, quantity: true },
+          orderBy: asc(posterHave.position),
         },
         wants: {
-          columns: { id: true, thumbnailUrl: true },
-          limit: 6,
+          columns: { id: true, thumbnailUrl: true, quantity: true },
+          orderBy: asc(posterWant.position),
         },
       },
     }),

@@ -37,21 +37,36 @@ interface PosterSummary {
   theme: string;
   createdAt: string;
   updatedAt: string;
-  haves: { id: number; thumbnailUrl: string | null }[];
-  wants: { id: number; thumbnailUrl: string | null }[];
+  haves: { id: number; thumbnailUrl: string | null; quantity: number }[];
+  wants: { id: number; thumbnailUrl: string | null; quantity: number }[];
 }
 
 const PREVIEW_VISIBLE_COUNT = 4;
 
-function uniqueThumbnails(items: { thumbnailUrl: string | null }[]): string[] {
+function itemQuantity(item: { quantity?: number | null }) {
+  return Math.max(1, item.quantity ?? 1);
+}
+
+function totalQuantity(items: { quantity?: number | null }[]) {
+  return items.reduce((sum, item) => sum + itemQuantity(item), 0);
+}
+
+function buildPreviewSide(items: { thumbnailUrl: string | null; quantity: number }[]) {
   const seen = new Set<string>();
   const urls: string[] = [];
+  const total = totalQuantity(items);
+
   for (const item of items) {
     if (!item.thumbnailUrl || seen.has(item.thumbnailUrl)) continue;
     seen.add(item.thumbnailUrl);
     urls.push(item.thumbnailUrl);
+    if (urls.length >= PREVIEW_VISIBLE_COUNT) break;
   }
-  return urls;
+
+  return {
+    urls,
+    remaining: Math.max(total - urls.length, 0),
+  };
 }
 
 function ObjektThumb({ url }: { url: string }) {
@@ -77,16 +92,17 @@ function MoreObjektsTile({ count }: { count: number }) {
   );
 }
 
-function ObjektPreviewSide({ urls }: { urls: string[] }) {
-  const visible = urls.slice(0, PREVIEW_VISIBLE_COUNT);
-  const remaining = Math.max(urls.length - visible.length, 0);
-
+function ObjektPreviewSide({
+  preview,
+}: {
+  preview: ReturnType<typeof buildPreviewSide>;
+}) {
   return (
     <div className="flex shrink-0 gap-1.5">
-      {visible.map((url) => (
+      {preview.urls.map((url) => (
         <ObjektThumb key={url} url={url} />
       ))}
-      {remaining > 0 && <MoreObjektsTile count={remaining} />}
+      {preview.remaining > 0 && <MoreObjektsTile count={preview.remaining} />}
     </div>
   );
 }
@@ -99,9 +115,15 @@ function PosterCard({
   onDelete: (id: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const haveThumbs = uniqueThumbnails(poster.haves);
-  const wantThumbs = uniqueThumbnails(poster.wants);
-  const hasPreview = haveThumbs.length > 0 || wantThumbs.length > 0;
+  const havePreview = buildPreviewSide(poster.haves);
+  const wantPreview = buildPreviewSide(poster.wants);
+  const haveCount = totalQuantity(poster.haves);
+  const wantCount = totalQuantity(poster.wants);
+  const hasPreview =
+    havePreview.urls.length > 0 ||
+    wantPreview.urls.length > 0 ||
+    havePreview.remaining > 0 ||
+    wantPreview.remaining > 0;
 
   const handleCopyLink = async () => {
     try {
@@ -124,7 +146,7 @@ function PosterCard({
             {poster.username ? `@${poster.username}'s list` : "Trade list"}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {poster.haves.length} have · {poster.wants.length} want ·{" "}
+            {haveCount} have · {wantCount} want ·{" "}
             {new Date(poster.updatedAt).toLocaleDateString("en-GB")}
           </p>
         </div>
@@ -167,9 +189,9 @@ function PosterCard({
       {hasPreview && (
         <div className="overflow-x-auto pb-1">
           <div className="flex w-max items-center gap-2">
-            <ObjektPreviewSide urls={haveThumbs} />
+            <ObjektPreviewSide preview={havePreview} />
             <ArrowRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <ObjektPreviewSide urls={wantThumbs} />
+            <ObjektPreviewSide preview={wantPreview} />
           </div>
         </div>
       )}
