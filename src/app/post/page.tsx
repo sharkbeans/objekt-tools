@@ -223,6 +223,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [inventoryWarningOpen, setInventoryWarningOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
+  const openPicker = useCallback(() => {
+    setPickerOpen(true);
+  }, []);
+
   useEffect(() => {
     setIsHydrated(true);
   }, []);
@@ -709,11 +713,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 placeholder="Cosmo username"
                 value={cosmoId}
                 onChange={(e) => setCosmoId(e.target.value)}
-                onBlur={() => { if (cosmoId.trim()) setPickerOpen(true); }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && cosmoId.trim()) {
                     e.preventDefault();
-                    setPickerOpen(true);
+                    openPicker();
                   }
                 }}
                 className="w-48 shrink-0"
@@ -722,7 +725,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 type="button"
                 variant="outline"
                 className="gap-1.5 flex-1"
-                onClick={() => setPickerOpen(true)}
+                onClick={openPicker}
               >
                 <ImageIcon className="h-4 w-4" />
                 Add Objekts
