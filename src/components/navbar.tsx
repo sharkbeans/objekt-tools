@@ -130,10 +130,10 @@ export function Navbar() {
                 )}
               </Link>
               <Link
-                href="/post"
+                href="/list"
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
-                Poster
+                Lists
               </Link>
               <Link
                 href="/objekt-maker"
@@ -406,9 +406,9 @@ function MobileNav({
               )}
             </span>
           </MobileNavLink>
-          <MobileNavLink href="/post" onClick={() => setOpen(false)}>
+          <MobileNavLink href="/list" onClick={() => setOpen(false)}>
             <ImageIcon className="size-4" />
-            Poster
+            Lists
           </MobileNavLink>
           <MobileNavLink href="/objekt-maker" onClick={() => setOpen(false)}>
             <SparklesIcon className="size-4" />
@@ -530,7 +530,8 @@ function getMobilePageTitle(pathname: string): string {
   if (pathname.startsWith("/objekt-maker")) return "Objektify";
   if (pathname.startsWith("/proofshot")) return "Proofshot";
   if (pathname.startsWith("/list/mine")) return "My Lists";
-  if (pathname.startsWith("/post")) return "Poster";
+  if (pathname.startsWith("/list")) return "Lists";
+  if (pathname.startsWith("/post")) return "Lists";
   if (pathname.startsWith("/spin")) return "Spin";
   if (pathname.startsWith("/link")) return "Link Cosmo";
   if (pathname.startsWith("/sign-in")) return "Sign in";

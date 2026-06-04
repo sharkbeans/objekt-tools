@@ -60,9 +60,9 @@ const tools: {
     CustomIcon: TradesIcon,
   },
   {
-    title: "Poster",
-    description: "Turn tradelist into a poster image.",
-    href: "/post",
+    title: "Lists",
+    description: "Turn tradelist into a shareable page.",
+    href: "/list",
     Icon: Rows3,
   },
   {

@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { ListLinkField } from "@/components/list-link-field";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -145,15 +146,21 @@ function sortObjektEntries(entries: ObjektEntry[]): ObjektEntry[] {
 }
 
 function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
-  const withEntry = items.filter((i) => i.entry);
+  const withEntry = items.filter(
+    (
+      item,
+    ): item is ResolvedPosterItem & {
+      entry: NonNullable<ResolvedPosterItem["entry"]>;
+    } => item.entry != null,
+  );
   const withoutEntry = items.filter((i) => !i.entry);
   withEntry.sort((a, b) => {
-    const seasonCmp = compareSeasons(a.entry!.season, b.entry!.season);
+    const seasonCmp = compareSeasons(a.entry.season, b.entry.season);
     if (seasonCmp !== 0) return seasonCmp;
     const colCmp =
-      parseCollectionNo(a.entry!.collectionNo) - parseCollectionNo(b.entry!.collectionNo);
+      parseCollectionNo(a.entry.collectionNo) - parseCollectionNo(b.entry.collectionNo);
     if (colCmp !== 0) return colCmp;
-    return compareMembers(a.entry!.member, b.entry!.member);
+    return compareMembers(a.entry.member, b.entry.member);
   });
   return [...withEntry, ...withoutEntry];
 }
@@ -189,11 +196,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const router = useRouter();
   const editId = editIdProp ?? searchParams.get("edit");
 
-  // Redirect legacy ?edit=id URLs to the canonical /post/[id]/edit route
+  const [origin, setOrigin] = useState("");
+
+  // Redirect legacy ?edit=id URLs to the canonical /list/[id]/edit route
   useEffect(() => {
     const legacyId = searchParams.get("edit");
     if (legacyId && !editIdProp) {
-      router.replace(`/post/${legacyId}/edit`);
+      router.replace(`/list/${legacyId}/edit`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -229,6 +238,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   useEffect(() => {
     setIsHydrated(true);
+    setOrigin(window.location.origin);
   }, []);
 
   // Restore stashed draft after Discord login redirect
@@ -530,7 +540,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         posterData.cosmoId.toLowerCase() === linkedNickname.toLowerCase();
       if (isOwnList) {
         const checkableHaves = posterData.haves.filter(
-          (h) => !h.parsed.freeform && h.entry?.collectionId,
+          (
+            h,
+          ): h is ResolvedPosterItem & {
+            entry: NonNullable<ResolvedPosterItem["entry"]>;
+          } => !h.parsed.freeform && h.entry?.collectionId != null,
         );
         if (checkableHaves.length > 0) {
           try {
@@ -540,7 +554,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
               inventory.map((i) => `${i.collectionId}:${i.serial}`),
             );
             const anyOwned = checkableHaves.some((h) => {
-              const colId = h.entry!.collectionId;
+              const colId = h.entry.collectionId;
               const serial =
                 h.parsed.serial != null ? parseInt(h.parsed.serial, 10) : null;
               return serial != null
@@ -570,7 +584,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       groupByNumbers,
       colsPerRow,
     }));
-    signIn.social({ provider: "discord", callbackURL: `${window.location.origin}/post?restore=1` });
+    signIn.social({ provider: "discord", callbackURL: `${window.location.origin}/list?restore=1` });
   }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
 
   const handleAddItems = useCallback((section: "have" | "want", entries: ObjektEntry[]) => {
@@ -687,9 +701,9 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     <div className="max-w-4xl sm:mx-auto space-y-4 sm:space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Objekt Poster</h1>
+          <h1 className="text-2xl font-bold">Trade List</h1>
           <p className="text-muted-foreground">
-            Turn your trade list into a clean, shareable image in seconds
+            Build a shareable trade list and poster in seconds
           </p>
         </div>
         {session && (
@@ -768,7 +782,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
             className="gap-1.5"
           >
             <ImageIcon className="h-4 w-4" />
-            Generate Poster
+            Preview List
           </Button>
         </div>
       )}
@@ -792,17 +806,16 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       {/* ── Preview / Editor stage ── */}
       {stage === "preview" && posterData && (
         <div className="space-y-4">
-
           {/* Top controls bar */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {/* Row 1: navigation + actions */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5">
                 <ArrowLeftIcon className="h-4 w-4" />
                 Back
               </Button>
 
-              <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
+              <div className="grid grid-cols-1 gap-2 sm:ml-auto sm:flex sm:items-center sm:flex-wrap sm:justify-end">
                 <Button size="sm" variant="outline" onClick={handleCopyText} className="gap-1.5">
                   <CopyIcon className="h-4 w-4" />
                   Copy Text
@@ -828,13 +841,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   ) : (
                     <ShareIcon className="h-4 w-4" />
                   )}
-                  {linkCopied ? "Link Copied!" : editId ? "Save Changes" : "Share Link"}
+                  {linkCopied ? "Link Copied!" : editId ? "Save Changes" : "Create List"}
                 </Button>
               </div>
             </div>
 
             {/* Row 2: poster settings */}
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
               {/* Columns per row */}
               <div className="flex items-center gap-1.5">
                 <select
@@ -895,8 +908,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
               cosmoId={posterData.cosmoId || undefined}
               initialSelected={
                 (addDialogSection === "have" ? posterData.haves : posterData.wants)
-                  .filter((item) => item.entry != null)
-                  .map((item) => item.entry!)
+                  .flatMap((item) => (item.entry ? [item.entry] : []))
               }
               onOpenChange={(open) => { if (!open) setAddDialogSection(null); }}
               onConfirm={handleAddItems}
@@ -910,6 +922,15 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           />
 
           {/* Poster canvas — always editable (except during download) */}
+          {editId && origin && (
+            <div className="flex justify-start">
+              <ListLinkField
+                label="Edit link"
+                value={`${origin}/list/${editId}/edit`}
+                className="sm:max-w-sm"
+              />
+            </div>
+          )}
           <div className="overflow-x-auto rounded-lg border border-border">
             <PosterCanvas
               ref={posterRef}

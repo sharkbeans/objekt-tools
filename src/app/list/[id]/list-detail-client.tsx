@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon, LinkIcon, Loader2Icon, PencilIcon, PlusIcon } from "lucide-react";
+import { DownloadIcon, Loader2Icon, PencilIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import {
   type PosterData,
   type PosterTheme,
 } from "@/components/poster/poster-canvas";
+import { ListLinkField } from "@/components/list-link-field";
 import { Button } from "@/components/ui/button";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
@@ -114,6 +115,7 @@ export default function ListDetailClient({
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [origin, setOrigin] = useState("");
   // Anon owner check: server passes isOwner=false for anon; we check localStorage
   const [anonOwner, setAnonOwner] = useState(false);
 
@@ -127,6 +129,7 @@ export default function ListDetailClient({
   }, [searchParams, id, router]);
 
   useEffect(() => {
+    setOrigin(window.location.origin);
     // Check anon edit token
     const token = localStorage.getItem(`poster-edit-token:${id}`);
     if (token) setAnonOwner(true);
@@ -201,17 +204,8 @@ export default function ListDetailClient({
     }
   }, [posterRow, id]);
 
-  const handleCopyLink = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      toast.success("Link copied!");
-    } catch {
-      toast.error("Failed to copy link");
-    }
-  }, []);
-
   const handleEdit = useCallback(() => {
-    router.push(`/post/${id}/edit`);
+    router.push(`/list/${id}/edit`);
   }, [router, id]);
 
   if (loading) {
@@ -231,7 +225,7 @@ export default function ListDetailClient({
           This list may have been deleted or the link is invalid.
         </p>
         <Button asChild variant="outline">
-          <Link href="/post">Make your own</Link>
+          <Link href="/list">Make your own</Link>
         </Button>
       </div>
     );
@@ -242,27 +236,28 @@ export default function ListDetailClient({
 
   return (
     <div className="max-w-4xl sm:mx-auto space-y-4">
-      {/* Controls bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex-1 min-w-0">
+      <div className="space-y-3">
+        {/* Controls bar */}
+        <div className="min-w-0">
           <h1 className="text-xl font-bold truncate">
             {posterRow.username
               ? `@${posterRow.username}'s list`
               : "Trade list"}
           </h1>
         </div>
+      </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyLink}
-            className="gap-1.5"
-          >
-            <LinkIcon className="h-4 w-4" />
-            Copy Link
-          </Button>
+      {/* Poster (read-only) */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        {origin && (
+          <ListLinkField
+            label="List link"
+            value={`${origin}/list/${id}`}
+            className="sm:max-w-sm"
+          />
+        )}
 
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center sm:flex-wrap sm:justify-end">
           {canEdit && (
             <Button
               variant="outline"
@@ -294,15 +289,13 @@ export default function ListDetailClient({
             asChild
             className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
           >
-            <Link href="/post">
+            <Link href="/list">
               <PlusIcon className="h-4 w-4" />
               Create List
             </Link>
           </Button>
         </div>
       </div>
-
-      {/* Poster (read-only) */}
       <div className="overflow-x-auto rounded-lg border border-border">
         <PosterCanvas
           ref={posterRef}

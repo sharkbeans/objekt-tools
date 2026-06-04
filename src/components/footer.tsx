@@ -26,7 +26,7 @@ function getDisclaimerText(pathname: string | null): string {
     return "Fan-made custom objekt and proofshot maker · not affiliated with or endorsed by MODHAUS or COSMO · no real objekts are distributed";
   }
 
-  if (pathname.startsWith("/post")) {
+  if (pathname.startsWith("/post") || pathname.startsWith("/list")) {
     return "Fan-made HAVE/WANT poster tool · not affiliated with or endorsed by MODHAUS or COSMO · no real objekts are distributed";
   }
 
