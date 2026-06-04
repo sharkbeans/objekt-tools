@@ -1,6 +1,6 @@
-import { cache, Suspense } from "react";
-import { count, eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Metadata } from "next";
+import { cache, Suspense } from "react";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { poster, posterHave, posterWant } from "@/lib/db/schema";
@@ -13,10 +13,22 @@ const getPosterMeta = cache(async (id: string) => {
   const [row, [haveCount], [wantCount]] = await Promise.all([
     db.query.poster.findFirst({
       where: eq(poster.id, id),
-      columns: { id: true, userId: true, username: true, version: true, notes: true },
+      columns: {
+        id: true,
+        userId: true,
+        username: true,
+        version: true,
+        notes: true,
+      },
     }),
-    db.select({ n: count() }).from(posterHave).where(eq(posterHave.posterId, id)),
-    db.select({ n: count() }).from(posterWant).where(eq(posterWant.posterId, id)),
+    db
+      .select({ n: sql<number>`coalesce(sum(${posterHave.quantity}), 0)::int` })
+      .from(posterHave)
+      .where(eq(posterHave.posterId, id)),
+    db
+      .select({ n: sql<number>`coalesce(sum(${posterWant.quantity}), 0)::int` })
+      .from(posterWant)
+      .where(eq(posterWant.posterId, id)),
   ]);
   if (!row) return null;
   return { ...row, haveCount: haveCount?.n ?? 0, wantCount: wantCount?.n ?? 0 };
@@ -40,7 +52,9 @@ export async function generateMetadata({
 
   const rawNotes = row.notes?.trim();
   const description = rawNotes
-    ? rawNotes.length > 200 ? rawNotes.slice(0, 197) + "…" : rawNotes
+    ? rawNotes.length > 200
+      ? `${rawNotes.slice(0, 197)}…`
+      : rawNotes
     : `${row.haveCount} Have · ${row.wantCount} Want`;
 
   const ogUrl = `${APP_URL}/list/${id}/og?v=${row.version}`;

@@ -110,9 +110,15 @@ export async function GET(
   const wantSlots = groupedWants.length > maxSlots ? maxSlots - 1 : maxSlots;
   const haves = groupedHaves.slice(0, haveSlots);
   const wants = groupedWants.slice(0, wantSlots);
-  // True count of grouped items not shown — each duplicate group counts once.
-  const haveExtra = groupedHaves.length - haves.length;
-  const wantExtra = groupedWants.length - wants.length;
+
+  function quantityTotal(rows: Row[]): number {
+    return rows.reduce((total, item) => total + Math.max(1, item.quantity ?? 1), 0);
+  }
+
+  // Count hidden quantities, not hidden groups, so duplicate/quantity rows are
+  // reflected accurately in the +N chip.
+  const haveExtra = quantityTotal(groupedHaves.slice(haves.length));
+  const wantExtra = quantityTotal(groupedWants.slice(wants.length));
 
   const row = { ...meta };
 

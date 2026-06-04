@@ -51,7 +51,9 @@ function totalQuantity(items: { quantity?: number | null }[]) {
   return items.reduce((sum, item) => sum + itemQuantity(item), 0);
 }
 
-function buildPreviewSide(items: { thumbnailUrl: string | null; quantity: number }[]) {
+function buildPreviewSide(
+  items: { thumbnailUrl: string | null; quantity: number }[],
+) {
   const seen = new Set<string>();
   const urls: string[] = [];
   const total = totalQuantity(items);
