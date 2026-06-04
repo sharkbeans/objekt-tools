@@ -19,6 +19,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { LoginCodeDialog } from "@/components/login-code-dialog";
+import { ObjektLogo } from "@/components/objekt-logo";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -109,7 +110,11 @@ export function Navbar() {
       <header className="hidden sm:block border-b border-border">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-6">
-            <Link href="/" className="font-bold text-lg">
+            <Link
+              href="/"
+              className="flex items-center gap-2 font-bold text-lg"
+            >
+              <ObjektLogo />
               objekt.my
             </Link>
             <nav className="flex items-center gap-4 text-sm">
@@ -346,9 +351,10 @@ function MobileNav({
           </button>
           <Link
             href="/"
-            className="font-bold text-lg"
+            className="flex items-center gap-2 font-bold text-lg"
             onClick={() => setOpen(false)}
           >
+            <ObjektLogo />
             objekt.my
           </Link>
         </div>
@@ -381,7 +387,10 @@ function MobileNav({
           >
             <XIcon className="h-5 w-5" />
           </button>
-          <span className="font-bold text-lg">objekt.my</span>
+          <span className="flex items-center gap-2 font-bold text-lg">
+            <ObjektLogo />
+            objekt.my
+          </span>
         </div>
 
         {/* Nav links */}
