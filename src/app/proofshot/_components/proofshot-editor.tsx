@@ -46,6 +46,9 @@ function ControlSlider({ label, value, min, max, step, display, onChange }: {
   );
 }
 
+// Set to true to re-enable the Create Frame (AI background removal) feature
+const FRAME_FEATURE_ENABLED = false;
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export function ProofshotEditor() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -740,7 +743,7 @@ export function ProofshotEditor() {
           )}
 
           {/* Mobile-only Create Frame strip — visible whenever a background is loaded */}
-          {hasBg && !isCameraActive && (
+          {FRAME_FEATURE_ENABLED && hasBg && !isCameraActive && (
             <div className="flex md:hidden gap-2 justify-center">
               <button
                 onClick={handleCreateFrame}
@@ -860,16 +863,18 @@ export function ProofshotEditor() {
                 <ControlSlider label="Position Y" value={pcSliders.y} min={0} max={1000} step={1} display={Math.round(pcSliders.y).toString()} onChange={(v) => { setPcSliders((s) => ({ ...s, y: v })); managerRef.current?.updatePhotocard("y", v); }} />
                 <ControlSlider label="Scale" value={pcSliders.scale} min={0.1} max={5} step={0.01} display={pcSliders.scale.toFixed(2)} onChange={(v) => { setPcSliders((s) => ({ ...s, scale: v })); managerRef.current?.updatePhotocard("scale", v); }} />
                 <ControlSlider label="Rotation" value={pcSliders.rotation} min={-180} max={180} step={1} display={Math.round(pcSliders.rotation) + "°"} onChange={(v) => { setPcSliders((s) => ({ ...s, rotation: v })); managerRef.current?.updatePhotocard("rotation", (v * Math.PI) / 180); }} />
-                <div className="flex gap-2">
-                  <button onClick={handleCreateFrame} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
-                    <Scissors className="w-4 h-4" /> Create Frame
-                  </button>
-                  {isFrameMode && (
-                    <button onClick={handleRestoreFrameSource} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
-                      <RefreshCw className="w-4 h-4" /> Restore
+                {FRAME_FEATURE_ENABLED && (
+                  <div className="flex gap-2">
+                    <button onClick={handleCreateFrame} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                      <Scissors className="w-4 h-4" /> Create Frame
                     </button>
-                  )}
-                </div>
+                    {isFrameMode && (
+                      <button onClick={handleRestoreFrameSource} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                        <RefreshCw className="w-4 h-4" /> Restore
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <Switch id="toploader" checked={showToploader} disabled={isFrameMode} onCheckedChange={handleToploaderToggle} />
                   <Label htmlFor="toploader" className="text-base">Show Toploader</Label>

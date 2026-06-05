@@ -30,26 +30,27 @@ services:
       timeout: 3s
       retries: 5
 
-  rembg:
-    image: danielgatis/rembg:latest
-    container_name: objekt-trade-rembg
-    restart: unless-stopped
-    environment:
-      U2NET_HOME: /models
-      OMP_NUM_THREADS: "1"
-    volumes:
-      - rembg-models:/models
-    ports:
-      - "127.0.0.1:7000:7000"
-    command:
-      - s
-      - --host
-      - 0.0.0.0
-      - --port
-      - "7000"
-      - --threads
-      - "1"
-      - --no-ui
+  # rembg: (disabled — Create Frame feature temporarily off)
+  # rembg:
+  #   image: danielgatis/rembg:latest
+  #   container_name: objekt-trade-rembg
+  #   restart: unless-stopped
+  #   environment:
+  #     U2NET_HOME: /models
+  #     OMP_NUM_THREADS: "1"
+  #   volumes:
+  #     - rembg-models:/models
+  #   ports:
+  #     - "127.0.0.1:7000:7000"
+  #   command:
+  #     - s
+  #     - --host
+  #     - 0.0.0.0
+  #     - --port
+  #     - "7000"
+  #     - --threads
+  #     - "1"
+  #     - --no-ui
 
   app:
     build:
@@ -65,8 +66,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rembg:
-        condition: service_started
+      # rembg:       (disabled — Create Frame feature temporarily off)
+      # rembg:
+      #   condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379

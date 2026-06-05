@@ -1117,7 +1117,7 @@ export class CanvasManager {
     if (!this.photocardImage) return;
     const rect = this.canvas.getBoundingClientRect();
     const iw = (this.photocardImage as HTMLVideoElement).videoWidth ?? (this.photocardImage as HTMLImageElement).width;
-    this.photocard = { x: 450, y: 470, scale: Math.min(rect.width, rect.height) / (iw * 3), rotation: -15 * Math.PI / 180, flipH: false, flipV: false, layer: this.photocard.layer, showToploader: this.photocard.showToploader };
+    this.photocard = { x: rect.width / 2, y: rect.height / 2, scale: Math.min(rect.width, rect.height) / (iw * 3), rotation: 0, flipH: false, flipV: false, layer: this.photocard.layer, showToploader: this.photocard.showToploader };
     if (this.photocardVideo.isVideo && this.photocardVideo.element) this.photocardVideo.element.play().catch(() => {});
     this.render();
   }
