@@ -474,9 +474,9 @@ export class CanvasManager {
       this.isPlaceholder = true;
       this.canvas.classList.add("placeholder-active");
       const rect = this.canvas.getBoundingClientRect();
-      this.photocard.x = 450;
-      this.photocard.y = 470;
-      this.photocard.rotation = -15 * Math.PI / 180;
+      this.photocard.x = rect.width / 2;
+      this.photocard.y = rect.height / 2;
+      this.photocard.rotation = 0;
       this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 3);
       this.render();
     };
@@ -549,9 +549,9 @@ export class CanvasManager {
           this.canvas.classList.remove("placeholder-active");
           this.canvas.style.cursor = "grab";
           const rect = this.canvas.getBoundingClientRect();
-          this.photocard.x = 450;
-          this.photocard.y = 470;
-          this.photocard.rotation = -15 * Math.PI / 180;
+          this.photocard.x = rect.width / 2;
+          this.photocard.y = rect.height / 2;
+          this.photocard.rotation = 0;
           this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 3);
           this.render();
           res();
@@ -575,10 +575,10 @@ export class CanvasManager {
     this.isPlaceholder = false;
     this.canvas.classList.remove("placeholder-active");
     this.canvas.style.cursor = "grab";
-    this.photocard.x = 450;
-    this.photocard.y = 470;
-    this.photocard.rotation = -15 * Math.PI / 180;
     const rect = this.canvas.getBoundingClientRect();
+    this.photocard.x = rect.width / 2;
+    this.photocard.y = rect.height / 2;
+    this.photocard.rotation = 0;
     this.photocard.scale = Math.min(rect.width, rect.height) / (gif.frames[0].width * 1.5);
     this.startPhotocardGifAnimation();
     this.render();
@@ -599,10 +599,10 @@ export class CanvasManager {
         this.frameMode = false;
         this.canvas.classList.remove("placeholder-active");
         this.canvas.style.cursor = "grab";
-        this.photocard.x = 450;
-        this.photocard.y = 470;
-        this.photocard.rotation = -15 * Math.PI / 180;
         const rect = this.canvas.getBoundingClientRect();
+        this.photocard.x = rect.width / 2;
+        this.photocard.y = rect.height / 2;
+        this.photocard.rotation = 0;
         this.photocard.scale = Math.min(rect.width, rect.height) / (video.videoWidth * 1.5);
         video.play().then(() => { this.startPhotocardVideoAnimation(); this.render(); res(); }).catch(rej);
       };
@@ -1146,9 +1146,9 @@ export class CanvasManager {
     this.frameMode = false;
     this.photocard.showToploader = true;
     const rect = this.canvas.getBoundingClientRect();
-    this.photocard.x = 450;
-    this.photocard.y = 470;
-    this.photocard.rotation = -15 * Math.PI / 180;
+    this.photocard.x = rect.width / 2;
+    this.photocard.y = rect.height / 2;
+    this.photocard.rotation = 0;
     this.photocard.scale = Math.min(rect.width, rect.height) / (this.originalPhotocardImage.width * 3);
     this.render();
   }

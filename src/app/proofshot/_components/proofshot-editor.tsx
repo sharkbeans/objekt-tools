@@ -717,19 +717,37 @@ export function ProofshotEditor() {
 
           {/* Camera action buttons (after capture) */}
           {showActionButtons && (
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={handleCameraDiscard}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium"
-              >
-                <RotateCcw className="w-4 h-4" /> Retake
-              </button>
-              <button
-                onClick={handleCameraSave}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
-              >
-                <Check className="w-4 h-4" /> Save
-              </button>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={handleCameraDiscard}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium"
+                >
+                  <RotateCcw className="w-4 h-4" /> Retake
+                </button>
+                <button
+                  onClick={handleCameraSave}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+                >
+                  <Check className="w-4 h-4" /> Save
+                </button>
+              </div>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={handleCreateFrame}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium"
+                >
+                  <Scissors className="w-4 h-4" /> Create Frame
+                </button>
+                {isFrameMode && (
+                  <button
+                    onClick={handleRestoreFrameSource}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Restore
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
