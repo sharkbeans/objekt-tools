@@ -80,7 +80,7 @@ services:
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       INDEXER_DATABASE_URL: ${INDEXER_DATABASE_URL:-}
       REMBG_SERVICE_URL: ${REMBG_SERVICE_URL:-http://rembg:7000}
-      REMBG_MODEL: ${REMBG_MODEL:-birefnet-portrait}
+      REMBG_MODEL: ${REMBG_MODEL:-u2net_human_seg}
       PUSHER_APP_ID: ${PUSHER_APP_ID:-}
       PUSHER_KEY: ${PUSHER_KEY:-}
       PUSHER_SECRET: ${PUSHER_SECRET:-}
