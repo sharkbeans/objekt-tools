@@ -71,6 +71,7 @@ export function ProofshotEditor() {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [showCameraControls, setShowCameraControls] = useState(false);
   const [showActionButtons, setShowActionButtons] = useState(false);
+  const [hasBg, setHasBg] = useState(false);
   const [cameraAspectRatio, setCameraAspectRatio] = useState<AspectRatio>("3:4");
   const [cameraZoom, setCameraZoomState] = useState(1);
   const [showToploader, setShowToploader] = useState(true);
@@ -265,6 +266,7 @@ export function ProofshotEditor() {
       syncBgSliders();
       setTimeout(() => mgr.resizeCanvas(), 100);
       if (isMobileRef.current) setShowActionButtons(true);
+      setHasBg(true);
       toast.success("Background loaded");
     } catch {
       toast.error("Failed to load background");
@@ -391,6 +393,7 @@ export function ProofshotEditor() {
       }, 150);
     }, 100);
     setShowActionButtons(true);
+    setHasBg(true);
     showFlash();
     toast.success("Photo captured!");
   };
@@ -425,6 +428,7 @@ export function ProofshotEditor() {
 
   const handleCameraDiscard = async () => {
     setShowActionButtons(false);
+    setHasBg(false);
     managerRef.current!.backgroundImage = null;
     if (isMobileRef.current) {
       setShowMobileHome(true);
@@ -442,6 +446,7 @@ export function ProofshotEditor() {
     if (!confirm("Reset the canvas? This will clear all images.")) return;
     managerRef.current?.reset();
     setIsFrameMode(false);
+    setHasBg(false);
     setShowToploader(true);
     syncBgSliders();
     syncPcSliders();
@@ -508,6 +513,7 @@ export function ProofshotEditor() {
   const handleDiscardImage = async () => {
     setShowSaveModal(false);
     setShowActionButtons(false);
+    setHasBg(false);
     managerRef.current!.backgroundImage = null;
     if (isMobileRef.current) {
       setShowMobileHome(true);
@@ -717,37 +723,39 @@ export function ProofshotEditor() {
 
           {/* Camera action buttons (after capture) */}
           {showActionButtons && (
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-3 justify-center">
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={handleCameraDiscard}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium"
+              >
+                <RotateCcw className="w-4 h-4" /> Retake
+              </button>
+              <button
+                onClick={handleCameraSave}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+              >
+                <Check className="w-4 h-4" /> Save
+              </button>
+            </div>
+          )}
+
+          {/* Mobile-only Create Frame strip — visible whenever a background is loaded */}
+          {hasBg && !isCameraActive && (
+            <div className="flex md:hidden gap-2 justify-center">
+              <button
+                onClick={handleCreateFrame}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium"
+              >
+                <Scissors className="w-4 h-4" /> Create Frame
+              </button>
+              {isFrameMode && (
                 <button
-                  onClick={handleCameraDiscard}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium"
-                >
-                  <RotateCcw className="w-4 h-4" /> Retake
-                </button>
-                <button
-                  onClick={handleCameraSave}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
-                >
-                  <Check className="w-4 h-4" /> Save
-                </button>
-              </div>
-              <div className="flex gap-2 justify-center">
-                <button
-                  onClick={handleCreateFrame}
+                  onClick={handleRestoreFrameSource}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium"
                 >
-                  <Scissors className="w-4 h-4" /> Create Frame
+                  <RefreshCw className="w-4 h-4" /> Restore
                 </button>
-                {isFrameMode && (
-                  <button
-                    onClick={handleRestoreFrameSource}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium"
-                  >
-                    <RefreshCw className="w-4 h-4" /> Restore
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           )}
         </div>
