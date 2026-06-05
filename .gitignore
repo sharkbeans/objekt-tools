@@ -24,8 +24,8 @@
 .DS_Store
 *.pem
 .codex
+.agents/
 .claude/
-trade-system.excalidraw
 
 # debug
 npm-debug.log*
@@ -75,16 +75,11 @@ session-tokens*
 
 # vercel
 .vercel
-vercel.json
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
-
-# reference repos
-/cosmo-web
-/objekt-explorer
 
 # markdowns
 *.md
