@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const REMBG_SERVICE_URL =
   process.env.REMBG_SERVICE_URL ?? "http://127.0.0.1:7000";
+const REMBG_MODEL = process.env.REMBG_MODEL ?? "u2net_human_seg";
 const REMBG_TIMEOUT_MS = 120_000;
 
 let backgroundRemovalQueue = Promise.resolve();
@@ -56,7 +57,8 @@ async function removeBackgroundWithRembg(
   try {
     const body = new FormData();
     body.append("file", image, image.name || "fco.png");
-    body.append("model", "u2netp");
+    body.append("model", REMBG_MODEL);
+    body.append("ppm", "true");
 
     const response = await fetch(`${REMBG_SERVICE_URL}/api/remove`, {
       method: "POST",
