@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   Camera, CreditCard, Image, ImagePlus, BadgePlus, RefreshCw, FlipHorizontal,
   FlipVertical, Move, ChevronDown, Check, Video, ZoomIn, ZoomOut, RotateCcw,
-  Edit, Trash2,
+  Edit, Trash2, Scissors,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -74,6 +74,7 @@ export function ProofshotEditor() {
   const [cameraAspectRatio, setCameraAspectRatio] = useState<AspectRatio>("3:4");
   const [cameraZoom, setCameraZoomState] = useState(1);
   const [showToploader, setShowToploader] = useState(true);
+  const [isFrameMode, setIsFrameMode] = useState(false);
   const [bgSliders, setBgSliders] = useState<SliderState>(DEFAULT_BG);
   const [pcSliders, setPcSliders] = useState<SliderState>(DEFAULT_PC);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
@@ -283,6 +284,8 @@ export function ProofshotEditor() {
     try {
       loading("Loading photocard…");
       await managerRef.current!.loadPhotocard(file);
+      setIsFrameMode(false);
+      setShowToploader(managerRef.current!.photocard.showToploader);
       syncPcSliders();
       toast.success("Photocard loaded");
     } catch {
@@ -300,7 +303,12 @@ export function ProofshotEditor() {
     if (!files.length) { toast.error("Please drop image or video files"); return; }
     const mgr = managerRef.current!;
     if (files[0]) { await mgr.loadBackground(files[0]); syncBgSliders(); }
-    if (files[1]) { await mgr.loadPhotocard(files[1]); syncPcSliders(); }
+    if (files[1]) {
+      await mgr.loadPhotocard(files[1]);
+      setIsFrameMode(false);
+      setShowToploader(mgr.photocard.showToploader);
+      syncPcSliders();
+    }
   };
 
   // ── Camera ────────────────────────────────────────────────────────────────────
@@ -433,6 +441,8 @@ export function ProofshotEditor() {
   const handleReset = () => {
     if (!confirm("Reset the canvas? This will clear all images.")) return;
     managerRef.current?.reset();
+    setIsFrameMode(false);
+    setShowToploader(true);
     syncBgSliders();
     syncPcSliders();
     toast.success("Canvas reset");
@@ -514,8 +524,37 @@ export function ProofshotEditor() {
     syncPcSliders();
   };
 
+  const handleCreateFrame = async () => {
+    const mgr = managerRef.current;
+    if (!mgr?.photocardImage || mgr.isPlaceholder) {
+      toast.error("Upload an FCO image first");
+      return;
+    }
+    try {
+      loading("Creating frame…");
+      await mgr.createFrameFromPhotocard();
+      setIsFrameMode(true);
+      setShowToploader(false);
+      syncPcSliders();
+      toast.success("Frame created");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Frame extraction works with still image FCOs");
+    } finally {
+      doneLoading();
+    }
+  };
+
+  const handleRestoreFrameSource = () => {
+    managerRef.current?.restorePhotocardFrameSource();
+    setIsFrameMode(false);
+    setShowToploader(true);
+    syncPcSliders();
+    toast.success("Original photocard restored");
+  };
+
   // ── Toploader ─────────────────────────────────────────────────────────────────
   const handleToploaderToggle = (v: boolean) => {
+    if (isFrameMode && v) setIsFrameMode(false);
     setShowToploader(v);
     managerRef.current?.toggleToploader(v);
   };
@@ -795,8 +834,18 @@ export function ProofshotEditor() {
                 <ControlSlider label="Position Y" value={pcSliders.y} min={0} max={1000} step={1} display={Math.round(pcSliders.y).toString()} onChange={(v) => { setPcSliders((s) => ({ ...s, y: v })); managerRef.current?.updatePhotocard("y", v); }} />
                 <ControlSlider label="Scale" value={pcSliders.scale} min={0.1} max={5} step={0.01} display={pcSliders.scale.toFixed(2)} onChange={(v) => { setPcSliders((s) => ({ ...s, scale: v })); managerRef.current?.updatePhotocard("scale", v); }} />
                 <ControlSlider label="Rotation" value={pcSliders.rotation} min={-180} max={180} step={1} display={Math.round(pcSliders.rotation) + "°"} onChange={(v) => { setPcSliders((s) => ({ ...s, rotation: v })); managerRef.current?.updatePhotocard("rotation", (v * Math.PI) / 180); }} />
+                <div className="flex gap-2">
+                  <button onClick={handleCreateFrame} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                    <Scissors className="w-4 h-4" /> Create Frame
+                  </button>
+                  {isFrameMode && (
+                    <button onClick={handleRestoreFrameSource} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                      <RefreshCw className="w-4 h-4" /> Restore
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
-                  <Switch id="toploader" checked={showToploader} onCheckedChange={handleToploaderToggle} />
+                  <Switch id="toploader" checked={showToploader} disabled={isFrameMode} onCheckedChange={handleToploaderToggle} />
                   <Label htmlFor="toploader" className="text-base">Show Toploader</Label>
                 </div>
                 <div className="flex gap-2">

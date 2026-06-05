@@ -149,6 +149,7 @@ Important variables:
 Optional variables:
 
 - `INDEXER_DATABASE_URL`
+- `REMBG_SERVICE_URL`
 - `DISCORD_BOT_TOKEN`
 - `DISCORD_INVITE_URL`
 - `DISCORD_GUILD_ID`
@@ -170,8 +171,11 @@ Services started by Compose:
 
 - `postgres` on `127.0.0.1:5432`
 - `redis`
+- `rembg` for local Proofshot background removal
 - `app` on port `3000`
 - `cron` for nightly trade expiration
+
+The `rembg` service is internal to the Docker network and is reached by the app through `REMBG_SERVICE_URL`. The app requests the lighter `u2netp` model by default and the service stores downloaded model files in the `rembg-models` Docker volume. For better cutout quality, change the forwarded `model` field in `src/app/api/proofshot/remove-bg/route.ts` from `u2netp` to `u2net`, at the cost of more RAM and slower CPU inference.
 
 On deploy, the app container automatically runs database migrations before starting the Next.js server.
 

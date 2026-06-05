@@ -19,6 +19,9 @@ export class CanvasManager {
   ctx!: CanvasRenderingContext2D;
   backgroundImage: HTMLImageElement | HTMLVideoElement | null = null;
   photocardImage: HTMLImageElement | HTMLVideoElement | null = null;
+  originalPhotocardImage: HTMLImageElement | null = null;
+  originalPhotocardFile: File | null = null;
+  frameMode = false;
   isPlaceholder = false;
   modalOpen = false;
   onUploadRequest: (() => void) | null = null;
@@ -465,6 +468,9 @@ export class CanvasManager {
     const img = new Image();
     img.onload = () => {
       this.photocardImage = img;
+      this.originalPhotocardImage = null;
+      this.originalPhotocardFile = null;
+      this.frameMode = false;
       this.isPlaceholder = true;
       this.canvas.classList.add("placeholder-active");
       const rect = this.canvas.getBoundingClientRect();
@@ -534,6 +540,9 @@ export class CanvasManager {
         const img = new Image();
         img.onload = () => {
           this.photocardImage = img;
+          this.originalPhotocardImage = img;
+          this.originalPhotocardFile = file;
+          this.frameMode = false;
           this.isPlaceholder = false;
           this.photocardGif.isGif = false;
           this.photocardVideo.isVideo = false;
@@ -560,6 +569,9 @@ export class CanvasManager {
     const gif = await this.parseGif(buf);
     this.photocardGif = { isGif: true, frames: gif.frames, delays: gif.delays, currentFrame: 0, lastFrameTime: performance.now(), animationFrame: null };
     this.photocardImage = gif.frames[0];
+    this.originalPhotocardImage = null;
+    this.originalPhotocardFile = null;
+    this.frameMode = false;
     this.isPlaceholder = false;
     this.canvas.classList.remove("placeholder-active");
     this.canvas.style.cursor = "grab";
@@ -582,6 +594,9 @@ export class CanvasManager {
       video.onseeked = () => {
         if (init) return; init = true;
         this.photocardImage = video;
+        this.originalPhotocardImage = null;
+        this.originalPhotocardFile = null;
+        this.frameMode = false;
         this.canvas.classList.remove("placeholder-active");
         this.canvas.style.cursor = "grab";
         this.photocard.x = 450;
@@ -775,7 +790,9 @@ export class CanvasManager {
     const h = (img as HTMLVideoElement).videoHeight ?? (img as HTMLImageElement).height;
     const cfg = ToploaderConfig;
 
-    if (this.photocard.showToploader) {
+    if (this.frameMode) {
+      this.ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    } else if (this.photocard.showToploader) {
       const { sideGap, topGap, bottomGap, recessShadow } = cfg.photocardInset;
       const iw = w - sideGap * 2;
       const ih = h - topGap - bottomGap;
@@ -1105,11 +1122,124 @@ export class CanvasManager {
     this.render();
   }
 
+  async createFrameFromPhotocard(): Promise<void> {
+    if (!this.originalPhotocardImage || !this.originalPhotocardFile || this.isPlaceholder) {
+      throw new Error("Frame extraction needs a still image photocard");
+    }
+
+    const result = await this.removeBackground(this.originalPhotocardFile);
+    this.photocardImage = result;
+    this.frameMode = true;
+    this.photocard.showToploader = false;
+
+    const rect = this.canvas.getBoundingClientRect();
+    this.photocard.x = rect.width / 2;
+    this.photocard.y = rect.height / 2;
+    this.photocard.rotation = 0;
+    this.photocard.scale = Math.min(rect.width / result.width, rect.height / result.height) * 0.78;
+    this.render();
+  }
+
+  restorePhotocardFrameSource() {
+    if (!this.originalPhotocardImage) return;
+    this.photocardImage = this.originalPhotocardImage;
+    this.frameMode = false;
+    this.photocard.showToploader = true;
+    const rect = this.canvas.getBoundingClientRect();
+    this.photocard.x = 450;
+    this.photocard.y = 470;
+    this.photocard.rotation = -15 * Math.PI / 180;
+    this.photocard.scale = Math.min(rect.width, rect.height) / (this.originalPhotocardImage.width * 3);
+    this.render();
+  }
+
+  private async removeBackground(file: File): Promise<HTMLImageElement> {
+    const body = new FormData();
+    body.append("image", file, file.name || "fco.png");
+
+    const response = await fetch("/api/proofshot/remove-bg", {
+      method: "POST",
+      body,
+    });
+
+    if (!response.ok) {
+      let message = "Failed to remove background";
+      try {
+        message = (await response.json()).error ?? message;
+      } catch {
+        // fall through with generic message
+      }
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const image = await this.loadImageFromUrl(url);
+      return await this.cropTransparentPadding(image);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  private loadImageFromUrl(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const out = new Image();
+      out.onload = () => resolve(out);
+      out.onerror = reject;
+      out.src = url;
+    });
+  }
+
+  private cropTransparentPadding(img: HTMLImageElement): Promise<HTMLImageElement> {
+    const source = document.createElement("canvas");
+    source.width = img.naturalWidth || img.width;
+    source.height = img.naturalHeight || img.height;
+    const sourceCtx = source.getContext("2d", { willReadFrequently: true })!;
+    sourceCtx.drawImage(img, 0, 0, source.width, source.height);
+
+    const imageData = sourceCtx.getImageData(0, 0, source.width, source.height);
+    const { data, width, height } = imageData;
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] <= 8) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    if (maxX < minX || maxY < minY) return this.loadImageFromUrl(source.toDataURL("image/png"));
+
+    const pad = Math.round(Math.max(width, height) * 0.035);
+    minX = Math.max(0, minX - pad);
+    minY = Math.max(0, minY - pad);
+    maxX = Math.min(width - 1, maxX + pad);
+    maxY = Math.min(height - 1, maxY + pad);
+
+    const output = document.createElement("canvas");
+    output.width = maxX - minX + 1;
+    output.height = maxY - minY + 1;
+    output.getContext("2d")!.drawImage(source, minX, minY, output.width, output.height, 0, 0, output.width, output.height);
+
+    return this.loadImageFromUrl(output.toDataURL("image/png"));
+  }
+
   flipHorizontal() { if (!this.photocardImage) return; this.photocard.flipH = !this.photocard.flipH; this.render(); }
   flipVertical() { if (!this.photocardImage) return; this.photocard.flipV = !this.photocard.flipV; this.render(); }
   rotateLeft() { if (!this.photocardImage) return; this.photocard.rotation -= Math.PI / 2; this.render(); }
   rotateRight() { if (!this.photocardImage) return; this.photocard.rotation += Math.PI / 2; this.render(); }
-  toggleToploader(show: boolean) { this.photocard.showToploader = show; this.render(); }
+  toggleToploader(show: boolean) {
+    if (show) this.frameMode = false;
+    this.photocard.showToploader = show;
+    this.render();
+  }
   setEditMode(mode: EditMode) { this.editMode = mode; }
 
   reset() {
@@ -1121,6 +1251,9 @@ export class CanvasManager {
     if (this.backgroundVideo.element?.src?.startsWith("blob:")) URL.revokeObjectURL(this.backgroundVideo.element.src);
     this.backgroundImage = null;
     this.photocardImage = null;
+    this.originalPhotocardImage = null;
+    this.originalPhotocardFile = null;
+    this.frameMode = false;
     this.isPlaceholder = false;
     this.photocardGif = this.freshGifState();
     this.backgroundGif = this.freshGifState();
