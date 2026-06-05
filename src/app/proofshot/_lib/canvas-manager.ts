@@ -456,16 +456,11 @@ export class CanvasManager {
 
   loadPlaceholderPhotocard() {
     const svg = `<svg width="600" height="900" xmlns="http://www.w3.org/2000/svg">
-      <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#c7b6f9;stop-opacity:0.25"/>
-        <stop offset="100%" style="stop-color:#6dd5a0;stop-opacity:0.2"/>
-      </linearGradient></defs>
-      <rect width="600" height="900" rx="30" fill="url(#g)" stroke="#c7b6f9" stroke-width="4" opacity="0.7" stroke-dasharray="20,10"/>
-      <circle cx="300" cy="380" r="60" fill="#c7b6f9" opacity="0.2"/>
-      <path d="M300 340 L300 400 M280 360 L300 340 L320 360" stroke="#c7b6f9" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
-      <rect x="270" y="400" width="60" height="8" rx="4" fill="#c7b6f9" opacity="0.8"/>
-      <text x="300" y="480" font-family="Arial,sans-serif" font-size="36" font-weight="bold" fill="#c7b6f9" text-anchor="middle" opacity="0.9">Tap to Upload</text>
-      <text x="300" y="520" font-family="Arial,sans-serif" font-size="28" fill="#a0aec0" text-anchor="middle" opacity="0.8">Your Photocard</text>
+      <rect width="600" height="900" rx="28" fill="#6d22ff" fill-opacity="0.08" stroke="#7435ff" stroke-width="2.5" stroke-opacity="0.45" stroke-dasharray="14 8"/>
+      <circle cx="300" cy="392" r="48" fill="#6d22ff" fill-opacity="0.18"/>
+      <path d="M300 414 L300 372 M285 387 L300 370 L315 387" stroke="#a58cff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="300" y="490" font-family="-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif" font-size="34" font-weight="600" letter-spacing="-0.5" fill="#c4a8ff" fill-opacity="0.95" text-anchor="middle">Upload Photocard</text>
+      <text x="300" y="528" font-family="-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif" font-size="24" font-weight="400" fill="#8d74ff" fill-opacity="0.8" text-anchor="middle">Tap anywhere to begin</text>
     </svg>`;
     const img = new Image();
     img.onload = () => {
@@ -473,9 +468,10 @@ export class CanvasManager {
       this.isPlaceholder = true;
       this.canvas.classList.add("placeholder-active");
       const rect = this.canvas.getBoundingClientRect();
-      this.photocard.x = rect.width / 2;
-      this.photocard.y = rect.height / 2;
-      this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 1.5);
+      this.photocard.x = 450;
+      this.photocard.y = 470;
+      this.photocard.rotation = -15 * Math.PI / 180;
+      this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 3);
       this.render();
     };
     img.src = "data:image/svg+xml;base64," + btoa(svg);
@@ -544,9 +540,10 @@ export class CanvasManager {
           this.canvas.classList.remove("placeholder-active");
           this.canvas.style.cursor = "grab";
           const rect = this.canvas.getBoundingClientRect();
-          this.photocard.x = rect.width / 2;
-          this.photocard.y = rect.height / 2;
-          this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 1.5);
+          this.photocard.x = 450;
+          this.photocard.y = 470;
+          this.photocard.rotation = -15 * Math.PI / 180;
+          this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 3);
           this.render();
           res();
         };
@@ -566,9 +563,10 @@ export class CanvasManager {
     this.isPlaceholder = false;
     this.canvas.classList.remove("placeholder-active");
     this.canvas.style.cursor = "grab";
+    this.photocard.x = 450;
+    this.photocard.y = 470;
+    this.photocard.rotation = -15 * Math.PI / 180;
     const rect = this.canvas.getBoundingClientRect();
-    this.photocard.x = rect.width / 2;
-    this.photocard.y = rect.height / 2;
     this.photocard.scale = Math.min(rect.width, rect.height) / (gif.frames[0].width * 1.5);
     this.startPhotocardGifAnimation();
     this.render();
@@ -586,9 +584,10 @@ export class CanvasManager {
         this.photocardImage = video;
         this.canvas.classList.remove("placeholder-active");
         this.canvas.style.cursor = "grab";
+        this.photocard.x = 450;
+        this.photocard.y = 470;
+        this.photocard.rotation = -15 * Math.PI / 180;
         const rect = this.canvas.getBoundingClientRect();
-        this.photocard.x = rect.width / 2;
-        this.photocard.y = rect.height / 2;
         this.photocard.scale = Math.min(rect.width, rect.height) / (video.videoWidth * 1.5);
         video.play().then(() => { this.startPhotocardVideoAnimation(); this.render(); res(); }).catch(rej);
       };
@@ -1101,7 +1100,7 @@ export class CanvasManager {
     if (!this.photocardImage) return;
     const rect = this.canvas.getBoundingClientRect();
     const iw = (this.photocardImage as HTMLVideoElement).videoWidth ?? (this.photocardImage as HTMLImageElement).width;
-    this.photocard = { x: rect.width / 2, y: rect.height / 2, scale: Math.min(rect.width, rect.height) / (iw * 1.5), rotation: 0, flipH: false, flipV: false, layer: this.photocard.layer, showToploader: this.photocard.showToploader };
+    this.photocard = { x: 450, y: 470, scale: Math.min(rect.width, rect.height) / (iw * 3), rotation: -15 * Math.PI / 180, flipH: false, flipV: false, layer: this.photocard.layer, showToploader: this.photocard.showToploader };
     if (this.photocardVideo.isVideo && this.photocardVideo.element) this.photocardVideo.element.play().catch(() => {});
     this.render();
   }

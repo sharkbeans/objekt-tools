@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import Script from "next/script";
 import { toast } from "sonner";
 import {
@@ -32,15 +32,15 @@ function ControlSlider({ label, value, min, max, step, display, onChange }: {
   display: string; onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>{label}</span>
         <span className="font-mono text-foreground">{display}</span>
       </div>
       <input
         type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full h-1.5 rounded-full appearance-none bg-border cursor-pointer accent-primary"
+        className="w-full h-2 rounded-full appearance-none bg-border cursor-pointer accent-primary"
       />
     </div>
   );
@@ -55,6 +55,13 @@ export function ProofshotEditor() {
   const pcFileRef = useRef<HTMLInputElement>(null);
   const managerRef = useRef<CanvasManager | null>(null);
   const isMobileRef = useRef(false);
+  const tabsBarRef = useRef<HTMLDivElement>(null);
+  const tabsPillRef = useRef<HTMLSpanElement>(null);
+  const tabsFirstPaint = useRef(true);
+  const canvasTabsBarRef = useRef<HTMLDivElement>(null);
+  const canvasTabsPillRef = useRef<HTMLSpanElement>(null);
+  const canvasTabsFirstPaint = useRef(true);
+  const aspectMenuContainerRef = useRef<HTMLDivElement>(null);
 
   const [editMode, setEditMode] = useState<EditMode>("photocard");
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -133,6 +140,79 @@ export function ProofshotEditor() {
     if (!mgr) return;
     setPcSliders({ x: mgr.photocard.x, y: mgr.photocard.y, scale: mgr.photocard.scale, rotation: (mgr.photocard.rotation * 180) / Math.PI });
   }, []);
+
+  const moveTabsPill = useCallback((animate: boolean) => {
+    const bar = tabsBarRef.current;
+    const pill = tabsPillRef.current;
+    if (!bar || !pill) return;
+    const activeTab = bar.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!activeTab) return;
+    if (!animate) {
+      pill.style.transition = "none";
+      pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+      pill.style.width = `${activeTab.offsetWidth}px`;
+      void pill.offsetWidth;
+      pill.style.transition = "";
+    } else {
+      pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+      pill.style.width = `${activeTab.offsetWidth}px`;
+    }
+  }, []);
+
+  const moveCanvasTabsPill = useCallback((animate: boolean) => {
+    const bar = canvasTabsBarRef.current;
+    const pill = canvasTabsPillRef.current;
+    if (!bar || !pill) return;
+    const activeTab = bar.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!activeTab) return;
+    if (!animate) {
+      pill.style.transition = "none";
+      pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+      pill.style.width = `${activeTab.offsetWidth}px`;
+      void pill.offsetWidth;
+      pill.style.transition = "";
+    } else {
+      pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+      pill.style.width = `${activeTab.offsetWidth}px`;
+    }
+  }, []);
+
+  // Tabs pill position
+  useLayoutEffect(() => {
+    if (tabsFirstPaint.current) {
+      tabsFirstPaint.current = false;
+      moveTabsPill(false);
+    } else {
+      moveTabsPill(true);
+    }
+  }, [editMode, moveTabsPill]);
+
+  useLayoutEffect(() => {
+    if (canvasTabsFirstPaint.current) {
+      canvasTabsFirstPaint.current = false;
+      moveCanvasTabsPill(false);
+    } else {
+      moveCanvasTabsPill(true);
+    }
+  }, [editMode, moveCanvasTabsPill]);
+
+  useEffect(() => {
+    const handler = () => { moveTabsPill(false); moveCanvasTabsPill(false); };
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [moveTabsPill, moveCanvasTabsPill]);
+
+  // Close aspect menu on outside click
+  useEffect(() => {
+    if (!aspectMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (aspectMenuContainerRef.current && !aspectMenuContainerRef.current.contains(e.target as Node)) {
+        setAspectMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [aspectMenuOpen]);
 
   const triggerPhotocardUpload = useCallback(() => {
     pcFileRef.current?.click();
@@ -507,17 +587,19 @@ export function ProofshotEditor() {
 
             {/* Edit mode toggle (visible when not in camera) */}
             {!isCameraActive && (
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+              <div
+                ref={canvasTabsBarRef}
+                className="t-tabs canvas-tabs absolute top-3 left-1/2 -translate-x-1/2 z-10"
+                role="tablist"
+              >
+                <span ref={canvasTabsPillRef} className="t-tabs-pill" aria-hidden="true" />
                 {(["photocard", "background"] as EditMode[]).map((mode) => (
                   <button
                     key={mode}
+                    role="tab"
                     onClick={() => handleEditModeChange(mode)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                      editMode === mode
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-black/50 text-white hover:bg-black/70"
-                    )}
+                    aria-selected={editMode === mode}
+                    className="t-tab flex items-center gap-1.5 text-xs font-medium"
                   >
                     {mode === "photocard" ? <CreditCard className="w-3 h-3" /> : <Image className="w-3 h-3" />}
                     {mode === "photocard" ? "Photocard" : "Background"}
@@ -614,25 +696,25 @@ export function ProofshotEditor() {
         </div>
 
         {/* ── Toolbar — hidden on mobile, visible on desktop (matches original display:none !important) */}
-        <div className="hidden md:flex md:w-72 flex-shrink-0 bg-[#1a1a1a] border border-border rounded-lg flex-col overflow-hidden md:max-h-full md:overflow-y-auto sticky top-0">
-          <div className="flex flex-col gap-4 p-4">
+        <div className="hidden md:flex md:w-80 flex-shrink-0 bg-[#1a1a1a] border border-border rounded-lg flex-col overflow-hidden md:max-h-full md:overflow-y-auto sticky top-0">
+          <div className="flex flex-col gap-5 p-5">
             {/* Header */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Proofshot</p>
-                <h2 className="font-semibold">Adjust layers</h2>
+                <h2 className="text-base font-semibold">Adjust layers</h2>
               </div>
               {/* Aspect ratio selector */}
-              <div className="relative">
+              <div ref={aspectMenuContainerRef} className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setAspectMenuOpen((o) => !o); }}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm hover:bg-secondary/80"
+                  onClick={() => setAspectMenuOpen((o) => !o)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm hover:bg-secondary/80"
                 >
                   <span>{canvasAspectRatio}</span>
-                  <ChevronDown className="w-3 h-3" />
+                  <ChevronDown className="w-3.5 h-3.5" />
                 </button>
                 {aspectMenuOpen && (
-                  <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden min-w-[80px]" onClick={(e) => e.stopPropagation()}>
+                  <div className="aspect-dd-open absolute right-0 top-full mt-1 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden min-w-20">
                     {(["3:4", "9:16", "1:1"] as AspectRatio[]).map((r) => (
                       <button
                         key={r}
@@ -640,7 +722,7 @@ export function ProofshotEditor() {
                         className={cn("w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-accent", canvasAspectRatio === r && "bg-accent")}
                       >
                         <span>{r}</span>
-                        {canvasAspectRatio === r && <Check className="w-3 h-3" />}
+                        {canvasAspectRatio === r && <Check className="w-3.5 h-3.5" />}
                       </button>
                     ))}
                   </div>
@@ -649,17 +731,16 @@ export function ProofshotEditor() {
             </div>
 
             {/* Layer tabs */}
-            <div className="flex gap-1 bg-secondary/50 p-1 rounded-lg">
+            <div ref={tabsBarRef} className="t-tabs proofshot-tabs flex gap-1 bg-secondary/50 p-1 rounded-lg">
+              <span ref={tabsPillRef} className="t-tabs-pill" aria-hidden="true" />
               {(["photocard", "background"] as EditMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => handleEditModeChange(mode)}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-sm font-medium transition-colors",
-                    editMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  )}
+                  aria-selected={editMode === mode}
+                  className="t-tab flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium"
                 >
-                  {mode === "photocard" ? <CreditCard className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
+                  {mode === "photocard" ? <CreditCard className="w-4 h-4" /> : <Image className="w-4 h-4" />}
                   {mode === "photocard" ? "Photocard" : "Background"}
                 </button>
               ))}
@@ -667,19 +748,19 @@ export function ProofshotEditor() {
 
             {/* Add Media */}
             <div>
-              <p className="text-xs text-muted-foreground font-medium mb-2">Add Media</p>
+              <p className="text-sm text-muted-foreground font-medium mb-2.5">Add Media</p>
               <div className="flex gap-2">
-                <button onClick={() => bgFileRef.current?.click()} className="flex-1 flex flex-col items-center gap-1 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm">
-                  <ImagePlus className="w-4 h-4" />
-                  <span className="text-xs">Background</span>
+                <button onClick={() => bgFileRef.current?.click()} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80">
+                  <ImagePlus className="w-5 h-5" />
+                  <span className="text-sm">Background</span>
                 </button>
-                <button onClick={() => initCamera()} className="flex-1 flex flex-col items-center gap-1 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm md:hidden">
-                  <Camera className="w-4 h-4" />
-                  <span className="text-xs">Camera</span>
+                <button onClick={() => initCamera()} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80 md:hidden">
+                  <Camera className="w-5 h-5" />
+                  <span className="text-sm">Camera</span>
                 </button>
-                <button onClick={triggerPhotocardUpload} className="flex-1 flex flex-col items-center gap-1 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm">
-                  <BadgePlus className="w-4 h-4" />
-                  <span className="text-xs">Photocard</span>
+                <button onClick={triggerPhotocardUpload} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80">
+                  <BadgePlus className="w-5 h-5" />
+                  <span className="text-sm">Photocard</span>
                 </button>
               </div>
             </div>
@@ -687,20 +768,20 @@ export function ProofshotEditor() {
             {/* Background controls */}
             {editMode === "background" && (
               <div className="flex flex-col gap-3">
-                <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Image className="w-3 h-3" /> Background</p>
+                <p className="text-sm text-muted-foreground font-medium flex items-center gap-1.5"><Image className="w-3.5 h-3.5" /> Background</p>
                 <ControlSlider label="Position X" value={bgSliders.x} min={-500} max={500} step={1} display={Math.round(bgSliders.x).toString()} onChange={(v) => { setBgSliders((s) => ({ ...s, x: v })); managerRef.current?.updateBackground("x", v); }} />
                 <ControlSlider label="Position Y" value={bgSliders.y} min={-500} max={500} step={1} display={Math.round(bgSliders.y).toString()} onChange={(v) => { setBgSliders((s) => ({ ...s, y: v })); managerRef.current?.updateBackground("y", v); }} />
                 <ControlSlider label="Scale" value={bgSliders.scale} min={0.1} max={3} step={0.01} display={bgSliders.scale.toFixed(2)} onChange={(v) => { setBgSliders((s) => ({ ...s, scale: v })); managerRef.current?.updateBackground("scale", v); }} />
                 <ControlSlider label="Rotation" value={bgSliders.rotation} min={-180} max={180} step={1} display={Math.round(bgSliders.rotation) + "°"} onChange={(v) => { setBgSliders((s) => ({ ...s, rotation: v })); managerRef.current?.updateBackground("rotation", v); }} />
                 <div className="flex gap-2">
-                  <button onClick={() => managerRef.current?.flipBackgroundHorizontal()} className="flex-1 flex items-center justify-center gap-1 p-2 rounded-md bg-secondary hover:bg-secondary/80 text-xs">
-                    <FlipHorizontal className="w-3.5 h-3.5" />
+                  <button onClick={() => managerRef.current?.flipBackgroundHorizontal()} className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                    <FlipHorizontal className="w-4 h-4" />
                   </button>
-                  <button onClick={() => managerRef.current?.flipBackgroundVertical()} className="flex-1 flex items-center justify-center gap-1 p-2 rounded-md bg-secondary hover:bg-secondary/80 text-xs">
-                    <FlipVertical className="w-3.5 h-3.5" />
+                  <button onClick={() => managerRef.current?.flipBackgroundVertical()} className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                    <FlipVertical className="w-4 h-4" />
                   </button>
-                  <button onClick={() => { managerRef.current?.resetBackground(); syncBgSliders(); }} className="flex-1 flex items-center justify-center gap-1 p-2 rounded-md bg-secondary hover:bg-secondary/80 text-xs">
-                    <RefreshCw className="w-3.5 h-3.5" />
+                  <button onClick={() => { managerRef.current?.resetBackground(); syncBgSliders(); }} className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                    <RefreshCw className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -709,21 +790,21 @@ export function ProofshotEditor() {
             {/* Photocard controls */}
             {editMode === "photocard" && (
               <div className="flex flex-col gap-3">
-                <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><CreditCard className="w-3 h-3" /> Photocard</p>
+                <p className="text-sm text-muted-foreground font-medium flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5" /> Photocard</p>
                 <ControlSlider label="Position X" value={pcSliders.x} min={0} max={1000} step={1} display={Math.round(pcSliders.x).toString()} onChange={(v) => { setPcSliders((s) => ({ ...s, x: v })); managerRef.current?.updatePhotocard("x", v); }} />
                 <ControlSlider label="Position Y" value={pcSliders.y} min={0} max={1000} step={1} display={Math.round(pcSliders.y).toString()} onChange={(v) => { setPcSliders((s) => ({ ...s, y: v })); managerRef.current?.updatePhotocard("y", v); }} />
                 <ControlSlider label="Scale" value={pcSliders.scale} min={0.1} max={5} step={0.01} display={pcSliders.scale.toFixed(2)} onChange={(v) => { setPcSliders((s) => ({ ...s, scale: v })); managerRef.current?.updatePhotocard("scale", v); }} />
                 <ControlSlider label="Rotation" value={pcSliders.rotation} min={-180} max={180} step={1} display={Math.round(pcSliders.rotation) + "°"} onChange={(v) => { setPcSliders((s) => ({ ...s, rotation: v })); managerRef.current?.updatePhotocard("rotation", (v * Math.PI) / 180); }} />
                 <div className="flex items-center gap-2">
                   <Switch id="toploader" checked={showToploader} onCheckedChange={handleToploaderToggle} />
-                  <Label htmlFor="toploader" className="text-sm">Show Toploader</Label>
+                  <Label htmlFor="toploader" className="text-base">Show Toploader</Label>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handlePcReset} className="flex-1 flex items-center justify-center gap-1.5 p-2 rounded-md bg-secondary hover:bg-secondary/80 text-xs">
-                    <RefreshCw className="w-3.5 h-3.5" /> Reset
+                  <button onClick={handlePcReset} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                    <RefreshCw className="w-4 h-4" /> Reset
                   </button>
-                  <button onClick={handlePcReset} className="flex-1 flex items-center justify-center gap-1.5 p-2 rounded-md bg-secondary hover:bg-secondary/80 text-xs">
-                    <Move className="w-3.5 h-3.5" /> Position
+                  <button onClick={handlePcReset} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                    <Move className="w-4 h-4" /> Position
                   </button>
                 </div>
               </div>
@@ -753,7 +834,7 @@ export function ProofshotEditor() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999]">
           <div className="flex flex-col items-center gap-4 text-white">
             <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-            <p className="font-semibold">{loadingMessage}</p>
+            <span className="t-shimmer loading-shimmer font-semibold" data-text={loadingMessage}>{loadingMessage}</span>
           </div>
         </div>
       )}
@@ -775,10 +856,152 @@ export function ProofshotEditor() {
         </DialogContent>
       </Dialog>
 
-      {/* Click outside to close aspect menu */}
-      {aspectMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setAspectMenuOpen(false)} />}
-
       <style>{`
+        /* ── transitions-dev variables ── */
+        :root {
+          --tabs-dur: 200ms;
+          --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+          --shimmer-dur: 2000ms;
+          --shimmer-band: 400%;
+          --shimmer-ease: linear;
+        }
+        /* ── Aspect ratio dropdown open animation ── */
+        @keyframes aspect-dd-in {
+          from { transform: scale(0.97); opacity: 0; }
+          to   { transform: scale(1);    opacity: 1; }
+        }
+        .aspect-dd-open {
+          transform-origin: top right;
+          animation: aspect-dd-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .aspect-dd-open { animation: none !important; }
+        }
+        /* ── Tabs sliding ── */
+        .t-tabs {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 3px;
+          border-radius: 48px;
+        }
+        .t-tab {
+          position: relative;
+          appearance: none;
+          border: 0;
+          background: transparent;
+          height: 30px;
+          padding: 4px 12px;
+          color: var(--tabs-text-muted);
+          cursor: pointer;
+          border-radius: 48px;
+          z-index: 1;
+          transition: color var(--tabs-dur) var(--tabs-ease);
+        }
+        .t-tab:not([aria-selected="true"]):hover,
+        .t-tab[aria-selected="true"] { color: var(--tabs-text-active); }
+        .t-tabs-pill {
+          position: absolute;
+          top: 3px;
+          left: 0;
+          height: 30px;
+          width: 0;
+          background: var(--tabs-pill-bg);
+          border-radius: 48px;
+          transform: translateX(0);
+          transition:
+            transform var(--tabs-dur) var(--tabs-ease),
+            width     var(--tabs-dur) var(--tabs-ease);
+          will-change: transform, width;
+          z-index: 0;
+          pointer-events: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .t-tabs-pill, .t-tab { transition: none !important; }
+        }
+        /* ── Canvas overlay tabs ── */
+        .canvas-tabs.t-tabs {
+          position: absolute;
+          border-radius: 0.5rem;
+          background: rgba(0, 0, 0, 0.55);
+          backdrop-filter: blur(8px);
+          padding: 3px;
+          gap: 3px;
+        }
+        .canvas-tabs .t-tabs-pill {
+          --tabs-pill-bg: #ffffff;
+          top: 3px;
+          height: calc(100% - 6px);
+          border-radius: 6px;
+        }
+        .canvas-tabs .t-tab {
+          --tabs-text-muted: rgba(255, 255, 255, 0.55);
+          --tabs-text-active: #1a1a1a;
+          height: auto;
+          padding: 4px 10px;
+          border-radius: 6px;
+        }
+        /* ── Proofshot tabs overrides ── */
+        .proofshot-tabs.t-tabs {
+          display: flex;
+          border-radius: 0.5rem;
+          background: transparent;
+          padding: 4px;
+          gap: 4px;
+        }
+        .proofshot-tabs .t-tabs-pill {
+          --tabs-pill-bg: var(--background);
+          top: 4px;
+          height: calc(100% - 8px);
+          border-radius: 0.375rem;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+        }
+        .proofshot-tabs .t-tab {
+          --tabs-text-muted: var(--muted-foreground);
+          --tabs-text-active: var(--foreground);
+          height: auto;
+          padding: 6px 0;
+          border-radius: 0.375rem;
+        }
+        /* ── Shimmer text ── */
+        .t-shimmer {
+          position: relative;
+          display: inline-block;
+          color: var(--shimmer-base);
+        }
+        .t-shimmer::before {
+          content: attr(data-text);
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background-image: linear-gradient(
+            90deg,
+            transparent 0%, transparent 40%,
+            var(--shimmer-highlight) 50%,
+            transparent 60%, transparent 100%
+          );
+          background-size: var(--shimmer-band) 100%;
+          background-repeat: no-repeat;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          -webkit-text-fill-color: transparent;
+          animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+        }
+        @keyframes t-shimmer {
+          0%   { background-position: 100% 0; }
+          100% { background-position: 0% 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .t-shimmer::before { animation: none !important; }
+        }
+        /* Loading overlay shimmer colours */
+        .loading-shimmer {
+          --shimmer-base: rgba(255, 255, 255, 0.65);
+          --shimmer-highlight: #ffffff;
+        }
+        /* ── canvas/camera ── */
         .aspect-3-4 { aspect-ratio: 3/4; }
         .aspect-9-16 { aspect-ratio: 9/16; }
         .aspect-1-1 { aspect-ratio: 1/1; }
