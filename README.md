@@ -4,7 +4,7 @@ All-in-one Cosmo tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the G
 
 **objekt.my is not affiliated with, endorsed by, or supported by MODHAUS or its artists.**
 
-## Tools
+## Tools 
 
 **[Objekt Trade](https://objekt.my/trades)** — Browse and match Cosmo objekt trades. Get auto-matched with other collectors and receive instant Discord notifications—no more searching through lists or DMs.
 
