@@ -1,28 +1,34 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import Link from "next/link";
-import { useSearchParams, useRouter } from "next/navigation";
-import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import {
-  Loader2Icon,
   AlertCircleIcon,
-  DownloadIcon,
-  SunIcon,
-  MoonIcon,
   ArrowLeftIcon,
-  ImageIcon,
   CopyIcon,
-  ShareIcon,
+  DownloadIcon,
+  ImageIcon,
   ListIcon,
+  Loader2Icon,
+  MoonIcon,
+  ShareIcon,
+  SunIcon,
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { ListLinkField } from "@/components/list-link-field";
+import {
+  AddCustomWantDialog,
+  AddObjektDialog,
+} from "@/components/poster/add-objekt-dialog";
+import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
+import {
+  getDisplayCount,
+  getGridCols,
+  PosterCanvas,
+  type PosterData,
+  type PosterTheme,
+} from "@/components/poster/poster-canvas";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -39,17 +46,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { parsePastedTrade } from "@/lib/paste-parser";
-import { resolveForPoster, type ResolvedPosterItem } from "@/lib/poster-resolver";
-import { PosterCanvas, getGridCols, getDisplayCount, type PosterData, type PosterTheme } from "@/components/poster/poster-canvas";
-import { formatPosterAsText } from "@/lib/poster-text-format";
-import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
-import { AddObjektDialog, AddCustomWantDialog } from "@/components/poster/add-objekt-dialog";
-import { useSession, signIn } from "@/lib/auth-client";
-import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { signIn, useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { getSeasonPrefix } from "@/lib/season-prefix";
+import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
 import { compareMembers, compareSeasons } from "@/lib/filter-options";
+import { parsePastedTrade } from "@/lib/paste-parser";
+import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
+import {
+  type ResolvedPosterItem,
+  resolveForPoster,
+} from "@/lib/poster-resolver";
+import { formatPosterAsText } from "@/lib/poster-text-format";
+import { getSeasonPrefix } from "@/lib/season-prefix";
 
 interface StoredItem {
   id: number;
@@ -91,11 +103,15 @@ function storedItemToResolved(item: StoredItem): ResolvedPosterItem {
       member: item.member ?? null,
       season: item.season ?? "",
       collectionNo: item.collectionNo ?? "",
-      raw: item.rawLabel ?? `${item.member ?? ""} ${item.collectionNo ?? ""}`.trim(),
+      raw:
+        item.rawLabel ??
+        `${item.member ?? ""} ${item.collectionNo ?? ""}`.trim(),
       ...(item.serial != null ? { serial: String(item.serial) } : {}),
       ...(item.quantity > 1 ? { quantity: item.quantity } : {}),
       ...(item.freeform ? { freeform: true as const } : {}),
-      ...(item.onOffline ? { onOffline: item.onOffline as "online" | "offline" } : {}),
+      ...(item.onOffline
+        ? { onOffline: item.onOffline as "online" | "offline" }
+        : {}),
     },
     entry: item.collectionId
       ? {
@@ -121,7 +137,8 @@ function resolvedToApiItem(item: ResolvedPosterItem, position: number) {
     class: item.entry?.class ?? null,
     thumbnailUrl: item.imageUrl ?? null,
     serial: item.parsed.serial ? parseInt(item.parsed.serial, 10) : null,
-    objektId: (item.entry as ObjektEntry & { objektId?: string })?.objektId ?? null,
+    objektId:
+      (item.entry as ObjektEntry & { objektId?: string })?.objektId ?? null,
     quantity: item.parsed.quantity ?? 1,
     freeform: item.parsed.freeform ?? false,
     rawLabel: item.parsed.raw ?? null,
@@ -139,7 +156,8 @@ function sortObjektEntries(entries: ObjektEntry[]): ObjektEntry[] {
   return [...entries].sort((a, b) => {
     const seasonCmp = compareSeasons(a.season, b.season);
     if (seasonCmp !== 0) return seasonCmp;
-    const colCmp = parseCollectionNo(a.collectionNo) - parseCollectionNo(b.collectionNo);
+    const colCmp =
+      parseCollectionNo(a.collectionNo) - parseCollectionNo(b.collectionNo);
     if (colCmp !== 0) return colCmp;
     return compareMembers(a.member, b.member);
   });
@@ -158,7 +176,8 @@ function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
     const seasonCmp = compareSeasons(a.entry.season, b.entry.season);
     if (seasonCmp !== 0) return seasonCmp;
     const colCmp =
-      parseCollectionNo(a.entry.collectionNo) - parseCollectionNo(b.entry.collectionNo);
+      parseCollectionNo(a.entry.collectionNo) -
+      parseCollectionNo(b.entry.collectionNo);
     if (colCmp !== 0) return colCmp;
     return compareMembers(a.entry.member, b.entry.member);
   });
@@ -170,9 +189,10 @@ type Stage = "input" | "resolving" | "preview";
 const STASH_KEY = "poster-draft-stash";
 
 function makeItem(entry: ObjektEntry): ResolvedPosterItem {
-  const imageUrl = (entry as ObjektEntry & { frontImage?: string }).thumbnailImage
-    ?? (entry as ObjektEntry & { frontImage?: string }).frontImage
-    ?? null;
+  const imageUrl =
+    (entry as ObjektEntry & { frontImage?: string }).thumbnailImage ??
+    (entry as ObjektEntry & { frontImage?: string }).frontImage ??
+    null;
   return {
     parsed: {
       member: entry.member,
@@ -186,26 +206,24 @@ function makeItem(entry: ObjektEntry): ResolvedPosterItem {
   };
 }
 
-import { Suspense } from "react";
-
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const editId = editIdProp ?? searchParams.get("edit");
+  const legacyEditId = searchParams.get("edit");
+  const restoreParam = searchParams.get("restore");
+  const editId = editIdProp ?? legacyEditId;
 
   const [origin, setOrigin] = useState("");
 
   // Redirect legacy ?edit=id URLs to the canonical /list/[id]/edit route
   useEffect(() => {
-    const legacyId = searchParams.get("edit");
-    if (legacyId && !editIdProp) {
-      router.replace(`/list/${legacyId}/edit`);
+    if (legacyEditId && !editIdProp) {
+      router.replace(`/list/${legacyEditId}/edit`);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [editIdProp, legacyEditId, router]);
 
   const [text, setText] = useState("");
   const [cosmoId, setCosmoId] = useState("");
@@ -223,7 +241,9 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [colsPerRow, setColsPerRow] = useState(5);
   const userSetCols = useRef(false);
   const posterRef = useRef<HTMLDivElement>(null);
-  const [addDialogSection, setAddDialogSection] = useState<"have" | "want" | null>(null);
+  const [addDialogSection, setAddDialogSection] = useState<
+    "have" | "want" | null
+  >(null);
   const [customWantOpen, setCustomWantOpen] = useState(false);
 
   const [isLinked, setIsLinked] = useState(false);
@@ -236,6 +256,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     setPickerOpen(true);
   }, []);
 
+  const handleCosmoBlur = useCallback(() => {
+    if (!cosmoId.trim() || pickerOpen) return;
+    openPicker();
+  }, [cosmoId, openPicker, pickerOpen]);
+
   useEffect(() => {
     setIsHydrated(true);
     setOrigin(window.location.origin);
@@ -243,8 +268,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   // Restore stashed draft after Discord login redirect
   useEffect(() => {
-    const restore = searchParams.get("restore");
-    if (!restore || !session) return;
+    if (!restoreParam || !session) return;
     const raw = sessionStorage.getItem(STASH_KEY);
     if (!raw) return;
     sessionStorage.removeItem(STASH_KEY);
@@ -267,15 +291,14 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     } catch {
       toast.error("Could not restore your draft");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [restoreParam, session]);
 
   // Pre-load a stored poster when ?edit=id is in the URL
   useEffect(() => {
     if (!editId) return;
     setStage("resolving");
     fetch(`/api/posters/${editId}`)
-      .then((r) => r.ok ? r.json() : null)
+      .then((r) => (r.ok ? r.json() : null))
       .then((data: StoredPoster | null) => {
         if (!data) {
           toast.error("Could not load poster for editing");
@@ -294,7 +317,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           haves: data.haves.map(storedItemToResolved),
           wants: data.wants.map(storedItemToResolved),
           notes: data.notes ?? undefined,
-          date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+          date: new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }),
           haveTitle: data.haveTitle,
           wantTitle: data.wantTitle,
         });
@@ -304,7 +331,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         toast.error("Failed to load poster");
         setStage("input");
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId]);
 
   // Auto-assign colsPerRow when items change, unless user has manually set it
@@ -321,7 +348,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   useEffect(() => {
     if (!session) return;
     fetch("/api/cosmo/status")
-      .then((res) => res.ok ? res.json() : null)
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.nickname) {
           setCosmoId((prev) => prev || data.nickname);
@@ -336,7 +363,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     if (!text.trim()) return;
 
     const parsed = parsePastedTrade(text);
-    if (parsed.errors.length > 0 && parsed.haves.length === 0 && parsed.wants.length === 0) {
+    if (
+      parsed.errors.length > 0 &&
+      parsed.haves.length === 0 &&
+      parsed.wants.length === 0
+    ) {
       setParseErrors(parsed.errors);
       return;
     }
@@ -390,12 +421,19 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         colsPerRow,
       );
       const blob = await new Promise<Blob>((resolve, reject) =>
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png"),
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+          "image/png",
+        ),
       );
       const fileName = `trade-poster-${Date.now()}.png`;
 
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      const canShareFiles = isMobile && navigator.canShare?.({ files: [new File([], "t.png", { type: "image/png" })] });
+      const canShareFiles =
+        isMobile &&
+        navigator.canShare?.({
+          files: [new File([], "t.png", { type: "image/png" })],
+        });
 
       if (canShareFiles) {
         // Mobile: use Share API
@@ -404,7 +442,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           await navigator.share({ files: [file] });
           toast.success("Poster shared!");
         } catch (shareErr) {
-          if (shareErr instanceof Error && shareErr.name === "AbortError") return;
+          if (shareErr instanceof Error && shareErr.name === "AbortError")
+            return;
           // Share API blocked (gesture timeout etc.) — fall back to download
           const blobUrl = URL.createObjectURL(blob);
           const link = document.createElement("a");
@@ -451,70 +490,79 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     userSetCols.current = false;
   }, []);
 
-  const doSaveAndShare = useCallback(async (data: PosterData) => {
-    setSaving(true);
-    try {
-      const body = {
-        username: data.username,
-        cosmoId: data.cosmoId,
-        notes: data.notes,
-        theme: posterTheme,
-        groupByMember,
-        groupByNumbers,
-        colsPerRow,
-        haveTitle: data.haveTitle,
-        wantTitle: data.wantTitle,
-        haves: data.haves.map((item, i) => resolvedToApiItem(item, i)),
-        wants: data.wants.map((item, i) => resolvedToApiItem(item, i)),
-      };
+  const doSaveAndShare = useCallback(
+    async (data: PosterData) => {
+      setSaving(true);
+      try {
+        const body = {
+          username: data.username,
+          cosmoId: data.cosmoId,
+          notes: data.notes,
+          theme: posterTheme,
+          groupByMember,
+          groupByNumbers,
+          colsPerRow,
+          haveTitle: data.haveTitle,
+          wantTitle: data.wantTitle,
+          haves: data.haves.map((item, i) => resolvedToApiItem(item, i)),
+          wants: data.wants.map((item, i) => resolvedToApiItem(item, i)),
+        };
 
-      if (editId) {
-        const token = localStorage.getItem(`poster-edit-token:${editId}`);
-        const headers: HeadersInit = { "Content-Type": "application/json" };
-        if (token) headers["x-poster-edit-token"] = token;
-        const res = await fetch(`/api/posters/${editId}`, {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as { error?: string }).error ?? "Failed to save");
+        if (editId) {
+          const token = localStorage.getItem(`poster-edit-token:${editId}`);
+          const headers: HeadersInit = { "Content-Type": "application/json" };
+          if (token) headers["x-poster-edit-token"] = token;
+          const res = await fetch(`/api/posters/${editId}`, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(
+              (err as { error?: string }).error ?? "Failed to save",
+            );
+          }
+          toast.success("Saved!");
+          try {
+            await navigator.clipboard.writeText(
+              `${window.location.origin}/list/${editId}`,
+            );
+            setLinkCopied(true);
+            toast.success("Link copied!");
+          } catch {}
+          router.push(`/list/${editId}`);
+        } else {
+          const res = await fetch("/api/posters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(
+              (err as { error?: string }).error ?? "Failed to save",
+            );
+          }
+          const { id } = (await res.json()) as { id: string };
+          const listUrl = `${window.location.origin}/list/${id}`;
+          toast.success("Saved!");
+          try {
+            await navigator.clipboard.writeText(listUrl);
+            setLinkCopied(true);
+            toast.success("Link copied!");
+          } catch {}
+          router.push(`/list/${id}`);
         }
-        toast.success("Saved!");
-        try {
-          await navigator.clipboard.writeText(`${window.location.origin}/list/${editId}`);
-          setLinkCopied(true);
-          toast.success("Link copied!");
-        } catch {}
-        router.push(`/list/${editId}`);
-      } else {
-        const res = await fetch("/api/posters", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as { error?: string }).error ?? "Failed to save");
-        }
-        const { id } = (await res.json()) as { id: string };
-        const listUrl = `${window.location.origin}/list/${id}`;
-        toast.success("Saved!");
-        try {
-          await navigator.clipboard.writeText(listUrl);
-          setLinkCopied(true);
-          toast.success("Link copied!");
-        } catch {}
-        router.push(`/list/${id}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`Failed to save: ${msg}`);
+      } finally {
+        setSaving(false);
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to save: ${msg}`);
-    } finally {
-      setSaving(false);
-    }
-  }, [posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, router]);
+    },
+    [posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, router],
+  );
 
   // Auto-save after restoring a stashed draft post-login
   useEffect(() => {
@@ -548,8 +596,12 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         );
         if (checkableHaves.length > 0) {
           try {
-            const inventory = await fetchInventoryByNickname(posterData.cosmoId);
-            const ownedCollections = new Set(inventory.map((i) => i.collectionId));
+            const inventory = await fetchInventoryByNickname(
+              posterData.cosmoId,
+            );
+            const ownedCollections = new Set(
+              inventory.map((i) => i.collectionId),
+            );
             const ownedSet = new Set(
               inventory.map((i) => `${i.collectionId}:${i.serial}`),
             );
@@ -573,36 +625,49 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     }
 
     await doSaveAndShare(posterData);
-  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, session, doSaveAndShare, linkedNickname]);
+  }, [posterData, editId, session, doSaveAndShare, linkedNickname]);
 
   const handleSignInForSave = useCallback(() => {
     if (!posterData) return;
-    sessionStorage.setItem(STASH_KEY, JSON.stringify({
-      posterData,
-      posterTheme,
-      groupByMember,
-      groupByNumbers,
-      colsPerRow,
-    }));
-    signIn.social({ provider: "discord", callbackURL: `${window.location.origin}/list?restore=1` });
+    sessionStorage.setItem(
+      STASH_KEY,
+      JSON.stringify({
+        posterData,
+        posterTheme,
+        groupByMember,
+        groupByNumbers,
+        colsPerRow,
+      }),
+    );
+    signIn.social({
+      provider: "discord",
+      callbackURL: `${window.location.origin}/list?restore=1`,
+    });
   }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
 
-  const handleAddItems = useCallback((section: "have" | "want", entries: ObjektEntry[]) => {
-    setPosterData((prev) => {
-      if (!prev) return prev;
-      const key = section === "have" ? "haves" : "wants";
-      const existing = prev[key];
-      // Keep freeform items (custom wants) that have no backing entry
-      const freeformItems = existing.filter((h) => !h.entry && h.parsed.freeform);
-      const sortedEntries = sortObjektEntries(entries);
-      const newItems = sortedEntries.map((e) => {
-        const existingMatch = existing.find((h) => h.entry?.collectionId === e.collectionId);
-        return existingMatch ?? makeItem(e);
+  const handleAddItems = useCallback(
+    (section: "have" | "want", entries: ObjektEntry[]) => {
+      setPosterData((prev) => {
+        if (!prev) return prev;
+        const key = section === "have" ? "haves" : "wants";
+        const existing = prev[key];
+        // Keep freeform items (custom wants) that have no backing entry
+        const freeformItems = existing.filter(
+          (h) => !h.entry && h.parsed.freeform,
+        );
+        const sortedEntries = sortObjektEntries(entries);
+        const newItems = sortedEntries.map((e) => {
+          const existingMatch = existing.find(
+            (h) => h.entry?.collectionId === e.collectionId,
+          );
+          return existingMatch ?? makeItem(e);
+        });
+        return { ...prev, [key]: [...newItems, ...freeformItems] };
       });
-      return { ...prev, [key]: [...newItems, ...freeformItems] };
-    });
-    setAddDialogSection(null);
-  }, []);
+      setAddDialogSection(null);
+    },
+    [],
+  );
 
   const handleAddCustomWant = useCallback((label: string) => {
     setPosterData((prev) => {
@@ -622,54 +687,74 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     });
   }, []);
 
-  const handleRemoveItem = useCallback((section: "have" | "want", index: number) => {
-    setPosterData((prev) => {
-      if (!prev) return prev;
-      const key = section === "have" ? "haves" : "wants";
-      return {
-        ...prev,
-        [key]: prev[key].filter((_, i) => i !== index),
-      };
-    });
-  }, []);
-
-  const handlePickerConfirm = useCallback(async (haves: ObjektEntry[], wants: ObjektEntry[], searchedNickname: string) => {
-    setCosmoId(searchedNickname);
-    setStage("resolving");
-    try {
-      const resolvedHaves = sortObjektEntries(haves).map((entry) => makeItem(entry));
-      const resolvedWants = sortObjektEntries(wants).map((entry) => makeItem(entry));
-
-      const now = new Date();
-      const date = now.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
+  const handleRemoveItem = useCallback(
+    (section: "have" | "want", index: number) => {
+      setPosterData((prev) => {
+        if (!prev) return prev;
+        const key = section === "have" ? "haves" : "wants";
+        return {
+          ...prev,
+          [key]: prev[key].filter((_, i) => i !== index),
+        };
       });
+    },
+    [],
+  );
 
-      userSetCols.current = false;
-      setPosterData({
-        username: searchedNickname,
-        cosmoId: searchedNickname,
-        haves: resolvedHaves,
-        wants: resolvedWants,
-        notes: undefined,
-        date,
-        haveTitle: "Have",
-        wantTitle: "Want",
-      });
-      setStage("preview");
-    } catch {
-      toast.error("Failed to build poster");
-      setStage("input");
-    }
-  }, []);
+  const handlePickerConfirm = useCallback(
+    async (
+      haves: ObjektEntry[],
+      wants: ObjektEntry[],
+      searchedNickname: string,
+    ) => {
+      setCosmoId(searchedNickname);
+      setStage("resolving");
+      try {
+        const resolvedHaves = sortObjektEntries(haves).map((entry) =>
+          makeItem(entry),
+        );
+        const resolvedWants = sortObjektEntries(wants).map((entry) =>
+          makeItem(entry),
+        );
+
+        const now = new Date();
+        const date = now.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+
+        userSetCols.current = false;
+        setPosterData({
+          username: searchedNickname,
+          cosmoId: searchedNickname,
+          haves: resolvedHaves,
+          wants: resolvedWants,
+          notes: undefined,
+          date,
+          haveTitle: "Have",
+          wantTitle: "Want",
+        });
+        setStage("preview");
+      } catch {
+        toast.error("Failed to build poster");
+        setStage("input");
+      }
+    },
+    [],
+  );
 
   const handleTextChange = useCallback((field: string, value: string) => {
     setPosterData((prev) => {
       if (!prev) return prev;
       // Direct PosterData fields
-      if (field === "username" || field === "date" || field === "notes" || field === "haveTitle" || field === "wantTitle") {
+      if (
+        field === "username" ||
+        field === "date" ||
+        field === "notes" ||
+        field === "haveTitle" ||
+        field === "wantTitle"
+      ) {
         return { ...prev, [field]: value };
       }
       // Card label changes — we store these on the parsed.raw for display override
@@ -695,259 +780,343 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   const unresolvedHaves = posterData?.haves.filter((h) => h.error) ?? [];
   const unresolvedWants = posterData?.wants.filter((w) => w.error) ?? [];
-  const hasUnresolved = unresolvedHaves.length > 0 || unresolvedWants.length > 0;
+  const hasUnresolved =
+    unresolvedHaves.length > 0 || unresolvedWants.length > 0;
 
   return (
-    <div className="max-w-4xl sm:mx-auto space-y-4 sm:space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Trade List</h1>
-          <p className="text-muted-foreground">
-            Build a shareable trade list and poster in seconds
-          </p>
-        </div>
-        {session && (
-          <Button asChild variant="outline" size="sm" className="gap-1.5 shrink-0 mt-1">
-            <Link href="/list/mine">
-              <ListIcon className="h-4 w-4" />
-              My Lists
-            </Link>
-          </Button>
-        )}
-      </div>
+    <div className="mx-auto w-full max-w-6xl pb-20">
+      <section className="overflow-hidden rounded-[1.25rem] border border-background bg-background">
+        <div className="border-b border-border px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
 
-      {/* ── Input stage ── */}
-      {stage === "input" && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="poster-cosmoid">Cosmo ID (optional)</Label>
-            <div className="flex gap-2">
-              <Input
-                id="poster-cosmoid"
-                placeholder="Cosmo username"
-                value={cosmoId}
-                onChange={(e) => setCosmoId(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && cosmoId.trim()) {
-                    e.preventDefault();
-                    openPicker();
-                  }
-                }}
-                className="w-48 shrink-0"
-              />
+              <div className="space-y-2">
+                <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                  Trade List
+                </h1>
+              </div>
+            </div>
+            {session && (
               <Button
-                type="button"
+                asChild
                 variant="outline"
-                className="gap-1.5 flex-1"
-                onClick={openPicker}
+                size="sm"
+                className="h-10 gap-2 self-start border-border bg-transparent px-4"
               >
-                <ImageIcon className="h-4 w-4" />
-                Add Objekts
+                <Link href="/list/mine">
+                  <ListIcon className="h-4 w-4" />
+                  My Lists
+                </Link>
               </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Press Enter to open the objekt picker for that username.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="poster-text">Trade List</Label>
-            <Textarea
-              id="poster-text"
-              placeholder={`**HAVE**\nsy AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
-              value={text}
-              onChange={(e) => { setText(e.target.value); setParseErrors([]); }}
-              rows={12}
-              className="font-mono text-sm"
-            />
-            {parseErrors.length > 0 && (
-              <div className="space-y-1">
-                {parseErrors.map((err, i) => (
-                  <p key={i} className="text-xs text-destructive flex items-start gap-1">
-                    <AlertCircleIcon className="h-3 w-3 mt-0.5 shrink-0" />
-                    {err}
-                  </p>
-                ))}
-              </div>
             )}
-            <p className="text-xs text-muted-foreground">
-              Use HAVE / WANT as section headers. Supports shortforms like BB345, AA201, member aliases (SY, HR, DH).
-              Add x3 after an objekt for quantity. Any unparseable text becomes poster notes.
-            </p>
           </div>
-
-          <Button
-            onClick={handleGenerate}
-            disabled={isHydrated ? !text.trim() : undefined}
-            className="gap-1.5"
-          >
-            <ImageIcon className="h-4 w-4" />
-            Preview List
-          </Button>
         </div>
-      )}
 
-      <CosmoPickerDialog
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        initialNickname={cosmoId}
-        isLinked={isLinked}
-        onConfirm={handlePickerConfirm}
-      />
-
-      {/* ── Resolving stage ── */}
-      {stage === "resolving" && (
-        <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-          <Loader2Icon className="h-4 w-4 animate-spin" />
-          Resolving objekts...
-        </div>
-      )}
-
-      {/* ── Preview / Editor stage ── */}
-      {stage === "preview" && posterData && (
-        <div className="space-y-4">
-          {/* Top controls bar */}
-          <div className="flex flex-col gap-3">
-            {/* Row 1: navigation + actions */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5">
-                <ArrowLeftIcon className="h-4 w-4" />
-                Back
-              </Button>
-
-              <div className="grid grid-cols-1 gap-2 sm:ml-auto sm:flex sm:items-center sm:flex-wrap sm:justify-end">
-                <Button size="sm" variant="outline" onClick={handleCopyText} className="gap-1.5">
-                  <CopyIcon className="h-4 w-4" />
-                  Copy Text
-                </Button>
-
-                <Button size="sm" variant="outline" onClick={handleDownload} disabled={downloading} className="gap-1.5">
-                  {downloading ? (
-                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <DownloadIcon className="h-4 w-4" />
-                  )}
-                  Download PNG
-                </Button>
-
-                <Button
-                  size="sm"
-                  onClick={handleSaveAndShare}
-                  disabled={saving}
-                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {saving ? (
-                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShareIcon className="h-4 w-4" />
-                  )}
-                  {linkCopied ? "Link Copied!" : editId ? "Save Changes" : "Create List"}
-                </Button>
-              </div>
-            </div>
-
-            {/* Row 2: poster settings */}
-            <div className="flex items-center gap-3 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-              {/* Columns per row */}
-              <div className="flex items-center gap-1.5">
-                <select
-                  value={colsPerRow}
-                  onChange={(e) => { userSetCols.current = true; setColsPerRow(Number(e.target.value)); }}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-                <span className="text-xs text-muted-foreground">per row</span>
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          {stage === "input" && (
+            <section className="space-y-5">
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="poster-cosmoid"
+                    placeholder="Cosmo username"
+                    value={cosmoId}
+                    onChange={(e) => setCosmoId(e.target.value)}
+                    onBlur={handleCosmoBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && cosmoId.trim()) {
+                        e.preventDefault();
+                        openPicker();
+                      }
+                    }}
+                    className="h-11 bg-background sm:max-w-64"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 gap-2 border-border bg-transparent px-4 sm:flex-1"
+                    onClick={openPicker}
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    Add Objekts
+                  </Button>
+                </div>
               </div>
 
-              {/* Group by members toggle */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Group by Members</span>
-                <Switch checked={groupByMember} onCheckedChange={setGroupByMember} />
-              </div>
-
-              {/* Group by numbers toggle */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Combine Duplicates</span>
-                <Switch checked={groupByNumbers} onCheckedChange={setGroupByNumbers} />
-              </div>
-
-              {/* Theme toggle */}
-              <div className="flex items-center gap-2">
-                <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                <Switch
-                  checked={posterTheme === "dark"}
-                  onCheckedChange={(checked) => setPosterTheme(checked ? "dark" : "light")}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="poster-text"
+                    className="text-lg font-bold text-foreground"
+                  >
+                    Trade List
+                  </Label>
+                  <p className="text-sm leading-5 text-muted-foreground">
+                    Use HAVE and WANT as section headers. Shortforms and
+                    quantities like (x3) are supported.
+                  </p>
+                </div>
+                <Textarea
+                  id="poster-text"
+                  placeholder={`**HAVE**\nsy AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    setParseErrors([]);
+                  }}
+                  rows={14}
+                  className="min-h-[22rem] resize-y border-border bg-background font-mono text-sm leading-6"
                 />
-                <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                {parseErrors.length > 0 && (
+                  <div className="space-y-1">
+                    {parseErrors.map((err) => (
+                      <p
+                        key={err}
+                        className="flex items-start gap-1.5 text-xs leading-5 text-destructive"
+                      >
+                        <AlertCircleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        {err}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isHydrated ? !text.trim() : undefined}
+                  className="h-11 w-full gap-2 sm:w-auto sm:px-6"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  Preview List
+                </Button>
               </div>
-            </div>
-          </div>
-
-          {/* Unresolved warnings */}
-          {hasUnresolved && (
-            <div className="rounded-md border border-yellow-500/50 bg-yellow-500/5 p-3 space-y-1">
-              <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
-                Some items could not be resolved
-              </p>
-              {[...unresolvedHaves, ...unresolvedWants].map((item, i) => (
-                <p key={i} className="text-xs text-yellow-600 dark:text-yellow-400">
-                  {item.error}
-                </p>
-              ))}
-            </div>
+            </section>
           )}
 
-          {/* Inline add dialog — opened by clicking the + card in either section */}
-          {addDialogSection && (
-            <AddObjektDialog
-              open={!!addDialogSection}
-              section={addDialogSection}
-              cosmoId={posterData.cosmoId || undefined}
-              initialSelected={
-                (addDialogSection === "have" ? posterData.haves : posterData.wants)
-                  .flatMap((item) => (item.entry ? [item.entry] : []))
-              }
-              onOpenChange={(open) => { if (!open) setAddDialogSection(null); }}
-              onConfirm={handleAddItems}
-            />
-          )}
-
-          <AddCustomWantDialog
-            open={customWantOpen}
-            onOpenChange={setCustomWantOpen}
-            onConfirm={handleAddCustomWant}
+          <CosmoPickerDialog
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            initialNickname={cosmoId}
+            isLinked={isLinked}
+            onConfirm={handlePickerConfirm}
           />
 
-          {/* Poster canvas — always editable (except during download) */}
-          {editId && origin && (
-            <div className="flex justify-start">
-              <ListLinkField
-                label="Edit link"
-                value={`${origin}/list/${editId}/edit`}
-                className="sm:max-w-sm"
-              />
+          {stage === "resolving" && (
+            <div className="rounded-xl border border-border bg-background/40 px-4 py-12">
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2Icon className="h-4 w-4 animate-spin" />
+                Resolving objekts...
+              </div>
             </div>
           )}
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <PosterCanvas
-              ref={posterRef}
-              data={posterData}
-              theme={posterTheme}
-              editable={!downloading}
-              groupByMember={groupByMember}
-              groupByNumbers={groupByNumbers}
-              colsPerRow={colsPerRow}
-              onTextChange={handleTextChange}
-              onRemoveItem={handleRemoveItem}
-              onAddItem={setAddDialogSection}
-              onAddCustomWant={() => setCustomWantOpen(true)}
-            />
-          </div>
+
+          {stage === "preview" && posterData && (
+            <section className="space-y-4">
+              <div className="flex flex-col gap-3 border-b border-border pb-4">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Preview
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {getDisplayCount(posterData.haves, groupByNumbers)} have /{" "}
+                      {getDisplayCount(posterData.wants, groupByNumbers)} want
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBack}
+                      className="h-10 gap-2 border-border bg-transparent"
+                    >
+                      <ArrowLeftIcon className="h-4 w-4" />
+                      Back
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCopyText}
+                      className="h-10 gap-2 border-border bg-transparent"
+                    >
+                      <CopyIcon className="h-4 w-4" />
+                      Copy Text
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleDownload}
+                      disabled={downloading}
+                      className="h-10 gap-2 border-border bg-transparent"
+                    >
+                      {downloading ? (
+                        <Loader2Icon className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <DownloadIcon className="h-4 w-4" />
+                      )}
+                      Download PNG
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveAndShare}
+                      disabled={saving}
+                      className="h-10 gap-2"
+                    >
+                      {saving ? (
+                        <Loader2Icon className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ShareIcon className="h-4 w-4" />
+                      )}
+                      {linkCopied
+                        ? "Link Copied!"
+                        : editId
+                          ? "Save Changes"
+                          : "Create List"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor="cols-per-row"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Columns
+                    </Label>
+                    <select
+                      id="cols-per-row"
+                      value={colsPerRow}
+                      onChange={(e) => {
+                        userSetCols.current = true;
+                        setColsPerRow(Number(e.target.value));
+                      }}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                    >
+                      {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
+                        <option key={n} value={n}>
+                          {n} per row
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 sm:justify-start">
+                    <span className="text-xs text-muted-foreground">
+                      Group by Members
+                    </span>
+                    <Switch
+                      checked={groupByMember}
+                      onCheckedChange={setGroupByMember}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 sm:justify-start">
+                    <span className="text-xs text-muted-foreground">
+                      Combine Duplicates
+                    </span>
+                    <Switch
+                      checked={groupByNumbers}
+                      onCheckedChange={setGroupByNumbers}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 sm:justify-start">
+                    <span className="text-xs text-muted-foreground">Theme</span>
+                    <div className="flex items-center gap-2">
+                      <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Switch
+                        checked={posterTheme === "dark"}
+                        onCheckedChange={(checked) =>
+                          setPosterTheme(checked ? "dark" : "light")
+                        }
+                      />
+                      <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                  </div>
+
+                  {(linkedNickname || posterData.cosmoId) && (
+                    <span className="inline-flex rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">
+                      {linkedNickname
+                        ? `Linked Cosmo: @${linkedNickname}`
+                        : `Cosmo ID: @${posterData.cosmoId}`}
+                    </span>
+                  )}
+
+                  {autoSaving && (
+                    <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2Icon className="h-3 w-3 animate-spin" />
+                      Saving draft...
+                    </div>
+                  )}
+                </div>
+
+                {editId && origin && (
+                  <div className="max-w-md">
+                    <ListLinkField
+                      label="Edit link"
+                      value={`${origin}/list/${editId}/edit`}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {hasUnresolved && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                    Some items could not be resolved
+                  </p>
+                  {[...unresolvedHaves, ...unresolvedWants].map((item) => (
+                    <p
+                      key={item.error}
+                      className="text-xs leading-5 text-yellow-600 dark:text-yellow-400"
+                    >
+                      {item.error}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-lg border border-border bg-background">
+                <PosterCanvas
+                  ref={posterRef}
+                  data={posterData}
+                  theme={posterTheme}
+                  editable={!downloading}
+                  groupByMember={groupByMember}
+                  groupByNumbers={groupByNumbers}
+                  colsPerRow={colsPerRow}
+                  onTextChange={handleTextChange}
+                  onRemoveItem={handleRemoveItem}
+                  onAddItem={setAddDialogSection}
+                  onAddCustomWant={() => setCustomWantOpen(true)}
+                />
+              </div>
+            </section>
+          )}
         </div>
+      </section>
+
+      {stage === "preview" && posterData && addDialogSection && (
+        <AddObjektDialog
+          open={!!addDialogSection}
+          section={addDialogSection}
+          cosmoId={posterData.cosmoId || undefined}
+          initialSelected={(addDialogSection === "have"
+            ? posterData.haves
+            : posterData.wants
+          ).flatMap((item) => (item.entry ? [item.entry] : []))}
+          onOpenChange={(open) => {
+            if (!open) setAddDialogSection(null);
+          }}
+          onConfirm={handleAddItems}
+        />
       )}
+
+      <AddCustomWantDialog
+        open={customWantOpen}
+        onOpenChange={setCustomWantOpen}
+        onConfirm={handleAddCustomWant}
+      />
       <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -957,10 +1126,15 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
             </DialogDescription>
           </DialogHeader>
           <Button
-            className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white gap-2"
+            variant="outline"
+            className="w-full gap-2 border-border bg-background text-foreground hover:bg-muted"
             onClick={handleSignInForSave}
           >
-            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4 fill-current"
+              aria-hidden="true"
+            >
               <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.003.02.014.04.03.052a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
             </svg>
             Continue with Discord
@@ -968,12 +1142,15 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={inventoryWarningOpen} onOpenChange={setInventoryWarningOpen}>
+      <AlertDialog
+        open={inventoryWarningOpen}
+        onOpenChange={setInventoryWarningOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Inventory mismatch</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>@{posterData?.cosmoId}</strong>{" "}doesn&apos;t own any of
+              <strong>@{posterData?.cosmoId}</strong> doesn&apos;t own any of
               these objekts in their inventory. Either enter a different Cosmo
               username, or use Download PNG only.
             </AlertDialogDescription>

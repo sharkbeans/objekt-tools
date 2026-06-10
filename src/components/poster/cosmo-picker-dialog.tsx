@@ -29,6 +29,7 @@ import {
   type OwnedEntry,
 } from "@/lib/cosmo-inventory";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import type { ObjektStructuralFilters } from "@/lib/filter-utils";
 import { validOnlineTypes } from "@/lib/filters";
 import { objektMatchesSearch } from "@/lib/objekt-search";
 
@@ -53,7 +54,7 @@ type Step = "haves" | "wants";
 interface CosmoPickerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Pre-filled nickname. If provided and isLinked=true, auto-searches on open. */
+  /** Pre-filled nickname. If provided, auto-searches on open. */
   initialNickname?: string;
   /** Whether the current user is authed+linked to a Cosmo account. */
   isLinked?: boolean;
@@ -83,11 +84,19 @@ export function CosmoPickerDialog({
   const [inventoryFilters, setInventoryFilters] = useState<InventoryFilters>(
     emptyInventoryFilters,
   );
+  const [wantFilters, setWantFilters] = useState<ObjektStructuralFilters>({
+    artist: [],
+    member: [],
+    season: [],
+    class: [],
+    on_offline: [],
+  });
   const [selectedHaves, setSelectedHaves] = useState<ObjektEntry[]>([]);
   const [selectedWants, setSelectedWants] = useState<ObjektEntry[]>([]);
 
   // 3s cooldown between searches
   const lastSearchAt = useRef<number>(0);
+  const pendingSearchNickname = useRef<string | null>(null);
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -101,7 +110,15 @@ export function CosmoPickerDialog({
       setSearchedNickname(null);
       setHaveFilter("");
       setInventoryFilters(emptyInventoryFilters);
+      setWantFilters({
+        artist: [],
+        member: [],
+        season: [],
+        class: [],
+        on_offline: [],
+      });
       lastSearchAt.current = 0;
+      pendingSearchNickname.current = null;
     }
   }, [open]); // intentionally not including initialNickname — handled below
 
@@ -110,9 +127,9 @@ export function CosmoPickerDialog({
     if (open) setNickname(initialNickname);
   }, [initialNickname]);
 
-  // Auto-search on open only for authed+linked users with a pre-filled nickname
+  // Auto-search on open when a pre-filled nickname is available
   useEffect(() => {
-    if (open && isLinked && initialNickname.trim()) {
+    if (open && initialNickname.trim()) {
       doSearch(initialNickname.trim());
     }
   }, [open]);
@@ -120,6 +137,8 @@ export function CosmoPickerDialog({
   function doSearch(name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
+    if (inventoryLoading && pendingSearchNickname.current === trimmed) return;
+    if (searchedNickname === trimmed) return;
 
     const now = Date.now();
     const elapsed = now - lastSearchAt.current;
@@ -129,6 +148,7 @@ export function CosmoPickerDialog({
       return;
     }
     lastSearchAt.current = now;
+    pendingSearchNickname.current = trimmed;
 
     setInventoryLoading(true);
     setInventoryError(null);
@@ -151,7 +171,10 @@ export function CosmoPickerDialog({
           err instanceof Error ? err.message : "Failed to load inventory.",
         );
       })
-      .finally(() => setInventoryLoading(false));
+      .finally(() => {
+        pendingSearchNickname.current = null;
+        setInventoryLoading(false);
+      });
   }
 
   function handleSearch() {
@@ -160,6 +183,10 @@ export function CosmoPickerDialog({
 
   function handleNicknameKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") handleSearch();
+  }
+
+  function handleNicknameBlur() {
+    handleSearch();
   }
 
   const filteredInventory = useMemo(() => {
@@ -228,6 +255,21 @@ export function CosmoPickerDialog({
         (artist) => filterOptions.membersByArtist[artist] ?? [],
       )
     : filterOptions.allMembers;
+  const availableWantSeasons = wantFilters.artist.length
+    ? wantFilters.artist.flatMap(
+        (artist) => filterOptions.seasonsByArtist[artist] ?? [],
+      )
+    : filterOptions.allSeasons;
+  const availableWantClasses = wantFilters.artist.length
+    ? wantFilters.artist.flatMap(
+        (artist) => filterOptions.classesByArtist[artist] ?? [],
+      )
+    : filterOptions.allClasses;
+  const availableWantMembers = wantFilters.artist.length
+    ? wantFilters.artist.flatMap(
+        (artist) => filterOptions.membersByArtist[artist] ?? [],
+      )
+    : filterOptions.allMembers;
 
   function updateInventoryFilters(partial: Partial<InventoryFilters>) {
     setInventoryFilters((prev) => ({ ...prev, ...partial }));
@@ -244,6 +286,39 @@ export function CosmoPickerDialog({
       ? artists.flatMap((artist) => filterOptions.membersByArtist[artist] ?? [])
       : filterOptions.allMembers;
     setInventoryFilters((prev) => ({
+      ...prev,
+      artist: artists,
+      season: prev.season.filter((season) => {
+        const decoded = decodeGroupedValue(season);
+        return decoded
+          ? newSeasons.includes(decoded.item)
+          : newSeasons.includes(season);
+      }),
+      class: prev.class.filter((className) => {
+        const decoded = decodeGroupedValue(className);
+        return decoded
+          ? newClasses.includes(decoded.item)
+          : newClasses.includes(className);
+      }),
+      member: prev.member.filter((member) => newMembers.includes(member)),
+    }));
+  }
+
+  function updateWantFilters(partial: Partial<ObjektStructuralFilters>) {
+    setWantFilters((prev) => ({ ...prev, ...partial }));
+  }
+
+  function handleWantArtistFilterChange(artists: string[]) {
+    const newSeasons = artists.length
+      ? artists.flatMap((artist) => filterOptions.seasonsByArtist[artist] ?? [])
+      : filterOptions.allSeasons;
+    const newClasses = artists.length
+      ? artists.flatMap((artist) => filterOptions.classesByArtist[artist] ?? [])
+      : filterOptions.allClasses;
+    const newMembers = artists.length
+      ? artists.flatMap((artist) => filterOptions.membersByArtist[artist] ?? [])
+      : filterOptions.allMembers;
+    setWantFilters((prev) => ({
       ...prev,
       artist: artists,
       season: prev.season.filter((season) => {
@@ -280,13 +355,7 @@ export function CosmoPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={
-          step === "haves"
-            ? "max-h-[90vh] overflow-y-auto md:max-w-5xl"
-            : "max-w-lg max-h-[90vh] overflow-y-auto"
-        }
-      >
+      <DialogContent className="max-h-[90vh] overflow-y-auto md:max-w-5xl">
         {step === "haves" ? (
           <>
             <DialogHeader>
@@ -304,6 +373,7 @@ export function CosmoPickerDialog({
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   onKeyDown={handleNicknameKeyDown}
+                  onBlur={handleNicknameBlur}
                   autoComplete="off"
                   autoCapitalize="none"
                   autoCorrect="off"
@@ -479,6 +549,55 @@ export function CosmoPickerDialog({
             </DialogHeader>
 
             <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 sm:flex-1 sm:min-w-0">
+                  <MultiSelect
+                    options={filterOptions.artists}
+                    value={wantFilters.artist}
+                    onChange={handleWantArtistFilterChange}
+                    placeholder="Artist"
+                    className="w-full sm:w-auto sm:min-w-28"
+                  />
+                  <MultiSelect
+                    options={availableWantMembers.map((member) => ({
+                      label: member,
+                      value: member,
+                    }))}
+                    value={wantFilters.member}
+                    onChange={(value) => updateWantFilters({ member: value })}
+                    placeholder="Member"
+                    className="w-full sm:w-auto sm:min-w-32"
+                  />
+                  <SeasonMultiSelect
+                    options={availableWantSeasons}
+                    columns={filterOptions.seasonColumns}
+                    value={wantFilters.season}
+                    onChange={(value) => updateWantFilters({ season: value })}
+                    placeholder="Season"
+                    className="w-full sm:w-auto sm:min-w-32"
+                  />
+                  <ClassMultiSelect
+                    options={availableWantClasses}
+                    columns={filterOptions.classColumns}
+                    value={wantFilters.class}
+                    onChange={(value) => updateWantFilters({ class: value })}
+                    placeholder="Class"
+                    className="w-full sm:w-auto sm:min-w-28"
+                  />
+                  <MultiSelect
+                    options={validOnlineTypes.map((type) => ({
+                      label: type === "online" ? "Digital" : "Physical",
+                      value: type,
+                    }))}
+                    value={wantFilters.on_offline}
+                    onChange={(value) =>
+                      updateWantFilters({ on_offline: value })
+                    }
+                    placeholder="Type"
+                    className="w-full sm:w-auto sm:min-w-24"
+                  />
+                </div>
+              </div>
               <ObjektPicker
                 selected={selectedWants}
                 onSelect={(o) => setSelectedWants((prev) => [...prev, o])}
@@ -488,6 +607,8 @@ export function CosmoPickerDialog({
                   )
                 }
                 maxSelections={50}
+                filters={wantFilters}
+                gridClassName={havesGridClassName}
               />
             </div>
 

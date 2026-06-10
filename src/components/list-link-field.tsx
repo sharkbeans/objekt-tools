@@ -58,7 +58,7 @@ export function ListLinkField({
           className={cn(
             "h-8 w-8 shrink-0 border-0 transition-colors",
             copied &&
-              "bg-emerald-700 text-white hover:bg-emerald-700 hover:text-white",
+              "bg-foreground text-background hover:bg-foreground hover:text-background",
           )}
         >
           {copied ? (

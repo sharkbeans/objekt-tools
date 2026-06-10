@@ -7,7 +7,7 @@ import { TradePagination } from "@/components/trades/trade-pagination";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 36;
+const PAGE_SIZE = 40;
 
 interface ObjektGridPickerProps {
   items: ObjektEntry[];
