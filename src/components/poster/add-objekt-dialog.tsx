@@ -21,19 +21,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
+import type { ObjektEntry } from "@/lib/cosmo/types";
 import {
   fetchInventoryByNickname,
   getInventoryArtist,
   getInventoryType,
   type OwnedEntry,
 } from "@/lib/cosmo-inventory";
-import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "@/lib/filter-utils";
 import { validOnlineTypes } from "@/lib/filters";
 import { objektMatchesSearch } from "@/lib/objekt-search";
 
 const emptyFilters: ObjektStructuralFilters = {
-  artist: [], member: [], season: [], class: [], on_offline: [],
+  artist: [],
+  member: [],
+  season: [],
+  class: [],
+  on_offline: [],
 };
 
 // ── Shared filter bar ─────────────────────────────────────────────────────
@@ -184,25 +188,33 @@ function InventoryPicker({
     setError(null);
     fetchInventoryByNickname(cosmoId)
       .then(setInventory)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load inventory."))
+      .catch((err) =>
+        setError(
+          err instanceof Error ? err.message : "Failed to load inventory.",
+        ),
+      )
       .finally(() => setLoading(false));
   }, [cosmoId]);
 
   const filtered = useMemo(() => {
     let r = inventory;
-    if (textFilter.trim()) r = r.filter((o) => objektMatchesSearch(o, textFilter));
+    if (textFilter.trim())
+      r = r.filter((o) => objektMatchesSearch(o, textFilter));
     if (filters.artist.length) {
       r = r.filter((o) => {
         const a = getInventoryArtist(o);
         return a ? filters.artist.includes(a) : false;
       });
     }
-    if (filters.member.length) r = r.filter((o) => filters.member.includes(o.member));
+    if (filters.member.length)
+      r = r.filter((o) => filters.member.includes(o.member));
     if (filters.season.length) {
       r = r.filter((o) =>
         filters.season.some((s) => {
           const d = decodeGroupedValue(s);
-          return d ? d.item === o.season && d.artistId === getInventoryArtist(o) : s === o.season;
+          return d
+            ? d.item === o.season && d.artistId === getInventoryArtist(o)
+            : s === o.season;
         }),
       );
     }
@@ -210,16 +222,27 @@ function InventoryPicker({
       r = r.filter((o) =>
         filters.class.some((c) => {
           const d = decodeGroupedValue(c);
-          return d ? d.item === o.class && d.artistId === getInventoryArtist(o) : c === o.class;
+          return d
+            ? d.item === o.class && d.artistId === getInventoryArtist(o)
+            : c === o.class;
         }),
       );
     }
-    if (filters.on_offline.length) r = r.filter((o) => filters.on_offline.includes(getInventoryType(o)));
+    if (filters.on_offline.length)
+      r = r.filter((o) => filters.on_offline.includes(getInventoryType(o)));
     return r;
   }, [inventory, textFilter, filters]);
 
   if (loading) {
-    return <ObjektGridPicker items={[]} selected={[]} onSelect={() => {}} onDeselect={() => {}} loading />;
+    return (
+      <ObjektGridPicker
+        items={[]}
+        selected={[]}
+        onSelect={() => {}}
+        onDeselect={() => {}}
+        loading
+      />
+    );
   }
 
   if (error) {
@@ -230,7 +253,8 @@ function InventoryPicker({
     <div className="space-y-3">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <SearchIcon className="h-3 w-3" />
-        Showing inventory for <span className="font-medium text-foreground">{cosmoId}</span>
+        Showing inventory for{" "}
+        <span className="font-medium text-foreground">{cosmoId}</span>
       </div>
       <Input
         placeholder="Filter... e.g. JiWoo, Atom02"
@@ -335,16 +359,16 @@ export function AddCustomWantDialog({
       <DialogContent className="md:max-w-sm">
         <DialogHeader>
           <DialogTitle>Add Custom Want</DialogTitle>
-          <DialogDescription>
-            e.g. "Any Atom02 FCO"
-          </DialogDescription>
+          <DialogDescription>e.g. "Any Atom02 FCO"</DialogDescription>
         </DialogHeader>
 
         <Input
           placeholder="Type here..."
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") handleConfirm(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleConfirm();
+          }}
           autoFocus
           autoComplete="off"
           autoCapitalize="none"
@@ -408,7 +432,9 @@ export function AddObjektDialog({
   function handleDeselect(o: ObjektEntry) {
     setSelected((prev) =>
       prev.filter((s) =>
-        o.serial != null ? s.serial !== o.serial : s.collectionId !== o.collectionId,
+        o.serial != null
+          ? s.serial !== o.serial
+          : s.collectionId !== o.collectionId,
       ),
     );
   }
@@ -450,9 +476,7 @@ export function AddObjektDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm}>
-            Apply ({selected.length})
-          </Button>
+          <Button onClick={handleConfirm}>Apply ({selected.length})</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

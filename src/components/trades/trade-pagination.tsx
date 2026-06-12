@@ -1,6 +1,11 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronsLeftIcon,
+  ChevronsRightIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface TradePaginationProps {
@@ -12,7 +17,14 @@ interface TradePaginationProps {
   itemLabel?: string;
 }
 
-export function TradePagination({ page, totalPages, total, limit, onPageChange, itemLabel = "trades" }: TradePaginationProps) {
+export function TradePagination({
+  page,
+  totalPages,
+  total,
+  limit,
+  onPageChange,
+  itemLabel = "trades",
+}: TradePaginationProps) {
   if (total === 0) return null;
 
   const from = (page - 1) * limit + 1;
@@ -68,7 +80,10 @@ export function TradePagination({ page, totalPages, total, limit, onPageChange, 
 
           {pageNumbers.map((p, i) =>
             p === "ellipsis" ? (
-              <span key={`ellipsis-${i}`} className="px-1 text-sm text-muted-foreground">
+              <span
+                key={`ellipsis-${i}`}
+                className="px-1 text-sm text-muted-foreground"
+              >
                 ...
               </span>
             ) : (
@@ -80,7 +95,7 @@ export function TradePagination({ page, totalPages, total, limit, onPageChange, 
               >
                 {p}
               </Button>
-            )
+            ),
           )}
 
           <Button

@@ -1,10 +1,14 @@
 "use client";
 
-import * as React from "react";
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 export interface MultiSelectOption {
@@ -54,14 +58,21 @@ export function MultiSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("h-9 min-w-32 justify-between px-3 font-normal", className)}
+          className={cn(
+            "h-9 min-w-32 justify-between px-3 font-normal",
+            className,
+          )}
         >
           <span className="flex items-center gap-1 overflow-hidden">
             {value.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : value.length <= 2 ? (
               value.map((v) => (
-                <Badge key={v} variant="secondary" className="text-xs px-1.5 py-0">
+                <Badge
+                  key={v}
+                  variant="secondary"
+                  className="text-xs px-1.5 py-0"
+                >
                   {options.find((o) => o.value === v)?.label ?? v}
                 </Badge>
               ))
@@ -106,7 +117,9 @@ export function MultiSelect({
           }}
         >
           {filtered.length === 0 ? (
-            <p className="py-2 text-center text-xs text-muted-foreground">No options</p>
+            <p className="py-2 text-center text-xs text-muted-foreground">
+              No options
+            </p>
           ) : (
             filtered.map((opt) => {
               const selected = value.includes(opt.value);

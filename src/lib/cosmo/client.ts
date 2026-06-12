@@ -1,12 +1,8 @@
+import { desc, eq } from "drizzle-orm";
 import { ofetch } from "ofetch";
 import { db } from "@/lib/db";
 import { cosmoToken } from "@/lib/db/schema";
-import { desc, eq } from "drizzle-orm";
-import type {
-  CosmoSearchResult,
-  CosmoUserProfile,
-  ValidArtist,
-} from "./types";
+import type { CosmoSearchResult, CosmoUserProfile, ValidArtist } from "./types";
 
 const COSMO_API = "https://api.cosmo.fans";
 
@@ -57,7 +53,7 @@ async function refreshAccessToken(tokenRow: {
 
 async function cosmoFetchWithRefresh<T>(
   url: string,
-  opts?: Record<string, unknown>
+  opts?: Record<string, unknown>,
 ): Promise<T> {
   const token = await getLatestToken();
 
@@ -84,20 +80,18 @@ async function cosmoFetchWithRefresh<T>(
   }
 }
 
-export async function searchUsers(
-  query: string
-): Promise<CosmoSearchResult> {
+export async function searchUsers(query: string): Promise<CosmoSearchResult> {
   return cosmoFetchWithRefresh("/bff/v3/users/search", {
     params: { nickname: query, skip: 0, take: 100 },
   });
 }
 
 export async function fetchUserByNickname(
-  nickname: string
+  nickname: string,
 ): Promise<{ nickname: string; address: string } | null> {
   try {
     return await cosmoFetchWithRefresh<{ nickname: string; address: string }>(
-      `/bff/v3/users/by-nickname/${encodeURIComponent(nickname)}`
+      `/bff/v3/users/by-nickname/${encodeURIComponent(nickname)}`,
     );
   } catch {
     return null;
@@ -106,7 +100,7 @@ export async function fetchUserByNickname(
 
 export async function fetchUserProfile(
   cosmoId: number,
-  artistId: ValidArtist
+  artistId: ValidArtist,
 ): Promise<CosmoUserProfile> {
   return cosmoFetchWithRefresh(`/bff/v3/users/${cosmoId}`, {
     params: { artistId },

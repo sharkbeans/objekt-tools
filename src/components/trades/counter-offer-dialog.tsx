@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ArrowRight, Minus, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
+import { ObjektUserPicker } from "@/components/objekt/objekt-user-picker";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,12 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
-import { ObjektUserPicker } from "@/components/objekt/objekt-user-picker";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { Plus, Minus, ArrowRight } from "lucide-react";
+import type { ObjektSearchResult } from "@/lib/trade-types";
 
 interface TradeSide {
   id: number;
@@ -43,7 +44,12 @@ interface Props {
   theirCosmoUsername: string;
 }
 
-function formatLabel(item: { collectionNo?: string | null; member?: string | null; collectionId: string; serial?: number | null }) {
+function formatLabel(item: {
+  collectionNo?: string | null;
+  member?: string | null;
+  collectionId: string;
+  serial?: number | null;
+}) {
   const name =
     item.collectionNo && item.member
       ? `${item.member} ${item.collectionNo}`
@@ -68,7 +74,12 @@ function sideToObjektEntry(side: TradeSide): ObjektEntry {
   };
 }
 
-type ObjektMeta = { thumbnailImage: string | null; season: string; class: string; artist: string };
+type ObjektMeta = {
+  thumbnailImage: string | null;
+  season: string;
+  class: string;
+  artist: string;
+};
 const metaCache = new Map<string, ObjektMeta>();
 
 function fetchObjektMeta(collectionId: string): Promise<ObjektMeta> {
@@ -77,7 +88,9 @@ function fetchObjektMeta(collectionId: string): Promise<ObjektMeta> {
   return fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
     .then((res) => res.json())
     .then((data) => {
-      const match = data.results?.find((r: any) => r.collectionId === collectionId);
+      const match = data.results?.find(
+        (r: ObjektSearchResult) => r.collectionId === collectionId,
+      );
       const meta: ObjektMeta = {
         thumbnailImage: match?.thumbnailImage ?? match?.frontImage ?? null,
         season: match?.season ?? "",
@@ -88,7 +101,12 @@ function fetchObjektMeta(collectionId: string): Promise<ObjektMeta> {
       return meta;
     })
     .catch(() => {
-      const empty: ObjektMeta = { thumbnailImage: null, season: "", class: "", artist: "" };
+      const empty: ObjektMeta = {
+        thumbnailImage: null,
+        season: "",
+        class: "",
+        artist: "",
+      };
       metaCache.set(collectionId, empty);
       return empty;
     });
@@ -99,7 +117,9 @@ function ObjektCard({ objekt }: { objekt: ObjektEntry }) {
 
   useEffect(() => {
     if (!url && objekt.collectionId) {
-      fetchObjektMeta(objekt.collectionId).then((m) => setUrl(m.thumbnailImage));
+      fetchObjektMeta(objekt.collectionId).then((m) =>
+        setUrl(m.thumbnailImage),
+      );
     }
   }, [objekt.collectionId, url]);
 
@@ -113,10 +133,14 @@ function ObjektCard({ objekt }: { objekt: ObjektEntry }) {
         )}
       </div>
       <span className="text-[10px] text-muted-foreground text-center max-w-16 truncate">
-        {objekt.member && objekt.collectionNo ? `${objekt.member} ${objekt.collectionNo}` : objekt.collectionId}
+        {objekt.member && objekt.collectionNo
+          ? `${objekt.member} ${objekt.collectionNo}`
+          : objekt.collectionId}
       </span>
       {objekt.serial != null && (
-        <span className="text-[10px] text-muted-foreground">#{String(objekt.serial).padStart(5, "0")}</span>
+        <span className="text-[10px] text-muted-foreground">
+          #{String(objekt.serial).padStart(5, "0")}
+        </span>
       )}
     </div>
   );
@@ -133,42 +157,49 @@ export function CounterOfferDialog({
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ my?: string; their?: string; myObjektId?: string; theirObjektId?: string; noChange?: string }>({});
+  const [errors, setErrors] = useState<{
+    my?: string;
+    their?: string;
+    myObjektId?: string;
+    theirObjektId?: string;
+    noChange?: string;
+  }>({});
 
   // "My objekts" = what the counter-offerer will send
   const [mySelected, setMySelected] = useState<ObjektEntry[]>(() =>
-    mySides.map(sideToObjektEntry)
+    mySides.map(sideToObjektEntry),
   );
 
   // "Their objekts" = what the counter-offerer wants from the other party
   const [theirSelected, setTheirSelected] = useState<ObjektEntry[]>(() =>
-    theirSides.map(sideToObjektEntry)
+    theirSides.map(sideToObjektEntry),
   );
 
   // Enrich initial entries that came from TradeSide (no season/class/artist)
   useEffect(() => {
     const allInitial = [...mySides, ...theirSides];
     const uniqueIds = [...new Set(allInitial.map((s) => s.collectionId))];
-    Promise.all(uniqueIds.map((id) => fetchObjektMeta(id).then((meta) => ({ id, meta })))).then(
-      (results) => {
-        const byId = new Map(results.map(({ id, meta }) => [id, meta]));
-        const enrich = (entries: ObjektEntry[]): ObjektEntry[] =>
-          entries.map((o) => {
-            const meta = byId.get(o.collectionId);
-            if (!meta || (o.season && o.class)) return o;
-            return {
-              ...o,
-              season: o.season || meta.season,
-              class: o.class || meta.class,
-              artist: o.artist || meta.artist,
-              thumbnailImage: o.thumbnailImage || meta.thumbnailImage || undefined,
-            };
-          });
-        setMySelected((prev) => enrich(prev));
-        setTheirSelected((prev) => enrich(prev));
-      }
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    Promise.all(
+      uniqueIds.map((id) => fetchObjektMeta(id).then((meta) => ({ id, meta }))),
+    ).then((results) => {
+      const byId = new Map(results.map(({ id, meta }) => [id, meta]));
+      const enrich = (entries: ObjektEntry[]): ObjektEntry[] =>
+        entries.map((o) => {
+          const meta = byId.get(o.collectionId);
+          if (!meta || (o.season && o.class)) return o;
+          return {
+            ...o,
+            season: o.season || meta.season,
+            class: o.class || meta.class,
+            artist: o.artist || meta.artist,
+            thumbnailImage:
+              o.thumbnailImage || meta.thumbnailImage || undefined,
+          };
+        });
+      setMySelected((prev) => enrich(prev));
+      setTheirSelected((prev) => enrich(prev));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Track original items to show diff
@@ -177,8 +208,10 @@ export function CounterOfferDialog({
 
   async function handleSubmit() {
     const newErrors: { my?: string; their?: string } = {};
-    if (mySelected.length === 0) newErrors.my = "You must select at least 1 objekt to send.";
-    if (theirSelected.length === 0) newErrors.their = "You must select at least 1 objekt to receive.";
+    if (mySelected.length === 0)
+      newErrors.my = "You must select at least 1 objekt to send.";
+    if (theirSelected.length === 0)
+      newErrors.their = "You must select at least 1 objekt to receive.";
     if (newErrors.my || newErrors.their) {
       setErrors(newErrors);
       return;
@@ -187,22 +220,35 @@ export function CounterOfferDialog({
     // Check all items have objektId
     const missingMy = mySelected.find((o) => !o.objektId);
     if (missingMy) {
-      setErrors((e) => ({ ...e, myObjektId: `"${formatLabel(missingMy)}" has no objekt ID.` }));
+      setErrors((e) => ({
+        ...e,
+        myObjektId: `"${formatLabel(missingMy)}" has no objekt ID.`,
+      }));
       return;
     }
     const missingTheir = theirSelected.find((o) => !o.objektId);
     if (missingTheir) {
-      setErrors((e) => ({ ...e, theirObjektId: `"${formatLabel(missingTheir)}" has no objekt ID.` }));
+      setErrors((e) => ({
+        ...e,
+        theirObjektId: `"${formatLabel(missingTheir)}" has no objekt ID.`,
+      }));
       return;
     }
 
     // Check if anything actually changed
     const myIds = new Set(mySelected.map((o) => o.objektId));
     const theirIds = new Set(theirSelected.map((o) => o.objektId));
-    const sameMyObjekts = myIds.size === originalMyIds.size && [...myIds].every((id) => originalMyIds.has(id!));
-    const sameTheirObjekts = theirIds.size === originalTheirIds.size && [...theirIds].every((id) => originalTheirIds.has(id!));
+    const sameMyObjekts =
+      myIds.size === originalMyIds.size &&
+      [...myIds].every((id) => originalMyIds.has(id!));
+    const sameTheirObjekts =
+      theirIds.size === originalTheirIds.size &&
+      [...theirIds].every((id) => originalTheirIds.has(id!));
     if (sameMyObjekts && sameTheirObjekts) {
-      setErrors((e) => ({ ...e, noChange: "Counter-offer must differ from the original trade." }));
+      setErrors((e) => ({
+        ...e,
+        noChange: "Counter-offer must differ from the original trade.",
+      }));
       return;
     }
 
@@ -251,10 +297,20 @@ export function CounterOfferDialog({
 
   // Compute diff for display
   const myAdded = mySelected.filter((o) => !originalMyIds.has(o.objektId!));
-  const myRemoved = mySides.filter((s) => !mySelected.some((o) => o.objektId === s.objektId));
-  const theirAdded = theirSelected.filter((o) => !originalTheirIds.has(o.objektId!));
-  const theirRemoved = theirSides.filter((s) => !theirSelected.some((o) => o.objektId === s.objektId));
-  const hasChanges = myAdded.length > 0 || myRemoved.length > 0 || theirAdded.length > 0 || theirRemoved.length > 0;
+  const myRemoved = mySides.filter(
+    (s) => !mySelected.some((o) => o.objektId === s.objektId),
+  );
+  const theirAdded = theirSelected.filter(
+    (o) => !originalTheirIds.has(o.objektId!),
+  );
+  const theirRemoved = theirSides.filter(
+    (s) => !theirSelected.some((o) => o.objektId === s.objektId),
+  );
+  const hasChanges =
+    myAdded.length > 0 ||
+    myRemoved.length > 0 ||
+    theirAdded.length > 0 ||
+    theirRemoved.length > 0;
 
   const ratioLabel =
     mySelected.length > 0 && theirSelected.length > 0
@@ -267,7 +323,8 @@ export function CounterOfferDialog({
         <DialogHeader>
           <DialogTitle>Counter-Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
-            Modify the trade proposal. You can change which objekts you send and browse the other party&apos;s inventory to pick what you want.
+            Modify the trade proposal. You can change which objekts you send and
+            browse the other party&apos;s inventory to pick what you want.
           </DialogDescription>
         </DialogHeader>
 
@@ -276,30 +333,46 @@ export function CounterOfferDialog({
           {(mySelected.length > 0 || theirSelected.length > 0) && (
             <>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Trade Preview</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Trade Preview
+                </p>
                 <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground mb-1.5">You send</p>
+                    <p className="text-xs text-muted-foreground mb-1.5">
+                      You send
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
                       {mySelected.length > 0 ? (
                         mySelected.map((o) => (
-                          <ObjektCard key={o.objektId ?? o.collectionId} objekt={o} />
+                          <ObjektCard
+                            key={o.objektId ?? o.collectionId}
+                            objekt={o}
+                          />
                         ))
                       ) : (
-                        <span className="text-xs text-muted-foreground italic">Nothing selected</span>
+                        <span className="text-xs text-muted-foreground italic">
+                          Nothing selected
+                        </span>
                       )}
                     </div>
                   </div>
                   <ArrowRight className="w-6 h-6 text-muted-foreground mt-5 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground mb-1.5">You receive</p>
+                    <p className="text-xs text-muted-foreground mb-1.5">
+                      You receive
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
                       {theirSelected.length > 0 ? (
                         theirSelected.map((o) => (
-                          <ObjektCard key={o.objektId ?? o.collectionId} objekt={o} />
+                          <ObjektCard
+                            key={o.objektId ?? o.collectionId}
+                            objekt={o}
+                          />
                         ))
                       ) : (
-                        <span className="text-xs text-muted-foreground italic">Nothing selected</span>
+                        <span className="text-xs text-muted-foreground italic">
+                          Nothing selected
+                        </span>
                       )}
                     </div>
                   </div>
@@ -311,26 +384,40 @@ export function CounterOfferDialog({
 
           {/* My side - what I will send */}
           <div>
-            <p className="text-base font-semibold mb-1">
-              You will send
-            </p>
+            <p className="text-base font-semibold mb-1">You will send</p>
             <p className="text-xs text-muted-foreground mb-2">
-              Pick from your inventory{mySelected.length > 0 ? ` · ${mySelected.length} selected` : ""}
-              {mySelected.length >= 10 && <span className="ml-2">· Maximum 10 reached</span>}
+              Pick from your inventory
+              {mySelected.length > 0 ? ` · ${mySelected.length} selected` : ""}
+              {mySelected.length >= 10 && (
+                <span className="ml-2">· Maximum 10 reached</span>
+              )}
             </p>
-            {errors.my && <p className="text-sm text-destructive mb-2">{errors.my}</p>}
-            {errors.myObjektId && <p className="text-sm text-destructive mb-2">{errors.myObjektId}</p>}
+            {errors.my && (
+              <p className="text-sm text-destructive mb-2">{errors.my}</p>
+            )}
+            {errors.myObjektId && (
+              <p className="text-sm text-destructive mb-2">
+                {errors.myObjektId}
+              </p>
+            )}
             <ObjektOwnedPicker
               selected={mySelected}
               onSelect={(o) => {
                 setMySelected((prev) => [...prev, o]);
-                setErrors((e) => ({ ...e, my: undefined, myObjektId: undefined, noChange: undefined }));
+                setErrors((e) => ({
+                  ...e,
+                  my: undefined,
+                  myObjektId: undefined,
+                  noChange: undefined,
+                }));
               }}
               onDeselect={(o) => {
                 setMySelected((prev) =>
                   prev.filter((h) =>
-                    o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId
-                  )
+                    o.serial != null
+                      ? h.serial !== o.serial
+                      : h.collectionId !== o.collectionId,
+                  ),
                 );
                 setErrors((e) => ({ ...e, noChange: undefined }));
               }}
@@ -347,23 +434,41 @@ export function CounterOfferDialog({
               <span className="text-primary">@{theirCosmoUsername}</span>
             </p>
             <p className="text-xs text-muted-foreground mb-2">
-              Browse their inventory{theirSelected.length > 0 ? ` · ${theirSelected.length} selected` : ""}
-              {theirSelected.length >= 10 && <span className="ml-2">· Maximum 10 reached</span>}
+              Browse their inventory
+              {theirSelected.length > 0
+                ? ` · ${theirSelected.length} selected`
+                : ""}
+              {theirSelected.length >= 10 && (
+                <span className="ml-2">· Maximum 10 reached</span>
+              )}
             </p>
-            {errors.their && <p className="text-sm text-destructive mb-2">{errors.their}</p>}
-            {errors.theirObjektId && <p className="text-sm text-destructive mb-2">{errors.theirObjektId}</p>}
+            {errors.their && (
+              <p className="text-sm text-destructive mb-2">{errors.their}</p>
+            )}
+            {errors.theirObjektId && (
+              <p className="text-sm text-destructive mb-2">
+                {errors.theirObjektId}
+              </p>
+            )}
             <ObjektUserPicker
               address={theirAddress}
               selected={theirSelected}
               onSelect={(o) => {
                 setTheirSelected((prev) => [...prev, o]);
-                setErrors((e) => ({ ...e, their: undefined, theirObjektId: undefined, noChange: undefined }));
+                setErrors((e) => ({
+                  ...e,
+                  their: undefined,
+                  theirObjektId: undefined,
+                  noChange: undefined,
+                }));
               }}
               onDeselect={(o) => {
                 setTheirSelected((prev) =>
                   prev.filter((h) =>
-                    o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId
-                  )
+                    o.serial != null
+                      ? h.serial !== o.serial
+                      : h.collectionId !== o.collectionId,
+                  ),
                 );
                 setErrors((e) => ({ ...e, noChange: undefined }));
               }}
@@ -376,28 +481,42 @@ export function CounterOfferDialog({
             <>
               <Separator />
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Changes from original</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Changes from original
+                </p>
                 <div className="space-y-1 text-xs">
                   {myAdded.map((o) => (
-                    <div key={`add-my-${o.objektId}`} className="flex items-center gap-1.5 text-green-500">
+                    <div
+                      key={`add-my-${o.objektId}`}
+                      className="flex items-center gap-1.5 text-green-500"
+                    >
                       <Plus className="w-3 h-3" />
                       <span>You send: {formatLabel(o)}</span>
                     </div>
                   ))}
                   {myRemoved.map((s) => (
-                    <div key={`rm-my-${s.objektId}`} className="flex items-center gap-1.5 text-red-500">
+                    <div
+                      key={`rm-my-${s.objektId}`}
+                      className="flex items-center gap-1.5 text-red-500"
+                    >
                       <Minus className="w-3 h-3" />
                       <span>You send: {formatLabel(s)}</span>
                     </div>
                   ))}
                   {theirAdded.map((o) => (
-                    <div key={`add-their-${o.objektId}`} className="flex items-center gap-1.5 text-green-500">
+                    <div
+                      key={`add-their-${o.objektId}`}
+                      className="flex items-center gap-1.5 text-green-500"
+                    >
                       <Plus className="w-3 h-3" />
                       <span>You want: {formatLabel(o)}</span>
                     </div>
                   ))}
                   {theirRemoved.map((s) => (
-                    <div key={`rm-their-${s.objektId}`} className="flex items-center gap-1.5 text-red-500">
+                    <div
+                      key={`rm-their-${s.objektId}`}
+                      className="flex items-center gap-1.5 text-red-500"
+                    >
                       <Minus className="w-3 h-3" />
                       <span>You want: {formatLabel(s)}</span>
                     </div>
@@ -416,10 +535,7 @@ export function CounterOfferDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={loading}
-          >
+          <Button onClick={handleSubmit} disabled={loading}>
             {loading ? "Sending..." : "Send Counter-Offer"}
           </Button>
         </DialogFooter>

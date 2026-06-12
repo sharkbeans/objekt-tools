@@ -1,8 +1,8 @@
+import { and, count, desc, eq, inArray, not, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade } from "@/lib/db/schema";
-import { or, eq, and, desc, not, inArray, count } from "drizzle-orm";
 import { checkTradeOfferQuota } from "@/lib/trade-guards";
 
 const PAGE_LIMIT = 12;
@@ -37,17 +37,23 @@ export async function GET(request: NextRequest) {
           with: {
             user: {
               columns: { id: true, name: true, image: true },
-              with: { cosmoAccount: { columns: { nickname: true, address: true } } },
+              with: {
+                cosmoAccount: { columns: { nickname: true, address: true } },
+              },
             },
           },
         },
         initiator: {
           columns: { id: true, name: true, image: true },
-          with: { cosmoAccount: { columns: { nickname: true, address: true } } },
+          with: {
+            cosmoAccount: { columns: { nickname: true, address: true } },
+          },
         },
         recipient: {
           columns: { id: true, name: true, image: true },
-          with: { cosmoAccount: { columns: { nickname: true, address: true } } },
+          with: {
+            cosmoAccount: { columns: { nickname: true, address: true } },
+          },
         },
       },
       orderBy: [desc(activeTrade.updatedAt)],
@@ -89,5 +95,11 @@ export async function GET(request: NextRequest) {
     ? { remaining: quotaResult.remaining }
     : { remaining: 0 };
 
-  return NextResponse.json({ trades: mapped, total, limit: PAGE_LIMIT, page, quota });
+  return NextResponse.json({
+    trades: mapped,
+    total,
+    limit: PAGE_LIMIT,
+    page,
+    quota,
+  });
 }

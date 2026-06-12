@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import crypto from "crypto";
+import { type NextRequest, NextResponse } from "next/server";
+import { getClientIp } from "@/lib/client-ip";
 import { db } from "@/lib/db";
 import { session as sessionTable } from "@/lib/db/schema";
-import { getClientIp } from "@/lib/client-ip";
-import crypto from "crypto";
+import { redis } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   if (failCount >= 5) {
     return NextResponse.json(
       { error: "Too many failed attempts. Try again later." },
-      { status: 429 }
+      { status: 429 },
     );
   }
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   if (!/^\d{6}$/.test(code)) {
     return NextResponse.json(
       { error: "Invalid code format." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     if (newCount === 1) await redis.expire(failKey, 600);
     return NextResponse.json(
       { error: "Invalid or expired code." },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -66,12 +66,12 @@ export async function POST(request: NextRequest) {
     keyData,
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   const signature = await crypto.subtle.sign(
     "HMAC",
     cryptoKey,
-    new TextEncoder().encode(sessionToken)
+    new TextEncoder().encode(sessionToken),
   );
   const signedToken = `${sessionToken}.${btoa(String.fromCharCode(...new Uint8Array(signature)))}`;
 

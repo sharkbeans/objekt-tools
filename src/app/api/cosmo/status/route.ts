@@ -1,8 +1,8 @@
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 export async function GET() {
   let session;

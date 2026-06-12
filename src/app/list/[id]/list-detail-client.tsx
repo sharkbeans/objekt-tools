@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ListLinkField } from "@/components/list-link-field";
 import {
   PosterCanvas,
   type PosterData,
   type PosterTheme,
 } from "@/components/poster/poster-canvas";
-import { ListLinkField } from "@/components/list-link-field";
 import { Button } from "@/components/ui/button";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
@@ -158,7 +158,9 @@ export default function ListDetailClient({
                 // Re-fetch to reflect pruned haves
                 fetch(`/api/posters/${id}`)
                   .then((r) => r.json())
-                  .then((fresh) => { if (fresh) setPosterRow(fresh as StoredPoster); })
+                  .then((fresh) => {
+                    if (fresh) setPosterRow(fresh as StoredPoster);
+                  })
                   .catch(() => {});
               }
             })
@@ -307,7 +309,6 @@ export default function ListDetailClient({
           colsPerRow={posterRow.colsPerRow}
         />
       </div>
-
 
       {anonOwner && (
         <p className="text-center text-xs text-muted-foreground">

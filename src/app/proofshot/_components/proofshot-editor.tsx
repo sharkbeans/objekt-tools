@@ -1,35 +1,75 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import {
+  BadgePlus,
+  Camera,
+  Check,
+  ChevronDown,
+  CreditCard,
+  Edit,
+  FlipHorizontal,
+  FlipVertical,
+  Image,
+  ImagePlus,
+  Move,
+  RefreshCw,
+  RotateCcw,
+  Scissors,
+  Trash2,
+  Video,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import Script from "next/script";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
-  Camera, CreditCard, Image, ImagePlus, BadgePlus, RefreshCw, FlipHorizontal,
-  FlipVertical, Move, ChevronDown, Check, Video, ZoomIn, ZoomOut, RotateCcw,
-  Edit, Trash2, Scissors,
-} from "lucide-react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { CanvasManager } from "../_lib/canvas-manager";
 import { BorderManager } from "../_lib/border-manager";
+import { CanvasManager } from "../_lib/canvas-manager";
 import type { AspectRatio, EditMode } from "../_lib/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface SliderState {
-  x: number; y: number; scale: number; rotation: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
 }
 
 const DEFAULT_BG: SliderState = { x: 0, y: 0, scale: 1, rotation: 0 };
 const DEFAULT_PC: SliderState = { x: 0, y: 0, scale: 1, rotation: 0 };
 
 // ── Slider component ───────────────────────────────────────────────────────────
-function ControlSlider({ label, value, min, max, step, display, onChange }: {
-  label: string; value: number; min: number; max: number; step: number;
-  display: string; onChange: (v: number) => void;
+function ControlSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  display,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  display: string;
+  onChange: (v: number) => void;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -38,7 +78,11 @@ function ControlSlider({ label, value, min, max, step, display, onChange }: {
         <span className="font-mono text-foreground">{display}</span>
       </div>
       <input
-        type="range" min={min} max={max} step={step} value={value}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="w-full h-2 rounded-full appearance-none bg-border cursor-pointer accent-primary"
       />
@@ -75,14 +119,16 @@ export function ProofshotEditor() {
   const [showCameraControls, setShowCameraControls] = useState(false);
   const [showActionButtons, setShowActionButtons] = useState(false);
   const [hasBg, setHasBg] = useState(false);
-  const [cameraAspectRatio, setCameraAspectRatio] = useState<AspectRatio>("3:4");
+  const [cameraAspectRatio, setCameraAspectRatio] =
+    useState<AspectRatio>("3:4");
   const [cameraZoom, setCameraZoomState] = useState(1);
   const [showToploader, setShowToploader] = useState(true);
   const [isFrameMode, setIsFrameMode] = useState(false);
   const [bgSliders, setBgSliders] = useState<SliderState>(DEFAULT_BG);
   const [pcSliders, setPcSliders] = useState<SliderState>(DEFAULT_PC);
   const [aspectMenuOpen, setAspectMenuOpen] = useState(false);
-  const [canvasAspectRatio, setCanvasAspectRatio] = useState<AspectRatio>("3:4");
+  const [canvasAspectRatio, setCanvasAspectRatio] =
+    useState<AspectRatio>("3:4");
 
   const isAndroid = () => /Android/i.test(navigator.userAgent);
 
@@ -109,17 +155,27 @@ export function ProofshotEditor() {
     return () => {
       mgr.stopCamera();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
       const mgr = managerRef.current;
       if (!mgr) return;
-      if (e.key === "s" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSave(); }
-      if (e.key === "r" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleReset(); }
+      if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleSave();
+      }
+      if (e.key === "r" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleReset();
+      }
       if (e.key === "h") mgr.flipHorizontal();
       if (e.key === "v") mgr.flipVertical();
       if (e.key === "[") mgr.rotateLeft();
@@ -127,23 +183,36 @@ export function ProofshotEditor() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
-  const loading = (msg: string) => { setIsLoading(true); setLoadingMessage(msg); };
+  const loading = (msg: string) => {
+    setIsLoading(true);
+    setLoadingMessage(msg);
+  };
   const doneLoading = () => setIsLoading(false);
 
   const syncBgSliders = useCallback(() => {
     const mgr = managerRef.current;
     if (!mgr) return;
-    setBgSliders({ x: mgr.background.x, y: mgr.background.y, scale: mgr.background.scale, rotation: mgr.background.rotation });
+    setBgSliders({
+      x: mgr.background.x,
+      y: mgr.background.y,
+      scale: mgr.background.scale,
+      rotation: mgr.background.rotation,
+    });
   }, []);
 
   const syncPcSliders = useCallback(() => {
     const mgr = managerRef.current;
     if (!mgr) return;
-    setPcSliders({ x: mgr.photocard.x, y: mgr.photocard.y, scale: mgr.photocard.scale, rotation: (mgr.photocard.rotation * 180) / Math.PI });
+    setPcSliders({
+      x: mgr.photocard.x,
+      y: mgr.photocard.y,
+      scale: mgr.photocard.scale,
+      rotation: (mgr.photocard.rotation * 180) / Math.PI,
+    });
   }, []);
 
   const moveTabsPill = useCallback((animate: boolean) => {
@@ -202,7 +271,10 @@ export function ProofshotEditor() {
   }, [editMode, moveCanvasTabsPill]);
 
   useEffect(() => {
-    const handler = () => { moveTabsPill(false); moveCanvasTabsPill(false); };
+    const handler = () => {
+      moveTabsPill(false);
+      moveCanvasTabsPill(false);
+    };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, [moveTabsPill, moveCanvasTabsPill]);
@@ -211,7 +283,10 @@ export function ProofshotEditor() {
   useEffect(() => {
     if (!aspectMenuOpen) return;
     const handler = (e: MouseEvent) => {
-      if (aspectMenuContainerRef.current && !aspectMenuContainerRef.current.contains(e.target as Node)) {
+      if (
+        aspectMenuContainerRef.current &&
+        !aspectMenuContainerRef.current.contains(e.target as Node)
+      ) {
         setAspectMenuOpen(false);
       }
     };
@@ -226,8 +301,11 @@ export function ProofshotEditor() {
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -248,7 +326,11 @@ export function ProofshotEditor() {
     if (ratio === "3:4") container.classList.add("aspect-3-4");
     else if (ratio === "9:16") container.classList.add("aspect-9-16");
     else container.classList.add("aspect-1-1");
-    setTimeout(() => { managerRef.current?.resizeCanvas(); syncBgSliders(); syncPcSliders(); }, 100);
+    setTimeout(() => {
+      managerRef.current?.resizeCanvas();
+      syncBgSliders();
+      syncPcSliders();
+    }, 100);
   };
 
   // ── Background upload ─────────────────────────────────────────────────────────
@@ -256,7 +338,8 @@ export function ProofshotEditor() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      toast.error("Please select a valid image or video file"); return;
+      toast.error("Please select a valid image or video file");
+      return;
     }
     try {
       loading("Loading background…");
@@ -284,7 +367,8 @@ export function ProofshotEditor() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      toast.error("Please select a valid image or video file"); return;
+      toast.error("Please select a valid image or video file");
+      return;
     }
     try {
       loading("Loading photocard…");
@@ -304,10 +388,18 @@ export function ProofshotEditor() {
   // ── Drag & drop ───────────────────────────────────────────────────────────────
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
-    if (!files.length) { toast.error("Please drop image or video files"); return; }
+    const files = Array.from(e.dataTransfer.files).filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/"),
+    );
+    if (!files.length) {
+      toast.error("Please drop image or video files");
+      return;
+    }
     const mgr = managerRef.current!;
-    if (files[0]) { await mgr.loadBackground(files[0]); syncBgSliders(); }
+    if (files[0]) {
+      await mgr.loadBackground(files[0]);
+      syncBgSliders();
+    }
     if (files[1]) {
       await mgr.loadPhotocard(files[1]);
       setIsFrameMode(false);
@@ -323,14 +415,18 @@ export function ProofshotEditor() {
     container.classList.remove("camera-active");
     container.classList.remove("preview-mode");
     const canvas = canvasRef.current;
-    if (canvas) { canvas.style.width = ""; canvas.style.height = ""; }
+    if (canvas) {
+      canvas.style.width = "";
+      canvas.style.height = "";
+    }
     setIsCameraActive(false);
     setShowCameraControls(false);
   };
 
   const initCamera = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      toast.error("Camera not supported on this device"); return false;
+      toast.error("Camera not supported on this device");
+      return false;
     }
     if (!videoRef.current) return false;
     try {
@@ -361,7 +457,10 @@ export function ProofshotEditor() {
     }
   };
 
-  const applyAspectRatioClass = (container: HTMLDivElement, ratio: AspectRatio) => {
+  const applyAspectRatioClass = (
+    container: HTMLDivElement,
+    ratio: AspectRatio,
+  ) => {
     container.classList.remove("aspect-3-4", "aspect-9-16", "aspect-1-1");
     if (ratio === "3:4") container.classList.add("aspect-3-4");
     else if (ratio === "9:16") container.classList.add("aspect-9-16");
@@ -384,15 +483,24 @@ export function ProofshotEditor() {
     container.classList.add("preview-mode");
     applyAspectRatioClass(container, cameraAspectRatio);
     container.style.position = "relative";
-    container.style.top = "auto"; container.style.left = "auto"; container.style.zIndex = "auto";
-    container.style.width = ""; container.style.height = "";
+    container.style.top = "auto";
+    container.style.left = "auto";
+    container.style.zIndex = "auto";
+    container.style.width = "";
+    container.style.height = "";
     container.style.maxWidth = isMobileRef.current ? "100vw" : "800px";
-    container.style.maxHeight = isMobileRef.current ? "calc(100vh - 180px)" : "none";
+    container.style.maxHeight = isMobileRef.current
+      ? "calc(100vh - 180px)"
+      : "none";
     setTimeout(() => {
-      if (canvasRef.current) { canvasRef.current.style.width = ""; canvasRef.current.style.height = ""; }
+      if (canvasRef.current) {
+        canvasRef.current.style.width = "";
+        canvasRef.current.style.height = "";
+      }
       mgr.resizeCanvas();
       setTimeout(() => {
-        if (isMobileRef.current) window.scrollTo({ top: 0, behavior: "smooth" });
+        if (isMobileRef.current)
+          window.scrollTo({ top: 0, behavior: "smooth" });
       }, 150);
     }, 100);
     setShowActionButtons(true);
@@ -403,14 +511,27 @@ export function ProofshotEditor() {
 
   const showFlash = () => {
     const flash = document.createElement("div");
-    Object.assign(flash.style, { position: "fixed", inset: "0", background: "white", zIndex: "9999", pointerEvents: "none", animation: "none", opacity: "1", transition: "opacity 0.3s" });
+    Object.assign(flash.style, {
+      position: "fixed",
+      inset: "0",
+      background: "white",
+      zIndex: "9999",
+      pointerEvents: "none",
+      animation: "none",
+      opacity: "1",
+      transition: "opacity 0.3s",
+    });
     document.body.appendChild(flash);
-    requestAnimationFrame(() => { flash.style.opacity = "0"; setTimeout(() => document.body.removeChild(flash), 300); });
+    requestAnimationFrame(() => {
+      flash.style.opacity = "0";
+      setTimeout(() => document.body.removeChild(flash), 300);
+    });
   };
 
   const handleCameraAspectToggle = () => {
     const ratios: AspectRatio[] = ["3:4", "9:16", "1:1"];
-    const next = ratios[(ratios.indexOf(cameraAspectRatio) + 1) % ratios.length];
+    const next =
+      ratios[(ratios.indexOf(cameraAspectRatio) + 1) % ratios.length];
     setCameraAspectRatio(next);
     const container = containerRef.current!;
     applyAspectRatioClass(container, next);
@@ -459,33 +580,68 @@ export function ProofshotEditor() {
   // ── Save/export ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
     const mgr = managerRef.current!;
-    if (!mgr.backgroundImage) { toast.error("Please add a background image before saving"); return; }
+    if (!mgr.backgroundImage) {
+      toast.error("Please add a background image before saving");
+      return;
+    }
     const hasVideo = mgr.hasVideo();
     const hasGif = mgr.hasGifAnimation();
     const asVideo = hasVideo;
     const asGif = !hasVideo && hasGif;
-    loading(asVideo ? "Generating video…" : asGif ? "Generating animated GIF…" : "Exporting…");
+    loading(
+      asVideo
+        ? "Generating video…"
+        : asGif
+          ? "Generating animated GIF…"
+          : "Exporting…",
+    );
     try {
       let blob: Blob, mimeType: string, ext: string;
       if (asVideo) {
         const r = await mgr.exportAsVideo();
-        blob = r.blob; mimeType = r.mimeType; ext = r.extension;
+        blob = r.blob;
+        mimeType = r.mimeType;
+        ext = r.extension;
       } else if (asGif) {
-        blob = await mgr.exportImage(true); mimeType = "image/gif"; ext = "gif";
+        blob = await mgr.exportImage(true);
+        mimeType = "image/gif";
+        ext = "gif";
       } else {
-        blob = await mgr.exportImage(false); mimeType = "image/png"; ext = "png";
+        blob = await mgr.exportImage(false);
+        mimeType = "image/png";
+        ext = "png";
       }
       const filename = `proofshot-${Date.now()}.${ext}`;
       const isMobile = isMobileRef.current;
       if (isMobile && !isAndroid() && !asVideo) {
         const file = new File([blob], filename, { type: mimeType });
         if (navigator.canShare?.({ files: [file] })) {
-          try { await navigator.share({ files: [file], title: "Proofshot", text: "Check out my proofshot!" }); toast.success("Shared!"); }
-          catch (se: unknown) { if ((se as { name?: string }).name !== "AbortError") { downloadBlob(blob, filename); toast.success("Saved!"); } }
-        } else { downloadBlob(blob, filename); toast.success("Saved!"); }
+          try {
+            await navigator.share({
+              files: [file],
+              title: "Proofshot",
+              text: "Check out my proofshot!",
+            });
+            toast.success("Shared!");
+          } catch (se: unknown) {
+            if ((se as { name?: string }).name !== "AbortError") {
+              downloadBlob(blob, filename);
+              toast.success("Saved!");
+            }
+          }
+        } else {
+          downloadBlob(blob, filename);
+          toast.success("Saved!");
+        }
       } else {
         downloadBlob(blob, filename);
-        toast.success(asVideo ? "Video saved!" : asGif ? "Animated GIF saved!" : "Proofshot saved!");
+        toast.success(
+          asVideo
+            ? "Video saved!"
+            : asGif
+              ? "Animated GIF saved!"
+              : "Proofshot saved!",
+        );
       }
       setShowSaveModal(true);
     } catch {
@@ -497,7 +653,10 @@ export function ProofshotEditor() {
 
   const handleSaveAsVideo = async () => {
     const mgr = managerRef.current!;
-    if (!mgr.backgroundImage) { toast.error("Please add a background image before saving"); return; }
+    if (!mgr.backgroundImage) {
+      toast.error("Please add a background image before saving");
+      return;
+    }
     loading("Generating video…");
     try {
       const r = await mgr.exportAsVideo();
@@ -523,7 +682,10 @@ export function ProofshotEditor() {
       managerRef.current!.render();
     } else {
       const started = await initCamera();
-      if (!started) { managerRef.current!.render(); toast.info("Ready for new proofshot"); }
+      if (!started) {
+        managerRef.current!.render();
+        toast.info("Ready for new proofshot");
+      }
     }
   };
 
@@ -547,7 +709,11 @@ export function ProofshotEditor() {
       syncPcSliders();
       toast.success("Frame created");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Frame extraction works with still image FCOs");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Frame extraction works with still image FCOs",
+      );
     } finally {
       doneLoading();
     }
@@ -577,28 +743,44 @@ export function ProofshotEditor() {
   const containerClasses = cn(
     "relative bg-[#1a1a1a] rounded-lg border border-border overflow-hidden mx-auto touch-none select-none",
     {
-      "w-[600px] h-[800px] max-w-full": canvasAspectRatio === "3:4" && !isCameraActive,
-      "w-[450px] h-[800px] max-w-full": canvasAspectRatio === "9:16" && !isCameraActive,
-      "w-[600px] h-[600px] max-w-full": canvasAspectRatio === "1:1" && !isCameraActive,
-    }
+      "w-[600px] h-[800px] max-w-full":
+        canvasAspectRatio === "3:4" && !isCameraActive,
+      "w-[450px] h-[800px] max-w-full":
+        canvasAspectRatio === "9:16" && !isCameraActive,
+      "w-[600px] h-[600px] max-w-full":
+        canvasAspectRatio === "1:1" && !isCameraActive,
+    },
   );
 
   return (
     <>
       {/* External scripts for GIF export */}
-      <Script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js" strategy="lazyOnload" />
+      <Script
+        src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"
+        strategy="lazyOnload"
+      />
 
       {/* Hidden inputs */}
-      <input ref={bgFileRef} type="file" accept="image/*,image/gif,video/*" className="hidden" onChange={handleBgUpload} />
-      <input ref={pcFileRef} type="file" accept="image/*,image/gif,video/*" className="hidden" onChange={handlePcUpload} />
+      <input
+        ref={bgFileRef}
+        type="file"
+        accept="image/*,image/gif,video/*"
+        className="hidden"
+        onChange={handleBgUpload}
+      />
+      <input
+        ref={pcFileRef}
+        type="file"
+        accept="image/*,image/gif,video/*"
+        className="hidden"
+        onChange={handlePcUpload}
+      />
       {/* Hidden camera video */}
       <video ref={videoRef} autoPlay playsInline className="hidden" />
 
       <div className="flex flex-col md:flex-row h-full overflow-hidden gap-4">
-
         {/* ── Canvas section ───────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto md:overflow-visible">
-
           {/* Mobile home — fixed overlay, same as original `position:fixed; inset:0; z-index:999` */}
           {showMobileHome && (
             <div className="fixed inset-0 z-[999] bg-background flex items-center justify-center p-8">
@@ -608,7 +790,9 @@ export function ProofshotEditor() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold mb-3">Ready to Create?</h2>
-                  <p className="text-muted-foreground text-lg">Take a photo of your photocard with your camera</p>
+                  <p className="text-muted-foreground text-lg">
+                    Take a photo of your photocard with your camera
+                  </p>
                 </div>
                 <button
                   onClick={handleLaunchCamera}
@@ -640,7 +824,11 @@ export function ProofshotEditor() {
                 className="t-tabs canvas-tabs absolute top-3 left-1/2 -translate-x-1/2 z-10"
                 role="tablist"
               >
-                <span ref={canvasTabsPillRef} className="t-tabs-pill" aria-hidden="true" />
+                <span
+                  ref={canvasTabsPillRef}
+                  className="t-tabs-pill"
+                  aria-hidden="true"
+                />
                 {(["photocard", "background"] as EditMode[]).map((mode) => (
                   <button
                     key={mode}
@@ -649,7 +837,11 @@ export function ProofshotEditor() {
                     aria-selected={editMode === mode}
                     className="t-tab flex items-center gap-1.5 text-xs font-medium"
                   >
-                    {mode === "photocard" ? <CreditCard className="w-3 h-3" /> : <Image className="w-3 h-3" />}
+                    {mode === "photocard" ? (
+                      <CreditCard className="w-3 h-3" />
+                    ) : (
+                      <Image className="w-3 h-3" />
+                    )}
                     {mode === "photocard" ? "Photocard" : "Background"}
                   </button>
                 ))}
@@ -662,12 +854,18 @@ export function ProofshotEditor() {
                 {/* Bottom-center control column: reset / shutter / aspect + zoom */}
                 <div
                   className="fixed bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center w-full max-w-[75vh] px-3 z-[1001] pointer-events-none"
-                  style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+                  style={{
+                    paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
+                  }}
                 >
                   {/* Top row */}
                   <div className="flex items-center justify-between w-full mb-3 pointer-events-auto">
                     <button
-                      onClick={() => { managerRef.current?.resetPhotocard(); syncPcSliders(); toast.success("Photocard reset"); }}
+                      onClick={() => {
+                        managerRef.current?.resetPhotocard();
+                        syncPcSliders();
+                        toast.success("Photocard reset");
+                      }}
                       className="flex items-center gap-1.5 bg-[rgba(100,100,100,0.7)] text-white px-3 h-11 rounded-md text-sm font-semibold backdrop-blur-sm active:scale-95 transition-transform"
                     >
                       <RefreshCw className="w-4 h-4" /> Reset
@@ -675,7 +873,10 @@ export function ProofshotEditor() {
                     <button
                       onClick={handleCameraCapture}
                       className="w-[70px] h-[70px] rounded-full border-[3px] border-white/95 bg-transparent flex items-center justify-center active:scale-[0.88] transition-transform shrink-0"
-                      style={{ boxShadow: "0 0 0 6px rgba(255,255,255,0.2), 0 6px 12px rgba(0,0,0,0.4)" }}
+                      style={{
+                        boxShadow:
+                          "0 0 0 6px rgba(255,255,255,0.2), 0 6px 12px rgba(0,0,0,0.4)",
+                      }}
                       aria-label="Capture"
                     >
                       <div className="w-[54px] h-[54px] rounded-full bg-white" />
@@ -690,15 +891,29 @@ export function ProofshotEditor() {
 
                   {/* Zoom controls */}
                   <div className="flex items-center justify-center gap-2 mt-1 mb-1 pointer-events-auto">
-                    <button onClick={handleCameraZoomOut} className="w-8 h-8 flex items-center justify-center text-white active:scale-90 transition-transform">
+                    <button
+                      onClick={handleCameraZoomOut}
+                      className="w-8 h-8 flex items-center justify-center text-white active:scale-90 transition-transform"
+                    >
                       <ZoomOut className="w-5 h-5" />
                     </button>
                     <input
-                      type="range" min={1} max={10} step={0.1} value={cameraZoom}
-                      onChange={(e) => { const v = parseFloat(e.target.value); setCameraZoomState(v); managerRef.current?.setCameraZoom(v); }}
+                      type="range"
+                      min={1}
+                      max={10}
+                      step={0.1}
+                      value={cameraZoom}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setCameraZoomState(v);
+                        managerRef.current?.setCameraZoom(v);
+                      }}
                       className="w-[100px] accent-white"
                     />
-                    <button onClick={handleCameraZoomIn} className="w-8 h-8 flex items-center justify-center text-white active:scale-90 transition-transform">
+                    <button
+                      onClick={handleCameraZoomIn}
+                      className="w-8 h-8 flex items-center justify-center text-white active:scale-90 transition-transform"
+                    >
                       <ZoomIn className="w-5 h-5" />
                     </button>
                   </div>
@@ -769,7 +984,9 @@ export function ProofshotEditor() {
             {/* Header */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Proofshot</p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                  Proofshot
+                </p>
                 <h2 className="text-base font-semibold">Adjust layers</h2>
               </div>
               {/* Aspect ratio selector */}
@@ -786,11 +1003,19 @@ export function ProofshotEditor() {
                     {(["3:4", "9:16", "1:1"] as AspectRatio[]).map((r) => (
                       <button
                         key={r}
-                        onClick={() => { applyCanvasAspectRatio(r); setAspectMenuOpen(false); }}
-                        className={cn("w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-accent", canvasAspectRatio === r && "bg-accent")}
+                        onClick={() => {
+                          applyCanvasAspectRatio(r);
+                          setAspectMenuOpen(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-accent",
+                          canvasAspectRatio === r && "bg-accent",
+                        )}
                       >
                         <span>{r}</span>
-                        {canvasAspectRatio === r && <Check className="w-3.5 h-3.5" />}
+                        {canvasAspectRatio === r && (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
                       </button>
                     ))}
                   </div>
@@ -799,8 +1024,15 @@ export function ProofshotEditor() {
             </div>
 
             {/* Layer tabs */}
-            <div ref={tabsBarRef} className="t-tabs proofshot-tabs flex gap-1 bg-secondary/50 p-1 rounded-lg">
-              <span ref={tabsPillRef} className="t-tabs-pill" aria-hidden="true" />
+            <div
+              ref={tabsBarRef}
+              className="t-tabs proofshot-tabs flex gap-1 bg-secondary/50 p-1 rounded-lg"
+            >
+              <span
+                ref={tabsPillRef}
+                className="t-tabs-pill"
+                aria-hidden="true"
+              />
               {(["photocard", "background"] as EditMode[]).map((mode) => (
                 <button
                   key={mode}
@@ -808,7 +1040,11 @@ export function ProofshotEditor() {
                   aria-selected={editMode === mode}
                   className="t-tab flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium"
                 >
-                  {mode === "photocard" ? <CreditCard className="w-4 h-4" /> : <Image className="w-4 h-4" />}
+                  {mode === "photocard" ? (
+                    <CreditCard className="w-4 h-4" />
+                  ) : (
+                    <Image className="w-4 h-4" />
+                  )}
                   {mode === "photocard" ? "Photocard" : "Background"}
                 </button>
               ))}
@@ -816,17 +1052,28 @@ export function ProofshotEditor() {
 
             {/* Add Media */}
             <div>
-              <p className="text-sm text-muted-foreground font-medium mb-2.5">Add Media</p>
+              <p className="text-sm text-muted-foreground font-medium mb-2.5">
+                Add Media
+              </p>
               <div className="flex gap-2">
-                <button onClick={() => bgFileRef.current?.click()} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80">
+                <button
+                  onClick={() => bgFileRef.current?.click()}
+                  className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80"
+                >
                   <ImagePlus className="w-5 h-5" />
                   <span className="text-sm">Background</span>
                 </button>
-                <button onClick={() => initCamera()} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80 md:hidden">
+                <button
+                  onClick={() => initCamera()}
+                  className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80 md:hidden"
+                >
                   <Camera className="w-5 h-5" />
                   <span className="text-sm">Camera</span>
                 </button>
-                <button onClick={triggerPhotocardUpload} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80">
+                <button
+                  onClick={triggerPhotocardUpload}
+                  className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80"
+                >
                   <BadgePlus className="w-5 h-5" />
                   <span className="text-sm">Photocard</span>
                 </button>
@@ -836,19 +1083,79 @@ export function ProofshotEditor() {
             {/* Background controls */}
             {editMode === "background" && (
               <div className="flex flex-col gap-3">
-                <p className="text-sm text-muted-foreground font-medium flex items-center gap-1.5"><Image className="w-3.5 h-3.5" /> Background</p>
-                <ControlSlider label="Position X" value={bgSliders.x} min={-500} max={500} step={1} display={Math.round(bgSliders.x).toString()} onChange={(v) => { setBgSliders((s) => ({ ...s, x: v })); managerRef.current?.updateBackground("x", v); }} />
-                <ControlSlider label="Position Y" value={bgSliders.y} min={-500} max={500} step={1} display={Math.round(bgSliders.y).toString()} onChange={(v) => { setBgSliders((s) => ({ ...s, y: v })); managerRef.current?.updateBackground("y", v); }} />
-                <ControlSlider label="Scale" value={bgSliders.scale} min={0.1} max={3} step={0.01} display={bgSliders.scale.toFixed(2)} onChange={(v) => { setBgSliders((s) => ({ ...s, scale: v })); managerRef.current?.updateBackground("scale", v); }} />
-                <ControlSlider label="Rotation" value={bgSliders.rotation} min={-180} max={180} step={1} display={Math.round(bgSliders.rotation) + "°"} onChange={(v) => { setBgSliders((s) => ({ ...s, rotation: v })); managerRef.current?.updateBackground("rotation", v); }} />
+                <p className="text-sm text-muted-foreground font-medium flex items-center gap-1.5">
+                  <Image className="w-3.5 h-3.5" /> Background
+                </p>
+                <ControlSlider
+                  label="Position X"
+                  value={bgSliders.x}
+                  min={-500}
+                  max={500}
+                  step={1}
+                  display={Math.round(bgSliders.x).toString()}
+                  onChange={(v) => {
+                    setBgSliders((s) => ({ ...s, x: v }));
+                    managerRef.current?.updateBackground("x", v);
+                  }}
+                />
+                <ControlSlider
+                  label="Position Y"
+                  value={bgSliders.y}
+                  min={-500}
+                  max={500}
+                  step={1}
+                  display={Math.round(bgSliders.y).toString()}
+                  onChange={(v) => {
+                    setBgSliders((s) => ({ ...s, y: v }));
+                    managerRef.current?.updateBackground("y", v);
+                  }}
+                />
+                <ControlSlider
+                  label="Scale"
+                  value={bgSliders.scale}
+                  min={0.1}
+                  max={3}
+                  step={0.01}
+                  display={bgSliders.scale.toFixed(2)}
+                  onChange={(v) => {
+                    setBgSliders((s) => ({ ...s, scale: v }));
+                    managerRef.current?.updateBackground("scale", v);
+                  }}
+                />
+                <ControlSlider
+                  label="Rotation"
+                  value={bgSliders.rotation}
+                  min={-180}
+                  max={180}
+                  step={1}
+                  display={Math.round(bgSliders.rotation) + "°"}
+                  onChange={(v) => {
+                    setBgSliders((s) => ({ ...s, rotation: v }));
+                    managerRef.current?.updateBackground("rotation", v);
+                  }}
+                />
                 <div className="flex gap-2">
-                  <button onClick={() => managerRef.current?.flipBackgroundHorizontal()} className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                  <button
+                    onClick={() =>
+                      managerRef.current?.flipBackgroundHorizontal()
+                    }
+                    className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
+                  >
                     <FlipHorizontal className="w-4 h-4" />
                   </button>
-                  <button onClick={() => managerRef.current?.flipBackgroundVertical()} className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                  <button
+                    onClick={() => managerRef.current?.flipBackgroundVertical()}
+                    className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
+                  >
                     <FlipVertical className="w-4 h-4" />
                   </button>
-                  <button onClick={() => { managerRef.current?.resetBackground(); syncBgSliders(); }} className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                  <button
+                    onClick={() => {
+                      managerRef.current?.resetBackground();
+                      syncBgSliders();
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
+                  >
                     <RefreshCw className="w-4 h-4" />
                   </button>
                 </div>
@@ -858,32 +1165,100 @@ export function ProofshotEditor() {
             {/* Photocard controls */}
             {editMode === "photocard" && (
               <div className="flex flex-col gap-3">
-                <p className="text-sm text-muted-foreground font-medium flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5" /> Photocard</p>
-                <ControlSlider label="Position X" value={pcSliders.x} min={0} max={1000} step={1} display={Math.round(pcSliders.x).toString()} onChange={(v) => { setPcSliders((s) => ({ ...s, x: v })); managerRef.current?.updatePhotocard("x", v); }} />
-                <ControlSlider label="Position Y" value={pcSliders.y} min={0} max={1000} step={1} display={Math.round(pcSliders.y).toString()} onChange={(v) => { setPcSliders((s) => ({ ...s, y: v })); managerRef.current?.updatePhotocard("y", v); }} />
-                <ControlSlider label="Scale" value={pcSliders.scale} min={0.1} max={5} step={0.01} display={pcSliders.scale.toFixed(2)} onChange={(v) => { setPcSliders((s) => ({ ...s, scale: v })); managerRef.current?.updatePhotocard("scale", v); }} />
-                <ControlSlider label="Rotation" value={pcSliders.rotation} min={-180} max={180} step={1} display={Math.round(pcSliders.rotation) + "°"} onChange={(v) => { setPcSliders((s) => ({ ...s, rotation: v })); managerRef.current?.updatePhotocard("rotation", (v * Math.PI) / 180); }} />
+                <p className="text-sm text-muted-foreground font-medium flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5" /> Photocard
+                </p>
+                <ControlSlider
+                  label="Position X"
+                  value={pcSliders.x}
+                  min={0}
+                  max={1000}
+                  step={1}
+                  display={Math.round(pcSliders.x).toString()}
+                  onChange={(v) => {
+                    setPcSliders((s) => ({ ...s, x: v }));
+                    managerRef.current?.updatePhotocard("x", v);
+                  }}
+                />
+                <ControlSlider
+                  label="Position Y"
+                  value={pcSliders.y}
+                  min={0}
+                  max={1000}
+                  step={1}
+                  display={Math.round(pcSliders.y).toString()}
+                  onChange={(v) => {
+                    setPcSliders((s) => ({ ...s, y: v }));
+                    managerRef.current?.updatePhotocard("y", v);
+                  }}
+                />
+                <ControlSlider
+                  label="Scale"
+                  value={pcSliders.scale}
+                  min={0.1}
+                  max={5}
+                  step={0.01}
+                  display={pcSliders.scale.toFixed(2)}
+                  onChange={(v) => {
+                    setPcSliders((s) => ({ ...s, scale: v }));
+                    managerRef.current?.updatePhotocard("scale", v);
+                  }}
+                />
+                <ControlSlider
+                  label="Rotation"
+                  value={pcSliders.rotation}
+                  min={-180}
+                  max={180}
+                  step={1}
+                  display={Math.round(pcSliders.rotation) + "°"}
+                  onChange={(v) => {
+                    setPcSliders((s) => ({ ...s, rotation: v }));
+                    managerRef.current?.updatePhotocard(
+                      "rotation",
+                      (v * Math.PI) / 180,
+                    );
+                  }}
+                />
                 {FRAME_FEATURE_ENABLED && (
                   <div className="flex gap-2">
-                    <button onClick={handleCreateFrame} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                    <button
+                      onClick={handleCreateFrame}
+                      className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
+                    >
                       <Scissors className="w-4 h-4" /> Create Frame
                     </button>
                     {isFrameMode && (
-                      <button onClick={handleRestoreFrameSource} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                      <button
+                        onClick={handleRestoreFrameSource}
+                        className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
+                      >
                         <RefreshCw className="w-4 h-4" /> Restore
                       </button>
                     )}
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <Switch id="toploader" checked={showToploader} disabled={isFrameMode} onCheckedChange={handleToploaderToggle} />
-                  <Label htmlFor="toploader" className="text-base">Show Toploader</Label>
+                  <Switch
+                    id="toploader"
+                    checked={showToploader}
+                    disabled={isFrameMode}
+                    onCheckedChange={handleToploaderToggle}
+                  />
+                  <Label htmlFor="toploader" className="text-base">
+                    Show Toploader
+                  </Label>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handlePcReset} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                  <button
+                    onClick={handlePcReset}
+                    className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
+                  >
                     <RefreshCw className="w-4 h-4" /> Reset
                   </button>
-                  <button onClick={handlePcReset} className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm">
+                  <button
+                    onClick={handlePcReset}
+                    className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
+                  >
                     <Move className="w-4 h-4" /> Position
                   </button>
                 </div>
@@ -892,7 +1267,10 @@ export function ProofshotEditor() {
 
             {/* Actions */}
             <div className="flex flex-col gap-2 pt-2 border-t border-border">
-              <button onClick={handleReset} className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm font-medium">
+              <button
+                onClick={handleReset}
+                className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm font-medium"
+              >
                 <RefreshCw className="w-4 h-4" /> Reset Canvas
               </button>
               <button
@@ -901,7 +1279,10 @@ export function ProofshotEditor() {
               >
                 Save
               </button>
-              <button onClick={handleSaveAsVideo} className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm font-medium">
+              <button
+                onClick={handleSaveAsVideo}
+                className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm font-medium"
+              >
                 <Video className="w-4 h-4" /> Save as Video
               </button>
             </div>
@@ -914,22 +1295,39 @@ export function ProofshotEditor() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999]">
           <div className="flex flex-col items-center gap-4 text-white">
             <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-            <span className="t-shimmer loading-shimmer font-semibold" data-text={loadingMessage}>{loadingMessage}</span>
+            <span
+              className="t-shimmer loading-shimmer font-semibold"
+              data-text={loadingMessage}
+            >
+              {loadingMessage}
+            </span>
           </div>
         </div>
       )}
 
       {/* Save confirmation dialog */}
-      <Dialog open={showSaveModal} onOpenChange={(o) => { setShowSaveModal(o); managerRef.current?.setModalOpen(o); }}>
+      <Dialog
+        open={showSaveModal}
+        onOpenChange={(o) => {
+          setShowSaveModal(o);
+          managerRef.current?.setModalOpen(o);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>What&apos;s Next?</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3 mt-2">
-            <button onClick={handleKeepEditing} className="flex items-center justify-center gap-2 p-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium">
+            <button
+              onClick={handleKeepEditing}
+              className="flex items-center justify-center gap-2 p-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+            >
               <Edit className="w-4 h-4" /> Keep Editing
             </button>
-            <button onClick={handleDiscardImage} className="flex items-center justify-center gap-2 p-3 rounded-lg bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium">
+            <button
+              onClick={handleDiscardImage}
+              className="flex items-center justify-center gap-2 p-3 rounded-lg bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium"
+            >
               <Trash2 className="w-4 h-4" /> Discard Image
             </button>
           </div>

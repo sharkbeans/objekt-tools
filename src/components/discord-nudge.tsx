@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const DISMISS_KEY = "discord-banner-dismissed";
 const DISCORD_INVITE = "https://discord.gg/SWEm6RbJD3";
@@ -21,7 +21,9 @@ export function DiscordNudge() {
 
   return (
     <p className="text-xs text-muted-foreground">
-      <span className="text-[#7289da] font-medium">Get notified on Discord</span>
+      <span className="text-[#7289da] font-medium">
+        Get notified on Discord
+      </span>
       {" — "}
       <a
         href={DISCORD_INVITE}

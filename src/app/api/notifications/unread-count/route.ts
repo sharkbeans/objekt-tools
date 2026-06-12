@@ -1,8 +1,8 @@
+import { and, count, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { tradeNotification } from "@/lib/db/schema";
-import { eq, and, count } from "drizzle-orm";
 
 // GET /api/notifications/unread-count — count undismissed notifications
 export async function GET() {

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth-server";
+import { redis } from "@/lib/redis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +14,24 @@ const REMBG_TIMEOUT_MS = 120_000;
 let backgroundRemovalQueue = Promise.resolve();
 
 export async function POST(request: Request) {
+  let session;
+  try {
+    session = await requireSession();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 5 requests per 60 seconds per user
+  const rateLimitKey = `rate-limit:remove-bg:${session.user.id}`;
+  const attempts = await redis.incr(rateLimitKey);
+  if (attempts === 1) await redis.expire(rateLimitKey, 60);
+  if (attempts > 5) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      { status: 429 },
+    );
+  }
+
   const body = await request.formData();
   const image = body.get("image");
 

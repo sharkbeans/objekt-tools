@@ -26,7 +26,6 @@ const LIGHT = {
   sectionBg: "#f4f4f5",
 };
 
-
 function readFont(filename: string): Buffer {
   return fs.readFileSync(path.join(process.cwd(), "public", filename));
 }
@@ -40,7 +39,19 @@ export async function GET(
   // Step 1: fetch metadata only (no items) to compute maxSlots
   const meta = await db.query.poster.findFirst({
     where: eq(poster.id, id),
-    columns: { id: true, userId: true, version: true, username: true, cosmoId: true, notes: true, theme: true, colsPerRow: true, haveTitle: true, wantTitle: true, groupByNumbers: true },
+    columns: {
+      id: true,
+      userId: true,
+      version: true,
+      username: true,
+      cosmoId: true,
+      notes: true,
+      theme: true,
+      colsPerRow: true,
+      haveTitle: true,
+      wantTitle: true,
+      groupByNumbers: true,
+    },
   });
 
   if (!meta) {
@@ -57,21 +68,28 @@ export async function GET(
   const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - FOOTER_H - 16;
   const GAP = 8;
   const CARD_W = 72;
-  const CARD_IMG_H = Math.round(CARD_W * 4 / 3);
+  const CARD_IMG_H = Math.round((CARD_W * 4) / 3);
   const LABEL_H = 4 + 11 + 2 + 11;
   const CARD_H = CARD_IMG_H + LABEL_H;
   const cols = Math.min(meta.colsPerRow, 6);
-  const maxRows = Math.max(1, Math.floor((BODY_H - SECTION_LABEL_H) / (CARD_H + GAP)));
+  const maxRows = Math.max(
+    1,
+    Math.floor((BODY_H - SECTION_LABEL_H) / (CARD_H + GAP)),
+  );
   const maxSlots = Math.min(maxRows * cols, HARD_LIMIT);
 
   // Step 2: fetch ALL rows (cheap, small rows) so we can group duplicates before
   // truncating. We only render maxSlots images, so Satori stays bounded regardless
   // of how many rows exist.
   const [allHaves, allWants] = await Promise.all([
-    db.select().from(posterHave)
+    db
+      .select()
+      .from(posterHave)
       .where(eq(posterHave.posterId, id))
       .orderBy(asc(posterHave.position)),
-    db.select().from(posterWant)
+    db
+      .select()
+      .from(posterWant)
       .where(eq(posterWant.posterId, id))
       .orderBy(asc(posterWant.position)),
   ]);
@@ -112,7 +130,10 @@ export async function GET(
   const wants = groupedWants.slice(0, wantSlots);
 
   function quantityTotal(rows: Row[]): number {
-    return rows.reduce((total, item) => total + Math.max(1, item.quantity ?? 1), 0);
+    return rows.reduce(
+      (total, item) => total + Math.max(1, item.quantity ?? 1),
+      0,
+    );
   }
 
   // Count hidden quantities, not hidden groups, so duplicate/quantity rows are
@@ -175,7 +196,9 @@ export async function GET(
               const rawParts = item.rawLabel?.split(" ") ?? [];
               const labelLine1 = item.member ?? rawParts[0] ?? "";
               const labelLine2 = item.member
-                ? (rawParts.length >= 2 ? rawParts.slice(1).join(" ") : (item.collectionNo ?? ""))
+                ? rawParts.length >= 2
+                  ? rawParts.slice(1).join(" ")
+                  : (item.collectionNo ?? "")
                 : "";
               return (
                 <div
@@ -353,7 +376,12 @@ export async function GET(
       >
         {/* HAVE */}
         <div
-          style={{ display: "flex", flexDirection: "column", gap: 10, width: COL_W }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            width: COL_W,
+          }}
         >
           <div
             style={{
@@ -373,7 +401,12 @@ export async function GET(
 
         {/* WANT */}
         <div
-          style={{ display: "flex", flexDirection: "column", gap: 10, width: COL_W }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            width: COL_W,
+          }}
         >
           <div
             style={{

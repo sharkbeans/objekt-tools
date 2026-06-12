@@ -1,7 +1,7 @@
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { redis } from "@/lib/redis";
-import crypto from "crypto";
 
 export async function POST() {
   let session;
@@ -20,7 +20,7 @@ export async function POST() {
   if (genCount > 5) {
     return NextResponse.json(
       { error: "Too many code generations. Try again later." },
-      { status: 429 }
+      { status: 429 },
     );
   }
 
@@ -44,7 +44,10 @@ export async function POST() {
     }
   }
   if (!stored) {
-    return NextResponse.json({ error: "Failed to generate code. Try again." }, { status: 503 });
+    return NextResponse.json(
+      { error: "Failed to generate code. Try again." },
+      { status: 503 },
+    );
   }
 
   await redis.set(`login-code:user:${userId}`, code, "EX", 120);

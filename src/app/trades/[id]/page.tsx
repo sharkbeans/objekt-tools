@@ -1,7 +1,7 @@
-import { type Metadata } from "next";
+import { eq } from "drizzle-orm";
+import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { tradePost } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import TradeDetailClient from "./trade-detail-client";
 
 export async function generateMetadata({

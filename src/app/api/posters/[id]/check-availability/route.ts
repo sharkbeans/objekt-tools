@@ -4,8 +4,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { cosmoAccount, poster, posterHave } from "@/lib/db/schema";
 import { collections, objekts } from "@/lib/db/indexer-schema";
+import { cosmoAccount, poster, posterHave } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
 
 // POST /api/posters/[id]/check-availability
@@ -31,7 +31,10 @@ export async function POST(
   });
 
   if (!row || !row.userId) {
-    return NextResponse.json({ error: "Not found or anonymous poster" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Not found or anonymous poster" },
+      { status: 404 },
+    );
   }
 
   // Only check real objekt haves (skip freeform / no collectionId)
@@ -75,7 +78,9 @@ export async function POST(
       ),
     );
 
-  const ownedSet = new Set(ownedRows.map((r) => `${r.collectionId}:${r.serial}`));
+  const ownedSet = new Set(
+    ownedRows.map((r) => `${r.collectionId}:${r.serial}`),
+  );
   const ownedCollections = new Set(ownedRows.map((r) => r.collectionId));
 
   const available: typeof checkable = [];
@@ -90,7 +95,11 @@ export async function POST(
   }
 
   if (unavailable.length === 0) {
-    return NextResponse.json({ available: true, removed: 0, remaining: available.length });
+    return NextResponse.json({
+      available: true,
+      removed: 0,
+      remaining: available.length,
+    });
   }
 
   if (available.length === 0) {
@@ -101,9 +110,12 @@ export async function POST(
   }
 
   // Some gone — remove just those rows
-  await db
-    .delete(posterHave)
-    .where(inArray(posterHave.id, unavailable.map((h) => h.id)));
+  await db.delete(posterHave).where(
+    inArray(
+      posterHave.id,
+      unavailable.map((h) => h.id),
+    ),
+  );
   await redis.del(`poster:${posterId}`);
 
   return NextResponse.json({

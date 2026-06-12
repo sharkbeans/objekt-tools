@@ -21,7 +21,10 @@ function itemMember(item: ResolvedPosterItem): string | null {
 function formatSection(items: ResolvedPosterItem[]): string {
   if (items.length === 0) return "";
 
-  const byMember = new Map<string, { order: string[]; counts: Map<string, number> }>();
+  const byMember = new Map<
+    string,
+    { order: string[]; counts: Map<string, number> }
+  >();
   const memberOrder: string[] = [];
   const freeformLines: string[] = [];
 
@@ -34,9 +37,10 @@ function formatSection(items: ResolvedPosterItem[]): string {
     const member = itemMember(item) ?? "";
     const code = itemCode(item);
     if (!code) continue;
-    const qty = item.parsed.quantity && item.parsed.quantity > 1
-      ? item.parsed.quantity
-      : 1;
+    const qty =
+      item.parsed.quantity && item.parsed.quantity > 1
+        ? item.parsed.quantity
+        : 1;
 
     let group = byMember.get(member);
     if (!group) {

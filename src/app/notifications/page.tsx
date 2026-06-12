@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "@/lib/auth-client";
+import { BellIcon, CheckCheckIcon } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { BellIcon, CheckCheckIcon } from "lucide-react";
+import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -70,11 +70,17 @@ export default function NotificationsPage() {
   }
 
   if (isPending || isLoading) {
-    return <div className="text-center py-12 text-muted-foreground">Loading...</div>;
+    return (
+      <div className="text-center py-12 text-muted-foreground">Loading...</div>
+    );
   }
 
   if (!session) {
-    return <div className="text-center py-12 text-muted-foreground">Sign in to view notifications.</div>;
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        Sign in to view notifications.
+      </div>
+    );
   }
 
   const notifications = data?.notifications ?? [];
@@ -103,11 +109,14 @@ export default function NotificationsPage() {
         <CardContent>
           {error && (
             <p className="text-sm text-destructive mb-3">
-              Couldn&apos;t load your notification list right now. You can still mark all as read.
+              Couldn&apos;t load your notification list right now. You can still
+              mark all as read.
             </p>
           )}
           {notifications.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No notifications yet.</p>
+            <p className="text-center text-muted-foreground py-8">
+              No notifications yet.
+            </p>
           ) : (
             <div className="space-y-1">
               {notifications.map((n) => {
@@ -131,8 +140,9 @@ export default function NotificationsPage() {
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <p className="text-sm">{n.message}</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(n.createdAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
-                        {" "}
+                        {new Date(n.createdAt).toLocaleDateString("en-GB", {
+                          timeZone: "GMT",
+                        })}{" "}
                         {new Date(n.createdAt).toLocaleTimeString("en-GB", {
                           timeZone: "GMT",
                           hour: "2-digit",
@@ -142,7 +152,12 @@ export default function NotificationsPage() {
                       </p>
                     </div>
                     {!n.dismissed && (
-                      <Badge variant="secondary" className="text-[10px] shrink-0">New</Badge>
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] shrink-0"
+                      >
+                        New
+                      </Badge>
                     )}
                   </div>
                 );

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import Pusher, { Channel } from "pusher-js";
 import { useQueryClient } from "@tanstack/react-query";
+import Pusher, { type Channel } from "pusher-js";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 // Singleton Pusher client — shared across all hook instances
@@ -47,13 +47,17 @@ export function useTradeRealtime(tradeId: string) {
 
     channel.bind("trade:completed", () => {
       queryClient.invalidateQueries({ queryKey: ["active-trade", tradeId] });
-      queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", tradeId] });
+      queryClient.invalidateQueries({
+        queryKey: ["trade-transfer-logs", tradeId],
+      });
       queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
     });
 
     channel.bind("trade:transfer-detected", (data: { count: number }) => {
       queryClient.invalidateQueries({ queryKey: ["active-trade", tradeId] });
-      queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", tradeId] });
+      queryClient.invalidateQueries({
+        queryKey: ["trade-transfer-logs", tradeId],
+      });
       if (data.count > 0) {
         toast.info(`${data.count} transfer(s) detected.`);
       }
@@ -85,7 +89,9 @@ export function useUserRealtime(userId: string | undefined) {
     const channel = pusher.subscribe(`private-user-${userId}`);
 
     channel.bind("notification:new", (data: { message: string }) => {
-      queryClient.invalidateQueries({ queryKey: ["notification-unread-count"] });
+      queryClient.invalidateQueries({
+        queryKey: ["notification-unread-count"],
+      });
       if (data.message) {
         toast.info(data.message, { duration: 5000 });
       }

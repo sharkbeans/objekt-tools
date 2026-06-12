@@ -1,20 +1,30 @@
-export const dynamic = 'force-dynamic';
-import { NextRequest, NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+
+import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { redis } from "@/lib/redis";
-import { activeTrade, activeTradeSide, tradePost, tradeTransferLog } from "@/lib/db/schema";
-import { notify } from "@/lib/notify";
 import { objekts } from "@/lib/db/indexer-schema";
-import { eq, and, inArray, ne, or } from "drizzle-orm";
-import { getBlockingTradeId, getActiveBan, propagateResolution } from "@/lib/trade-guards";
+import {
+  activeTrade,
+  activeTradeSide,
+  tradePost,
+  tradeTransferLog,
+} from "@/lib/db/schema";
+import { notify } from "@/lib/notify";
 import { publishTradeEvent } from "@/lib/realtime";
+import { redis } from "@/lib/redis";
+import {
+  getActiveBan,
+  getBlockingTradeId,
+  propagateResolution,
+} from "@/lib/trade-guards";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
 export async function POST(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -25,7 +35,10 @@ export async function POST(
 
   const activeBan = await getActiveBan(session.user.id);
   if (activeBan) {
-    return NextResponse.json({ error: "You are trade banned and cannot perform this action." }, { status: 403 });
+    return NextResponse.json(
+      { error: "You are trade banned and cannot perform this action." },
+      { status: 403 },
+    );
   }
 
   // Rate limit: 5 requests per 60 seconds
@@ -33,20 +46,23 @@ export async function POST(
   const attempts = await redis.incr(rateLimitKey);
   if (attempts === 1) await redis.expire(rateLimitKey, 60);
   if (attempts > 5) {
-    return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      { status: 429 },
+    );
   }
 
   const { id: tradeId } = await params;
 
   const trade = await db.query.activeTrade.findFirst({
-    where: and(
-      eq(activeTrade.id, tradeId),
-      eq(activeTrade.status, "pending"),
-    ),
+    where: and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")),
   });
 
   if (!trade) {
-    return NextResponse.json({ error: "Trade not found or not pending" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Trade not found or not pending" },
+      { status: 404 },
+    );
   }
 
   // Only the recipient can accept
@@ -58,8 +74,12 @@ export async function POST(
   const blockingTradeId = await getBlockingTradeId(session.user.id);
   if (blockingTradeId) {
     return NextResponse.json(
-      { error: "You must send all your objekts in your current active trade before accepting another", activeTradeId: blockingTradeId },
-      { status: 403 }
+      {
+        error:
+          "You must send all your objekts in your current active trade before accepting another",
+        activeTradeId: blockingTradeId,
+      },
+      { status: 403 },
     );
   }
 
@@ -106,9 +126,10 @@ export async function POST(
         .set({ status: "confirmed", detectedAt: now })
         .where(eq(activeTradeSide.id, side.id));
 
-      const recipientUserId = side.userId === trade.initiatorUserId
-        ? trade.recipientUserId
-        : trade.initiatorUserId;
+      const recipientUserId =
+        side.userId === trade.initiatorUserId
+          ? trade.recipientUserId
+          : trade.initiatorUserId;
       await tx.insert(tradeTransferLog).values({
         activeTradeId: tradeId,
         activeTradeSideId: side.id,
@@ -142,15 +163,25 @@ export async function POST(
     // to enable block-based transfer filtering in check-transfers.
     await tx
       .update(activeTrade)
-      .set({ status: newStatus, acceptedAt: now, acceptanceBlock: null, updatedAt: now })
+      .set({
+        status: newStatus,
+        acceptedAt: now,
+        acceptanceBlock: null,
+        updatedAt: now,
+      })
       .where(eq(activeTrade.id, tradeId));
 
     // Temporarily hide both trade posts from the browse listing while trade is in progress
-    const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+    const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
+      (id): id is string => id !== null,
+    );
     if (postIds.length > 0) {
       await tx
         .update(tradePost)
-        .set({ status: newStatus === "completed" ? "closed" : "in_trade", updatedAt: now })
+        .set({
+          status: newStatus === "completed" ? "closed" : "in_trade",
+          updatedAt: now,
+        })
         .where(inArray(tradePost.id, postIds));
     }
 
@@ -179,7 +210,7 @@ export async function POST(
               ...postIds.flatMap((pid) => [
                 eq(activeTrade.tradePostId, pid),
                 eq(activeTrade.matchedTradePostId, pid),
-              ])
+              ]),
             ),
           ),
           columns: { id: true, initiatorUserId: true, recipientUserId: true },
@@ -243,7 +274,8 @@ export async function POST(
   }
 
   // Realtime: push status event to both participants
-  const event = finalStatus === "completed" ? "trade:completed" : "trade:accepted";
+  const event =
+    finalStatus === "completed" ? "trade:completed" : "trade:accepted";
   void publishTradeEvent(tradeId, event, { activeTradeId: tradeId });
 
   return NextResponse.json({

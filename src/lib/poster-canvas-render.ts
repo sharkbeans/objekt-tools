@@ -3,18 +3,29 @@
  * no SVG foreignObject, no CORS taint issues on mobile browsers.
  */
 
-import type { PosterData, PosterTheme } from "@/components/poster/poster-canvas";
-import { getSeasonPrefix } from "@/lib/season-prefix";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import type {
+  PosterData,
+  PosterTheme,
+} from "@/components/poster/poster-canvas";
 import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
+import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import { getSeasonPrefix } from "@/lib/season-prefix";
 
 const DARK = {
-  bg: "#0f0f14", fg: "#e4e4e7", muted: "#a1a1aa",
-  border: "#3f3f46", sectionBg: "#18181b", accent: "#71717a",
+  bg: "#0f0f14",
+  fg: "#e4e4e7",
+  muted: "#a1a1aa",
+  border: "#3f3f46",
+  sectionBg: "#18181b",
+  accent: "#71717a",
 };
 const LIGHT = {
-  bg: "#ffffff", fg: "#18181b", muted: "#71717a",
-  border: "#e4e4e7", sectionBg: "#f4f4f5", accent: "#d4d4d8",
+  bg: "#ffffff",
+  fg: "#18181b",
+  muted: "#71717a",
+  border: "#e4e4e7",
+  sectionBg: "#f4f4f5",
+  accent: "#d4d4d8",
 };
 
 const CARD_W = 100;
@@ -53,7 +64,7 @@ function getDisplayItems(
 
 function groupDisplayByMember(items: DisplayItem[]) {
   const groups: { member: string | null; items: DisplayItem[] }[] = [];
-  const seen = new Map<string, typeof groups[0]>();
+  const seen = new Map<string, (typeof groups)[0]>();
   for (const item of items) {
     const m = item.item.entry?.member ?? item.item.parsed.member ?? null;
     const key = m ?? "\0";
@@ -78,8 +89,14 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
   const blobUrl = URL.createObjectURL(blob);
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(blobUrl); resolve(img); };
-    img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error(`img load failed: ${url}`)); };
+    img.onload = () => {
+      URL.revokeObjectURL(blobUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(blobUrl);
+      reject(new Error(`img load failed: ${url}`));
+    };
     img.src = blobUrl;
   });
 }
@@ -142,7 +159,14 @@ function sectionHeightGrouped(
   return h;
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
@@ -209,7 +233,8 @@ export async function renderPosterToCanvas(
   const posterH =
     PAD +
     40 + // header
-    20 + dividerH + // header divider
+    20 +
+    dividerH + // header divider
     haveH +
     (hasBothSections ? dividerH : 0) +
     wantH +
@@ -289,7 +314,10 @@ export async function renderPosterToCanvas(
     }
   }
 
-  async function drawItemRow(items: DisplayItem[], images: Map<string, HTMLImageElement>) {
+  async function drawItemRow(
+    items: DisplayItem[],
+    images: Map<string, HTMLImageElement>,
+  ) {
     const batches: DisplayItem[][] = [];
     const maxUnits = groupByMember ? 12 : cols;
     let current: DisplayItem[] = [];
@@ -372,10 +400,19 @@ export async function renderPosterToCanvas(
             const totalH = wrappedLines.length * lineH;
             const startY = y + cardH / 2 - totalH / 2 + lineH / 2;
             for (let li = 0; li < wrappedLines.length; li++) {
-              ctx.fillText(wrappedLines[li], x + itemW / 2, startY + li * lineH);
+              ctx.fillText(
+                wrappedLines[li],
+                x + itemW / 2,
+                startY + li * lineH,
+              );
             }
           } else {
-            ctx.fillText(item.parsed.raw, x + itemW / 2, y + cardH / 2, itemW - 24);
+            ctx.fillText(
+              item.parsed.raw,
+              x + itemW / 2,
+              y + cardH / 2,
+              itemW - 24,
+            );
           }
           ctx.globalAlpha = 1;
           ctx.textBaseline = "top";

@@ -9,8 +9,8 @@
 import { artistMatches } from "@/lib/artist-utils";
 import {
   makeObjektSearchTags,
-  objektSearchTermMatches,
   type ObjektSearchItem,
+  objektSearchTermMatches,
 } from "@/lib/objekt-search";
 import { membersByArtist, type ValidArtist } from "./filters";
 

@@ -32,15 +32,18 @@ async function fetchMemberOrder(
 
 export async function GET() {
   try {
-    const results = await getCached("spin:members:v1", 7 * 24 * 60 * 60_000, () =>
-      Promise.all(COSMO_ARTISTS.map(fetchMemberOrder)),
+    const results = await getCached(
+      "spin:members:v1",
+      7 * 24 * 60 * 60_000,
+      () => Promise.all(COSMO_ARTISTS.map(fetchMemberOrder)),
     );
 
     return NextResponse.json(
       { results },
       {
         headers: {
-          "Cache-Control": "public, max-age=604800, stale-while-revalidate=604800",
+          "Cache-Control":
+            "public, max-age=604800, stale-while-revalidate=604800",
         },
       },
     );

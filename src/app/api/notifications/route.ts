@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { tradeNotification } from "@/lib/db/schema";
-import { eq, and, desc, inArray, count } from "drizzle-orm";
 
 // GET /api/notifications — list all notifications (dismissed + undismissed) with pagination
 export async function GET(request: NextRequest) {

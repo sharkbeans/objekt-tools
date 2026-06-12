@@ -1,17 +1,17 @@
-import { parseGIF, decompressFrames, type ParsedFrame } from "gifuct-js";
+import { decompressFrames, type ParsedFrame, parseGIF } from "gifuct-js";
 import { GifReader } from "omggif";
+import type { BorderManager } from "./border-manager";
 import { ToploaderConfig } from "./toploader-config";
-import { BorderManager } from "./border-manager";
 import type {
   BackgroundTransform,
-  PhotocardTransform,
-  GifState,
-  VideoState,
   CameraState,
-  GestureState,
   CropState,
-  ExportVideoResult,
   EditMode,
+  ExportVideoResult,
+  GestureState,
+  GifState,
+  PhotocardTransform,
+  VideoState,
 } from "./types";
 
 export class CanvasManager {
@@ -43,16 +43,42 @@ export class CanvasManager {
     maxZoom: 10,
   };
 
-  background: BackgroundTransform = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false };
-  photocard: PhotocardTransform = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false, layer: "front", showToploader: true };
-  crop: CropState = { enabled: false, aspectRatio: null, bounds: { x: 0, y: 0, width: 0, height: 0 } };
+  background: BackgroundTransform = {
+    x: 0,
+    y: 0,
+    scale: 1,
+    rotation: 0,
+    flipH: false,
+    flipV: false,
+  };
+  photocard: PhotocardTransform = {
+    x: 0,
+    y: 0,
+    scale: 1,
+    rotation: 0,
+    flipH: false,
+    flipV: false,
+    layer: "front",
+    showToploader: true,
+  };
+  crop: CropState = {
+    enabled: false,
+    aspectRatio: null,
+    bounds: { x: 0, y: 0, width: 0, height: 0 },
+  };
   editMode: EditMode = "photocard";
 
   private animation = { active: false, velocityX: 0, velocityY: 0 };
   private photocardSavedPos = { x: 0, y: 0 };
   private gesture: GestureState = {
-    active: false, startDistance: 0, startAngle: 0, startScale: 1,
-    startRotation: 0, lastX: 0, lastY: 0, pointers: [],
+    active: false,
+    startDistance: 0,
+    startAngle: 0,
+    startScale: 1,
+    startRotation: 0,
+    lastX: 0,
+    lastY: 0,
+    pointers: [],
   };
   private toploaderGradientCache = {
     westGradient: null as CanvasGradient | null,
@@ -63,11 +89,23 @@ export class CanvasManager {
   };
 
   private freshGifState(): GifState {
-    return { isGif: false, frames: [], delays: [], currentFrame: 0, lastFrameTime: 0, animationFrame: null };
+    return {
+      isGif: false,
+      frames: [],
+      delays: [],
+      currentFrame: 0,
+      lastFrameTime: 0,
+      animationFrame: null,
+    };
   }
 
   private freshVideoState(): VideoState {
-    return { isVideo: false, element: null, originalFile: null, animationFrame: null };
+    return {
+      isVideo: false,
+      element: null,
+      originalFile: null,
+      animationFrame: null,
+    };
   }
 
   init(canvas: HTMLCanvasElement, onUploadRequest: () => void) {
@@ -147,7 +185,8 @@ export class CanvasManager {
     this.canvas.style.height = bufferHeight + "px";
 
     const containerMaxWidth = 800;
-    const containerWidth = container.getBoundingClientRect().width || containerMaxWidth;
+    const containerWidth =
+      container.getBoundingClientRect().width || containerMaxWidth;
     const maxWidth = Math.min(containerMaxWidth, containerWidth);
 
     if (bufferWidth > maxWidth) {
@@ -165,28 +204,50 @@ export class CanvasManager {
 
   private attachEventListeners() {
     window.addEventListener("resize", () => this.resizeCanvas());
-    this.canvas.addEventListener("pointerdown", (e) => this.handlePointerDown(e));
-    this.canvas.addEventListener("pointermove", (e) => this.handlePointerMove(e));
+    this.canvas.addEventListener("pointerdown", (e) =>
+      this.handlePointerDown(e),
+    );
+    this.canvas.addEventListener("pointermove", (e) =>
+      this.handlePointerMove(e),
+    );
     this.canvas.addEventListener("pointerup", (e) => this.handlePointerUp(e));
-    this.canvas.addEventListener("pointercancel", (e) => this.handlePointerUp(e));
-    this.canvas.addEventListener("touchstart", (e) => {
-      if (this.isPlaceholder && e.touches.length === 1) {
-        const touch = e.touches[0];
-        const rect = this.canvas.getBoundingClientRect();
-        if (this.isPointOnPhotocard(touch.clientX - rect.left, touch.clientY - rect.top)) return;
-      }
-      e.preventDefault();
-    }, { passive: false });
-    this.canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+    this.canvas.addEventListener("pointercancel", (e) =>
+      this.handlePointerUp(e),
+    );
+    this.canvas.addEventListener(
+      "touchstart",
+      (e) => {
+        if (this.isPlaceholder && e.touches.length === 1) {
+          const touch = e.touches[0];
+          const rect = this.canvas.getBoundingClientRect();
+          if (
+            this.isPointOnPhotocard(
+              touch.clientX - rect.left,
+              touch.clientY - rect.top,
+            )
+          )
+            return;
+        }
+        e.preventDefault();
+      },
+      { passive: false },
+    );
+    this.canvas.addEventListener("touchmove", (e) => e.preventDefault(), {
+      passive: false,
+    });
     this.canvas.addEventListener("click", (e) => {
       if (!this.photocardImage || !this.isPlaceholder) return;
       const rect = this.canvas.getBoundingClientRect();
-      if (this.isPointOnPhotocard(e.clientX - rect.left, e.clientY - rect.top)) {
+      if (
+        this.isPointOnPhotocard(e.clientX - rect.left, e.clientY - rect.top)
+      ) {
         e.preventDefault();
         this.onUploadRequest?.();
       }
     });
-    this.canvas.addEventListener("wheel", (e) => this.handleWheel(e), { passive: false });
+    this.canvas.addEventListener("wheel", (e) => this.handleWheel(e), {
+      passive: false,
+    });
   }
 
   private handlePointerDown(e: PointerEvent) {
@@ -195,12 +256,17 @@ export class CanvasManager {
 
     if (this.isPlaceholder && this.gesture.pointers.length === 0) {
       const rect = this.canvas.getBoundingClientRect();
-      if (this.isPointOnPhotocard(e.clientX - rect.left, e.clientY - rect.top)) {
+      if (
+        this.isPointOnPhotocard(e.clientX - rect.left, e.clientY - rect.top)
+      ) {
         const orig = this.photocard.scale;
         this.photocard.scale *= 0.95;
         this.render();
         this.onUploadRequest?.();
-        setTimeout(() => { this.photocard.scale = orig; this.render(); }, 150);
+        setTimeout(() => {
+          this.photocard.scale = orig;
+          this.render();
+        }, 150);
         e.preventDefault();
         e.stopPropagation();
         return;
@@ -222,8 +288,14 @@ export class CanvasManager {
       this.gesture.lastCenterY = (p1.y + p2.y) / 2;
       this.gesture.startDistance = this.getDistance(p1, p2);
       this.gesture.startAngle = this.getAngle(p1, p2);
-      this.gesture.startScale = this.editMode === "background" ? this.background.scale : this.photocard.scale;
-      this.gesture.startRotation = this.editMode === "background" ? this.background.rotation : this.photocard.rotation;
+      this.gesture.startScale =
+        this.editMode === "background"
+          ? this.background.scale
+          : this.photocard.scale;
+      this.gesture.startRotation =
+        this.editMode === "background"
+          ? this.background.rotation
+          : this.photocard.rotation;
     }
 
     this.gesture.active = true;
@@ -234,12 +306,20 @@ export class CanvasManager {
     if (this.modalOpen) return;
     if (this.isPlaceholder && !this.gesture.active) {
       const rect = this.canvas.getBoundingClientRect();
-      this.canvas.style.cursor = this.isPointOnPhotocard(e.clientX - rect.left, e.clientY - rect.top) ? "pointer" : "grab";
+      this.canvas.style.cursor = this.isPointOnPhotocard(
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      )
+        ? "pointer"
+        : "grab";
     }
     if (!this.gesture.active) return;
 
     const idx = this.gesture.pointers.findIndex((p) => p.id === e.pointerId);
-    if (idx !== -1) { this.gesture.pointers[idx].x = e.clientX; this.gesture.pointers[idx].y = e.clientY; }
+    if (idx !== -1) {
+      this.gesture.pointers[idx].x = e.clientX;
+      this.gesture.pointers[idx].y = e.clientY;
+    }
 
     if (this.editMode === "background" && this.backgroundImage) {
       if (this.gesture.pointers.length === 1) {
@@ -262,7 +342,14 @@ export class CanvasManager {
         }
         this.gesture.lastCenterX = cx;
         this.gesture.lastCenterY = cy;
-        this.background.scale = Math.max(0.1, Math.min(3, this.gesture.startScale * (this.getDistance(p1, p2) / this.gesture.startDistance)));
+        this.background.scale = Math.max(
+          0.1,
+          Math.min(
+            3,
+            this.gesture.startScale *
+              (this.getDistance(p1, p2) / this.gesture.startDistance),
+          ),
+        );
       }
     } else if (this.editMode === "photocard" && this.photocardImage) {
       if (this.gesture.pointers.length === 1) {
@@ -277,20 +364,34 @@ export class CanvasManager {
       } else if (this.gesture.pointers.length === 2) {
         const p1 = this.gesture.pointers[0];
         const p2 = this.gesture.pointers[1];
-        this.photocard.scale = Math.max(0.1, Math.min(5, this.gesture.startScale * (this.getDistance(p1, p2) / this.gesture.startDistance)));
-        this.photocard.rotation = this.gesture.startRotation + (this.getAngle(p1, p2) - this.gesture.startAngle);
+        this.photocard.scale = Math.max(
+          0.1,
+          Math.min(
+            5,
+            this.gesture.startScale *
+              (this.getDistance(p1, p2) / this.gesture.startDistance),
+          ),
+        );
+        this.photocard.rotation =
+          this.gesture.startRotation +
+          (this.getAngle(p1, p2) - this.gesture.startAngle);
       }
     }
     this.render();
   }
 
   private handlePointerUp(e: PointerEvent) {
-    this.gesture.pointers = this.gesture.pointers.filter((p) => p.id !== e.pointerId);
+    this.gesture.pointers = this.gesture.pointers.filter(
+      (p) => p.id !== e.pointerId,
+    );
     if (this.gesture.pointers.length === 0) {
       this.gesture.active = false;
       this.gesture.lastCenterX = undefined;
       this.gesture.lastCenterY = undefined;
-      if (Math.abs(this.animation.velocityX) > 1 || Math.abs(this.animation.velocityY) > 1) {
+      if (
+        Math.abs(this.animation.velocityX) > 1 ||
+        Math.abs(this.animation.velocityY) > 1
+      ) {
         this.startInertia();
       } else if (this.editMode === "photocard" && !this.isPhotocardVisible()) {
         this.snapPhotocardBack();
@@ -308,9 +409,15 @@ export class CanvasManager {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.95 : 1.05;
     if (this.editMode === "background" && this.backgroundImage) {
-      this.background.scale = Math.max(0.1, Math.min(3, this.background.scale * delta));
+      this.background.scale = Math.max(
+        0.1,
+        Math.min(3, this.background.scale * delta),
+      );
     } else if (this.editMode === "photocard" && this.photocardImage) {
-      this.photocard.scale = Math.max(0.1, Math.min(5, this.photocard.scale * delta));
+      this.photocard.scale = Math.max(
+        0.1,
+        Math.min(5, this.photocard.scale * delta),
+      );
     }
     this.render();
   }
@@ -328,7 +435,10 @@ export class CanvasManager {
       }
       this.animation.velocityX *= 0.9;
       this.animation.velocityY *= 0.9;
-      if (Math.abs(this.animation.velocityX) < 0.1 && Math.abs(this.animation.velocityY) < 0.1) {
+      if (
+        Math.abs(this.animation.velocityX) < 0.1 &&
+        Math.abs(this.animation.velocityY) < 0.1
+      ) {
         this.animation.active = false;
         if (this.editMode === "photocard" && !this.isPhotocardVisible()) {
           this.snapPhotocardBack();
@@ -366,7 +476,7 @@ export class CanvasManager {
     const start = performance.now();
     const animate = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
-      const ease = 1 - Math.pow(1 - t, 3);
+      const ease = 1 - (1 - t) ** 3;
       this.photocard.x = startX + (targetX - startX) * ease;
       this.photocard.y = startY + (targetY - startY) * ease;
       this.render();
@@ -375,7 +485,10 @@ export class CanvasManager {
     requestAnimationFrame(animate);
   }
 
-  private getDistance(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  private getDistance(
+    p1: { x: number; y: number },
+    p2: { x: number; y: number },
+  ) {
     return Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
   }
 
@@ -391,8 +504,12 @@ export class CanvasManager {
     const sin = Math.sin(-this.photocard.rotation);
     const lx = (dx * cos - dy * sin) / this.photocard.scale;
     const ly = (dx * sin + dy * cos) / this.photocard.scale;
-    const w = (this.photocardImage as HTMLVideoElement).videoWidth ?? (this.photocardImage as HTMLImageElement).width;
-    const h = (this.photocardImage as HTMLVideoElement).videoHeight ?? (this.photocardImage as HTMLImageElement).height;
+    const w =
+      (this.photocardImage as HTMLVideoElement).videoWidth ??
+      (this.photocardImage as HTMLImageElement).width;
+    const h =
+      (this.photocardImage as HTMLVideoElement).videoHeight ??
+      (this.photocardImage as HTMLImageElement).height;
     return Math.abs(lx) <= w / 2 && Math.abs(ly) <= h / 2;
   }
 
@@ -401,20 +518,27 @@ export class CanvasManager {
   async startCamera(videoEl: HTMLVideoElement) {
     this.camera.video = videoEl;
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: this.camera.facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: {
+        facingMode: this.camera.facingMode,
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
       audio: false,
     });
     this.camera.stream = stream;
     videoEl.srcObject = stream;
     this.camera.active = true;
-    await new Promise<void>((res) => { videoEl.onloadedmetadata = () => res(); });
+    await new Promise<void>((res) => {
+      videoEl.onloadedmetadata = () => res();
+    });
     this.renderCameraFrame();
   }
 
   stopCamera() {
     this.camera.stream?.getTracks().forEach((t) => t.stop());
     this.camera.stream = null;
-    if (this.camera.animationFrame) cancelAnimationFrame(this.camera.animationFrame);
+    if (this.camera.animationFrame)
+      cancelAnimationFrame(this.camera.animationFrame);
     this.camera.animationFrame = null;
     this.camera.active = false;
     this.camera.video = null;
@@ -424,7 +548,9 @@ export class CanvasManager {
   private renderCameraFrame() {
     if (!this.camera.active || !this.camera.video) return;
     this.render();
-    this.camera.animationFrame = requestAnimationFrame(() => this.renderCameraFrame());
+    this.camera.animationFrame = requestAnimationFrame(() =>
+      this.renderCameraFrame(),
+    );
   }
 
   captureFrame() {
@@ -437,23 +563,37 @@ export class CanvasManager {
     img.onload = () => {
       this.backgroundImage = img;
       this.stopCamera();
-      if (!this.photocardImage || this.isPlaceholder) this.loadPlaceholderPhotocard();
+      if (!this.photocardImage || this.isPlaceholder)
+        this.loadPlaceholderPhotocard();
     };
     img.src = cap.toDataURL("image/png");
   }
 
   setCameraZoom(zoom: number): Promise<boolean> {
-    if (!this.camera.stream || !this.camera.active) return Promise.resolve(false);
-    const clamped = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, zoom));
+    if (!this.camera.stream || !this.camera.active)
+      return Promise.resolve(false);
+    const clamped = Math.max(
+      this.camera.minZoom,
+      Math.min(this.camera.maxZoom, zoom),
+    );
     this.camera.currentZoom = clamped;
     const track = this.camera.stream.getVideoTracks()[0];
     if (!track?.getCapabilities) return Promise.resolve(false);
-    const caps = track.getCapabilities() as MediaTrackCapabilities & { zoom?: { min: number; max: number } };
+    const caps = track.getCapabilities() as MediaTrackCapabilities & {
+      zoom?: { min: number; max: number };
+    };
     if (!caps.zoom) return Promise.resolve(false);
-    return track.applyConstraints({ advanced: [{ zoom: clamped } as MediaTrackConstraintSet] }).then(() => true).catch(() => false);
+    return track
+      .applyConstraints({
+        advanced: [{ zoom: clamped } as MediaTrackConstraintSet],
+      })
+      .then(() => true)
+      .catch(() => false);
   }
 
-  getCameraZoom() { return this.camera.currentZoom; }
+  getCameraZoom() {
+    return this.camera.currentZoom;
+  }
 
   // ── Image loading ──────────────────────────────────────────────────────────
 
@@ -477,7 +617,8 @@ export class CanvasManager {
       this.photocard.x = rect.width / 2;
       this.photocard.y = rect.height / 2;
       this.photocard.rotation = 0;
-      this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 3);
+      this.photocard.scale =
+        Math.min(rect.width, rect.height) / (img.width * 3);
       this.render();
     };
     img.src = "data:image/svg+xml;base64," + btoa(svg);
@@ -508,7 +649,14 @@ export class CanvasManager {
   private async loadBackgroundGif(file: File): Promise<void> {
     const buf = await file.arrayBuffer();
     const gif = await this.parseGif(buf);
-    this.backgroundGif = { isGif: true, frames: gif.frames, delays: gif.delays, currentFrame: 0, lastFrameTime: performance.now(), animationFrame: null };
+    this.backgroundGif = {
+      isGif: true,
+      frames: gif.frames,
+      delays: gif.delays,
+      currentFrame: 0,
+      lastFrameTime: performance.now(),
+      animationFrame: null,
+    };
     this.backgroundImage = gif.frames[0];
     this.startBackgroundGifAnimation();
     this.render();
@@ -517,16 +665,36 @@ export class CanvasManager {
   private async loadBackgroundVideo(file: File): Promise<void> {
     return new Promise((res, rej) => {
       const video = document.createElement("video");
-      video.muted = true; video.loop = true; video.playsInline = true; video.autoplay = false;
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.autoplay = false;
       const url = URL.createObjectURL(file);
       let init = false;
-      video.onloadedmetadata = () => { this.backgroundVideo.isVideo = true; this.backgroundVideo.element = video; this.backgroundVideo.originalFile = file; this.backgroundGif.isGif = false; video.currentTime = 0; };
-      video.onseeked = () => {
-        if (init) return; init = true;
-        this.backgroundImage = video;
-        video.play().then(() => { this.startBackgroundVideoAnimation(); this.render(); res(); }).catch(rej);
+      video.onloadedmetadata = () => {
+        this.backgroundVideo.isVideo = true;
+        this.backgroundVideo.element = video;
+        this.backgroundVideo.originalFile = file;
+        this.backgroundGif.isGif = false;
+        video.currentTime = 0;
       };
-      video.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Failed to load video")); };
+      video.onseeked = () => {
+        if (init) return;
+        init = true;
+        this.backgroundImage = video;
+        video
+          .play()
+          .then(() => {
+            this.startBackgroundVideoAnimation();
+            this.render();
+            res();
+          })
+          .catch(rej);
+      };
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        rej(new Error("Failed to load video"));
+      };
       video.src = url;
     });
   }
@@ -552,7 +720,8 @@ export class CanvasManager {
           this.photocard.x = rect.width / 2;
           this.photocard.y = rect.height / 2;
           this.photocard.rotation = 0;
-          this.photocard.scale = Math.min(rect.width, rect.height) / (img.width * 3);
+          this.photocard.scale =
+            Math.min(rect.width, rect.height) / (img.width * 3);
           this.render();
           res();
         };
@@ -567,7 +736,14 @@ export class CanvasManager {
   private async loadPhotocardGif(file: File): Promise<void> {
     const buf = await file.arrayBuffer();
     const gif = await this.parseGif(buf);
-    this.photocardGif = { isGif: true, frames: gif.frames, delays: gif.delays, currentFrame: 0, lastFrameTime: performance.now(), animationFrame: null };
+    this.photocardGif = {
+      isGif: true,
+      frames: gif.frames,
+      delays: gif.delays,
+      currentFrame: 0,
+      lastFrameTime: performance.now(),
+      animationFrame: null,
+    };
     this.photocardImage = gif.frames[0];
     this.originalPhotocardImage = null;
     this.originalPhotocardFile = null;
@@ -579,7 +755,8 @@ export class CanvasManager {
     this.photocard.x = rect.width / 2;
     this.photocard.y = rect.height / 2;
     this.photocard.rotation = 0;
-    this.photocard.scale = Math.min(rect.width, rect.height) / (gif.frames[0].width * 1.5);
+    this.photocard.scale =
+      Math.min(rect.width, rect.height) / (gif.frames[0].width * 1.5);
     this.startPhotocardGifAnimation();
     this.render();
   }
@@ -587,12 +764,23 @@ export class CanvasManager {
   private async loadPhotocardVideo(file: File): Promise<void> {
     return new Promise((res, rej) => {
       const video = document.createElement("video");
-      video.muted = true; video.loop = true; video.playsInline = true; video.autoplay = false;
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.autoplay = false;
       const url = URL.createObjectURL(file);
       let init = false;
-      video.onloadedmetadata = () => { this.photocardVideo.isVideo = true; this.photocardVideo.element = video; this.photocardVideo.originalFile = file; this.photocardGif.isGif = false; this.isPlaceholder = false; video.currentTime = 0; };
+      video.onloadedmetadata = () => {
+        this.photocardVideo.isVideo = true;
+        this.photocardVideo.element = video;
+        this.photocardVideo.originalFile = file;
+        this.photocardGif.isGif = false;
+        this.isPlaceholder = false;
+        video.currentTime = 0;
+      };
       video.onseeked = () => {
-        if (init) return; init = true;
+        if (init) return;
+        init = true;
         this.photocardImage = video;
         this.originalPhotocardImage = null;
         this.originalPhotocardFile = null;
@@ -603,17 +791,30 @@ export class CanvasManager {
         this.photocard.x = rect.width / 2;
         this.photocard.y = rect.height / 2;
         this.photocard.rotation = 0;
-        this.photocard.scale = Math.min(rect.width, rect.height) / (video.videoWidth * 1.5);
-        video.play().then(() => { this.startPhotocardVideoAnimation(); this.render(); res(); }).catch(rej);
+        this.photocard.scale =
+          Math.min(rect.width, rect.height) / (video.videoWidth * 1.5);
+        video
+          .play()
+          .then(() => {
+            this.startPhotocardVideoAnimation();
+            this.render();
+            res();
+          })
+          .catch(rej);
       };
-      video.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Failed to load video")); };
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        rej(new Error("Failed to load video"));
+      };
       video.src = url;
     });
   }
 
   // ── GIF parsing ─────────────────────────────────────────────────────────────
 
-  private async parseGif(buf: ArrayBuffer): Promise<{ frames: HTMLImageElement[]; delays: number[] }> {
+  private async parseGif(
+    buf: ArrayBuffer,
+  ): Promise<{ frames: HTMLImageElement[]; delays: number[] }> {
     // Try gifuct-js first
     try {
       const raw = parseGIF(buf);
@@ -632,13 +833,16 @@ export class CanvasManager {
     }
   }
 
-  private processGifuctFrames(frames: ParsedFrame[]): Promise<{ frames: HTMLImageElement[]; delays: number[] }> {
+  private processGifuctFrames(
+    frames: ParsedFrame[],
+  ): Promise<{ frames: HTMLImageElement[]; delays: number[] }> {
     return new Promise((res, rej) => {
       if (!frames.length) return rej(new Error("GIF has no frames"));
       const w = frames[0].dims.width;
       const h = frames[0].dims.height;
       const tmp = document.createElement("canvas");
-      tmp.width = w; tmp.height = h;
+      tmp.width = w;
+      tmp.height = h;
       const tmpCtx = tmp.getContext("2d")!;
       const images: HTMLImageElement[] = [];
       const delays: number[] = [];
@@ -648,7 +852,9 @@ export class CanvasManager {
         id.data.set(frame.patch);
         tmpCtx.putImageData(id, frame.dims.left, frame.dims.top);
         const img = new Image();
-        img.onload = () => { if (++loaded === frames.length) res({ frames: images, delays }); };
+        img.onload = () => {
+          if (++loaded === frames.length) res({ frames: images, delays });
+        };
         img.onerror = () => rej(new Error(`Failed frame ${i}`));
         img.src = tmp.toDataURL("image/png");
         images[i] = img;
@@ -657,11 +863,14 @@ export class CanvasManager {
     });
   }
 
-  private processOmggifFrames(reader: GifReader): Promise<{ frames: HTMLImageElement[]; delays: number[] }> {
+  private processOmggifFrames(
+    reader: GifReader,
+  ): Promise<{ frames: HTMLImageElement[]; delays: number[] }> {
     return new Promise((res, rej) => {
       const n = reader.numFrames();
       const tmp = document.createElement("canvas");
-      tmp.width = reader.width; tmp.height = reader.height;
+      tmp.width = reader.width;
+      tmp.height = reader.height;
       const tmpCtx = tmp.getContext("2d")!;
       const images: HTMLImageElement[] = [];
       const delays: number[] = [];
@@ -674,7 +883,9 @@ export class CanvasManager {
         id.data.set(pixels);
         tmpCtx.putImageData(id, 0, 0);
         const img = new Image();
-        img.onload = () => { if (++loaded === n) res({ frames: images, delays }); };
+        img.onload = () => {
+          if (++loaded === n) res({ frames: images, delays });
+        };
         img.onerror = () => rej(new Error(`Failed frame ${i}`));
         img.src = tmp.toDataURL("image/png");
         images[i] = img;
@@ -688,9 +899,15 @@ export class CanvasManager {
   private startPhotocardGifAnimation() {
     const animate = (t: number) => {
       if (!this.photocardGif.isGif) return;
-      if (t - this.photocardGif.lastFrameTime >= this.photocardGif.delays[this.photocardGif.currentFrame]) {
-        this.photocardGif.currentFrame = (this.photocardGif.currentFrame + 1) % this.photocardGif.frames.length;
-        this.photocardImage = this.photocardGif.frames[this.photocardGif.currentFrame];
+      if (
+        t - this.photocardGif.lastFrameTime >=
+        this.photocardGif.delays[this.photocardGif.currentFrame]
+      ) {
+        this.photocardGif.currentFrame =
+          (this.photocardGif.currentFrame + 1) %
+          this.photocardGif.frames.length;
+        this.photocardImage =
+          this.photocardGif.frames[this.photocardGif.currentFrame];
         this.photocardGif.lastFrameTime = t;
         this.render();
       }
@@ -702,9 +919,15 @@ export class CanvasManager {
   private startBackgroundGifAnimation() {
     const animate = (t: number) => {
       if (!this.backgroundGif.isGif) return;
-      if (t - this.backgroundGif.lastFrameTime >= this.backgroundGif.delays[this.backgroundGif.currentFrame]) {
-        this.backgroundGif.currentFrame = (this.backgroundGif.currentFrame + 1) % this.backgroundGif.frames.length;
-        this.backgroundImage = this.backgroundGif.frames[this.backgroundGif.currentFrame];
+      if (
+        t - this.backgroundGif.lastFrameTime >=
+        this.backgroundGif.delays[this.backgroundGif.currentFrame]
+      ) {
+        this.backgroundGif.currentFrame =
+          (this.backgroundGif.currentFrame + 1) %
+          this.backgroundGif.frames.length;
+        this.backgroundImage =
+          this.backgroundGif.frames[this.backgroundGif.currentFrame];
         this.backgroundGif.lastFrameTime = t;
         this.render();
       }
@@ -714,21 +937,35 @@ export class CanvasManager {
   }
 
   private stopGifAnim(state: GifState) {
-    if (state.animationFrame) { cancelAnimationFrame(state.animationFrame); state.animationFrame = null; }
+    if (state.animationFrame) {
+      cancelAnimationFrame(state.animationFrame);
+      state.animationFrame = null;
+    }
   }
 
   private startPhotocardVideoAnimation() {
-    const animate = () => { if (!this.photocardVideo.isVideo) return; this.render(); this.photocardVideo.animationFrame = requestAnimationFrame(animate); };
+    const animate = () => {
+      if (!this.photocardVideo.isVideo) return;
+      this.render();
+      this.photocardVideo.animationFrame = requestAnimationFrame(animate);
+    };
     this.photocardVideo.animationFrame = requestAnimationFrame(animate);
   }
 
   private startBackgroundVideoAnimation() {
-    const animate = () => { if (!this.backgroundVideo.isVideo) return; this.render(); this.backgroundVideo.animationFrame = requestAnimationFrame(animate); };
+    const animate = () => {
+      if (!this.backgroundVideo.isVideo) return;
+      this.render();
+      this.backgroundVideo.animationFrame = requestAnimationFrame(animate);
+    };
     this.backgroundVideo.animationFrame = requestAnimationFrame(animate);
   }
 
   private stopVideoAnim(state: VideoState) {
-    if (state.animationFrame) { cancelAnimationFrame(state.animationFrame); state.animationFrame = null; }
+    if (state.animationFrame) {
+      cancelAnimationFrame(state.animationFrame);
+      state.animationFrame = null;
+    }
     state.element?.pause();
   }
 
@@ -743,9 +980,11 @@ export class CanvasManager {
     if (this.camera.active && this.camera.video) this.drawCameraFeed(w, h);
     else if (this.backgroundImage) this.drawBackground(w, h);
 
-    if (this.photocardImage && this.photocard.layer === "back") this.drawPhotocard();
+    if (this.photocardImage && this.photocard.layer === "back")
+      this.drawPhotocard();
     this.borderManager?.drawBorder(this.ctx, w, h);
-    if (this.photocardImage && this.photocard.layer === "front") this.drawPhotocard();
+    if (this.photocardImage && this.photocard.layer === "front")
+      this.drawPhotocard();
     this.drawCropOverlay(w, h);
   }
 
@@ -754,27 +993,47 @@ export class CanvasManager {
     const vr = video.videoWidth / video.videoHeight;
     const cr = w / h;
     let bw: number, bh: number;
-    if (vr > cr) { bh = h; bw = h * vr; } else { bw = w; bh = w / vr; }
+    if (vr > cr) {
+      bh = h;
+      bw = h * vr;
+    } else {
+      bw = w;
+      bh = w / vr;
+    }
     this.ctx.save();
     this.ctx.translate(w / 2 + this.background.x, h / 2 + this.background.y);
     this.ctx.rotate((this.background.rotation * Math.PI) / 180);
-    this.ctx.scale(this.background.scale * (this.background.flipH ? -1 : 1), this.background.scale * (this.background.flipV ? -1 : 1));
+    this.ctx.scale(
+      this.background.scale * (this.background.flipH ? -1 : 1),
+      this.background.scale * (this.background.flipV ? -1 : 1),
+    );
     this.ctx.drawImage(video, -bw / 2, -bh / 2, bw, bh);
     this.ctx.restore();
   }
 
   private drawBackground(w: number, h: number) {
     const img = this.backgroundImage!;
-    const iw = (img as HTMLVideoElement).videoWidth ?? (img as HTMLImageElement).width;
-    const ih = (img as HTMLVideoElement).videoHeight ?? (img as HTMLImageElement).height;
+    const iw =
+      (img as HTMLVideoElement).videoWidth ?? (img as HTMLImageElement).width;
+    const ih =
+      (img as HTMLVideoElement).videoHeight ?? (img as HTMLImageElement).height;
     const ir = iw / ih;
     const cr = w / h;
     let bw: number, bh: number;
-    if (ir > cr) { bh = h; bw = h * ir; } else { bw = w; bh = w / ir; }
+    if (ir > cr) {
+      bh = h;
+      bw = h * ir;
+    } else {
+      bw = w;
+      bh = w / ir;
+    }
     this.ctx.save();
     this.ctx.translate(w / 2 + this.background.x, h / 2 + this.background.y);
     this.ctx.rotate((this.background.rotation * Math.PI) / 180);
-    this.ctx.scale(this.background.scale * (this.background.flipH ? -1 : 1), this.background.scale * (this.background.flipV ? -1 : 1));
+    this.ctx.scale(
+      this.background.scale * (this.background.flipH ? -1 : 1),
+      this.background.scale * (this.background.flipV ? -1 : 1),
+    );
     this.ctx.drawImage(img, -bw / 2, -bh / 2, bw, bh);
     this.ctx.restore();
   }
@@ -783,11 +1042,16 @@ export class CanvasManager {
     this.ctx.save();
     this.ctx.translate(this.photocard.x, this.photocard.y);
     this.ctx.rotate(this.photocard.rotation);
-    this.ctx.scale(this.photocard.scale * (this.photocard.flipH ? -1 : 1), this.photocard.scale * (this.photocard.flipV ? -1 : 1));
+    this.ctx.scale(
+      this.photocard.scale * (this.photocard.flipH ? -1 : 1),
+      this.photocard.scale * (this.photocard.flipV ? -1 : 1),
+    );
 
     const img = this.photocardImage!;
-    const w = (img as HTMLVideoElement).videoWidth ?? (img as HTMLImageElement).width;
-    const h = (img as HTMLVideoElement).videoHeight ?? (img as HTMLImageElement).height;
+    const w =
+      (img as HTMLVideoElement).videoWidth ?? (img as HTMLImageElement).width;
+    const h =
+      (img as HTMLVideoElement).videoHeight ?? (img as HTMLImageElement).height;
     const cfg = ToploaderConfig;
 
     if (this.frameMode) {
@@ -845,7 +1109,9 @@ export class CanvasManager {
     const bottomOverlap = cfg.dimensions.bottomOverlap;
     const tW = width + overlap * 2;
     const tH = height + overlap + bottomOverlap;
-    const dimChanged = this.toploaderGradientCache.cachedWidth !== width || this.toploaderGradientCache.cachedHeight !== height;
+    const dimChanged =
+      this.toploaderGradientCache.cachedWidth !== width ||
+      this.toploaderGradientCache.cachedHeight !== height;
     const x = -(tW / 2);
     const y = -(height / 2) - overlap;
     const tr = cfg.corners.topRadius;
@@ -858,7 +1124,14 @@ export class CanvasManager {
     this.ctx.rect(x, y + cfg.clipping.topClip, tW, tH - cfg.clipping.topClip);
     this.ctx.clip();
 
-    const rr = (rx: number, ry: number, rw: number, rh: number, rt: number, rb: number) => {
+    const rr = (
+      rx: number,
+      ry: number,
+      rw: number,
+      rh: number,
+      rt: number,
+      rb: number,
+    ) => {
       this.ctx.beginPath();
       this.ctx.moveTo(rx + rt, ry);
       this.ctx.lineTo(rx + rw - rt, ry);
@@ -880,13 +1153,31 @@ export class CanvasManager {
     this.ctx.lineTo(x, y + tH - br);
     this.ctx.arcTo(x, y + tH, x + br, y + tH, br);
     this.ctx.lineTo(x + ftL + (br - ftL), y + tH - ftL);
-    this.ctx.arcTo(x + ftL, y + tH - ftL, x + ftL, y + tH - ftL - (br - ftL), br - ftL);
+    this.ctx.arcTo(
+      x + ftL,
+      y + tH - ftL,
+      x + ftL,
+      y + tH - ftL - (br - ftL),
+      br - ftL,
+    );
     this.ctx.lineTo(x + ftL, y + ftL + (tr - ftL));
-    this.ctx.arcTo(x + ftL, y + ftL, x + ftL + (tr - ftL) * cfg.curves.topCurveStartPercent, y + ftL, tr - ftL);
+    this.ctx.arcTo(
+      x + ftL,
+      y + ftL,
+      x + ftL + (tr - ftL) * cfg.curves.topCurveStartPercent,
+      y + ftL,
+      tr - ftL,
+    );
     this.ctx.lineTo(x + tcs, y);
     this.ctx.closePath();
     if (dimChanged) {
-      const g = this.ctx.createLinearGradient(x, y, x + ftL * cfg.borders.west.widthMultiplier * cfg.borders.west.scaleFactor, y);
+      const g = this.ctx.createLinearGradient(
+        x,
+        y,
+        x +
+          ftL * cfg.borders.west.widthMultiplier * cfg.borders.west.scaleFactor,
+        y,
+      );
       g.addColorStop(0, `rgba(255,255,255,${cfg.borders.west.startOpacity})`);
       g.addColorStop(1, `rgba(255,255,255,${cfg.borders.west.endOpacity})`);
       this.toploaderGradientCache.westGradient = g;
@@ -901,14 +1192,51 @@ export class CanvasManager {
     this.ctx.arcTo(x + tW, y, x + tW, y + tr, tr);
     this.ctx.lineTo(x + tW, y + tH - br);
     this.ctx.arcTo(x + tW, y + tH, x + tW - br, y + tH, br);
-    this.ctx.lineTo(x + tW - ftR * cfg.borders.east.scaleFactor - (br - ftR * cfg.borders.east.scaleFactor), y + tH - ftR * cfg.borders.east.scaleFactor);
-    this.ctx.arcTo(x + tW - ftR * cfg.borders.east.scaleFactor, y + tH - ftR * cfg.borders.east.scaleFactor, x + tW - ftR * cfg.borders.east.scaleFactor, y + tH - ftR * cfg.borders.east.scaleFactor - (br - ftR * cfg.borders.east.scaleFactor), br - ftR * cfg.borders.east.scaleFactor);
-    this.ctx.lineTo(x + tW - ftR * cfg.borders.east.scaleFactor, y + ftR * cfg.borders.east.scaleFactor + (tr - ftR * cfg.borders.east.scaleFactor));
-    this.ctx.arcTo(x + tW - ftR * cfg.borders.east.scaleFactor, y + ftR * cfg.borders.east.scaleFactor, x + tW - ftR * cfg.borders.east.scaleFactor - (tr - ftR * cfg.borders.east.scaleFactor) * cfg.curves.topCurveStartPercent, y + ftR * cfg.borders.east.scaleFactor, tr - ftR * cfg.borders.east.scaleFactor);
+    this.ctx.lineTo(
+      x +
+        tW -
+        ftR * cfg.borders.east.scaleFactor -
+        (br - ftR * cfg.borders.east.scaleFactor),
+      y + tH - ftR * cfg.borders.east.scaleFactor,
+    );
+    this.ctx.arcTo(
+      x + tW - ftR * cfg.borders.east.scaleFactor,
+      y + tH - ftR * cfg.borders.east.scaleFactor,
+      x + tW - ftR * cfg.borders.east.scaleFactor,
+      y +
+        tH -
+        ftR * cfg.borders.east.scaleFactor -
+        (br - ftR * cfg.borders.east.scaleFactor),
+      br - ftR * cfg.borders.east.scaleFactor,
+    );
+    this.ctx.lineTo(
+      x + tW - ftR * cfg.borders.east.scaleFactor,
+      y +
+        ftR * cfg.borders.east.scaleFactor +
+        (tr - ftR * cfg.borders.east.scaleFactor),
+    );
+    this.ctx.arcTo(
+      x + tW - ftR * cfg.borders.east.scaleFactor,
+      y + ftR * cfg.borders.east.scaleFactor,
+      x +
+        tW -
+        ftR * cfg.borders.east.scaleFactor -
+        (tr - ftR * cfg.borders.east.scaleFactor) *
+          cfg.curves.topCurveStartPercent,
+      y + ftR * cfg.borders.east.scaleFactor,
+      tr - ftR * cfg.borders.east.scaleFactor,
+    );
     this.ctx.lineTo(x + tce, y);
     this.ctx.closePath();
     if (dimChanged) {
-      const g = this.ctx.createLinearGradient(x + tW, y, x + tW - ftR * cfg.borders.east.widthMultiplier * cfg.borders.east.scaleFactor, y);
+      const g = this.ctx.createLinearGradient(
+        x + tW,
+        y,
+        x +
+          tW -
+          ftR * cfg.borders.east.widthMultiplier * cfg.borders.east.scaleFactor,
+        y,
+      );
       g.addColorStop(0, `rgba(255,255,255,${cfg.borders.east.startOpacity})`);
       g.addColorStop(1, `rgba(255,255,255,${cfg.borders.east.endOpacity})`);
       this.toploaderGradientCache.eastGradient = g;
@@ -929,7 +1257,10 @@ export class CanvasManager {
     if (dimChanged) {
       const g = this.ctx.createLinearGradient(sbs, y + tH, sbe, y + tH);
       g.addColorStop(0, `rgba(255,255,255,${cfg.borders.south.edgeOpacity})`);
-      g.addColorStop(0.5, `rgba(255,255,255,${cfg.borders.south.centerOpacity})`);
+      g.addColorStop(
+        0.5,
+        `rgba(255,255,255,${cfg.borders.south.centerOpacity})`,
+      );
       g.addColorStop(1, `rgba(255,255,255,${cfg.borders.south.edgeOpacity})`);
       this.toploaderGradientCache.southGradient = g;
     }
@@ -942,7 +1273,10 @@ export class CanvasManager {
     this.ctx.fill();
 
     // Inner area tint
-    const iX = x + ftL, iY = y + ftL, iW = tW - ftL - ftR, iH = tH - ftL - ftB;
+    const iX = x + ftL,
+      iY = y + ftL,
+      iW = tW - ftL - ftR,
+      iH = tH - ftL - ftB;
     rr(iX, iY, iW, iH, tr - ftL, br - ftL);
     const { innerTint: it } = cfg.overlay;
     this.ctx.fillStyle = `rgba(${it.red},${it.green},${it.blue},${it.opacity})`;
@@ -953,7 +1287,12 @@ export class CanvasManager {
     this.ctx.stroke();
 
     // Top highlight
-    const thGrad = this.ctx.createLinearGradient(iX, iY, iX, iY + iH * cfg.highlights.top.heightPercent);
+    const thGrad = this.ctx.createLinearGradient(
+      iX,
+      iY,
+      iX,
+      iY + iH * cfg.highlights.top.heightPercent,
+    );
     const ht = cfg.highlights.top;
     thGrad.addColorStop(0, `rgba(255,255,255,${ht.startOpacity})`);
     thGrad.addColorStop(0.2, `rgba(255,255,255,${ht.middleOpacity})`);
@@ -987,7 +1326,12 @@ export class CanvasManager {
       this.ctx.restore();
     };
     drawStreak(gs.widthFraction, gs.position, gs.peakOpacity);
-    if (gs.secondary) drawStreak(gs.secondary.widthFraction, gs.secondary.position, gs.secondary.peakOpacity);
+    if (gs.secondary)
+      drawStreak(
+        gs.secondary.widthFraction,
+        gs.secondary.position,
+        gs.secondary.peakOpacity,
+      );
     this.ctx.restore();
 
     // Inner vignette
@@ -995,8 +1339,17 @@ export class CanvasManager {
     this.ctx.save();
     rr(iX, iY, iW, iH, tr - ftL, br - ftL);
     this.ctx.clip();
-    const vcx = iX + iW / 2, vcy = iY + iH / 2, vr2 = Math.hypot(iW, iH) / 2;
-    const vig = this.ctx.createRadialGradient(vcx, vcy, vr2 * 0.55, vcx, vcy, vr2);
+    const vcx = iX + iW / 2,
+      vcy = iY + iH / 2,
+      vr2 = Math.hypot(iW, iH) / 2;
+    const vig = this.ctx.createRadialGradient(
+      vcx,
+      vcy,
+      vr2 * 0.55,
+      vcx,
+      vcy,
+      vr2,
+    );
     vig.addColorStop(0, `rgba(0,0,0,${iv.centerOpacity})`);
     vig.addColorStop(1, `rgba(0,0,0,${iv.cornerOpacity})`);
     this.ctx.fillStyle = vig;
@@ -1012,13 +1365,23 @@ export class CanvasManager {
     const stcr = tr - ftL;
     const sbcr = br - ftL;
 
-    const rsp = (sx: number, sy: number, sw: number, sh: number, rtl: number, rtr: number, rbl: number, rbr: number) => {
+    const rsp = (
+      sx: number,
+      sy: number,
+      sw: number,
+      sh: number,
+      rtl: number,
+      rtr: number,
+      rbl: number,
+      rbr: number,
+    ) => {
       this.ctx.beginPath();
       this.ctx.moveTo(sx + rtl, sy);
       this.ctx.lineTo(sx + sw - rtr, sy);
       if (rtr > 0) this.ctx.arcTo(sx + sw, sy, sx + sw, sy + rtr, rtr);
       this.ctx.lineTo(sx + sw, sy + sh - rbr);
-      if (rbr > 0) this.ctx.arcTo(sx + sw, sy + sh, sx + sw - rbr, sy + sh, rbr);
+      if (rbr > 0)
+        this.ctx.arcTo(sx + sw, sy + sh, sx + sw - rbr, sy + sh, rbr);
       this.ctx.lineTo(sx + rbl, sy + sh);
       if (rbl > 0) this.ctx.arcTo(sx, sy + sh, sx, sy + sh - rbl, rbl);
       this.ctx.lineTo(sx, sy + rtl);
@@ -1040,14 +1403,33 @@ export class CanvasManager {
     rsp(x + ftL, y + ftL, lsw, tH - ftL - ftB, stcr, 0, sbcr, 0);
     this.ctx.fill();
 
-    const rightG = this.ctx.createLinearGradient(x + tW - ftR - ri, y, x + tW - ftR - rsw - ri, y);
+    const rightG = this.ctx.createLinearGradient(
+      x + tW - ftR - ri,
+      y,
+      x + tW - ftR - rsw - ri,
+      y,
+    );
     rightG.addColorStop(0, `rgba(0,0,0,${cfg.shadows.east.startOpacity})`);
     rightG.addColorStop(1, `rgba(0,0,0,${cfg.shadows.east.endOpacity})`);
     this.ctx.fillStyle = rightG;
-    rsp(x + tW - ftR - rsw - ri, y + ftL, rsw, tH - ftL - ftB, 0, stcr, 0, sbcr);
+    rsp(
+      x + tW - ftR - rsw - ri,
+      y + ftL,
+      rsw,
+      tH - ftL - ftB,
+      0,
+      stcr,
+      0,
+      sbcr,
+    );
     this.ctx.fill();
 
-    const botG = this.ctx.createLinearGradient(x, y + tH - ftB - bsh, x, y + tH - ftB);
+    const botG = this.ctx.createLinearGradient(
+      x,
+      y + tH - ftB - bsh,
+      x,
+      y + tH - ftB,
+    );
     botG.addColorStop(0, `rgba(0,0,0,${cfg.shadows.south.startOpacity})`);
     botG.addColorStop(1, `rgba(0,0,0,${cfg.shadows.south.endOpacity})`);
     this.ctx.fillStyle = botG;
@@ -1057,13 +1439,25 @@ export class CanvasManager {
     // Shading lines
     const sl = cfg.shadingLine;
     this.ctx.strokeStyle = `rgba(${sl.red},${sl.green},${sl.blue},${sl.opacity})`;
-    const tlX = x + ftL, trX = x + tW - ftR * cfg.borders.east.scaleFactor, tlY = y + ftL, tbY = y + tH - ftB;
+    const tlX = x + ftL,
+      trX = x + tW - ftR * cfg.borders.east.scaleFactor,
+      tlY = y + ftL,
+      tbY = y + tH - ftB;
     this.ctx.lineWidth = ftL * sl.widthReduction;
-    this.ctx.beginPath(); this.ctx.moveTo(tlX, tlY + stcr); this.ctx.lineTo(tlX, tbY - sbcr); this.ctx.stroke();
+    this.ctx.beginPath();
+    this.ctx.moveTo(tlX, tlY + stcr);
+    this.ctx.lineTo(tlX, tbY - sbcr);
+    this.ctx.stroke();
     this.ctx.lineWidth = ftB * sl.widthReduction;
-    this.ctx.beginPath(); this.ctx.moveTo(tlX + sbcr, tbY); this.ctx.lineTo(trX - sbcr, tbY); this.ctx.stroke();
+    this.ctx.beginPath();
+    this.ctx.moveTo(tlX + sbcr, tbY);
+    this.ctx.lineTo(trX - sbcr, tbY);
+    this.ctx.stroke();
     this.ctx.lineWidth = ftR * cfg.borders.east.scaleFactor * sl.widthReduction;
-    this.ctx.beginPath(); this.ctx.moveTo(trX, tlY + stcr); this.ctx.lineTo(trX, tbY - sbcr); this.ctx.stroke();
+    this.ctx.beginPath();
+    this.ctx.moveTo(trX, tlY + stcr);
+    this.ctx.lineTo(trX, tbY - sbcr);
+    this.ctx.stroke();
 
     this.toploaderGradientCache.cachedWidth = width;
     this.toploaderGradientCache.cachedHeight = height;
@@ -1085,8 +1479,17 @@ export class CanvasManager {
     const ml = Math.min(20, cw / 5, ch / 5);
     this.ctx.lineWidth = 3;
     this.ctx.strokeStyle = "rgba(199,182,249,1)";
-    [[x, y + ml, x, y, x + ml, y], [x + cw - ml, y, x + cw, y, x + cw, y + ml], [x, y + ch - ml, x, y + ch, x + ml, y + ch], [x + cw - ml, y + ch, x + cw, y + ch, x + cw, y + ch - ml]].forEach(([x1, y1, x2, y2, x3, y3]) => {
-      this.ctx.beginPath(); this.ctx.moveTo(x1, y1); this.ctx.lineTo(x2, y2); this.ctx.lineTo(x3, y3); this.ctx.stroke();
+    [
+      [x, y + ml, x, y, x + ml, y],
+      [x + cw - ml, y, x + cw, y, x + cw, y + ml],
+      [x, y + ch - ml, x, y + ch, x + ml, y + ch],
+      [x + cw - ml, y + ch, x + cw, y + ch, x + cw, y + ch - ml],
+    ].forEach(([x1, y1, x2, y2, x3, y3]) => {
+      this.ctx.beginPath();
+      this.ctx.moveTo(x1, y1);
+      this.ctx.lineTo(x2, y2);
+      this.ctx.lineTo(x3, y3);
+      this.ctx.stroke();
     });
     this.ctx.restore();
   }
@@ -1099,11 +1502,26 @@ export class CanvasManager {
     this.render();
   }
 
-  flipBackgroundHorizontal() { if (!this.backgroundImage) return; this.background.flipH = !this.background.flipH; this.render(); }
-  flipBackgroundVertical() { if (!this.backgroundImage) return; this.background.flipV = !this.background.flipV; this.render(); }
+  flipBackgroundHorizontal() {
+    if (!this.backgroundImage) return;
+    this.background.flipH = !this.background.flipH;
+    this.render();
+  }
+  flipBackgroundVertical() {
+    if (!this.backgroundImage) return;
+    this.background.flipV = !this.background.flipV;
+    this.render();
+  }
   resetBackground() {
     if (!this.backgroundImage) return;
-    this.background = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false };
+    this.background = {
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+    };
     this.render();
   }
 
@@ -1116,14 +1534,30 @@ export class CanvasManager {
   resetPhotocard() {
     if (!this.photocardImage) return;
     const rect = this.canvas.getBoundingClientRect();
-    const iw = (this.photocardImage as HTMLVideoElement).videoWidth ?? (this.photocardImage as HTMLImageElement).width;
-    this.photocard = { x: rect.width / 2, y: rect.height / 2, scale: Math.min(rect.width, rect.height) / (iw * 3), rotation: 0, flipH: false, flipV: false, layer: this.photocard.layer, showToploader: this.photocard.showToploader };
-    if (this.photocardVideo.isVideo && this.photocardVideo.element) this.photocardVideo.element.play().catch(() => {});
+    const iw =
+      (this.photocardImage as HTMLVideoElement).videoWidth ??
+      (this.photocardImage as HTMLImageElement).width;
+    this.photocard = {
+      x: rect.width / 2,
+      y: rect.height / 2,
+      scale: Math.min(rect.width, rect.height) / (iw * 3),
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      layer: this.photocard.layer,
+      showToploader: this.photocard.showToploader,
+    };
+    if (this.photocardVideo.isVideo && this.photocardVideo.element)
+      this.photocardVideo.element.play().catch(() => {});
     this.render();
   }
 
   async createFrameFromPhotocard(): Promise<void> {
-    if (!this.originalPhotocardImage || !this.originalPhotocardFile || this.isPlaceholder) {
+    if (
+      !this.originalPhotocardImage ||
+      !this.originalPhotocardFile ||
+      this.isPlaceholder
+    ) {
       throw new Error("Frame extraction needs a still image photocard");
     }
 
@@ -1136,7 +1570,8 @@ export class CanvasManager {
     this.photocard.x = rect.width / 2;
     this.photocard.y = rect.height / 2;
     this.photocard.rotation = 0;
-    this.photocard.scale = Math.min(rect.width / result.width, rect.height / result.height) * 0.78;
+    this.photocard.scale =
+      Math.min(rect.width / result.width, rect.height / result.height) * 0.78;
     this.render();
   }
 
@@ -1149,7 +1584,9 @@ export class CanvasManager {
     this.photocard.x = rect.width / 2;
     this.photocard.y = rect.height / 2;
     this.photocard.rotation = 0;
-    this.photocard.scale = Math.min(rect.width, rect.height) / (this.originalPhotocardImage.width * 3);
+    this.photocard.scale =
+      Math.min(rect.width, rect.height) /
+      (this.originalPhotocardImage.width * 3);
     this.render();
   }
 
@@ -1191,7 +1628,9 @@ export class CanvasManager {
     });
   }
 
-  private cropTransparentPadding(img: HTMLImageElement): Promise<HTMLImageElement> {
+  private cropTransparentPadding(
+    img: HTMLImageElement,
+  ): Promise<HTMLImageElement> {
     const source = document.createElement("canvas");
     source.width = img.naturalWidth || img.width;
     source.height = img.naturalHeight || img.height;
@@ -1215,7 +1654,8 @@ export class CanvasManager {
       }
     }
 
-    if (maxX < minX || maxY < minY) return this.loadImageFromUrl(source.toDataURL("image/png"));
+    if (maxX < minX || maxY < minY)
+      return this.loadImageFromUrl(source.toDataURL("image/png"));
 
     const pad = Math.round(Math.max(width, height) * 0.035);
     minX = Math.max(0, minX - pad);
@@ -1226,29 +1666,61 @@ export class CanvasManager {
     const output = document.createElement("canvas");
     output.width = maxX - minX + 1;
     output.height = maxY - minY + 1;
-    output.getContext("2d")!.drawImage(source, minX, minY, output.width, output.height, 0, 0, output.width, output.height);
+    output
+      .getContext("2d")!
+      .drawImage(
+        source,
+        minX,
+        minY,
+        output.width,
+        output.height,
+        0,
+        0,
+        output.width,
+        output.height,
+      );
 
     return this.loadImageFromUrl(output.toDataURL("image/png"));
   }
 
-  flipHorizontal() { if (!this.photocardImage) return; this.photocard.flipH = !this.photocard.flipH; this.render(); }
-  flipVertical() { if (!this.photocardImage) return; this.photocard.flipV = !this.photocard.flipV; this.render(); }
-  rotateLeft() { if (!this.photocardImage) return; this.photocard.rotation -= Math.PI / 2; this.render(); }
-  rotateRight() { if (!this.photocardImage) return; this.photocard.rotation += Math.PI / 2; this.render(); }
+  flipHorizontal() {
+    if (!this.photocardImage) return;
+    this.photocard.flipH = !this.photocard.flipH;
+    this.render();
+  }
+  flipVertical() {
+    if (!this.photocardImage) return;
+    this.photocard.flipV = !this.photocard.flipV;
+    this.render();
+  }
+  rotateLeft() {
+    if (!this.photocardImage) return;
+    this.photocard.rotation -= Math.PI / 2;
+    this.render();
+  }
+  rotateRight() {
+    if (!this.photocardImage) return;
+    this.photocard.rotation += Math.PI / 2;
+    this.render();
+  }
   toggleToploader(show: boolean) {
     if (show) this.frameMode = false;
     this.photocard.showToploader = show;
     this.render();
   }
-  setEditMode(mode: EditMode) { this.editMode = mode; }
+  setEditMode(mode: EditMode) {
+    this.editMode = mode;
+  }
 
   reset() {
     this.stopGifAnim(this.photocardGif);
     this.stopGifAnim(this.backgroundGif);
     this.stopVideoAnim(this.photocardVideo);
     this.stopVideoAnim(this.backgroundVideo);
-    if (this.photocardVideo.element?.src?.startsWith("blob:")) URL.revokeObjectURL(this.photocardVideo.element.src);
-    if (this.backgroundVideo.element?.src?.startsWith("blob:")) URL.revokeObjectURL(this.backgroundVideo.element.src);
+    if (this.photocardVideo.element?.src?.startsWith("blob:"))
+      URL.revokeObjectURL(this.photocardVideo.element.src);
+    if (this.backgroundVideo.element?.src?.startsWith("blob:"))
+      URL.revokeObjectURL(this.backgroundVideo.element.src);
     this.backgroundImage = null;
     this.photocardImage = null;
     this.originalPhotocardImage = null;
@@ -1259,40 +1731,70 @@ export class CanvasManager {
     this.backgroundGif = this.freshGifState();
     this.photocardVideo = this.freshVideoState();
     this.backgroundVideo = this.freshVideoState();
-    this.background = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false };
-    this.photocard = { x: 0, y: 0, scale: 1, rotation: 0, flipH: false, flipV: false, layer: "front", showToploader: true };
+    this.background = {
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+    };
+    this.photocard = {
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      layer: "front",
+      showToploader: true,
+    };
     this.loadPlaceholderPhotocard();
   }
 
   // ── Export ─────────────────────────────────────────────────────────────────
 
-  hasGifAnimation() { return this.photocardGif.isGif || this.backgroundGif.isGif; }
-  hasVideo() { return this.photocardVideo.isVideo || this.backgroundVideo.isVideo; }
+  hasGifAnimation() {
+    return this.photocardGif.isGif || this.backgroundGif.isGif;
+  }
+  hasVideo() {
+    return this.photocardVideo.isVideo || this.backgroundVideo.isVideo;
+  }
 
   exportImage(asGif = false): Promise<Blob> {
     if (asGif && this.hasGifAnimation()) return this.exportAsGif();
     return new Promise((res, rej) => {
       try {
-        const dpr = window.devicePixelRatio || 1;
         const exp = document.createElement("canvas");
         exp.width = this.canvas.width;
         exp.height = this.canvas.height;
         exp.getContext("2d")!.drawImage(this.canvas, 0, 0);
-        exp.toBlob((b) => b ? res(b) : rej(new Error("Export failed")), "image/png");
-      } catch (e) { rej(e); }
+        exp.toBlob(
+          (b) => (b ? res(b) : rej(new Error("Export failed"))),
+          "image/png",
+        );
+      } catch (e) {
+        rej(e);
+      }
     });
   }
 
   private async exportAsGif(): Promise<Blob> {
-    const GIF = (window as unknown as Record<string, unknown>).GIF as new (opts: Record<string, unknown>) => {
+    const GIF = (window as unknown as Record<string, unknown>).GIF as new (
+      opts: Record<string, unknown>,
+    ) => {
       addFrame(canvas: HTMLCanvasElement, opts: Record<string, unknown>): void;
       on(event: string, cb: (data: unknown) => void): void;
       render(): void;
     };
     if (!GIF) throw new Error("gif.js not loaded");
 
-    const pcFrames = this.photocardGif.isGif ? this.photocardGif.frames.length : 1;
-    const bgFrames = this.backgroundGif.isGif ? this.backgroundGif.frames.length : 1;
+    const pcFrames = this.photocardGif.isGif
+      ? this.photocardGif.frames.length
+      : 1;
+    const bgFrames = this.backgroundGif.isGif
+      ? this.backgroundGif.frames.length
+      : 1;
     const total = Math.max(pcFrames, bgFrames);
     const dpr = window.devicePixelRatio || 1;
     const w = this.canvas.width / dpr;
@@ -1300,51 +1802,91 @@ export class CanvasManager {
 
     let workerUrl: string | undefined;
     try {
-      const r = await fetch("https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js");
+      const r = await fetch(
+        "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js",
+      );
       workerUrl = URL.createObjectURL(await r.blob());
     } catch {}
 
-    const gif = new GIF({ workers: workerUrl ? 2 : 0, quality: 10, width: w, height: h, workerScript: workerUrl });
+    const gif = new GIF({
+      workers: workerUrl ? 2 : 0,
+      quality: 10,
+      width: w,
+      height: h,
+      workerScript: workerUrl,
+    });
 
     for (let i = 0; i < total; i++) {
-      if (this.photocardGif.isGif) this.photocardImage = this.photocardGif.frames[i % pcFrames];
-      if (this.backgroundGif.isGif) this.backgroundImage = this.backgroundGif.frames[i % bgFrames];
+      if (this.photocardGif.isGif)
+        this.photocardImage = this.photocardGif.frames[i % pcFrames];
+      if (this.backgroundGif.isGif)
+        this.backgroundImage = this.backgroundGif.frames[i % bgFrames];
       this.render();
-      const delay = this.photocardGif.isGif && this.backgroundGif.isGif
-        ? Math.max(this.photocardGif.delays[i % pcFrames], this.backgroundGif.delays[i % bgFrames])
-        : this.photocardGif.isGif ? this.photocardGif.delays[i % pcFrames]
-        : this.backgroundGif.isGif ? this.backgroundGif.delays[i % bgFrames] : 100;
+      const delay =
+        this.photocardGif.isGif && this.backgroundGif.isGif
+          ? Math.max(
+              this.photocardGif.delays[i % pcFrames],
+              this.backgroundGif.delays[i % bgFrames],
+            )
+          : this.photocardGif.isGif
+            ? this.photocardGif.delays[i % pcFrames]
+            : this.backgroundGif.isGif
+              ? this.backgroundGif.delays[i % bgFrames]
+              : 100;
       gif.addFrame(this.canvas, { copy: true, delay });
     }
 
     return new Promise((res, rej) => {
-      gif.on("finished", (blob) => { if (workerUrl) URL.revokeObjectURL(workerUrl!); res(blob as Blob); });
-      gif.on("error", (e) => { if (workerUrl) URL.revokeObjectURL(workerUrl!); rej(e); });
+      gif.on("finished", (blob) => {
+        if (workerUrl) URL.revokeObjectURL(workerUrl!);
+        res(blob as Blob);
+      });
+      gif.on("error", (e) => {
+        if (workerUrl) URL.revokeObjectURL(workerUrl!);
+        rej(e);
+      });
       gif.render();
     });
   }
 
   async exportAsVideo(duration?: number): Promise<ExportVideoResult> {
-    const dur = duration ?? ((this.photocardVideo.isVideo && this.photocardVideo.element?.duration) || (this.backgroundVideo.isVideo && this.backgroundVideo.element?.duration) || 10);
-    const vEl = this.photocardVideo.isVideo ? this.photocardVideo.element : this.backgroundVideo.isVideo ? this.backgroundVideo.element : null;
+    const dur =
+      duration ??
+      ((this.photocardVideo.isVideo && this.photocardVideo.element?.duration) ||
+        (this.backgroundVideo.isVideo &&
+          this.backgroundVideo.element?.duration) ||
+        10);
+    const vEl = this.photocardVideo.isVideo
+      ? this.photocardVideo.element
+      : this.backgroundVideo.isVideo
+        ? this.backgroundVideo.element
+        : null;
     const ew = vEl?.videoWidth ?? this.canvas.width;
     const eh = vEl?.videoHeight ?? this.canvas.height;
 
     const exp = document.createElement("canvas");
-    exp.width = ew; exp.height = eh;
+    exp.width = ew;
+    exp.height = eh;
     const expCtx = exp.getContext("2d")!;
     expCtx.imageSmoothingEnabled = true;
     expCtx.imageSmoothingQuality = "high";
 
     const stream = exp.captureStream(30);
     const mimeTypes = [
-      { type: "video/mp4", ext: "mp4" }, { type: "video/mp4;codecs=h264", ext: "mp4" },
-      { type: "video/webm;codecs=vp9", ext: "webm" }, { type: "video/webm;codecs=vp8", ext: "webm" }, { type: "video/webm", ext: "webm" }
+      { type: "video/mp4", ext: "mp4" },
+      { type: "video/mp4;codecs=h264", ext: "mp4" },
+      { type: "video/webm;codecs=vp9", ext: "webm" },
+      { type: "video/webm;codecs=vp8", ext: "webm" },
+      { type: "video/webm", ext: "webm" },
     ];
-    const fmt = mimeTypes.find((m) => MediaRecorder.isTypeSupported(m.type)) ?? { type: "video/webm", ext: "webm" };
+    const fmt = mimeTypes.find((m) =>
+      MediaRecorder.isTypeSupported(m.type),
+    ) ?? { type: "video/webm", ext: "webm" };
     const recorder = new MediaRecorder(stream, { mimeType: fmt.type });
     const chunks: Blob[] = [];
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
 
     const dpr = window.devicePixelRatio || 1;
     const origW = this.canvas.width;
@@ -1354,21 +1896,43 @@ export class CanvasManager {
     const renderFrame = () => {
       expCtx.clearRect(0, 0, ew, eh);
       if (this.backgroundImage) {
-        const iw2 = (this.backgroundImage as HTMLVideoElement).videoWidth ?? (this.backgroundImage as HTMLImageElement).width;
-        const ih2 = (this.backgroundImage as HTMLVideoElement).videoHeight ?? (this.backgroundImage as HTMLImageElement).height;
-        const ir = iw2 / ih2; const cr = ew / eh;
+        const iw2 =
+          (this.backgroundImage as HTMLVideoElement).videoWidth ??
+          (this.backgroundImage as HTMLImageElement).width;
+        const ih2 =
+          (this.backgroundImage as HTMLVideoElement).videoHeight ??
+          (this.backgroundImage as HTMLImageElement).height;
+        const ir = iw2 / ih2;
+        const cr = ew / eh;
         let bw: number, bh: number, bx: number, by: number;
-        if (ir > cr) { bh = eh; bw = bh * ir; bx = (ew - bw) / 2; by = 0; } else { bw = ew; bh = bw / ir; bx = 0; by = (eh - bh) / 2; }
+        if (ir > cr) {
+          bh = eh;
+          bw = bh * ir;
+          bx = (ew - bw) / 2;
+          by = 0;
+        } else {
+          bw = ew;
+          bh = bw / ir;
+          bx = 0;
+          by = (eh - bh) / 2;
+        }
         expCtx.drawImage(this.backgroundImage, bx, by, bw, bh);
       }
       if (this.photocardImage) {
-        const pw = (this.photocardImage as HTMLVideoElement).videoWidth ?? (this.photocardImage as HTMLImageElement).width;
-        const ph = (this.photocardImage as HTMLVideoElement).videoHeight ?? (this.photocardImage as HTMLImageElement).height;
-        const sx = ew / (origW / dpr); const sy = eh / (origH / dpr);
+        const pw =
+          (this.photocardImage as HTMLVideoElement).videoWidth ??
+          (this.photocardImage as HTMLImageElement).width;
+        const ph =
+          (this.photocardImage as HTMLVideoElement).videoHeight ??
+          (this.photocardImage as HTMLImageElement).height;
+        const sx = ew / (origW / dpr);
+        const sy = eh / (origH / dpr);
         const sc = Math.min(sx, sy);
         const sps = this.photocard.scale * sc;
-        const sw = pw * sps; const sh = ph * sps;
-        const spx = this.photocard.x * sx; const spy = this.photocard.y * sy;
+        const sw = pw * sps;
+        const sh = ph * sps;
+        const spx = this.photocard.x * sx;
+        const spy = this.photocard.y * sy;
         expCtx.save();
         expCtx.translate(spx, spy);
         expCtx.rotate(this.photocard.rotation);
@@ -1382,9 +1946,20 @@ export class CanvasManager {
           expCtx.shadowBlur = cfg.photocardInset.recessShadow.blur * sps;
           expCtx.shadowOffsetY = cfg.photocardInset.recessShadow.offsetY * sps;
           expCtx.fillStyle = "#000";
-          expCtx.fillRect(-sw / 2 + sg, -sh / 2 + tg, sw - sg * 2, sh - tg - bg);
+          expCtx.fillRect(
+            -sw / 2 + sg,
+            -sh / 2 + tg,
+            sw - sg * 2,
+            sh - tg - bg,
+          );
           expCtx.restore();
-          expCtx.drawImage(this.photocardImage, -sw / 2 + sg, -sh / 2 + tg, sw - sg * 2, sh - tg - bg);
+          expCtx.drawImage(
+            this.photocardImage,
+            -sw / 2 + sg,
+            -sh / 2 + tg,
+            sw - sg * 2,
+            sh - tg - bg,
+          );
         } else {
           expCtx.drawImage(this.photocardImage, -sw / 2, -sh / 2, sw, sh);
         }
@@ -1395,7 +1970,10 @@ export class CanvasManager {
           expCtx.save();
           expCtx.translate(this.photocard.x * sx, this.photocard.y * sy);
           expCtx.rotate(this.photocard.rotation);
-          expCtx.scale(sps * (this.photocard.flipH ? -1 : 1), sps * (this.photocard.flipV ? -1 : 1));
+          expCtx.scale(
+            sps * (this.photocard.flipH ? -1 : 1),
+            sps * (this.photocard.flipV ? -1 : 1),
+          );
           this.drawToploader(pw, ph);
           expCtx.restore();
           this.ctx = origCtx;
@@ -1405,11 +1983,27 @@ export class CanvasManager {
     };
 
     return new Promise((res, rej) => {
-      recorder.onstop = () => { cancelAnimationFrame(animId); res({ blob: new Blob(chunks, { type: fmt.type }), mimeType: fmt.type, extension: fmt.ext }); };
-      recorder.onerror = (e) => { cancelAnimationFrame(animId); rej(e); };
+      recorder.onstop = () => {
+        cancelAnimationFrame(animId);
+        res({
+          blob: new Blob(chunks, { type: fmt.type }),
+          mimeType: fmt.type,
+          extension: fmt.ext,
+        });
+      };
+      recorder.onerror = (e) => {
+        cancelAnimationFrame(animId);
+        rej(e);
+      };
       renderFrame();
       recorder.start();
-      setTimeout(() => { recorder.stop(); stream.getTracks().forEach((t) => t.stop()); }, (dur as number) * 1000);
+      setTimeout(
+        () => {
+          recorder.stop();
+          stream.getTracks().forEach((t) => t.stop());
+        },
+        (dur as number) * 1000,
+      );
     });
   }
 }

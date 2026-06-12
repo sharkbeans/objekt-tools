@@ -1,18 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { redis } from "@/lib/redis";
 import {
-  tradePost,
-  cosmoAccount,
   activeTrade,
   activeTradeSide,
+  cosmoAccount,
+  tradePost,
 } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { eq, and } from "drizzle-orm";
-import { getBlockingTradeId, getActiveBan, checkTradeOfferQuota } from "@/lib/trade-guards";
-import { validateWantsOnly } from "@/lib/wants-only-validation";
 import { publishUserEvent } from "@/lib/realtime";
+import { redis } from "@/lib/redis";
+import {
+  checkTradeOfferQuota,
+  getActiveBan,
+  getBlockingTradeId,
+} from "@/lib/trade-guards";
+import { validateWantsOnly } from "@/lib/wants-only-validation";
 
 interface SideInput {
   objektId: string;
@@ -34,7 +38,7 @@ interface SideInput {
 //   matchedTradePostId: the matched trade post id that belongs to the recipient
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -45,7 +49,10 @@ export async function POST(
 
   const activeBan = await getActiveBan(session.user.id);
   if (activeBan) {
-    return NextResponse.json({ error: "You are trade banned and cannot perform this action." }, { status: 403 });
+    return NextResponse.json(
+      { error: "You are trade banned and cannot perform this action." },
+      { status: 403 },
+    );
   }
 
   // Rate limit: 10 requests per 60 seconds
@@ -57,7 +64,7 @@ export async function POST(
   if (attempts > 10) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again later." },
-      { status: 429 }
+      { status: 429 },
     );
   }
 
@@ -71,19 +78,29 @@ export async function POST(
   };
 
   if (!myObjekts?.length || !theirObjekts?.length || !matchedTradePostId) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing required fields" },
+      { status: 400 },
+    );
   }
 
   if (myObjekts.length > 10 || theirObjekts.length > 10) {
-    return NextResponse.json({ error: "Maximum 10 objekts per side" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Maximum 10 objekts per side" },
+      { status: 400 },
+    );
   }
 
   // Block if user has unsent objekts in an accepted trade
   const blockingTradeId = await getBlockingTradeId(session.user.id);
   if (blockingTradeId) {
     return NextResponse.json(
-      { error: "You must send all your objekts in your current active trade before initiating a new one", activeTradeId: blockingTradeId },
-      { status: 403 }
+      {
+        error:
+          "You must send all your objekts in your current active trade before initiating a new one",
+        activeTradeId: blockingTradeId,
+      },
+      { status: 403 },
     );
   }
 
@@ -91,20 +108,31 @@ export async function POST(
   const quota = await checkTradeOfferQuota(session.user.id);
   if (!quota.allowed) {
     return NextResponse.json(
-      { error: `You've reached your trade offer limit (${quota.quota}). Accept, decline, or cancel existing offers to free up space.` },
-      { status: 403 }
+      {
+        error: `You've reached your trade offer limit (${quota.quota}). Accept, decline, or cancel existing offers to free up space.`,
+      },
+      { status: 403 },
     );
   }
 
   for (const o of myObjekts) {
     if (!o.objektId) {
-      return NextResponse.json({ error: "All your objekts must have an objektId" }, { status: 400 });
+      return NextResponse.json(
+        { error: "All your objekts must have an objektId" },
+        { status: 400 },
+      );
     }
   }
 
   for (const o of theirObjekts) {
     if (!o.objektId) {
-      return NextResponse.json({ error: "All requested objekts must have an objektId. Please select a specific serial." }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "All requested objekts must have an objektId. Please select a specific serial.",
+        },
+        { status: 400 },
+      );
     }
   }
 
@@ -118,7 +146,10 @@ export async function POST(
   });
 
   if (!myPost) {
-    return NextResponse.json({ error: "Your trade post not found or not open" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Your trade post not found or not open" },
+      { status: 404 },
+    );
   }
 
   // Load the matched (recipient's) trade post
@@ -131,12 +162,18 @@ export async function POST(
   });
 
   if (!matchedPost) {
-    return NextResponse.json({ error: "Matched trade post not found or not open" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Matched trade post not found or not open" },
+      { status: 404 },
+    );
   }
 
   // Don't allow trading with yourself
   if (matchedPost.userId === session.user.id) {
-    return NextResponse.json({ error: "Cannot Send a Trade Offer with yourself" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Cannot Send a Trade Offer with yourself" },
+      { status: 400 },
+    );
   }
 
   // Validate wants-only restriction
@@ -144,8 +181,11 @@ export async function POST(
     const result = validateWantsOnly(myObjekts, matchedPost.wants);
     if (!result.valid) {
       return NextResponse.json(
-        { error: "This trade only accepts offers matching its want list. One or more of your objekts don't match." },
-        { status: 400 }
+        {
+          error:
+            "This trade only accepts offers matching its want list. One or more of your objekts don't match.",
+        },
+        { status: 400 },
       );
     }
   }
@@ -155,7 +195,10 @@ export async function POST(
     where: eq(cosmoAccount.userId, session.user.id),
   });
   if (!initiatorCosmo) {
-    return NextResponse.json({ error: "Link your Cosmo account first" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Link your Cosmo account first" },
+      { status: 403 },
+    );
   }
 
   // Get recipient's cosmo address
@@ -163,7 +206,10 @@ export async function POST(
     where: eq(cosmoAccount.userId, matchedPost.userId),
   });
   if (!recipientCosmo) {
-    return NextResponse.json({ error: "Recipient has no linked Cosmo account" }, { status: 422 });
+    return NextResponse.json(
+      { error: "Recipient has no linked Cosmo account" },
+      { status: 422 },
+    );
   }
 
   // Only block the same user from sending a duplicate request for the same pair of posts
@@ -175,62 +221,83 @@ export async function POST(
     ),
   });
 
-  if (existing && ["pending", "accepted", "partial"].includes(existing.status)) {
+  if (
+    existing &&
+    ["pending", "accepted", "partial"].includes(existing.status)
+  ) {
     return NextResponse.json(
-      { error: "You already have an active trade request for these posts", id: existing.id },
-      { status: 409 }
+      {
+        error: "You already have an active trade request for these posts",
+        id: existing.id,
+      },
+      { status: 409 },
     );
   }
 
   // Create the active trade and all sides in one transaction
-  const result = await db.transaction(async (tx) => {
-    const [trade] = await tx
-      .insert(activeTrade)
-      .values({
-        tradePostId,
-        matchedTradePostId,
-        initiatorUserId: session.user.id,
-        recipientUserId: matchedPost.userId,
-        status: "pending",
-      })
-      .returning();
+  let result;
+  try {
+    result = await db.transaction(async (tx) => {
+      const [trade] = await tx
+        .insert(activeTrade)
+        .values({
+          tradePostId,
+          matchedTradePostId,
+          initiatorUserId: session.user.id,
+          recipientUserId: matchedPost.userId,
+          status: "pending",
+        })
+        .returning();
 
-    // Initiator sides: they will send myObjekts to recipient
-    await tx.insert(activeTradeSide).values(
-      myObjekts.map((o) => ({
-        activeTradeId: trade.id,
-        userId: session.user.id,
-        address: initiatorCosmo.address,
-        recipientAddress: recipientCosmo.address,
-        objektId: o.objektId,
-        collectionId: o.collectionId,
-        collectionNo: o.collectionNo ?? null,
-        member: o.member ?? null,
-        serial: o.serial ?? null,
-        thumbnailUrl: o.thumbnailUrl ?? null,
-        status: "pending" as const,
-      }))
-    );
+      // Initiator sides: they will send myObjekts to recipient
+      await tx.insert(activeTradeSide).values(
+        myObjekts.map((o) => ({
+          activeTradeId: trade.id,
+          userId: session.user.id,
+          address: initiatorCosmo.address,
+          recipientAddress: recipientCosmo.address,
+          objektId: o.objektId,
+          collectionId: o.collectionId,
+          collectionNo: o.collectionNo ?? null,
+          member: o.member ?? null,
+          serial: o.serial ?? null,
+          thumbnailUrl: o.thumbnailUrl ?? null,
+          status: "pending" as const,
+        })),
+      );
 
-    // Recipient sides: they will send theirObjekts to initiator
-    await tx.insert(activeTradeSide).values(
-      theirObjekts.map((o) => ({
-        activeTradeId: trade.id,
-        userId: matchedPost.userId,
-        address: recipientCosmo.address,
-        recipientAddress: initiatorCosmo.address,
-        objektId: o.objektId,
-        collectionId: o.collectionId,
-        collectionNo: o.collectionNo ?? null,
-        member: o.member ?? null,
-        serial: o.serial ?? null,
-        thumbnailUrl: o.thumbnailUrl ?? null,
-        status: "pending" as const,
-      }))
-    );
+      // Recipient sides: they will send theirObjekts to initiator
+      await tx.insert(activeTradeSide).values(
+        theirObjekts.map((o) => ({
+          activeTradeId: trade.id,
+          userId: matchedPost.userId,
+          address: recipientCosmo.address,
+          recipientAddress: initiatorCosmo.address,
+          objektId: o.objektId,
+          collectionId: o.collectionId,
+          collectionNo: o.collectionNo ?? null,
+          member: o.member ?? null,
+          serial: o.serial ?? null,
+          thumbnailUrl: o.thumbnailUrl ?? null,
+          status: "pending" as const,
+        })),
+      );
 
-    return trade;
-  });
+      return trade;
+    });
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code?: string }).code === "23505"
+    ) {
+      return NextResponse.json(
+        { error: "You already have an active trade request for these posts" },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
 
   // Notify the trade post owner that they received an offer
   await notify({

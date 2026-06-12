@@ -18,7 +18,9 @@ function getPool(): Pool {
       max: 8,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 15000,
-      ssl: url.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
+      ssl: url.includes("sslmode=require")
+        ? { rejectUnauthorized: false }
+        : undefined,
     });
   }
   return _g._indexerPool;

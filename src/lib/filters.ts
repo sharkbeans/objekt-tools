@@ -45,7 +45,16 @@ export type ValidSort = (typeof validSorts)[number];
 export const classArtistMap: { artistId: ValidArtist; classes: string[] }[] = [
   {
     artistId: "tripleS",
-    classes: ["First", "Double", "Motion", "Unit", "Special", "Premier", "Welcome", "Zero"],
+    classes: [
+      "First",
+      "Double",
+      "Motion",
+      "Unit",
+      "Special",
+      "Premier",
+      "Welcome",
+      "Zero",
+    ],
   },
   {
     artistId: "artms",
@@ -61,11 +70,27 @@ export const classArtistMap: { artistId: ValidArtist; classes: string[] }[] = [
 export const seasonArtistMap: { artistId: ValidArtist; seasons: string[] }[] = [
   {
     artistId: "tripleS",
-    seasons: ["Atom01", "Binary01", "Cream01", "Divine01", "Ever01", "Atom02", "Binary02"],
+    seasons: [
+      "Atom01",
+      "Binary01",
+      "Cream01",
+      "Divine01",
+      "Ever01",
+      "Atom02",
+      "Binary02",
+    ],
   },
   {
     artistId: "artms",
-    seasons: ["Atom01", "Binary01", "Cream01", "Divine01", "Ever01", "Atom02", "Binary02"],
+    seasons: [
+      "Atom01",
+      "Binary01",
+      "Cream01",
+      "Divine01",
+      "Ever01",
+      "Atom02",
+      "Binary02",
+    ],
   },
   {
     artistId: "idntt",

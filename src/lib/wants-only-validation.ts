@@ -29,11 +29,11 @@ function objektMatchesWant(objekt: OfferedObjekt, want: TradeWant): boolean {
 
 export function validateWantsOnly(
   objekts: OfferedObjekt[],
-  wants: TradeWant[]
+  wants: TradeWant[],
 ): { valid: true } | { valid: false } {
   // At least one offered objekt must match a want
   const hasMatch = objekts.some((objekt) =>
-    wants.some((want) => objektMatchesWant(objekt, want))
+    wants.some((want) => objektMatchesWant(objekt, want)),
   );
   return hasMatch ? { valid: true } : { valid: false };
 }

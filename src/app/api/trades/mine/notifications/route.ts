@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { tradeNotification } from "@/lib/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
 
 // GET — list notifications for current user
 export async function GET() {
@@ -37,7 +37,10 @@ export async function PATCH(request: NextRequest) {
   const { ids } = (await request.json()) as { ids: number[] };
 
   if (!ids?.length || ids.length > 100) {
-    return NextResponse.json({ error: "Invalid notification IDs" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid notification IDs" },
+      { status: 400 },
+    );
   }
 
   await db

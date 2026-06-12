@@ -1,12 +1,13 @@
 "use client";
 
+import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
-import { useState, useRef, useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRightIcon } from "lucide-react";
 import { membersByArtist } from "@/lib/filters";
 import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
+import type { ObjektSearchResult } from "@/lib/trade-types";
 
 interface TradeItem {
   id: number;
@@ -21,21 +22,43 @@ interface TradeItem {
   thumbnailUrl?: string | null;
 }
 
-function formatObjektLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; season?: string | null; artist?: string | null; class?: string | null; serial?: number | null }, showSerial?: boolean) {
-  const name = item.collectionNo && item.member
-    ? [item.member, item.collectionNo].filter(Boolean).join(" ")
-    : item.collectionId;
+function formatObjektLabel(
+  item: {
+    collectionId: string;
+    collectionNo?: string | null;
+    member?: string | null;
+    season?: string | null;
+    artist?: string | null;
+    class?: string | null;
+    serial?: number | null;
+  },
+  showSerial?: boolean,
+) {
+  const name =
+    item.collectionNo && item.member
+      ? [item.member, item.collectionNo].filter(Boolean).join(" ")
+      : item.collectionId;
   const right = [
     item.class,
-    showSerial && item.serial != null ? `#${String(item.serial).padStart(5, "0")}` : null,
-  ].filter(Boolean).join(" ");
+    showSerial && item.serial != null
+      ? `#${String(item.serial).padStart(5, "0")}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
   return { name, right };
 }
 
-function buildObjektTopUrl(item: TradeItem, cosmoNickname: string | null | undefined, showSerial?: boolean): string {
+function buildObjektTopUrl(
+  item: TradeItem,
+  cosmoNickname: string | null | undefined,
+  showSerial?: boolean,
+): string {
   const parts: string[] = [];
   if (item.member) {
-    const artist = Object.entries(membersByArtist).find(([, members]) => members.includes(item.member!))?.[0];
+    const artist = Object.entries(membersByArtist).find(([, members]) =>
+      members.includes(item.member!),
+    )?.[0];
     if (artist) parts.push(artist);
   }
   if (item.season) parts.push(item.season);
@@ -49,7 +72,7 @@ function buildObjektTopUrl(item: TradeItem, cosmoNickname: string | null | undef
 
 interface TradeCardProps {
   trade: {
-    id: number;
+    id: string;
     description?: string | null;
     status: string;
     createdAt: string;
@@ -66,7 +89,9 @@ interface TradeCardProps {
 const imageCache = new Map<string, string | null>();
 
 function ObjektThumb({ item }: { item: TradeItem }) {
-  const [imageUrl, setImageUrl] = useState<string | null>(item.thumbnailUrl ?? null);
+  const [imageUrl, setImageUrl] = useState<string | null>(
+    item.thumbnailUrl ?? null,
+  );
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -88,7 +113,7 @@ function ObjektThumb({ item }: { item: TradeItem }) {
       .then((res) => res.json())
       .then((data) => {
         const match = data.results?.find(
-          (r: any) => r.collectionId === item.collectionId
+          (r: ObjektSearchResult) => r.collectionId === item.collectionId,
         );
         const url = match?.thumbnailImage ?? match?.frontImage ?? null;
         imageCache.set(item.collectionId, url);
@@ -122,21 +147,27 @@ function ObjektThumb({ item }: { item: TradeItem }) {
           loading="lazy"
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center" ref={() => ensureImage()} />
-      )}
-      {hover && imageUrl && rect && createPortal(
         <div
-          className="fixed z-50 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
-          style={{ top: rect.top, right: window.innerWidth - rect.left + 8 }}
-        >
-          <img
-            src={imageUrl}
-            alt={item.collectionId}
-            className="w-32 h-auto block"
-          />
-        </div>,
-        document.body
+          className="w-full h-full flex items-center justify-center"
+          ref={() => ensureImage()}
+        />
       )}
+      {hover &&
+        imageUrl &&
+        rect &&
+        createPortal(
+          <div
+            className="fixed z-50 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
+            style={{ top: rect.top, right: window.innerWidth - rect.left + 8 }}
+          >
+            <img
+              src={imageUrl}
+              alt={item.collectionId}
+              className="w-32 h-auto block"
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -147,7 +178,9 @@ function CompactItem({ item }: { item: TradeItem }) {
     return (
       <div className="flex items-center gap-2 min-w-0">
         <div className="w-12 h-18 rounded bg-muted/60 border border-dashed border-muted-foreground/30 shrink-0" />
-        <span className="text-xs text-muted-foreground italic truncate">{anyWantLabel(item)}</span>
+        <span className="text-xs text-muted-foreground italic truncate">
+          {anyWantLabel(item)}
+        </span>
       </div>
     );
   }
@@ -158,7 +191,9 @@ function CompactItem({ item }: { item: TradeItem }) {
       <div className="min-w-0">
         <p className="text-xs truncate">{formatShortLabel(item)}</p>
         {item.serial != null && (
-          <p className="text-[11px] text-muted-foreground">#{String(item.serial).padStart(5, "0")}</p>
+          <p className="text-[11px] text-muted-foreground">
+            #{String(item.serial).padStart(5, "0")}
+          </p>
         )}
       </div>
     </div>
@@ -166,7 +201,13 @@ function CompactItem({ item }: { item: TradeItem }) {
 }
 
 /** List of items with overflow count */
-function CompactItemList({ items, max = 3 }: { items: TradeItem[]; max?: number }) {
+function CompactItemList({
+  items,
+  max = 3,
+}: {
+  items: TradeItem[];
+  max?: number;
+}) {
   const visible = items.slice(0, max);
   const overflow = items.length - max;
 
@@ -185,7 +226,15 @@ function CompactItemList({ items, max = 3 }: { items: TradeItem[]; max?: number 
 }
 
 // Full text list with hover preview — exported for detail pages
-function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; showSerial?: boolean; cosmoNickname?: string | null }) {
+function ObjektLabel({
+  item,
+  showSerial,
+  cosmoNickname,
+}: {
+  item: TradeItem;
+  showSerial?: boolean;
+  cosmoNickname?: string | null;
+}) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [show, setShow] = useState(false);
   const fetchedRef = useRef(false);
@@ -205,7 +254,7 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
       .then((res) => res.json())
       .then((data) => {
         const match = data.results?.find(
-          (r: any) => r.collectionId === item.collectionId
+          (r: ObjektSearchResult) => r.collectionId === item.collectionId,
         );
         const url = match?.thumbnailImage ?? match?.frontImage ?? null;
         imageCache.set(item.collectionId, url);
@@ -224,20 +273,39 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
     >
-      <span className="flex items-center gap-1 min-w-0">
-        {label.name}
-      </span>
+      <span className="flex items-center gap-1 min-w-0">{label.name}</span>
       {label.right && (
-        <span className="text-muted-foreground ml-auto pl-2 shrink-0">{label.right}</span>
+        <span className="text-muted-foreground ml-auto pl-2 shrink-0">
+          {label.right}
+        </span>
       )}
       <button
         type="button"
         className="ml-2 text-muted-foreground hover:text-foreground"
-        onClick={(e) => { e.stopPropagation(); window.open(buildObjektTopUrl(item, cosmoNickname, showSerial), "_blank", "noopener,noreferrer"); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          window.open(
+            buildObjektTopUrl(item, cosmoNickname, showSerial),
+            "_blank",
+            "noopener,noreferrer",
+          );
+        }}
         title="View on Objekt.top"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M15 3h6v6" />
+          <path d="M10 14 21 3" />
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
         </svg>
       </button>
       {show && imageUrl && (
@@ -253,7 +321,15 @@ function ObjektLabel({ item, showSerial, cosmoNickname }: { item: TradeItem; sho
   );
 }
 
-export function ObjektLabels({ items, showSerial, cosmoNickname }: { items: TradeItem[]; showSerial?: boolean; cosmoNickname?: string | null }) {
+export function ObjektLabels({
+  items,
+  showSerial,
+  cosmoNickname,
+}: {
+  items: TradeItem[];
+  showSerial?: boolean;
+  cosmoNickname?: string | null;
+}) {
   return (
     <div className="flex flex-col gap-0.5 w-full">
       {items.map((item) =>
@@ -262,8 +338,13 @@ export function ObjektLabels({ items, showSerial, cosmoNickname }: { items: Trad
             {anyWantLabel(item)}
           </span>
         ) : (
-          <ObjektLabel key={item.id} item={item} showSerial={showSerial} cosmoNickname={cosmoNickname} />
-        )
+          <ObjektLabel
+            key={item.id}
+            item={item}
+            showSerial={showSerial}
+            cosmoNickname={cosmoNickname}
+          />
+        ),
       )}
     </div>
   );
@@ -281,27 +362,43 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
         {/* Header: user + date */}
         <div className="flex items-center justify-between gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 truncate">
-            <span className="text-xs font-medium truncate">{trade.cosmoNickname ? `@${trade.cosmoNickname}` : trade.user.name}</span>
+            <span className="text-xs font-medium truncate">
+              {trade.cosmoNickname
+                ? `@${trade.cosmoNickname}`
+                : trade.user.name}
+            </span>
             {trade.wantsOnly && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">Wants Only</Badge>
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-4 shrink-0"
+              >
+                Wants Only
+              </Badge>
             )}
           </div>
           <span className="text-[11px] text-muted-foreground shrink-0">
-            {new Date(trade.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+            {new Date(trade.createdAt).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+            })}
           </span>
         </div>
 
         {/* HAVE → WANT with compact item lists */}
         <div className="flex gap-2 min-w-0">
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-muted-foreground font-medium mb-1">HAVE</p>
+            <p className="text-[11px] text-muted-foreground font-medium mb-1">
+              HAVE
+            </p>
             <CompactItemList items={trade.haves} max={3} />
           </div>
           <div className="flex items-center shrink-0 px-0.5">
             <ArrowRightIcon className="w-3.5 h-3.5 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-muted-foreground font-medium mb-1">WANT</p>
+            <p className="text-[11px] text-muted-foreground font-medium mb-1">
+              WANT
+            </p>
             <CompactItemList items={trade.wants} max={3} />
           </div>
         </div>

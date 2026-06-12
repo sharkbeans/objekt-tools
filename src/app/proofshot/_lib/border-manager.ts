@@ -37,8 +37,17 @@ export class BorderManager {
     ctx.restore();
   }
 
-  private drawSolid(ctx: CanvasRenderingContext2D, w: number, h: number, b: BorderDef) {
-    if (b.shadow) { ctx.shadowColor = "rgba(0,0,0,0.3)"; ctx.shadowBlur = 15; ctx.shadowOffsetY = 5; }
+  private drawSolid(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    b: BorderDef,
+  ) {
+    if (b.shadow) {
+      ctx.shadowColor = "rgba(0,0,0,0.3)";
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetY = 5;
+    }
     ctx.fillStyle = b.color!;
     ctx.fillRect(0, 0, w, b.width!);
     ctx.fillRect(w - b.width!, 0, b.width!, h);
@@ -46,10 +55,21 @@ export class BorderManager {
     ctx.fillRect(0, 0, b.width!, h);
   }
 
-  private drawGradient(ctx: CanvasRenderingContext2D, w: number, h: number, b: BorderDef) {
-    if (b.shadow) { ctx.shadowColor = "rgba(0,0,0,0.3)"; ctx.shadowBlur = 15; ctx.shadowOffsetY = 5; }
+  private drawGradient(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    b: BorderDef,
+  ) {
+    if (b.shadow) {
+      ctx.shadowColor = "rgba(0,0,0,0.3)";
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetY = 5;
+    }
     const gradient = ctx.createLinearGradient(0, 0, w, h);
-    b.colors!.forEach((c, i) => gradient.addColorStop(i / (b.colors!.length - 1), c));
+    b.colors!.forEach((c, i) =>
+      gradient.addColorStop(i / (b.colors!.length - 1), c),
+    );
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, b.width!);
     ctx.fillRect(w - b.width!, 0, b.width!, h);
@@ -57,8 +77,17 @@ export class BorderManager {
     ctx.fillRect(0, 0, b.width!, h);
   }
 
-  private drawPolaroid(ctx: CanvasRenderingContext2D, w: number, h: number, b: BorderDef) {
-    if (b.shadow) { ctx.shadowColor = "rgba(0,0,0,0.3)"; ctx.shadowBlur = 15; ctx.shadowOffsetY = 5; }
+  private drawPolaroid(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    b: BorderDef,
+  ) {
+    if (b.shadow) {
+      ctx.shadowColor = "rgba(0,0,0,0.3)";
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetY = 5;
+    }
     ctx.fillStyle = b.color!;
     ctx.fillRect(0, 0, w, b.topWidth!);
     ctx.fillRect(w - b.sideWidth!, 0, b.sideWidth!, h);
@@ -66,7 +95,12 @@ export class BorderManager {
     ctx.fillRect(0, 0, b.sideWidth!, h);
   }
 
-  private drawDashed(ctx: CanvasRenderingContext2D, w: number, h: number, b: BorderDef) {
+  private drawDashed(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    b: BorderDef,
+  ) {
     ctx.strokeStyle = b.color!;
     ctx.lineWidth = b.width!;
     ctx.setLineDash(b.dashPattern ?? [10, 5]);

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Check } from "lucide-react";
-import type { ObjektEntry } from "@/lib/cosmo/types";
+import { useEffect, useState } from "react";
 import { TradePagination } from "@/components/trades/trade-pagination";
+import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +43,10 @@ export function ObjektGridPicker({
 
   // Clamp page if it exceeds total after filtering
   const safePage = Math.min(page, totalPages);
-  const pageItems = items.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageItems = items.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   const isSelected = (entry: ObjektEntry) =>
     compareBySerial
@@ -80,9 +83,14 @@ export function ObjektGridPicker({
 
   if (loading) {
     return (
-      <div className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}>
+      <div
+        className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}
+      >
         {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-          <div key={i} className="aspect-photocard rounded-sm bg-muted animate-pulse" />
+          <div
+            key={i}
+            className="aspect-photocard rounded-sm bg-muted animate-pulse"
+          />
         ))}
       </div>
     );
@@ -101,9 +109,11 @@ export function ObjektGridPicker({
       <div className="flex justify-end">
         <label className="inline-flex items-center justify-between gap-2 text-xs text-muted-foreground cursor-pointer select-none has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50">
           All
-          {allPageSelected
-            ? <span>({pageItems.length})</span>
-            : selectAllCount > 0 && <span>({selectAllCount})</span>}
+          {allPageSelected ? (
+            <span>({pageItems.length})</span>
+          ) : (
+            selectAllCount > 0 && <span>({selectAllCount})</span>
+          )}
           <input
             type="checkbox"
             checked={allPageSelected}
@@ -113,11 +123,15 @@ export function ObjektGridPicker({
           />
         </label>
       </div>
-      <div className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}>
+      <div
+        className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}
+      >
         {pageItems.map((entry, i) => {
           const sel = isSelected(entry);
           const url = entry.thumbnailImage;
-          const key = compareBySerial ? `${entry.collectionId}-${entry.serial}` : entry.collectionId;
+          const key = compareBySerial
+            ? `${entry.collectionId}-${entry.serial}`
+            : entry.collectionId;
           return (
             <button
               key={`${key}-${i}`}
@@ -140,7 +154,10 @@ export function ObjektGridPicker({
               {/* Member + collection badge */}
               <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
                 <p className="text-[10px] text-white font-medium leading-tight wrap-break-word">
-                  {entry.member}<br />{getSeasonPrefix(entry.season)}{entry.collectionNo.replace(/[A-Za-z]$/, "")}
+                  {entry.member}
+                  <br />
+                  {getSeasonPrefix(entry.season)}
+                  {entry.collectionNo.replace(/[A-Za-z]$/, "")}
                 </p>
               </div>
               {/* Serial badge for owned */}

@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { CreatePosterPageWrapper } from "@/app/list/page";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { poster } from "@/lib/db/schema";
-import { CreatePosterPageWrapper } from "@/app/list/page";
 
 export default async function EditPosterPage({
   params,

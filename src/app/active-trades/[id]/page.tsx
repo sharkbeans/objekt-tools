@@ -1,25 +1,21 @@
 "use client";
 
-import { Fragment, use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "@/lib/auth-client";
-import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import { CopyIcon, CheckIcon, ExternalLinkIcon, AlertTriangleIcon, ArrowUpDownIcon, ArrowRightIcon, ClockIcon, MessageCircleIcon } from "lucide-react";
-import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
-import { DiscordNudge } from "@/components/discord-nudge";
-import { useTradeRealtime } from "@/hooks/use-realtime";
+  AlertTriangleIcon,
+  ArrowRightIcon,
+  ArrowUpDownIcon,
+  CheckIcon,
+  ClockIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  MessageCircleIcon,
+} from "lucide-react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
+import { Fragment, use, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { DiscordNudge } from "@/components/discord-nudge";
+import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,32 +26,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-type SideStatus = "pending" | "sent" | "confirmed";
-type TradeStatus =
-  | "pending"
-  | "accepted"
-  | "partial"
-  | "completed"
-  | "cancelled"
-  | "countered"
-  | "disputed";
-
-interface TradeSide {
-  id: number;
-  userId: string;
-  address: string;
-  recipientAddress: string;
-  objektId: string;
-  collectionId: string;
-  collectionNo?: string | null;
-  member?: string | null;
-  serial?: number | null;
-  thumbnailUrl?: string | null;
-  status: SideStatus;
-  detectedAt?: string | null;
-  user: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null };
-}
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { useTradeRealtime } from "@/hooks/use-realtime";
+import { useSession } from "@/lib/auth-client";
+import type {
+  ActiveTradeDTO,
+  SideStatus,
+  TradeSideDTO as TradeSide,
+  TradeStatus,
+} from "@/lib/trade-types";
+import { cn } from "@/lib/utils";
 
 interface CounterOfferChainEntry {
   id: string;
@@ -67,28 +56,15 @@ interface CounterOfferChainEntry {
   recipientName: string;
 }
 
-interface ActiveTrade {
-  id: string;
-  status: TradeStatus;
-  createdAt: string;
-  updatedAt: string;
-  acceptedAt?: string | null;
-  tradePostId?: string | null;
-  matchedTradePostId?: string | null;
-  initiatorUserId: string;
-  recipientUserId: string;
-  counterOfferToId?: string | null;
-  counterOfferId?: string | null;
+interface ActiveTrade extends ActiveTradeDTO {
   counterOfferChain?: CounterOfferChainEntry[];
-  expiresAt?: string | null;
-  initiator: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null; discordId?: string | null; discordUsername?: string | null };
-  recipient: { id: string; name: string; image?: string | null; cosmoNickname?: string | null; cosmoAddress?: string | null; discordId?: string | null; discordUsername?: string | null };
-  sides: TradeSide[];
 }
 
 const thumbnailLookupCache = new Map<string, string | null>();
 
-async function fetchCollectionThumbnailUrl(collectionId: string): Promise<string | null> {
+async function fetchCollectionThumbnailUrl(
+  collectionId: string,
+): Promise<string | null> {
   const normalizedId = collectionId.trim().toLowerCase();
   if (!normalizedId) return null;
 
@@ -96,7 +72,9 @@ async function fetchCollectionThumbnailUrl(collectionId: string): Promise<string
   if (cached !== undefined) return cached;
 
   try {
-    const res = await fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`);
+    const res = await fetch(
+      `/api/objekts/search?q=${encodeURIComponent(collectionId)}`,
+    );
     if (!res.ok) {
       thumbnailLookupCache.set(normalizedId, null);
       return null;
@@ -108,8 +86,9 @@ async function fetchCollectionThumbnailUrl(collectionId: string): Promise<string
       frontImage?: string | null;
     }> = Array.isArray(data?.results) ? data.results : [];
     const match =
-      results.find((r) => (r.collectionId ?? "").trim().toLowerCase() === normalizedId) ??
-      results[0];
+      results.find(
+        (r) => (r.collectionId ?? "").trim().toLowerCase() === normalizedId,
+      ) ?? results[0];
     const url = match?.thumbnailImage ?? match?.frontImage ?? null;
     thumbnailLookupCache.set(normalizedId, url);
     return url;
@@ -156,7 +135,7 @@ function ProgressStepper({ status }: { status: TradeStatus }) {
               <div
                 className={cn(
                   "flex-1 h-0.5 mx-1.25 transition-colors",
-                  i <= active ? "bg-foreground" : "bg-muted-foreground/30"
+                  i <= active ? "bg-foreground" : "bg-muted-foreground/30",
                 )}
               />
             )}
@@ -165,7 +144,7 @@ function ProgressStepper({ status }: { status: TradeStatus }) {
                 "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border-2 transition-colors shrink-0",
                 i <= active
                   ? "bg-primary border-primary text-primary-foreground"
-                  : "border-muted-foreground/30 text-muted-foreground"
+                  : "border-muted-foreground/30 text-muted-foreground",
               )}
             >
               {i < active ? "✓" : i + 1}
@@ -180,7 +159,9 @@ function ProgressStepper({ status }: { status: TradeStatus }) {
             <span
               className={cn(
                 "text-[10px] text-center leading-tight whitespace-nowrap",
-                i <= active ? "text-foreground font-medium" : "text-muted-foreground"
+                i <= active
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground",
               )}
             >
               {step.label}
@@ -192,7 +173,10 @@ function ProgressStepper({ status }: { status: TradeStatus }) {
   );
 }
 
-const sideStatusVariant: Record<SideStatus, "default" | "secondary" | "outline"> = {
+const sideStatusVariant: Record<
+  SideStatus,
+  "default" | "secondary" | "outline"
+> = {
   pending: "outline",
   sent: "secondary",
   confirmed: "default",
@@ -215,7 +199,11 @@ function CopyButton({ text }: { text: string }) {
       className="text-muted-foreground hover:text-foreground transition-colors"
       aria-label="Copy username"
     >
-      {copied ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
+      {copied ? (
+        <CheckIcon className="h-3 w-3" />
+      ) : (
+        <CopyIcon className="h-3 w-3" />
+      )}
     </button>
   );
 }
@@ -233,7 +221,9 @@ function ObjektThumbnail({
 }) {
   const normalizedInitialSrc = src.trim();
   const [resolvedSrc, setResolvedSrc] = useState(normalizedInitialSrc);
-  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">(
+    "loading",
+  );
 
   useEffect(() => {
     setResolvedSrc(normalizedInitialSrc);
@@ -307,23 +297,35 @@ function ObjektThumbnail({
           setStatus(e.currentTarget.naturalWidth === 0 ? "error" : "loaded")
         }
         onError={() => setStatus("error")}
-        className={cn("w-full h-full object-cover", status !== "loaded" && "opacity-0")}
+        className={cn(
+          "w-full h-full object-cover",
+          status !== "loaded" && "opacity-0",
+        )}
       />
       {status === "loading" && (
         <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
-          <span className="text-[8px] text-muted-foreground text-center leading-tight px-1">Loading image</span>
+          <span className="text-[8px] text-muted-foreground text-center leading-tight px-1">
+            Loading image
+          </span>
         </div>
       )}
       {status === "error" && (
         <div className="absolute inset-0 bg-muted flex items-center justify-center">
-          <span className="text-[8px] text-muted-foreground text-center leading-tight px-1">No image</span>
+          <span className="text-[8px] text-muted-foreground text-center leading-tight px-1">
+            No image
+          </span>
         </div>
       )}
     </div>
   );
 
   const trigger = href ? (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="shrink-0 self-start block hover:opacity-80 transition-opacity cursor-zoom-in">
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="shrink-0 self-start block hover:opacity-80 transition-opacity cursor-zoom-in"
+    >
       {thumbnail}
     </a>
   ) : (
@@ -333,12 +335,14 @@ function ObjektThumbnail({
   return (
     <TooltipPrimitive.Provider delayDuration={200}>
       <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>
-          {trigger}
-        </TooltipPrimitive.Trigger>
+        <TooltipPrimitive.Trigger asChild>{trigger}</TooltipPrimitive.Trigger>
         {status === "loaded" && (
           <TooltipPrimitive.Portal>
-            <TooltipPrimitive.Content side="left" sideOffset={8} className="z-50 rounded-md shadow-xl overflow-hidden border border-border">
+            <TooltipPrimitive.Content
+              side="left"
+              sideOffset={8}
+              className="z-50 rounded-md shadow-xl overflow-hidden border border-border"
+            >
               <img src={resolvedSrc} alt={alt} className="w-36 block" />
             </TooltipPrimitive.Content>
           </TooltipPrimitive.Portal>
@@ -391,14 +395,18 @@ function SideCard({
     confirmed: "Received",
   };
   const statusText =
-    isYours === true ? yourStatusText[side.status]
-    : isYours === false ? theirStatusText[side.status]
-    : side.status;
+    isYours === true
+      ? yourStatusText[side.status]
+      : isYours === false
+        ? theirStatusText[side.status]
+        : side.status;
 
   const objektLine = (
     <span className="text-sm font-medium flex items-center gap-2">
       <span>{sideName}</span>
-      {sideSerial && <span className="text-muted-foreground font-normal">{sideSerial}</span>}
+      {sideSerial && (
+        <span className="text-muted-foreground font-normal">{sideSerial}</span>
+      )}
       {profileUrl && (
         <ExternalLinkIcon className="h-3 w-3 text-muted-foreground" />
       )}
@@ -415,8 +423,10 @@ function SideCard({
       <div
         className={cn(
           "rounded-md border p-3",
-          isYours === true && side.status !== "confirmed" && "border-primary/40 bg-primary/5",
-          side.status === "confirmed" && "border-green-600/50 bg-green-950/40"
+          isYours === true &&
+            side.status !== "confirmed" &&
+            "border-primary/40 bg-primary/5",
+          side.status === "confirmed" && "border-green-600/50 bg-green-950/40",
         )}
       >
         <div className="flex gap-3">
@@ -447,7 +457,9 @@ function SideCard({
                 <CopyButton text={recipientDisplayName} />
               </div>
             ) : isYours === false ? (
-              <p className="text-xs text-muted-foreground">from {displayName}</p>
+              <p className="text-xs text-muted-foreground">
+                from {displayName}
+              </p>
             ) : (
               <div className="flex items-center gap-1">
                 <p className="text-xs text-muted-foreground">{displayName}</p>
@@ -456,12 +468,18 @@ function SideCard({
             )}
 
             <div className="flex items-center gap-2">
-              <Badge variant={sideStatusVariant[side.status]} className="text-xs">
+              <Badge
+                variant={sideStatusVariant[side.status]}
+                className="text-xs"
+              >
                 {statusText}
               </Badge>
               {side.detectedAt && (
                 <span className="text-xs text-muted-foreground">
-                  {new Date(side.detectedAt).toLocaleString("en-GB", { timeZone: "GMT" })} GMT
+                  {new Date(side.detectedAt).toLocaleString("en-GB", {
+                    timeZone: "GMT",
+                  })}{" "}
+                  GMT
                 </span>
               )}
             </div>
@@ -507,7 +525,11 @@ function DiscordContact({
             rel="noopener noreferrer"
             className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#5865F2] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4752C4]"
           >
-            <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+            <svg
+              className="h-4 w-4 fill-current"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
             </svg>
             Message {partnerDiscord}
@@ -523,7 +545,15 @@ function DiscordContact({
   );
 }
 
-type TransferLogEvent = "sent" | "confirmed" | "pre_accept_sent" | "pre_accept_confirmed" | "wrong_objekt" | "wrong_recipient" | "recovered" | "returned";
+type TransferLogEvent =
+  | "sent"
+  | "confirmed"
+  | "pre_accept_sent"
+  | "pre_accept_confirmed"
+  | "wrong_objekt"
+  | "wrong_recipient"
+  | "recovered"
+  | "returned";
 
 interface TransferLog {
   id: number;
@@ -554,7 +584,9 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
     refetchInterval: 30_000,
   });
 
-  const logs = rawLogs.filter((l) => l.event !== "sent" && l.event !== "pre_accept_sent");
+  const logs = rawLogs.filter(
+    (l) => l.event !== "sent" && l.event !== "pre_accept_sent",
+  );
 
   function formatObjektName(log: TransferLog) {
     const name =
@@ -593,8 +625,7 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
       case "pre_accept_confirmed":
         return (
           <>
-            <span className="font-medium text-warning">[PRE-ACCEPT]</span>
-            {" "}
+            <span className="font-medium text-warning">[PRE-ACCEPT]</span>{" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
@@ -606,19 +637,20 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
       case "pre_accept_sent":
         return (
           <>
-            <span className="font-medium text-warning">[PRE-ACCEPT]</span>
-            {" "}
+            <span className="font-medium text-warning">[PRE-ACCEPT]</span>{" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
-            <span className="text-warning"> (before trade was accepted, in transit)</span>
+            <span className="text-warning">
+              {" "}
+              (before trade was accepted, in transit)
+            </span>
           </>
         );
       case "wrong_objekt":
         return (
           <>
-            <span className="font-medium text-danger">[WRONG OBJEKT]</span>
-            {" "}
+            <span className="font-medium text-danger">[WRONG OBJEKT]</span>{" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
@@ -630,41 +662,45 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
       case "wrong_recipient":
         return (
           <>
-            <span className="font-medium text-danger">[WRONG RECIPIENT]</span>
-            {" "}
+            <span className="font-medium text-danger">[WRONG RECIPIENT]</span>{" "}
             <span className="font-medium">{log.senderName}</span>
             {" sent "}
             <span className="font-medium">{objekt}</span>
             {" to "}
-            {log.toName
-              ? <span className="font-medium">{log.toName}</span>
-              : <span className="font-mono text-[11px]">{log.toAddress}</span>
-            }
+            {log.toName ? (
+              <span className="font-medium">{log.toName}</span>
+            ) : (
+              <span className="font-mono text-[11px]">{log.toAddress}</span>
+            )}
             <span className="text-danger"> (not the intended recipient)</span>
           </>
         );
       case "recovered":
         return (
           <>
-            <span className="font-medium text-green-500">[RECOVERED]</span>
-            {" "}
+            <span className="font-medium text-green-500">[RECOVERED]</span>{" "}
             <span className="font-medium">{objekt}</span>
             {" was forwarded to "}
             <span className="font-medium">{log.recipientName}</span>
-            <span className="text-green-500"> (objekt reached the intended recipient)</span>
+            <span className="text-green-500">
+              {" "}
+              (objekt reached the intended recipient)
+            </span>
           </>
         );
       case "returned":
         return (
           <>
-            <span className="font-medium text-blue-400">[RETURNED]</span>
-            {" "}
+            <span className="font-medium text-blue-400">[RETURNED]</span>{" "}
             <span className="font-medium">{log.senderName}</span>
             {" returned "}
             <span className="font-medium">{objekt}</span>
             {" to "}
             <span className="font-medium">{log.recipientName}</span>
-            <span className="text-blue-400"> (objekt returned to original sender)</span>
+            <span className="text-blue-400">
+              {" "}
+              (objekt returned to original sender)
+            </span>
           </>
         );
       default:
@@ -684,14 +720,20 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
     <div className="space-y-3">
       <h3 className="text-sm font-medium">Transfer Logs</h3>
       {logs.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No transfers detected yet.</p>
+        <p className="text-xs text-muted-foreground">
+          No transfers detected yet.
+        </p>
       ) : (
         <div className="rounded-md border overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">Date &amp; Time</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Event</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">
+                  Date &amp; Time
+                </th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">
+                  Event
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -700,21 +742,29 @@ function TransferLogs({ tradeId }: { tradeId: string }) {
                   key={log.id}
                   className={cn(
                     "border-b last:border-0",
-                    (log.event === "wrong_objekt" || log.event === "wrong_recipient") && "bg-red-500/10",
-                    (log.event === "pre_accept_sent" || log.event === "pre_accept_confirmed") && "bg-amber-500/10",
+                    (log.event === "wrong_objekt" ||
+                      log.event === "wrong_recipient") &&
+                      "bg-red-500/10",
+                    (log.event === "pre_accept_sent" ||
+                      log.event === "pre_accept_confirmed") &&
+                      "bg-amber-500/10",
                     log.event === "recovered" && "bg-green-500/10",
                     log.event === "returned" && "bg-blue-500/10",
                   )}
                 >
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                    {new Date(log.detectedAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
-                    {" "}
-                    {new Date(log.detectedAt).toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    {new Date(log.detectedAt).toLocaleDateString("en-GB", {
+                      timeZone: "GMT",
+                    })}{" "}
+                    {new Date(log.detectedAt).toLocaleTimeString("en-GB", {
+                      timeZone: "GMT",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
                     {" GMT"}
                   </td>
-                  <td className="px-3 py-2">
-                    {formatEventDescription(log)}
-                  </td>
+                  <td className="px-3 py-2">{formatEventDescription(log)}</td>
                 </tr>
               ))}
             </tbody>
@@ -768,12 +818,14 @@ function NegotiationHistory({
       <div className="space-y-1">
         {entries.map((entry, i) => (
           <div key={entry.id} className="flex items-center gap-2 text-xs">
-            <span className={cn(
-              "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold border shrink-0",
-              entry.isCurrent
-                ? "bg-primary border-primary text-primary-foreground"
-                : "border-muted-foreground/30 text-muted-foreground"
-            )}>
+            <span
+              className={cn(
+                "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold border shrink-0",
+                entry.isCurrent
+                  ? "bg-primary border-primary text-primary-foreground"
+                  : "border-muted-foreground/30 text-muted-foreground",
+              )}
+            >
               {i + 1}
             </span>
             {entry.isCurrent ? (
@@ -786,11 +838,18 @@ function NegotiationHistory({
                 {entry.label}
               </a>
             )}
-            <span className={cn("capitalize", statusColors[entry.status] ?? "text-muted-foreground")}>
+            <span
+              className={cn(
+                "capitalize",
+                statusColors[entry.status] ?? "text-muted-foreground",
+              )}
+            >
               {entry.status}
             </span>
             {entry.isCurrent && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">current</Badge>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                current
+              </Badge>
             )}
           </div>
         ))}
@@ -840,7 +899,9 @@ export default function ActiveTradePage({
   const [checkCooldown, setCheckCooldown] = useState(0);
   const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [counterOfferOpen, setCounterOfferOpen] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState<"accept" | "decline" | "cancel" | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<
+    "accept" | "decline" | "cancel" | null
+  >(null);
   const [cancelCheckDone, setCancelCheckDone] = useState(false);
   const [cancelCheckRunning, setCancelCheckRunning] = useState(false);
 
@@ -857,7 +918,8 @@ export default function ActiveTradePage({
     },
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (!status || status === "completed" || status === "cancelled") return false;
+      if (!status || status === "completed" || status === "cancelled")
+        return false;
       return 60_000; // fallback polling — realtime handles fast updates
     },
   });
@@ -873,18 +935,18 @@ export default function ActiveTradePage({
   });
 
   const preAcceptLogs = transferLogs.filter(
-    (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed"
+    (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed",
   );
   const recoveredObjektIds = new Set(
-    transferLogs.filter((l) => l.event === "recovered").map((l) => l.objektId)
+    transferLogs.filter((l) => l.event === "recovered").map((l) => l.objektId),
   );
   const returnedObjektIds = new Set(
-    transferLogs.filter((l) => l.event === "returned").map((l) => l.objektId)
+    transferLogs.filter((l) => l.event === "returned").map((l) => l.objektId),
   );
   const suspiciousTransferLogs = transferLogs.filter(
     (l) =>
       l.event === "wrong_objekt" ||
-      (l.event === "wrong_recipient" && !recoveredObjektIds.has(l.objektId))
+      (l.event === "wrong_recipient" && !recoveredObjektIds.has(l.objektId)),
   );
 
   const terminalStatuses = ["completed", "cancelled", "countered", "disputed"];
@@ -898,8 +960,12 @@ export default function ActiveTradePage({
   useEffect(() => {
     function onVisible() {
       if (document.visibilityState !== "visible") return;
-      const status = queryClient.getQueryData<ActiveTrade>(["active-trade", id])?.status;
-      if (!status || !["pending", "accepted", "partial"].includes(status)) return;
+      const status = queryClient.getQueryData<ActiveTrade>([
+        "active-trade",
+        id,
+      ])?.status;
+      if (!status || !["pending", "accepted", "partial"].includes(status))
+        return;
       runCheckTransfers(true);
     }
     document.addEventListener("visibilitychange", onVisible);
@@ -928,7 +994,9 @@ export default function ActiveTradePage({
     lastCheckRef.current = now;
     startCooldownDisplay();
 
-    const res = await fetch(`/api/active-trades/${id}/check-transfers`, { method: "POST" });
+    const res = await fetch(`/api/active-trades/${id}/check-transfers`, {
+      method: "POST",
+    });
     if (!res.ok) {
       if (!silent) toast.error("Failed to check transfers");
       return;
@@ -946,7 +1014,9 @@ export default function ActiveTradePage({
   }
 
   async function handleAccept() {
-    const res = await fetch(`/api/active-trades/${id}/accept`, { method: "POST" });
+    const res = await fetch(`/api/active-trades/${id}/accept`, {
+      method: "POST",
+    });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
       toast.error(data?.error || "Failed to accept trade");
@@ -956,7 +1026,7 @@ export default function ActiveTradePage({
     if (data?.preDeliveredCount > 0) {
       toast.success(
         `Trade accepted! ${data.preDeliveredCount} objekt(s) were already transferred and have been auto-confirmed.`,
-        { duration: 6000 }
+        { duration: 6000 },
       );
     } else {
       toast.success("Trade accepted! Both parties can now send their objekts.");
@@ -966,7 +1036,9 @@ export default function ActiveTradePage({
   }
 
   async function handleCancel() {
-    const res = await fetch(`/api/active-trades/${id}/cancel`, { method: "POST" });
+    const res = await fetch(`/api/active-trades/${id}/cancel`, {
+      method: "POST",
+    });
     if (!res.ok) {
       toast.error("Failed to cancel trade");
       return;
@@ -987,7 +1059,10 @@ export default function ActiveTradePage({
 
     // For accepted/partial trades only: run a fresh transfer check before the user can confirm.
     // This ensures the ban warning reflects the latest on-chain state.
-    const currentStatus = queryClient.getQueryData<ActiveTrade>(["active-trade", id])?.status;
+    const currentStatus = queryClient.getQueryData<ActiveTrade>([
+      "active-trade",
+      id,
+    ])?.status;
     if (currentStatus === "accepted" || currentStatus === "partial") {
       setCancelCheckRunning(true);
       try {
@@ -995,10 +1070,14 @@ export default function ActiveTradePage({
         // Bypass the UI cooldown — this is a dedicated safety check, not a user-initiated poll
         lastCheckRef.current = now;
         startCooldownDisplay();
-        const res = await fetch(`/api/active-trades/${id}/check-transfers`, { method: "POST" });
+        const res = await fetch(`/api/active-trades/${id}/check-transfers`, {
+          method: "POST",
+        });
         if (res.ok) {
           queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
-          queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", id] });
+          queryClient.invalidateQueries({
+            queryKey: ["trade-transfer-logs", id],
+          });
           // Wait for the query to settle so the dialog renders updated side statuses
           await queryClient.refetchQueries({ queryKey: ["active-trade", id] });
         }
@@ -1020,7 +1099,9 @@ export default function ActiveTradePage({
 
   if (!trade) {
     return (
-      <div className="text-center py-12 text-muted-foreground">Trade not found.</div>
+      <div className="text-center py-12 text-muted-foreground">
+        Trade not found.
+      </div>
     );
   }
 
@@ -1028,38 +1109,54 @@ export default function ActiveTradePage({
   const isParticipant =
     trade.initiatorUserId === userId || trade.recipientUserId === userId;
   const isRecipient = trade.recipientUserId === userId;
-  const isActive = !["completed", "cancelled", "countered", "disputed"].includes(trade.status);
+  const isActive = ![
+    "completed",
+    "cancelled",
+    "countered",
+    "disputed",
+  ].includes(trade.status);
   const mySides = trade.sides.filter((s) => s.userId === userId);
   const otherSides = trade.sides.filter((s) => s.userId !== userId);
   const myAllPending = mySides.every((s) => s.status === "pending");
-  const myAllConfirmed = mySides.length > 0 && mySides.every((s) => s.status === "confirmed");
-  const otherAllConfirmed = otherSides.length > 0 && otherSides.every((s) => s.status === "confirmed");
+  const myAllConfirmed =
+    mySides.length > 0 && mySides.every((s) => s.status === "confirmed");
+  const otherAllConfirmed =
+    otherSides.length > 0 && otherSides.every((s) => s.status === "confirmed");
   const otherAllPending = otherSides.every((s) => s.status === "pending");
 
   // Path D: I sent, partner received, partner returned everything back to me.
   // Both parties can cancel cleanly — no ban for either side.
-  const allMySentReturned = isActive &&
+  const allMySentReturned =
+    isActive &&
     myAllConfirmed &&
     mySides.length > 0 &&
-    mySides.every((s) => s.status === "confirmed" && returnedObjektIds.has(s.objektId));
+    mySides.every(
+      (s) => s.status === "confirmed" && returnedObjektIds.has(s.objektId),
+    );
 
   // I've sent everything but partner hasn't — waiting on them.
   // The API allows cancel after 24h (Path C), but we don't surface the button at all.
   // There is no benefit to cancelling: userA gets nothing back and userB faces no ban yet.
   // Exception: Path D — if they returned, unlock the cancel button immediately.
-  const iWaitingForPartner = isActive && myAllConfirmed && otherAllPending && !allMySentReturned;
+  const iWaitingForPartner =
+    isActive && myAllConfirmed && otherAllPending && !allMySentReturned;
 
   // Can cancel if: nothing sent yet (Path A), partner confirmed but I haven't sent (Path B),
   // or partner returned everything to me (Path D).
-  const canCancel = isActive && !iWaitingForPartner && (
-    trade.sides.every((s) => s.status === "pending") ||  // Path A
-    (myAllPending && otherAllConfirmed) ||               // Path B
-    allMySentReturned                                    // Path D
-  );
+  const canCancel =
+    isActive &&
+    !iWaitingForPartner &&
+    (trade.sides.every((s) => s.status === "pending") || // Path A
+      (myAllPending && otherAllConfirmed) || // Path B
+      allMySentReturned); // Path D
 
   // Split sides into initiator's and recipient's (may be multiple per user for multi-objekt trades)
-  const initiatorSides = trade.sides.filter((s) => s.userId === trade.initiatorUserId);
-  const recipientSides = trade.sides.filter((s) => s.userId === trade.recipientUserId);
+  const initiatorSides = trade.sides.filter(
+    (s) => s.userId === trade.initiatorUserId,
+  );
+  const recipientSides = trade.sides.filter(
+    (s) => s.userId === trade.recipientUserId,
+  );
 
   const initiatorName = trade.initiator.cosmoNickname ?? trade.initiator.name;
   const recipientName = trade.recipient.cosmoNickname ?? trade.recipient.name;
@@ -1073,7 +1170,10 @@ export default function ActiveTradePage({
     ? `${isInitiator ? recipientName : initiatorName} sends`
     : `${recipientName} sends`;
 
-  const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
+  const statusVariant: Record<
+    TradeStatus,
+    "default" | "secondary" | "outline" | "destructive"
+  > = {
     pending: "secondary",
     accepted: "default",
     partial: "default",
@@ -1088,7 +1188,9 @@ export default function ActiveTradePage({
     accepted: "Accepted",
     partial: "Ongoing",
     completed: "Completed",
-    cancelled: trade.sides.every((s) => s.status === "pending") ? "Declined" : "Cancelled",
+    cancelled: trade.sides.every((s) => s.status === "pending")
+      ? "Declined"
+      : "Cancelled",
     countered: "Countered",
     disputed: "Disputed",
   };
@@ -1106,50 +1208,75 @@ export default function ActiveTradePage({
                 </Badge>
               </CardTitle>
               <CardDescription className="mt-1">
-                {trade.initiator.cosmoNickname ?? trade.initiator.name} ↔ {trade.recipient.cosmoNickname ?? trade.recipient.name}
+                {trade.initiator.cosmoNickname ?? trade.initiator.name} ↔{" "}
+                {trade.recipient.cosmoNickname ?? trade.recipient.name}
                 {" · "}
-                {new Date(trade.createdAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
-                {" "}
-                {new Date(trade.createdAt).toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit" })}
+                {new Date(trade.createdAt).toLocaleDateString("en-GB", {
+                  timeZone: "GMT",
+                })}{" "}
+                {new Date(trade.createdAt).toLocaleTimeString("en-GB", {
+                  timeZone: "GMT",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
                 {" GMT"}
               </CardDescription>
               {trade.status === "pending" && trade.expiresAt && (
                 <ExpiryCountdown expiresAt={trade.expiresAt} />
               )}
-              {trade.counterOfferChain && trade.counterOfferChain.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Counter-offer round {trade.counterOfferChain.length + 1}/10
-                </p>
-              )}
+              {trade.counterOfferChain &&
+                trade.counterOfferChain.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Counter-offer round {trade.counterOfferChain.length + 1}/10
+                  </p>
+                )}
             </div>
             {isParticipant && (
               <div className="flex flex-wrap gap-2 items-center">
                 {isRecipient && trade.status === "pending" && (
                   <>
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white border-0" onClick={() => setConfirmDialog("accept")}>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white border-0"
+                      onClick={() => setConfirmDialog("accept")}
+                    >
                       Accept
                     </Button>
-                    <Button size="sm" variant="outline" className="border-blue-700/60 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300" onClick={() => setCounterOfferOpen(true)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-blue-700/60 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300"
+                      onClick={() => setCounterOfferOpen(true)}
+                    >
                       Counter-Offer
                     </Button>
                   </>
                 )}
                 {iWaitingForPartner && (
                   <p className="text-xs text-muted-foreground">
-                    Waiting for {isInitiator ? recipientName : initiatorName} to send
+                    Waiting for {isInitiator ? recipientName : initiatorName} to
+                    send
                   </p>
                 )}
-                {canCancel && (
-                  trade.status === "pending" ? (
-                    <Button size="sm" variant="outline" className="border-red-800/60 text-red-400 hover:bg-red-900/30 hover:text-red-300" onClick={() => setConfirmDialog("decline")}>
+                {canCancel &&
+                  (trade.status === "pending" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-800/60 text-red-400 hover:bg-red-900/30 hover:text-red-300"
+                      onClick={() => setConfirmDialog("decline")}
+                    >
                       Decline
                     </Button>
                   ) : (
-                    <Button size="sm" variant="destructive" onClick={openCancelDialog}>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={openCancelDialog}
+                    >
                       Cancel
                     </Button>
-                  )
-                )}
+                  ))}
               </div>
             )}
           </div>
@@ -1164,47 +1291,81 @@ export default function ActiveTradePage({
             <div className="space-y-3">
               <div className="banner-warning flex items-center gap-3">
                 <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
-                <p className="text-sm">Do not send any objekts until this trade has been accepted by both parties.</p>
+                <p className="text-sm">
+                  Do not send any objekts until this trade has been accepted by
+                  both parties.
+                </p>
               </div>
 
-              {preAcceptLogs.length > 0 && (() => {
-                const partnerName = isInitiator ? recipientName : initiatorName;
-                const myPreAcceptSends = preAcceptLogs.filter((l) => l.senderUserId === userId);
-                const theirPreAcceptSends = preAcceptLogs.filter((l) => l.senderUserId !== userId);
-                return (
-                  <>
-                    {theirPreAcceptSends.length > 0 && (
-                      <div className="banner-warning flex items-start gap-3">
-                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning mt-0.5" />
-                        <div className="text-sm space-y-1">
-                          <p className="font-medium text-warning-strong">{partnerName} has sent objekt(s) before the trade was accepted.</p>
-                          {isRecipient ? (
-                            <p className="text-muted-foreground">You are still allowed to cancel this trade. If you are happy with the trade, you may accept it and the transfer will be auto-confirmed. You may also return the objekt(s) to the sender via Cosmo.</p>
-                          ) : (
-                            <p className="text-muted-foreground">{partnerName} sent objekt(s) before the trade was accepted. The recipient can still cancel this trade.</p>
-                          )}
+              {preAcceptLogs.length > 0 &&
+                (() => {
+                  const partnerName = isInitiator
+                    ? recipientName
+                    : initiatorName;
+                  const myPreAcceptSends = preAcceptLogs.filter(
+                    (l) => l.senderUserId === userId,
+                  );
+                  const theirPreAcceptSends = preAcceptLogs.filter(
+                    (l) => l.senderUserId !== userId,
+                  );
+                  return (
+                    <>
+                      {theirPreAcceptSends.length > 0 && (
+                        <div className="banner-warning flex items-start gap-3">
+                          <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning mt-0.5" />
+                          <div className="text-sm space-y-1">
+                            <p className="font-medium text-warning-strong">
+                              {partnerName} has sent objekt(s) before the trade
+                              was accepted.
+                            </p>
+                            {isRecipient ? (
+                              <p className="text-muted-foreground">
+                                You are still allowed to cancel this trade. If
+                                you are happy with the trade, you may accept it
+                                and the transfer will be auto-confirmed. You may
+                                also return the objekt(s) to the sender via
+                                Cosmo.
+                              </p>
+                            ) : (
+                              <p className="text-muted-foreground">
+                                {partnerName} sent objekt(s) before the trade
+                                was accepted. The recipient can still cancel
+                                this trade.
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {myPreAcceptSends.length > 0 && (
-                      <div className="banner-danger flex items-start gap-3">
-                        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
-                        <div className="text-sm space-y-1">
-                          <p className="font-medium text-danger-strong">You sent objekt(s) before {partnerName} accepted.</p>
-                          <p className="text-muted-foreground">{partnerName} has not accepted this trade yet. They can cancel and your objekt may be lost. Wait for acceptance before sending.</p>
+                      )}
+                      {myPreAcceptSends.length > 0 && (
+                        <div className="banner-danger flex items-start gap-3">
+                          <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
+                          <div className="text-sm space-y-1">
+                            <p className="font-medium text-danger-strong">
+                              You sent objekt(s) before {partnerName} accepted.
+                            </p>
+                            <p className="text-muted-foreground">
+                              {partnerName} has not accepted this trade yet.
+                              They can cancel and your objekt may be lost. Wait
+                              for acceptance before sending.
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                      )}
+                    </>
+                  );
+                })()}
 
               {suspiciousTransferLogs.length > 0 && (
                 <div className="banner-danger flex items-start gap-3">
                   <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
                   <div className="text-sm space-y-1">
-                    <p className="font-medium text-danger-strong">Suspicious transfer(s) detected!</p>
-                    <p className="text-muted-foreground">One or more transfers are unsafe (wrong objekt or wrong recipient). Check the Transfer Logs below for details.</p>
+                    <p className="font-medium text-danger-strong">
+                      Suspicious transfer(s) detected!
+                    </p>
+                    <p className="text-muted-foreground">
+                      One or more transfers are unsafe (wrong objekt or wrong
+                      recipient). Check the Transfer Logs below for details.
+                    </p>
                   </div>
                 </div>
               )}
@@ -1219,7 +1380,9 @@ export default function ActiveTradePage({
                     key={`left-${side.id}`}
                     side={side}
                     label={i === 0 ? "You send" : ""}
-                    recipientUser={isInitiator ? trade.recipient : trade.initiator}
+                    recipientUser={
+                      isInitiator ? trade.recipient : trade.initiator
+                    }
                     isYours={true}
                   />
                 ))}
@@ -1271,9 +1434,13 @@ export default function ActiveTradePage({
             <div className="rounded-md border border-blue-500/40 bg-blue-950/30 px-4 py-3 flex items-start gap-3">
               <AlertTriangleIcon className="h-4 w-4 shrink-0 text-blue-400 mt-0.5" />
               <div className="text-sm space-y-1">
-                <p className="font-medium text-blue-300">{isInitiator ? recipientName : initiatorName} returned your objekt(s).</p>
+                <p className="font-medium text-blue-300">
+                  {isInitiator ? recipientName : initiatorName} returned your
+                  objekt(s).
+                </p>
                 <p className="text-muted-foreground">
-                  All transferred objekts have been returned. Either party can now cancel this trade without any penalties or bans.
+                  All transferred objekts have been returned. Either party can
+                  now cancel this trade without any penalties or bans.
                 </p>
               </div>
             </div>
@@ -1283,24 +1450,38 @@ export default function ActiveTradePage({
             <div className="banner-warning flex items-start gap-3">
               <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning mt-0.5" />
               <div className="text-sm space-y-1">
-                <p className="font-medium text-warning-strong">You have sent your objekt — waiting for {isInitiator ? recipientName : initiatorName} to send theirs.</p>
+                <p className="font-medium text-warning-strong">
+                  You have sent your objekt — waiting for{" "}
+                  {isInitiator ? recipientName : initiatorName} to send theirs.
+                </p>
                 <p className="text-muted-foreground">
-                  You cannot cancel this trade yet. If {isInitiator ? recipientName : initiatorName} does not send within 24 hours of your transfer being detected, you will be able to cancel and they will be banned.
-                  If they no longer want to trade, ask them to return your objekt via Cosmo — the system will detect it and unlock a penalty-free cancel.
+                  You cannot cancel this trade yet. If{" "}
+                  {isInitiator ? recipientName : initiatorName} does not send
+                  within 24 hours of your transfer being detected, you will be
+                  able to cancel and they will be banned. If they no longer want
+                  to trade, ask them to return your objekt via Cosmo — the
+                  system will detect it and unlock a penalty-free cancel.
                 </p>
               </div>
             </div>
           )}
 
-          {["accepted", "partial"].includes(trade.status) && isParticipant && suspiciousTransferLogs.length > 0 && (
-            <div className="banner-danger flex items-start gap-3">
-              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
-              <div className="text-sm space-y-1">
-                <p className="font-medium text-danger-strong">Suspicious transfer(s) detected!</p>
-                <p className="text-muted-foreground">One or more transfers are unsafe (wrong objekt or wrong recipient). Check the Transfer Logs below for details.</p>
+          {["accepted", "partial"].includes(trade.status) &&
+            isParticipant &&
+            suspiciousTransferLogs.length > 0 && (
+              <div className="banner-danger flex items-start gap-3">
+                <AlertTriangleIcon className="h-4 w-4 shrink-0 text-danger mt-0.5" />
+                <div className="text-sm space-y-1">
+                  <p className="font-medium text-danger-strong">
+                    Suspicious transfer(s) detected!
+                  </p>
+                  <p className="text-muted-foreground">
+                    One or more transfers are unsafe (wrong objekt or wrong
+                    recipient). Check the Transfer Logs below for details.
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {["accepted", "partial"].includes(trade.status) && isParticipant && (
             <div className="space-y-2">
@@ -1314,14 +1495,18 @@ export default function ActiveTradePage({
                 disabled={checkCooldown > 0}
                 className="w-full"
               >
-                {checkCooldown > 0 ? `Check Transfers (${checkCooldown}s)` : "Check Transfers"}
+                {checkCooldown > 0
+                  ? `Check Transfers (${checkCooldown}s)`
+                  : "Check Transfers"}
               </Button>
             </div>
           )}
 
           {trade.status === "completed" && (
             <div className="banner-success flex items-center justify-between gap-3">
-              <p className="text-sm">Trade complete! Both objekts have been successfully transferred.</p>
+              <p className="text-sm">
+                Trade complete! Both objekts have been successfully transferred.
+              </p>
             </div>
           )}
 
@@ -1331,7 +1516,11 @@ export default function ActiveTradePage({
                 <div className="flex items-start gap-3">
                   <ArrowUpDownIcon className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0 space-y-1">
-                    <p className="text-sm font-semibold text-blue-300">{isInitiator ? `${recipientName} sent a counter-offer` : "You sent a counter-offer"}</p>
+                    <p className="text-sm font-semibold text-blue-300">
+                      {isInitiator
+                        ? `${recipientName} sent a counter-offer`
+                        : "You sent a counter-offer"}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {isInitiator
                         ? `${recipientName} modified the trade contents and sent a new offer. This trade is now closed — view the counter-offer to accept, decline, or counter back.`
@@ -1340,21 +1529,29 @@ export default function ActiveTradePage({
                   </div>
                 </div>
                 <a href={`/active-trades/${trade.counterOfferId}`}>
-                  <Button size="sm" className="w-full bg-blue-600/80 hover:bg-blue-600 text-white">
+                  <Button
+                    size="sm"
+                    className="w-full bg-blue-600/80 hover:bg-blue-600 text-white"
+                  >
                     View Counter-Offer
                     <ArrowRightIcon className="h-3.5 w-3.5 ml-1" />
                   </Button>
                 </a>
               </div>
-              {trade.counterOfferChain && trade.counterOfferChain.length > 0 && (
-                <NegotiationHistory
-                  chain={trade.counterOfferChain}
-                  currentTradeId={trade.id}
-                  currentInitiatorName={trade.initiator.cosmoNickname ?? trade.initiator.name}
-                  currentRecipientName={trade.recipient.cosmoNickname ?? trade.recipient.name}
-                  currentStatus={trade.status}
-                />
-              )}
+              {trade.counterOfferChain &&
+                trade.counterOfferChain.length > 0 && (
+                  <NegotiationHistory
+                    chain={trade.counterOfferChain}
+                    currentTradeId={trade.id}
+                    currentInitiatorName={
+                      trade.initiator.cosmoNickname ?? trade.initiator.name
+                    }
+                    currentRecipientName={
+                      trade.recipient.cosmoNickname ?? trade.recipient.name
+                    }
+                    currentStatus={trade.status}
+                  />
+                )}
             </div>
           )}
 
@@ -1363,8 +1560,16 @@ export default function ActiveTradePage({
               <Separator />
               <DiscordNudge />
               <DiscordContact
-                partnerDiscord={isInitiator ? trade.recipient.discordUsername : trade.initiator.discordUsername}
-                partnerDiscordId={isInitiator ? trade.recipient.discordId : trade.initiator.discordId}
+                partnerDiscord={
+                  isInitiator
+                    ? trade.recipient.discordUsername
+                    : trade.initiator.discordUsername
+                }
+                partnerDiscordId={
+                  isInitiator
+                    ? trade.recipient.discordId
+                    : trade.initiator.discordId
+                }
                 partnerName={isInitiator ? recipientName : initiatorName}
               />
             </>
@@ -1411,33 +1616,51 @@ export default function ActiveTradePage({
             </p>
           )}
           {/* Negotiation History Chain — shown inline with countered banner above; only show here for other statuses */}
-          {trade.counterOfferChain && trade.counterOfferChain.length > 0 && trade.status !== "countered" && (
-            <>
-              <Separator />
-              <NegotiationHistory
-                chain={trade.counterOfferChain}
-                currentTradeId={trade.id}
-                currentInitiatorName={trade.initiator.cosmoNickname ?? trade.initiator.name}
-                currentRecipientName={trade.recipient.cosmoNickname ?? trade.recipient.name}
-                currentStatus={trade.status}
-              />
-            </>
-          )}
+          {trade.counterOfferChain &&
+            trade.counterOfferChain.length > 0 &&
+            trade.status !== "countered" && (
+              <>
+                <Separator />
+                <NegotiationHistory
+                  chain={trade.counterOfferChain}
+                  currentTradeId={trade.id}
+                  currentInitiatorName={
+                    trade.initiator.cosmoNickname ?? trade.initiator.name
+                  }
+                  currentRecipientName={
+                    trade.recipient.cosmoNickname ?? trade.recipient.name
+                  }
+                  currentStatus={trade.status}
+                />
+              </>
+            )}
         </CardContent>
       </Card>
 
       {/* Accept confirmation */}
-      <AlertDialog open={confirmDialog === "accept"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+      <AlertDialog
+        open={confirmDialog === "accept"}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDialog(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Accept this trade?</AlertDialogTitle>
             <AlertDialogDescription>
-              Both parties will be committed to sending their objekts. This cannot be undone once accepted.
+              Both parties will be committed to sending their objekts. This
+              cannot be undone once accepted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back</AlertDialogCancel>
-            <AlertDialogAction className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { setConfirmDialog(null); handleAccept(); }}>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                setConfirmDialog(null);
+                handleAccept();
+              }}
+            >
               Accept trade
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1445,17 +1668,29 @@ export default function ActiveTradePage({
       </AlertDialog>
 
       {/* Decline confirmation */}
-      <AlertDialog open={confirmDialog === "decline"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+      <AlertDialog
+        open={confirmDialog === "decline"}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDialog(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Decline this trade?</AlertDialogTitle>
             <AlertDialogDescription>
-              This trade will be permanently cancelled and the other party will be notified. This cannot be undone.
+              This trade will be permanently cancelled and the other party will
+              be notified. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleCancel(); }}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setConfirmDialog(null);
+                handleCancel();
+              }}
+            >
               Decline trade
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1463,7 +1698,12 @@ export default function ActiveTradePage({
       </AlertDialog>
 
       {/* Cancel confirmation */}
-      <AlertDialog open={confirmDialog === "cancel"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+      <AlertDialog
+        open={confirmDialog === "cancel"}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDialog(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel this trade?</AlertDialogTitle>
@@ -1471,63 +1711,92 @@ export default function ActiveTradePage({
               <AlertDialogDescription>
                 Checking transfer status… please wait.
               </AlertDialogDescription>
-            ) : (() => {
-              // Re-derive from latest trade data after the check
-              const freshMySides = trade.sides.filter((s) => s.userId === userId);
-              const freshOtherSides = trade.sides.filter((s) => s.userId !== userId);
-              const freshMyAllPending = freshMySides.every((s) => s.status === "pending");
-              const freshOtherAllConfirmed = freshOtherSides.length > 0 && freshOtherSides.every((s) => s.status === "confirmed");
-              const partnerName = isInitiator ? recipientName : initiatorName;
+            ) : (
+              (() => {
+                // Re-derive from latest trade data after the check
+                const freshMySides = trade.sides.filter(
+                  (s) => s.userId === userId,
+                );
+                const freshOtherSides = trade.sides.filter(
+                  (s) => s.userId !== userId,
+                );
+                const freshMyAllPending = freshMySides.every(
+                  (s) => s.status === "pending",
+                );
+                const freshOtherAllConfirmed =
+                  freshOtherSides.length > 0 &&
+                  freshOtherSides.every((s) => s.status === "confirmed");
+                const partnerName = isInitiator ? recipientName : initiatorName;
 
-              // Path D: all my sent objekts were returned — clean cancel
-              if (allMySentReturned) {
-                return (
-                  <div className="space-y-3">
-                    <div className="rounded-md border border-blue-500/40 bg-blue-950/30 px-4 py-3 space-y-1.5">
-                      <p className="text-sm font-semibold text-blue-300">Your objekt(s) were returned — no penalties will apply.</p>
+                // Path D: all my sent objekts were returned — clean cancel
+                if (allMySentReturned) {
+                  return (
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-blue-500/40 bg-blue-950/30 px-4 py-3 space-y-1.5">
+                        <p className="text-sm font-semibold text-blue-300">
+                          Your objekt(s) were returned — no penalties will
+                          apply.
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-semibold">{partnerName}</span>{" "}
+                          returned all transferred objekts. Cancelling this
+                          trade will not result in a ban for either party.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Path B: partner confirmed, I haven't sent — I will be banned
+                if (freshMyAllPending && freshOtherAllConfirmed) {
+                  const sentObjekts = freshOtherSides
+                    .map((s) => {
+                      const { name, serial } = formatLabel(s);
+                      return serial ? `${name} ${serial}` : name;
+                    })
+                    .join(", ");
+                  return (
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-red-600/60 bg-red-950/40 px-4 py-3 space-y-1.5">
+                        <p className="text-sm font-bold text-red-400">
+                          ⚠ YOU WILL BE BANNED if you cancel now.
+                        </p>
+                        <p className="text-sm text-red-300">
+                          <span className="font-semibold">{partnerName}</span>{" "}
+                          has already sent:{" "}
+                          <span className="font-semibold">{sentObjekts}</span>.
+                          Cancelling means you are defaulting on an agreed trade
+                          — a trade ban will be issued to your account
+                          automatically.
+                        </p>
+                      </div>
                       <p className="text-sm text-muted-foreground">
-                        <span className="font-semibold">{partnerName}</span> returned all transferred objekts. Cancelling this trade will not result in a ban for either party.
+                        If you believe this is a mistake or you were pressured
+                        into cancelling, do not proceed. Contact support
+                        instead.
                       </p>
                     </div>
-                  </div>
-                );
-              }
+                  );
+                }
 
-              // Path B: partner confirmed, I haven't sent — I will be banned
-              if (freshMyAllPending && freshOtherAllConfirmed) {
-                const sentObjekts = freshOtherSides.map((s) => {
-                  const { name, serial } = formatLabel(s);
-                  return serial ? `${name} ${serial}` : name;
-                }).join(", ");
                 return (
-                  <div className="space-y-3">
-                    <div className="rounded-md border border-red-600/60 bg-red-950/40 px-4 py-3 space-y-1.5">
-                      <p className="text-sm font-bold text-red-400">⚠ YOU WILL BE BANNED if you cancel now.</p>
-                      <p className="text-sm text-red-300">
-                        <span className="font-semibold">{partnerName}</span> has already sent: <span className="font-semibold">{sentObjekts}</span>.
-                        Cancelling means you are defaulting on an agreed trade — a trade ban will be issued to your account automatically.
-                      </p>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      If you believe this is a mistake or you were pressured into cancelling, do not proceed. Contact support instead.
-                    </p>
-                  </div>
+                  <AlertDialogDescription>
+                    Neither party has sent their objekt yet. Cancelling will
+                    revert both trade posts to open. This cannot be undone.
+                  </AlertDialogDescription>
                 );
-              }
-
-              return (
-                <AlertDialogDescription>
-                  Neither party has sent their objekt yet. Cancelling will revert both trade posts to open. This cannot be undone.
-                </AlertDialogDescription>
-              );
-            })()}
+              })()
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={!cancelCheckDone}
-              onClick={() => { setConfirmDialog(null); handleCancel(); }}
+              onClick={() => {
+                setConfirmDialog(null);
+                handleCancel();
+              }}
             >
               {cancelCheckRunning ? "Checking…" : "Cancel trade"}
             </AlertDialogAction>
@@ -1544,7 +1813,9 @@ export default function ActiveTradePage({
           mySides={recipientSides}
           theirSides={initiatorSides}
           theirAddress={initiatorSides[0]?.address ?? ""}
-          theirCosmoUsername={trade.initiator.cosmoNickname ?? trade.initiator.name}
+          theirCosmoUsername={
+            trade.initiator.cosmoNickname ?? trade.initiator.name
+          }
         />
       )}
     </div>

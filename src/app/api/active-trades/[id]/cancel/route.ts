@@ -1,18 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq, inArray, or } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { activeTrade, activeTradeSide, cosmoAccount, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import {
+  activeTrade,
+  activeTradeSide,
+  cosmoAccount,
+  tradePost,
+  tradeTransferLog,
+} from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { eq, inArray, and, or } from "drizzle-orm";
-import { issueBan, propagateResolution } from "@/lib/trade-guards";
 import { publishTradeEvent } from "@/lib/realtime";
+import { issueBan, propagateResolution } from "@/lib/trade-guards";
 
 const CANCEL_TIMEOUT_HOURS = 24;
 
 // POST /api/active-trades/[id]/cancel — either participant cancels
 export async function POST(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -39,8 +45,15 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (trade.status === "completed" || trade.status === "cancelled" || trade.status === "countered") {
-    return NextResponse.json({ error: "Trade already finalised" }, { status: 400 });
+  if (
+    trade.status === "completed" ||
+    trade.status === "cancelled" ||
+    trade.status === "countered"
+  ) {
+    return NextResponse.json(
+      { error: "Trade already finalised" },
+      { status: 400 },
+    );
   }
 
   // Determine which sides belong to which party
@@ -55,8 +68,11 @@ export async function POST(
   // Both parties have confirmed — trade should complete, cannot cancel
   if (myConfirmed && otherConfirmed) {
     return NextResponse.json(
-      { error: "Cannot cancel: both parties have already transferred. The trade should complete shortly." },
-      { status: 400 }
+      {
+        error:
+          "Cannot cancel: both parties have already transferred. The trade should complete shortly.",
+      },
+      { status: 400 },
     );
   }
 
@@ -72,12 +88,18 @@ export async function POST(
   // within 24h of acceptance if userA only sent much later.
   let timeoutExpired = false;
   if (myConfirmed && otherAllPending) {
-    const myConfirmedSides = mySides.filter((s) => s.status === "confirmed" && s.detectedAt);
-    const earliestSend = myConfirmedSides.length > 0
-      ? new Date(Math.min(...myConfirmedSides.map((s) => s.detectedAt!.getTime())))
-      : trade.acceptedAt;
+    const myConfirmedSides = mySides.filter(
+      (s) => s.status === "confirmed" && s.detectedAt,
+    );
+    const earliestSend =
+      myConfirmedSides.length > 0
+        ? new Date(
+            Math.min(...myConfirmedSides.map((s) => s.detectedAt!.getTime())),
+          )
+        : trade.acceptedAt;
     if (earliestSend) {
-      const hoursSinceSend = (Date.now() - earliestSend.getTime()) / (1000 * 60 * 60);
+      const hoursSinceSend =
+        (Date.now() - earliestSend.getTime()) / (1000 * 60 * 60);
       timeoutExpired = hoursSinceSend >= CANCEL_TIMEOUT_HOURS;
     }
   }
@@ -87,7 +109,9 @@ export async function POST(
   let allReceivedReturned = false;
   if (["accepted", "partial"].includes(trade.status)) {
     // "confirmed" sides where the other party was the recipient (i.e. I sent, they received)
-    const mySentConfirmedSides = mySides.filter((s) => s.status === "confirmed");
+    const mySentConfirmedSides = mySides.filter(
+      (s) => s.status === "confirmed",
+    );
     if (mySentConfirmedSides.length > 0) {
       const returnedLogs = await db.query.tradeTransferLog.findMany({
         where: and(
@@ -96,20 +120,27 @@ export async function POST(
         ),
       });
       const returnedObjektIds = new Set(returnedLogs.map((l) => l.objektId));
-      allReceivedReturned = mySentConfirmedSides.every((s) => returnedObjektIds.has(s.objektId));
+      allReceivedReturned = mySentConfirmedSides.every((s) =>
+        returnedObjektIds.has(s.objektId),
+      );
     }
   }
 
   if (!noOneSent && !iCanBackOut && !timeoutExpired && !allReceivedReturned) {
     if (myConfirmed && otherAllPending) {
       return NextResponse.json(
-        { error: `Cannot cancel yet: you must wait ${CANCEL_TIMEOUT_HOURS} hours after sending your objekt before cancelling. Contact support if there is a dispute.` },
-        { status: 400 }
+        {
+          error: `Cannot cancel yet: you must wait ${CANCEL_TIMEOUT_HOURS} hours after sending your objekt before cancelling. Contact support if there is a dispute.`,
+        },
+        { status: 400 },
       );
     }
     return NextResponse.json(
-      { error: "Cannot cancel: at least one objekt has already been transferred. Contact support if there is a dispute." },
-      { status: 400 }
+      {
+        error:
+          "Cannot cancel: at least one objekt has already been transferred. Contact support if there is a dispute.",
+      },
+      { status: 400 },
     );
   }
 
@@ -121,7 +152,9 @@ export async function POST(
 
     // If the trade had been accepted (posts were hidden), restore them to open
     if (["accepted", "partial"].includes(trade.status)) {
-      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
+        (id): id is string => id !== null,
+      );
       if (postIds.length > 0) {
         await tx
           .update(tradePost)
@@ -132,7 +165,9 @@ export async function POST(
 
     // For any cancellation: check if either trade post has remaining active trades.
     // If not, revert "in_trade" posts back to "open" so they aren't stuck.
-    const postIdsToCheck = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+    const postIdsToCheck = [trade.tradePostId, trade.matchedTradePostId].filter(
+      (id): id is string => id !== null,
+    );
     for (const postId of postIdsToCheck) {
       const remainingTrade = await tx.query.activeTrade.findFirst({
         where: and(
@@ -147,7 +182,9 @@ export async function POST(
         await tx
           .update(tradePost)
           .set({ status: "open", updatedAt: new Date() })
-          .where(and(eq(tradePost.id, postId), eq(tradePost.status, "in_trade")));
+          .where(
+            and(eq(tradePost.id, postId), eq(tradePost.status, "in_trade")),
+          );
       }
     }
   });
@@ -197,12 +234,13 @@ export async function POST(
         where: eq(cosmoAccount.userId, session.user.id),
         columns: { cosmoId: true, address: true },
       });
-      const myCosmoId = myCosmo?.cosmoId?.toString() ?? myCosmo?.address ?? session.user.id;
+      const myCosmoId =
+        myCosmo?.cosmoId?.toString() ?? myCosmo?.address ?? session.user.id;
       await issueBan(
         session.user.id,
         myCosmoId,
         tradeId,
-        `Defaulted on Active Trade #${tradeId} (backed out after partner confirmed).`
+        `Defaulted on Active Trade #${tradeId} (backed out after partner confirmed).`,
       );
     }
 
@@ -212,12 +250,13 @@ export async function POST(
         where: eq(cosmoAccount.userId, otherUserId),
         columns: { cosmoId: true, address: true },
       });
-      const otherCosmoId = otherCosmo?.cosmoId?.toString() ?? otherCosmo?.address ?? otherUserId;
+      const otherCosmoId =
+        otherCosmo?.cosmoId?.toString() ?? otherCosmo?.address ?? otherUserId;
       await issueBan(
         otherUserId,
         otherCosmoId,
         tradeId,
-        `Defaulted on Active Trade #${tradeId} (did not send within ${CANCEL_TIMEOUT_HOURS} hours of partner sending).`
+        `Defaulted on Active Trade #${tradeId} (did not send within ${CANCEL_TIMEOUT_HOURS} hours of partner sending).`,
       );
     }
   }

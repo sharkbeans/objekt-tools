@@ -1,22 +1,32 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth-client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangleIcon, XIcon } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { TradeCard } from "@/components/trades/trade-card";
+import {
+  defaultFilters,
+  type TradeFilterState,
+  TradeFilters,
+} from "@/components/trades/trade-filters";
 import { TradePagination } from "@/components/trades/trade-pagination";
-import { TradeFilters, defaultFilters, type TradeFilterState } from "@/components/trades/trade-filters";
-import { XIcon, AlertTriangleIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { useSession } from "@/lib/auth-client";
+import type {
+  ActiveTradeDTO,
+  TradePostDTO,
+  TradeStatus,
+} from "@/lib/trade-types";
 import { cn } from "@/lib/utils";
 
-type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "countered" | "disputed";
-
-const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
+const statusVariant: Record<
+  TradeStatus,
+  "default" | "secondary" | "outline" | "destructive"
+> = {
   pending: "secondary",
   accepted: "default",
   partial: "default",
@@ -80,47 +90,56 @@ function TradeNotifications() {
 
   return (
     <div className="space-y-2">
-      {notifications.map((n: { id: number; message: string; createdAt: string }) => {
-        const activeTradeMatch = n.message.match(/Active Trade #([a-zA-Z0-9]+)/);
-        const activeTradeId = activeTradeMatch?.[1] ?? null;
+      {notifications.map(
+        (n: { id: number; message: string; createdAt: string }) => {
+          const activeTradeMatch = n.message.match(
+            /Active Trade #([a-zA-Z0-9]+)/,
+          );
+          const activeTradeId = activeTradeMatch?.[1] ?? null;
 
-        const inner = (
-          <>
-            <div className="flex items-center gap-3 min-w-0">
-              <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
-              <p className="text-sm">{n.message}</p>
-            </div>
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); dismiss.mutate([n.id]); }}
-              className="shrink-0 text-muted-foreground hover:text-foreground"
+          const inner = (
+            <>
+              <div className="flex items-center gap-3 min-w-0">
+                <AlertTriangleIcon className="h-4 w-4 shrink-0 text-warning" />
+                <p className="text-sm">{n.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  dismiss.mutate([n.id]);
+                }}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
+            </>
+          );
+
+          return activeTradeId ? (
+            <Link
+              key={n.id}
+              href={`/active-trades/${activeTradeId}`}
+              className="banner-warning flex items-center justify-between gap-3"
             >
-              <XIcon className="h-4 w-4" />
-            </button>
-          </>
-        );
-
-        return activeTradeId ? (
-          <Link
-            key={n.id}
-            href={`/active-trades/${activeTradeId}`}
-            className="banner-warning flex items-center justify-between gap-3"
-          >
-            {inner}
-          </Link>
-        ) : (
-          <div
-            key={n.id}
-            className="banner-warning flex items-center justify-between gap-3"
-          >
-            {inner}
-          </div>
-        );
-      })}
+              {inner}
+            </Link>
+          ) : (
+            <div
+              key={n.id}
+              className="banner-warning flex items-center justify-between gap-3"
+            >
+              {inner}
+            </div>
+          );
+        },
+      )}
       {notifications.length > 1 && (
         <button
           type="button"
-          onClick={() => dismiss.mutate(notifications.map((n: { id: number }) => n.id))}
+          onClick={() =>
+            dismiss.mutate(notifications.map((n: { id: number }) => n.id))
+          }
           className="text-xs text-muted-foreground hover:text-foreground"
         >
           Dismiss all
@@ -129,7 +148,6 @@ function TradeNotifications() {
     </div>
   );
 }
-
 
 export default function MyTradesPage() {
   const { data: session, isPending } = useSession();
@@ -191,12 +209,12 @@ export default function MyTradesPage() {
   const limit: number = data?.limit ?? 12;
   const totalPages = Math.ceil(total / limit);
 
-  const activeTrades: any[] = activeData?.trades ?? [];
+  const activeTrades: ActiveTradeDTO[] = activeData?.trades ?? [];
   const activeTotal: number = activeData?.total ?? 0;
   const activeLimit: number = activeData?.limit ?? 12;
   const activeTotalPages = Math.ceil(activeTotal / activeLimit);
 
-  const tradeIds: number[] = trades.map((t: any) => t.id);
+  const tradeIds: string[] = trades.map((t: TradePostDTO) => t.id);
 
   const { data: matchCounts } = useQuery({
     queryKey: ["my-trades-match-counts", tradeIds],
@@ -206,7 +224,7 @@ export default function MyTradesPage() {
           const res = await fetch(`/api/trades/${id}/matches`);
           const json = await res.json();
           return { id, count: json.matches?.length ?? 0 };
-        })
+        }),
       );
       return Object.fromEntries(results.map((r) => [r.id, r.count]));
     },
@@ -232,7 +250,9 @@ export default function MyTradesPage() {
       </div>
 
       {isChecking && (
-        <p className="text-xs text-muted-foreground">Checking objekt availability...</p>
+        <p className="text-xs text-muted-foreground">
+          Checking objekt availability...
+        </p>
       )}
 
       <TradeNotifications />
@@ -247,9 +267,11 @@ export default function MyTradesPage() {
         ) : activeTrades.length > 0 ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {activeTrades.map((trade: any) => {
+              {activeTrades.map((trade: ActiveTradeDTO) => {
                 const isRecipient = trade.recipientUserId === userId;
-                const otherUser = isRecipient ? trade.initiator : trade.recipient;
+                const otherUser = isRecipient
+                  ? trade.initiator
+                  : trade.recipient;
                 const status = trade.status as TradeStatus;
                 const needsAccept = isRecipient && status === "pending";
 
@@ -258,26 +280,34 @@ export default function MyTradesPage() {
                   status === "completed"
                     ? "border-green-300 bg-green-500/10 dark:border-green-800"
                     : status === "pending"
-                    ? "border-amber-200 bg-amber-500/15 dark:border-amber-900"
-                    : status === "cancelled" || status === "disputed"
-                    ? "border-destructive/40 bg-destructive/10"
-                    : "border-border bg-card"
+                      ? "border-amber-200 bg-amber-500/15 dark:border-amber-900"
+                      : status === "cancelled" || status === "disputed"
+                        ? "border-destructive/40 bg-destructive/10"
+                        : "border-border bg-card",
                 );
 
                 return (
-                  <Link key={trade.id} href={`/active-trades/${trade.id}`} className={cardClass}>
+                  <Link
+                    key={trade.id}
+                    href={`/active-trades/${trade.id}`}
+                    className={cardClass}
+                  >
                     <Badge
                       variant={statusVariant[status]}
                       className="absolute top-3 right-3 shrink-0"
                     >
                       {statusLabel[status]}
                     </Badge>
-                    <p className="text-sm font-medium pr-20">Trade #{trade.id}</p>
+                    <p className="text-sm font-medium pr-20">
+                      Trade #{trade.id}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       with {otherUser.cosmoNickname ?? otherUser.name}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(trade.updatedAt).toLocaleDateString("en-GB", { timeZone: "GMT" })}
+                      {new Date(trade.updatedAt).toLocaleDateString("en-GB", {
+                        timeZone: "GMT",
+                      })}
                     </p>
                     {needsAccept && (
                       <Badge variant="default" className="text-xs">
@@ -315,8 +345,12 @@ export default function MyTradesPage() {
       ) : trades.length > 0 ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {trades.map((trade: any) => (
-              <TradeCard key={trade.id} trade={trade} matchCount={matchCounts?.[trade.id]} />
+            {trades.map((trade: TradePostDTO) => (
+              <TradeCard
+                key={trade.id}
+                trade={trade}
+                matchCount={matchCounts?.[trade.id]}
+              />
             ))}
           </div>
           <TradePagination

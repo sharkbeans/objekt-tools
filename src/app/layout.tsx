@@ -25,9 +25,7 @@ export default function RootLayout({
           data-website-id="2efbd898-a793-436a-9078-e7e4b6abd77d"
         ></script>
       </head>
-      <body
-        className="antialiased flex flex-col h-dvh"
-      >
+      <body className="antialiased flex flex-col h-dvh">
         <Providers>
           <Navbar />
           <DiscordBanner />

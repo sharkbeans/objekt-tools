@@ -1,9 +1,15 @@
 import crypto from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { activeTrade, activeTradeSide, cosmoAccount, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import {
+  activeTrade,
+  activeTradeSide,
+  cosmoAccount,
+  tradePost,
+  tradeTransferLog,
+} from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { and, eq, lt, inArray, isNotNull } from "drizzle-orm";
 import { issueBan, propagateResolution } from "@/lib/trade-guards";
 
 // GET /api/cron/expire-trades
@@ -15,7 +21,8 @@ export async function GET(request: NextRequest) {
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
   let authorized = false;
   try {
-    authorized = authHeader.length === expected.length &&
+    authorized =
+      authHeader.length === expected.length &&
       crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
   } catch {
     authorized = false;
@@ -32,12 +39,7 @@ export async function GET(request: NextRequest) {
   const expiredPosts = await db
     .update(tradePost)
     .set({ status: "closed", updatedAt: now })
-    .where(
-      and(
-        eq(tradePost.status, "open"),
-        lt(tradePost.createdAt, cutoff),
-      )
-    )
+    .where(and(eq(tradePost.status, "open"), lt(tradePost.createdAt, cutoff)))
     .returning({ id: tradePost.id, userId: tradePost.userId });
 
   const postNotifications = expiredPosts.map((p) => ({
@@ -122,7 +124,13 @@ export async function GET(request: NextRequest) {
       isNotNull(activeTrade.acceptedAt),
       lt(activeTrade.acceptedAt, acceptedCutoff),
     ),
-    columns: { id: true, initiatorUserId: true, recipientUserId: true, tradePostId: true, matchedTradePostId: true },
+    columns: {
+      id: true,
+      initiatorUserId: true,
+      recipientUserId: true,
+      tradePostId: true,
+      matchedTradePostId: true,
+    },
   });
 
   if (staleAcceptedTrades.length > 0) {
@@ -162,20 +170,30 @@ export async function GET(request: NextRequest) {
       const sides = await db.query.activeTradeSide.findMany({
         where: eq(activeTradeSide.activeTradeId, t.id),
       });
-      const unsentUserIds = [...new Set(
-        sides.filter((s) => s.status === "pending").map((s) => s.userId),
-      )];
+      const unsentUserIds = [
+        ...new Set(
+          sides.filter((s) => s.status === "pending").map((s) => s.userId),
+        ),
+      ];
       for (const userId of unsentUserIds) {
-        const otherUserId = userId === t.initiatorUserId ? t.recipientUserId : t.initiatorUserId;
+        const otherUserId =
+          userId === t.initiatorUserId ? t.recipientUserId : t.initiatorUserId;
         const otherSides = sides.filter((s) => s.userId === otherUserId);
-        const otherSent = otherSides.length > 0 && otherSides.every((s) => s.status === "confirmed");
+        const otherSent =
+          otherSides.length > 0 &&
+          otherSides.every((s) => s.status === "confirmed");
         if (!otherSent) continue; // Both ghosted — no ban
         const cosmo = await db.query.cosmoAccount.findFirst({
           where: eq(cosmoAccount.userId, userId),
           columns: { cosmoId: true, address: true },
         });
         const cosmoId = cosmo?.cosmoId?.toString() ?? cosmo?.address ?? userId;
-        await issueBan(userId, cosmoId, t.id, `Defaulted on Active Trade #${t.id} (expired after 30 days without completion).`);
+        await issueBan(
+          userId,
+          cosmoId,
+          t.id,
+          `Defaulted on Active Trade #${t.id} (expired after 30 days without completion).`,
+        );
       }
     }
   }
@@ -192,7 +210,9 @@ export async function GET(request: NextRequest) {
   });
 
   // Filter to trades that are still active and have no corresponding "recovered" log
-  const wrongRecipientTradeIds = [...new Set(wrongRecipientLogs.map((l) => l.activeTradeId))];
+  const wrongRecipientTradeIds = [
+    ...new Set(wrongRecipientLogs.map((l) => l.activeTradeId)),
+  ];
   const tradesToExpireForWrongRecipient: string[] = [];
 
   for (const tradeIdToCheck of wrongRecipientTradeIds) {
@@ -206,7 +226,9 @@ export async function GET(request: NextRequest) {
     if (!trade) continue;
 
     // Check if the wrong-recipient objekts have been recovered
-    const wrongLogs = wrongRecipientLogs.filter((l) => l.activeTradeId === tradeIdToCheck);
+    const wrongLogs = wrongRecipientLogs.filter(
+      (l) => l.activeTradeId === tradeIdToCheck,
+    );
     const recoveredLogs = await db.query.tradeTransferLog.findMany({
       where: and(
         eq(tradeTransferLog.activeTradeId, tradeIdToCheck),
@@ -214,7 +236,9 @@ export async function GET(request: NextRequest) {
       ),
     });
     const recoveredObjektIds = new Set(recoveredLogs.map((l) => l.objektId));
-    const hasUnrecovered = wrongLogs.some((l) => !recoveredObjektIds.has(l.objektId));
+    const hasUnrecovered = wrongLogs.some(
+      (l) => !recoveredObjektIds.has(l.objektId),
+    );
 
     if (hasUnrecovered) {
       tradesToExpireForWrongRecipient.push(tradeIdToCheck);
@@ -224,7 +248,13 @@ export async function GET(request: NextRequest) {
   if (tradesToExpireForWrongRecipient.length > 0) {
     const wrongRecipientTrades = await db.query.activeTrade.findMany({
       where: inArray(activeTrade.id, tradesToExpireForWrongRecipient),
-      columns: { id: true, initiatorUserId: true, recipientUserId: true, tradePostId: true, matchedTradePostId: true },
+      columns: {
+        id: true,
+        initiatorUserId: true,
+        recipientUserId: true,
+        tradePostId: true,
+        matchedTradePostId: true,
+      },
     });
 
     await db
@@ -257,7 +287,9 @@ export async function GET(request: NextRequest) {
     // Issue bans to users who sent to the wrong recipient and it wasn't recovered
     for (const t of wrongRecipientTrades) {
       // Find the wrong_recipient logs for this trade that aren't recovered
-      const tradeWrongLogs = wrongRecipientLogs.filter((l) => l.activeTradeId === t.id);
+      const tradeWrongLogs = wrongRecipientLogs.filter(
+        (l) => l.activeTradeId === t.id,
+      );
       const recoveredForTrade = await db.query.tradeTransferLog.findMany({
         where: and(
           eq(tradeTransferLog.activeTradeId, t.id),
@@ -278,7 +310,12 @@ export async function GET(request: NextRequest) {
           columns: { cosmoId: true, address: true },
         });
         const cosmoId = cosmo?.cosmoId?.toString() ?? cosmo?.address ?? userId;
-        await issueBan(userId, cosmoId, t.id, `Defaulted on Active Trade #${t.id} (misrouted transfer not recovered within 7 days).`);
+        await issueBan(
+          userId,
+          cosmoId,
+          t.id,
+          `Defaulted on Active Trade #${t.id} (misrouted transfer not recovered within 7 days).`,
+        );
       }
     }
   }

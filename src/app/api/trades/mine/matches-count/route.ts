@@ -1,12 +1,8 @@
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import {
-  tradePost,
-  tradePostHave,
-  tradePostWant,
-} from "@/lib/db/schema";
-import { eq, and, ne, inArray, isNull } from "drizzle-orm";
+import { tradePost, tradePostHave, tradePostWant } from "@/lib/db/schema";
 
 // GET /api/trades/mine/matches-count — total match count across all user's open trades
 // Batched: 3 queries total instead of 3*N
@@ -21,7 +17,7 @@ export async function GET() {
   const myTrades = await db.query.tradePost.findMany({
     where: and(
       eq(tradePost.userId, session.user.id),
-      eq(tradePost.status, "open")
+      eq(tradePost.status, "open"),
     ),
     with: {
       haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
@@ -53,14 +49,24 @@ export async function GET() {
         collectionId: tradePostHave.collectionId,
       })
       .from(tradePostHave)
-      .where(and(inArray(tradePostHave.collectionId, allMyWantCollections), isNull(tradePostHave.deletedAt))),
+      .where(
+        and(
+          inArray(tradePostHave.collectionId, allMyWantCollections),
+          isNull(tradePostHave.deletedAt),
+        ),
+      ),
     db
       .selectDistinct({
         tradePostId: tradePostWant.tradePostId,
         collectionId: tradePostWant.collectionId,
       })
       .from(tradePostWant)
-      .where(and(inArray(tradePostWant.collectionId, allMyHaveCollections), isNull(tradePostWant.deletedAt))),
+      .where(
+        and(
+          inArray(tradePostWant.collectionId, allMyHaveCollections),
+          isNull(tradePostWant.deletedAt),
+        ),
+      ),
   ]);
 
   // Build lookup: tradePostId -> Set<collectionId>
@@ -109,7 +115,7 @@ export async function GET() {
     where: and(
       inArray(tradePost.id, [...candidateIds]),
       eq(tradePost.status, "open"),
-      ne(tradePost.userId, session.user.id)
+      ne(tradePost.userId, session.user.id),
     ),
     columns: { id: true },
   });

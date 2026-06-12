@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth-client";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
+import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 type TradeStatus = "completed" | "cancelled" | "countered" | "disputed";
@@ -35,22 +35,42 @@ function getDisplayStatus(trade: HistoryTrade): {
   variant: "default" | "destructive" | "secondary" | "outline";
   className?: string;
 } {
-  if (trade.status === "completed") return { label: "Completed", variant: "default" };
-  if (trade.status === "disputed") return { label: "Disputed", variant: "destructive" };
-  if (trade.status === "countered") return { label: "Countered", variant: "outline", className: "border-blue-500/60 text-blue-400" };
+  if (trade.status === "completed")
+    return { label: "Completed", variant: "default" };
+  if (trade.status === "disputed")
+    return { label: "Disputed", variant: "destructive" };
+  if (trade.status === "countered")
+    return {
+      label: "Countered",
+      variant: "outline",
+      className: "border-blue-500/60 text-blue-400",
+    };
   if (trade.status === "cancelled") {
     const wasAccepted = trade.acceptedAt != null;
     return wasAccepted
       ? { label: "Cancelled", variant: "destructive" }
-      : { label: "Declined", variant: "outline", className: "border-red-500/60 text-red-400" };
+      : {
+          label: "Declined",
+          variant: "outline",
+          className: "border-red-500/60 text-red-400",
+        };
   }
   return { label: trade.status, variant: "secondary" };
 }
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
-  const date = d.toLocaleDateString("en-GB", { timeZone: "GMT", day: "2-digit", month: "short", year: "numeric" });
-  const time = d.toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit" });
+  const date = d.toLocaleDateString("en-GB", {
+    timeZone: "GMT",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-GB", {
+    timeZone: "GMT",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return `${date} · ${time} GMT`;
 }
 
@@ -82,7 +102,10 @@ export default function TradeHistoryPage() {
           <h1 className="text-2xl font-bold">Trade History</h1>
           <p className="text-muted-foreground">Completed and past trades</p>
         </div>
-        <Link href="/trades/mine" className="text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/trades/mine"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
           ← My Trades
         </Link>
       </div>
@@ -90,7 +113,9 @@ export default function TradeHistoryPage() {
       <ActiveTradesBanner />
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading...</div>
+        <div className="text-center py-12 text-muted-foreground">
+          Loading...
+        </div>
       ) : trades.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
@@ -112,7 +137,10 @@ export default function TradeHistoryPage() {
               >
                 <Badge
                   variant={display.variant}
-                  className={cn("shrink-0 w-24 justify-center", display.className)}
+                  className={cn(
+                    "shrink-0 w-24 justify-center",
+                    display.className,
+                  )}
                 >
                   {display.label}
                 </Badge>

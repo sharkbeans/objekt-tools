@@ -1,7 +1,7 @@
-import { forwardRef, useState, useRef, useEffect } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
+import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
 import { getSeasonPrefix } from "@/lib/season-prefix";
-import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
 
 export type PosterTheme = "dark" | "light";
 
@@ -117,7 +117,10 @@ export function getGridCols(count: number): number {
   return Math.min(10, Math.max(3, Math.ceil(Math.sqrt(count * 1.5))));
 }
 
-export function getDisplayCount(items: ResolvedPosterItem[], groupByNumbers: boolean): number {
+export function getDisplayCount(
+  items: ResolvedPosterItem[],
+  groupByNumbers: boolean,
+): number {
   return getDisplayItems(items, groupByNumbers).length;
 }
 
@@ -555,7 +558,14 @@ function AddCustomWantCard({
         aria-label="Add custom want"
       >
         <span style={{ fontSize: 22, fontWeight: 400, lineHeight: 1 }}>+</span>
-        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase" as const }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: 0.5,
+            textTransform: "uppercase" as const,
+          }}
+        >
           Custom Want
         </span>
       </button>
@@ -790,10 +800,14 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
       maxCols = colsPerRow;
     } else if (groupByMember) {
       const haveGroups = groupItemsByMember(
-        getDisplayItems(data.haves, groupByNumbers).map((display) => display.item),
+        getDisplayItems(data.haves, groupByNumbers).map(
+          (display) => display.item,
+        ),
       );
       const wantGroups = groupItemsByMember(
-        getDisplayItems(data.wants, groupByNumbers).map((display) => display.item),
+        getDisplayItems(data.wants, groupByNumbers).map(
+          (display) => display.item,
+        ),
       );
       const maxGroupSize = Math.max(
         ...haveGroups.map((g) => g.items.length),

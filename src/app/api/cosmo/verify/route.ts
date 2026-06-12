@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
-import { redis } from "@/lib/redis";
-import { db } from "@/lib/db";
-import { cosmoAccount } from "@/lib/db/schema";
 import { fetchUserProfile } from "@/lib/cosmo/client";
 import type { ValidArtist } from "@/lib/cosmo/types";
+import { db } from "@/lib/db";
+import { cosmoAccount } from "@/lib/db/schema";
+import { redis } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
   let session;
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   if (!stored) {
     return NextResponse.json(
       { error: "Verification code expired. Please generate a new one." },
-      { status: 410 }
+      { status: 410 },
     );
   }
 
@@ -45,10 +45,7 @@ export async function POST(request: NextRequest) {
 
     // Validate nickname matches
     if (profile.nickname.toLowerCase() !== nickname.toLowerCase()) {
-      return NextResponse.json(
-        { error: "Nickname mismatch" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Nickname mismatch" }, { status: 400 });
     }
 
     // Check if code appears in status message
@@ -58,7 +55,7 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "Verification code not found in your Cosmo bio message" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -83,12 +80,16 @@ export async function POST(request: NextRequest) {
     // Clean up Redis
     await redis.del(redisKey);
 
-    return NextResponse.json({ success: true, address: address.toLowerCase(), nickname });
+    return NextResponse.json({
+      success: true,
+      address: address.toLowerCase(),
+      nickname,
+    });
   } catch (error) {
     console.error("Cosmo verification failed:", error);
     return NextResponse.json(
       { error: "Failed to verify with Cosmo" },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }

@@ -141,6 +141,20 @@
       "when": 1780464604970,
       "tag": "0019_whole_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1781239020368,
+      "tag": "0020_strange_landau",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781239367392,
+      "tag": "0021_gigantic_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+
 import { eq, inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
@@ -26,16 +27,30 @@ export async function GET(
         with: {
           user: {
             columns: { id: true, name: true, image: true },
-            with: { cosmoAccount: { columns: { nickname: true, address: true } } },
+            with: {
+              cosmoAccount: { columns: { nickname: true, address: true } },
+            },
           },
         },
       },
       initiator: {
-        columns: { id: true, name: true, image: true, discordId: true, discordUsername: true },
+        columns: {
+          id: true,
+          name: true,
+          image: true,
+          discordId: true,
+          discordUsername: true,
+        },
         with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
       recipient: {
-        columns: { id: true, name: true, image: true, discordId: true, discordUsername: true },
+        columns: {
+          id: true,
+          name: true,
+          image: true,
+          discordId: true,
+          discordUsername: true,
+        },
         with: { cosmoAccount: { columns: { nickname: true, address: true } } },
       },
       counterOffers: {
@@ -128,8 +143,10 @@ export async function GET(
         initiatorUserId: ancestor.initiatorUserId,
         recipientUserId: ancestor.recipientUserId,
         createdAt: ancestor.createdAt,
-        initiatorName: initiatorRow?.nickname ?? initiatorRow?.name ?? "Unknown",
-        recipientName: recipientRow?.nickname ?? recipientRow?.name ?? "Unknown",
+        initiatorName:
+          initiatorRow?.nickname ?? initiatorRow?.name ?? "Unknown",
+        recipientName:
+          recipientRow?.nickname ?? recipientRow?.name ?? "Unknown",
       });
       currentId = ancestor.counterOfferToId;
     }

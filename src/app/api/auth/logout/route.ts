@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { session as sessionTable } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   const isSecure =

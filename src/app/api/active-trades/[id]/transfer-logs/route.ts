@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { asc, eq, inArray } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade, cosmoAccount, tradeTransferLog } from "@/lib/db/schema";
-import { eq, asc, inArray } from "drizzle-orm";
 
 // GET /api/active-trades/[id]/transfer-logs
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -36,6 +36,7 @@ export async function GET(
   const logs = await db.query.tradeTransferLog.findMany({
     where: eq(tradeTransferLog.activeTradeId, tradeId),
     orderBy: [asc(tradeTransferLog.detectedAt)],
+    limit: 500,
     with: {
       sender: {
         columns: { id: true, name: true },
@@ -60,7 +61,10 @@ export async function GET(
       columns: { address: true, nickname: true },
     });
     for (const account of accounts) {
-      toAddressNicknameMap.set(account.address.toLowerCase(), account.nickname ?? null);
+      toAddressNicknameMap.set(
+        account.address.toLowerCase(),
+        account.nickname ?? null,
+      );
     }
   }
 

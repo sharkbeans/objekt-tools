@@ -1,21 +1,28 @@
-export const dynamic = 'force-dynamic';
-import { NextRequest, NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+
+import { and, eq, gte, inArray, ne, or } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { activeTrade, activeTradeSide, tradeNotification, tradePost, tradeTransferLog } from "@/lib/db/schema";
+import { collections, objekts, transfers } from "@/lib/db/indexer-schema";
+import {
+  activeTrade,
+  activeTradeSide,
+  tradeNotification,
+  tradePost,
+  tradeTransferLog,
+} from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { tryLiftBan, propagateResolution } from "@/lib/trade-guards";
 import { publishTradeEvent } from "@/lib/realtime";
-import { objekts, collections, transfers } from "@/lib/db/indexer-schema";
-import { eq, inArray, and, or, ne, gte } from "drizzle-orm";
+import { propagateResolution, tryLiftBan } from "@/lib/trade-guards";
 
 // POST /api/active-trades/[id]/check-transfers
 // Queries the indexer for current objekt ownership and updates side statuses.
 // Works for both pending and accepted/partial trades.
 export async function POST(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -58,7 +65,7 @@ export async function POST(
   const tradeObjektIdSet = new Set(tradeObjektIds);
 
   const loggedEvents = new Set(
-    existingLogs.map((l) => `${l.objektId}:${l.event}`)
+    existingLogs.map((l) => `${l.objektId}:${l.event}`),
   );
 
   let updatedCount = 0;
@@ -79,7 +86,7 @@ export async function POST(
           trade.createdAt
             ? gte(transfers.timestamp, trade.createdAt)
             : undefined,
-        )
+        ),
       );
 
     // Collect inserts to batch
@@ -90,15 +97,16 @@ export async function POST(
         (t) =>
           t.objektId === side.objektId &&
           t.from.toLowerCase() === side.address.toLowerCase() &&
-          t.to.toLowerCase() === side.recipientAddress.toLowerCase()
+          t.to.toLowerCase() === side.recipientAddress.toLowerCase(),
       );
       if (!matchedTransfer) {
         continue;
       }
 
-      const recipientUserId = side.userId === trade.initiatorUserId
-        ? trade.recipientUserId
-        : trade.initiatorUserId;
+      const recipientUserId =
+        side.userId === trade.initiatorUserId
+          ? trade.recipientUserId
+          : trade.initiatorUserId;
 
       if (!loggedEvents.has(`${side.objektId}:pre_accept_sent`)) {
         pendingInserts.push({
@@ -145,14 +153,18 @@ export async function POST(
 
     // ── AUTO-ACCEPT: if ALL sides for a party are now pre_accept_sent, promote the trade ──
     // Group sides by user
-    const initiatorSides = trade.sides.filter((s) => s.userId === trade.initiatorUserId);
-    const recipientSidesForCheck = trade.sides.filter((s) => s.userId === trade.recipientUserId);
+    const initiatorSides = trade.sides.filter(
+      (s) => s.userId === trade.initiatorUserId,
+    );
+    const recipientSidesForCheck = trade.sides.filter(
+      (s) => s.userId === trade.recipientUserId,
+    );
 
     const initiatorAllPreSent = initiatorSides.every((s) =>
-      loggedEvents.has(`${s.objektId}:pre_accept_sent`)
+      loggedEvents.has(`${s.objektId}:pre_accept_sent`),
     );
     const recipientAllPreSent = recipientSidesForCheck.every((s) =>
-      loggedEvents.has(`${s.objektId}:pre_accept_sent`)
+      loggedEvents.has(`${s.objektId}:pre_accept_sent`),
     );
 
     if (initiatorAllPreSent && recipientAllPreSent) {
@@ -171,23 +183,30 @@ export async function POST(
           const currentOwner = ownerMap2.get(side.objektId);
           await tx
             .update(activeTradeSide)
-            .set({ status: "confirmed", ownerAtAcceptance: currentOwner ?? null, detectedAt: now })
+            .set({
+              status: "confirmed",
+              ownerAtAcceptance: currentOwner ?? null,
+              detectedAt: now,
+            })
             .where(eq(activeTradeSide.id, side.id));
         }
 
         await tx
           .update(activeTrade)
           .set({ status: "completed", acceptedAt: now, updatedAt: now })
-          .where(and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")));
+          .where(
+            and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")),
+          );
 
-        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
+          (id): id is string => id !== null,
+        );
         if (postIds.length > 0) {
           await tx
             .update(tradePost)
             .set({ status: "closed", updatedAt: now })
             .where(inArray(tradePost.id, postIds));
         }
-
       });
       await notify([
         {
@@ -229,16 +248,19 @@ export async function POST(
         await tx
           .update(activeTrade)
           .set({ status: "accepted", acceptedAt: now, updatedAt: now })
-          .where(and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")));
+          .where(
+            and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")),
+          );
 
-        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
+          (id): id is string => id !== null,
+        );
         if (postIds.length > 0) {
           await tx
             .update(tradePost)
             .set({ status: "in_trade", updatedAt: now })
             .where(inArray(tradePost.id, postIds));
         }
-
       });
       await notify([
         {
@@ -291,20 +313,23 @@ export async function POST(
         .where(
           and(
             inArray(transfers.objektId, pendingObjektIds),
-            transferSince
-              ? gte(transfers.timestamp, transferSince)
-              : undefined,
-          )
+            transferSince ? gte(transfers.timestamp, transferSince) : undefined,
+          ),
         );
 
       // Collect inserts to batch
       const sideInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
-      const sideUpdates: { id: number; status: "sent" | "confirmed"; detectedAt?: Date }[] = [];
+      const sideUpdates: {
+        id: number;
+        status: "sent" | "confirmed";
+        detectedAt?: Date;
+      }[] = [];
 
       for (const side of pendingSides) {
-        const recipientUserId = side.userId === trade.initiatorUserId
-          ? trade.recipientUserId
-          : trade.initiatorUserId;
+        const recipientUserId =
+          side.userId === trade.initiatorUserId
+            ? trade.recipientUserId
+            : trade.initiatorUserId;
 
         // Find a transfer event where the correct objekt was sent
         // from the correct sender to the correct recipient
@@ -312,20 +337,21 @@ export async function POST(
           (t) =>
             t.objektId === side.objektId &&
             t.from.toLowerCase() === side.address.toLowerCase() &&
-            t.to.toLowerCase() === side.recipientAddress.toLowerCase()
+            t.to.toLowerCase() === side.recipientAddress.toLowerCase(),
         );
         const wrongRecipientTransfer = transferEvents.find(
           (t) =>
             t.objektId === side.objektId &&
             t.from.toLowerCase() === side.address.toLowerCase() &&
-            t.to.toLowerCase() !== side.recipientAddress.toLowerCase()
+            t.to.toLowerCase() !== side.recipientAddress.toLowerCase(),
         );
 
         if (confirmedTransfer) {
           // Skip unsolicited pre-accept transfers
           if (
             side.ownerAtAcceptance &&
-            side.ownerAtAcceptance.toLowerCase() === side.recipientAddress.toLowerCase()
+            side.ownerAtAcceptance.toLowerCase() ===
+              side.recipientAddress.toLowerCase()
           ) {
             continue;
           }
@@ -348,7 +374,11 @@ export async function POST(
             });
             updatedCount++;
           } else if (side.status === "sent") {
-            sideUpdates.push({ id: side.id, status: "confirmed", detectedAt: new Date() });
+            sideUpdates.push({
+              id: side.id,
+              status: "confirmed",
+              detectedAt: new Date(),
+            });
             sideInserts.push({
               activeTradeId: tradeId,
               activeTradeSideId: side.id,
@@ -365,7 +395,10 @@ export async function POST(
             });
             updatedCount++;
           }
-        } else if (wrongRecipientTransfer && !loggedEvents.has(`${side.objektId}:wrong_recipient`)) {
+        } else if (
+          wrongRecipientTransfer &&
+          !loggedEvents.has(`${side.objektId}:wrong_recipient`)
+        ) {
           sideInserts.push({
             activeTradeId: tradeId,
             activeTradeSideId: side.id,
@@ -400,7 +433,7 @@ export async function POST(
             (t) =>
               t.objektId === side.objektId &&
               t.to.toLowerCase() === side.recipientAddress.toLowerCase() &&
-              t.from.toLowerCase() !== side.address.toLowerCase() // not the original sender (that path is confirmedTransfer)
+              t.from.toLowerCase() !== side.address.toLowerCase(), // not the original sender (that path is confirmedTransfer)
           );
           if (recoveryTransfer) {
             sideInserts.push({
@@ -418,7 +451,11 @@ export async function POST(
               event: "recovered",
             });
             loggedEvents.add(`${side.objektId}:recovered`);
-            sideUpdates.push({ id: side.id, status: "confirmed", detectedAt: new Date() });
+            sideUpdates.push({
+              id: side.id,
+              status: "confirmed",
+              detectedAt: new Date(),
+            });
             updatedCount++;
           }
         }
@@ -432,8 +469,12 @@ export async function POST(
         ...sideUpdates.map((u) =>
           db
             .update(activeTradeSide)
-            .set(u.detectedAt ? { status: u.status, detectedAt: u.detectedAt } : { status: u.status })
-            .where(eq(activeTradeSide.id, u.id))
+            .set(
+              u.detectedAt
+                ? { status: u.status, detectedAt: u.detectedAt }
+                : { status: u.status },
+            )
+            .where(eq(activeTradeSide.id, u.id)),
         ),
       ]);
     }
@@ -464,12 +505,16 @@ export async function POST(
           and(
             inArray(transfers.objektId, confirmedObjektIds),
             transferSince ? gte(transfers.timestamp, transferSince) : undefined,
-          )
+          ),
         );
 
       // Collect return inserts to batch
       const returnInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
-      const returnNotifications: { userId: string; activeTradeId: string; message: string }[] = [];
+      const returnNotifications: {
+        userId: string;
+        activeTradeId: string;
+        message: string;
+      }[] = [];
 
       // Build dedup set for return notifications once, not per-side
       let existingReturnMsgs: Set<string> | null = null;
@@ -481,13 +526,14 @@ export async function POST(
           (t) =>
             t.objektId === side.objektId &&
             t.from.toLowerCase() === side.recipientAddress.toLowerCase() &&
-            t.to.toLowerCase() === side.address.toLowerCase()
+            t.to.toLowerCase() === side.address.toLowerCase(),
         );
 
         if (returnTransfer && !loggedEvents.has(`${side.objektId}:returned`)) {
-          const recipientUserId = side.userId === trade.initiatorUserId
-            ? trade.recipientUserId
-            : trade.initiatorUserId;
+          const recipientUserId =
+            side.userId === trade.initiatorUserId
+              ? trade.recipientUserId
+              : trade.initiatorUserId;
 
           returnInserts.push({
             activeTradeId: tradeId,
@@ -507,30 +553,48 @@ export async function POST(
           loggedEvents.add(`${side.objektId}:returned`);
           updatedCount++;
 
-          const senderName = recipientUserId === trade.initiatorUserId
-            ? (trade as typeof trade & { initiator?: { name: string } }).initiator?.name ?? "Your partner"
-            : (trade as typeof trade & { recipient?: { name: string } }).recipient?.name ?? "Your partner";
-          const objektLabel = side.collectionNo && side.member
-            ? `${side.member} ${side.collectionNo}`
-            : side.collectionId;
+          const senderName =
+            recipientUserId === trade.initiatorUserId
+              ? ((trade as typeof trade & { initiator?: { name: string } })
+                  .initiator?.name ?? "Your partner")
+              : ((trade as typeof trade & { recipient?: { name: string } })
+                  .recipient?.name ?? "Your partner");
+          const objektLabel =
+            side.collectionNo && side.member
+              ? `${side.member} ${side.collectionNo}`
+              : side.collectionId;
 
           const returnNotifMsg = `${senderName} returned ${objektLabel}. Either party can now cancel this trade without penalty.`;
 
           // Lazy-load existing return notification messages once
           if (existingReturnMsgs === null) {
-            const existingReturnNotifs = await db.query.tradeNotification.findMany({
-              where: and(
-                inArray(tradeNotification.userId, [trade.initiatorUserId, trade.recipientUserId]),
-                eq(tradeNotification.activeTradeId, tradeId),
-              ),
-            });
-            existingReturnMsgs = new Set(existingReturnNotifs.map((n) => n.message));
+            const existingReturnNotifs =
+              await db.query.tradeNotification.findMany({
+                where: and(
+                  inArray(tradeNotification.userId, [
+                    trade.initiatorUserId,
+                    trade.recipientUserId,
+                  ]),
+                  eq(tradeNotification.activeTradeId, tradeId),
+                ),
+              });
+            existingReturnMsgs = new Set(
+              existingReturnNotifs.map((n) => n.message),
+            );
           }
 
           if (!existingReturnMsgs.has(returnNotifMsg)) {
             returnNotifications.push(
-              { userId: trade.initiatorUserId, activeTradeId: tradeId, message: returnNotifMsg },
-              { userId: trade.recipientUserId, activeTradeId: tradeId, message: returnNotifMsg },
+              {
+                userId: trade.initiatorUserId,
+                activeTradeId: tradeId,
+                message: returnNotifMsg,
+              },
+              {
+                userId: trade.recipientUserId,
+                activeTradeId: tradeId,
+                message: returnNotifMsg,
+              },
             );
             existingReturnMsgs.add(returnNotifMsg);
           }
@@ -558,13 +622,17 @@ export async function POST(
     // have unrelated transfers (from old or other active trades) that would be
     // falsely flagged. Only pre_accept_* events are meaningful here.
     if (updatedCount > 0) {
-      void publishTradeEvent(tradeId, "trade:transfer-detected", { activeTradeId: tradeId, count: updatedCount });
+      void publishTradeEvent(tradeId, "trade:transfer-detected", {
+        activeTradeId: tradeId,
+        count: updatedCount,
+      });
     }
 
     // If nothing changed, skip the DB reloads and reconstruct from what we have
     if (updatedCount === 0) {
       const preAcceptCount = existingLogs.filter(
-        (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed"
+        (l) =>
+          l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed",
       ).length;
       return NextResponse.json({
         status: trade.status,
@@ -579,10 +647,17 @@ export async function POST(
     }
 
     const [freshLogsEarly, freshSidesEarly] = await Promise.all([
-      db.query.tradeTransferLog.findMany({ where: eq(tradeTransferLog.activeTradeId, tradeId) }),
-      db.query.activeTradeSide.findMany({ where: eq(activeTradeSide.activeTradeId, tradeId) }),
+      db.query.tradeTransferLog.findMany({
+        where: eq(tradeTransferLog.activeTradeId, tradeId),
+      }),
+      db.query.activeTradeSide.findMany({
+        where: eq(activeTradeSide.activeTradeId, tradeId),
+      }),
     ]);
-    const preAcceptLogsEarly = freshLogsEarly.filter((l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed");
+    const preAcceptLogsEarly = freshLogsEarly.filter(
+      (l) =>
+        l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed",
+    );
     return NextResponse.json({
       status: trade.status,
       updated: updatedCount,
@@ -614,8 +689,12 @@ export async function POST(
     .map((s) => s.recipientAddress.toLowerCase());
 
   // from = any sender address, to = any receiver address
-  const uniqueFromAddresses = [...new Set([...initiatorSendAddrs, ...recipientSendAddrs])];
-  const uniqueToAddresses = [...new Set([...recipientRecvAddrs, ...initiatorRecvAddrs])];
+  const uniqueFromAddresses = [
+    ...new Set([...initiatorSendAddrs, ...recipientSendAddrs]),
+  ];
+  const uniqueToAddresses = [
+    ...new Set([...recipientRecvAddrs, ...initiatorRecvAddrs]),
+  ];
 
   // Query actual transfers between the parties from the indexer transfer table
   const recentTransfers = await indexer
@@ -636,12 +715,12 @@ export async function POST(
         (trade.acceptedAt ?? trade.createdAt)
           ? gte(transfers.timestamp, trade.acceptedAt ?? trade.createdAt!)
           : undefined,
-      )
+      ),
     );
 
   // Filter to non-trade objekts only
   const wrongTransfers = recentTransfers.filter(
-    (t) => t.objektId && !tradeObjektIdSet.has(t.objektId)
+    (t) => t.objektId && !tradeObjektIdSet.has(t.objektId),
   );
 
   const MAX_WRONG_TRANSFERS_PER_TRADE = 10;
@@ -649,7 +728,7 @@ export async function POST(
   if (wrongTransfers.length > 0) {
     // Check how many wrong_objekt logs already exist for this trade
     const existingWrongCount = existingLogs.filter(
-      (l) => l.event === "wrong_objekt"
+      (l) => l.event === "wrong_objekt",
     ).length;
 
     if (existingWrongCount < MAX_WRONG_TRANSFERS_PER_TRADE) {
@@ -665,18 +744,42 @@ export async function POST(
       // Fetch serial and collection info in parallel
       const [objs, colls] = await Promise.all([
         wrongObjektIds.length > 0
-          ? indexer.select({ id: objekts.id, serial: objekts.serial }).from(objekts).where(inArray(objekts.id, wrongObjektIds))
+          ? indexer
+              .select({ id: objekts.id, serial: objekts.serial })
+              .from(objekts)
+              .where(inArray(objekts.id, wrongObjektIds))
           : Promise.resolve([] as { id: string; serial: number }[]),
         wrongCollectionIds.length > 0
           ? indexer
-              .select({ id: collections.id, collectionId: collections.collectionId, collectionNo: collections.collectionNo, member: collections.member })
+              .select({
+                id: collections.id,
+                collectionId: collections.collectionId,
+                collectionNo: collections.collectionNo,
+                member: collections.member,
+              })
               .from(collections)
               .where(inArray(collections.id, [...new Set(wrongCollectionIds)]))
-          : Promise.resolve([] as { id: string; collectionId: string; collectionNo: string; member: string }[]),
+          : Promise.resolve(
+              [] as {
+                id: string;
+                collectionId: string;
+                collectionNo: string;
+                member: string;
+              }[],
+            ),
       ]);
 
       const serialMap = new Map(objs.map((o) => [o.id, o.serial]));
-      const collectionMap = new Map(colls.map((c) => [c.id, { collectionId: c.collectionId, collectionNo: c.collectionNo, member: c.member }]));
+      const collectionMap = new Map(
+        colls.map((c) => [
+          c.id,
+          {
+            collectionId: c.collectionId,
+            collectionNo: c.collectionNo,
+            member: c.member,
+          },
+        ]),
+      );
 
       const wrongInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
       let insertedWrongCount = 0;
@@ -687,8 +790,12 @@ export async function POST(
 
         const fromLower = t.from.toLowerCase();
         const isFromInitiator = initiatorSendAddrs.includes(fromLower);
-        const senderUserId = isFromInitiator ? trade.initiatorUserId : trade.recipientUserId;
-        const recipientUserId = isFromInitiator ? trade.recipientUserId : trade.initiatorUserId;
+        const senderUserId = isFromInitiator
+          ? trade.initiatorUserId
+          : trade.recipientUserId;
+        const recipientUserId = isFromInitiator
+          ? trade.recipientUserId
+          : trade.initiatorUserId;
 
         const coll = t.collectionId ? collectionMap.get(t.collectionId) : null;
 
@@ -701,7 +808,7 @@ export async function POST(
           collectionId: coll?.collectionId ?? t.collectionId ?? "unknown",
           collectionNo: coll?.collectionNo ?? null,
           member: coll?.member ?? null,
-          serial: t.objektId ? serialMap.get(t.objektId) ?? null : null,
+          serial: t.objektId ? (serialMap.get(t.objektId) ?? null) : null,
           senderUserId,
           recipientUserId,
           event: "wrong_objekt",
@@ -720,10 +827,14 @@ export async function POST(
   let freshSides = trade.sides;
   let freshLogs = existingLogs;
   if (updatedCount > 0) {
-    [freshSides, freshLogs] = await Promise.all([
-      db.query.activeTradeSide.findMany({ where: eq(activeTradeSide.activeTradeId, tradeId) }),
-      db.query.tradeTransferLog.findMany({ where: eq(tradeTransferLog.activeTradeId, tradeId) }),
-    ]) as [typeof freshSides, typeof freshLogs];
+    [freshSides, freshLogs] = (await Promise.all([
+      db.query.activeTradeSide.findMany({
+        where: eq(activeTradeSide.activeTradeId, tradeId),
+      }),
+      db.query.tradeTransferLog.findMany({
+        where: eq(tradeTransferLog.activeTradeId, tradeId),
+      }),
+    ])) as [typeof freshSides, typeof freshLogs];
   }
 
   // Update overall trade status (only for accepted/partial)
@@ -757,7 +868,9 @@ export async function POST(
         ]);
 
         // Close both trade posts permanently
-        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
+        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
+          (id): id is string => id !== null,
+        );
         if (postIds.length > 0) {
           await db
             .update(tradePost)
@@ -775,7 +888,7 @@ export async function POST(
                 ...postIds.flatMap((pid) => [
                   eq(activeTrade.tradePostId, pid),
                   eq(activeTrade.matchedTradePostId, pid),
-                ])
+                ]),
               ),
             ),
             columns: { id: true, initiatorUserId: true, recipientUserId: true },
@@ -816,22 +929,30 @@ export async function POST(
 
   // Realtime: notify participants of transfer updates
   if (updatedCount > 0) {
-    const event = newTradeStatus === "completed" ? "trade:completed" : "trade:transfer-detected";
-    void publishTradeEvent(tradeId, event, { activeTradeId: tradeId, count: updatedCount });
+    const event =
+      newTradeStatus === "completed"
+        ? "trade:completed"
+        : "trade:transfer-detected";
+    void publishTradeEvent(tradeId, event, {
+      activeTradeId: tradeId,
+      count: updatedCount,
+    });
   }
 
-  const preAcceptLogs = freshLogs.filter((l) =>
-    l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed"
+  const preAcceptLogs = freshLogs.filter(
+    (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed",
   );
   const wrongObjektLogs = freshLogs.filter((l) => l.event === "wrong_objekt");
-  const wrongRecipientLogs = freshLogs.filter((l) => l.event === "wrong_recipient");
+  const wrongRecipientLogs = freshLogs.filter(
+    (l) => l.event === "wrong_recipient",
+  );
   const recoveredLogs = freshLogs.filter((l) => l.event === "recovered");
   const returnedLogs = freshLogs.filter((l) => l.event === "returned");
 
   // wrong_recipient logs that have a matching recovered log are no longer suspicious
   const recoveredObjektIds = new Set(recoveredLogs.map((l) => l.objektId));
   const unresolvedWrongRecipientLogs = wrongRecipientLogs.filter(
-    (l) => !recoveredObjektIds.has(l.objektId)
+    (l) => !recoveredObjektIds.has(l.objektId),
   );
 
   // A user has "fully returned" if every confirmed side they received has a matching returned log
@@ -847,6 +968,7 @@ export async function POST(
     recoveredTransfers: recoveredLogs.length,
     returnedTransfers: returnedLogs.length,
     returnedObjektIds: [...returnedObjektIds],
-    suspiciousTransfers: wrongObjektLogs.length + unresolvedWrongRecipientLogs.length,
+    suspiciousTransfers:
+      wrongObjektLogs.length + unresolvedWrongRecipientLogs.length,
   });
 }

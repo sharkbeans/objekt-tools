@@ -1,0 +1,2 @@
+CREATE INDEX "active_trade_side_trade_status_idx" ON "active_trade_side" USING btree ("active_trade_id","status");--> statement-breakpoint
+CREATE INDEX "trade_transfer_log_trade_event_idx" ON "trade_transfer_log" USING btree ("active_trade_id","event");

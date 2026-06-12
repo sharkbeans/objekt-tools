@@ -1,21 +1,21 @@
 "use client";
 
-import * as React from "react";
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
+import * as React from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   classArtistMap,
   seasonArtistMap,
   validClasses,
   validSeasons,
 } from "@/lib/filters";
+import { cn } from "@/lib/utils";
 
 // Values are stored as "artistId::item" to scope selections per-artist.
 // e.g. "tripleS::Atom01", "artms::Special"

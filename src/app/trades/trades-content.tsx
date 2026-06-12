@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { TradeCard } from "@/components/trades/trade-card";
-import { TradePagination } from "@/components/trades/trade-pagination";
-import { TradeFilters, type TradeFilterState } from "@/components/trades/trade-filters";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
+import { TradeCard } from "@/components/trades/trade-card";
+import {
+  type TradeFilterState,
+  TradeFilters,
+} from "@/components/trades/trade-filters";
+import { TradePagination } from "@/components/trades/trade-pagination";
+import type { TradePostDTO } from "@/lib/trade-types";
 
 function SkeletonRow() {
   return (
@@ -93,7 +97,9 @@ export function TradesContent() {
   const [filters, setFilters] = useState<TradeFilterState>(() =>
     filtersFromSearchParams(searchParams),
   );
-  const [page, setPage] = useState(() => Number(searchParams.get("page") ?? "1"));
+  const [page, setPage] = useState(() =>
+    Number(searchParams.get("page") ?? "1"),
+  );
 
   const handleFiltersChange = useCallback((next: TradeFilterState) => {
     setFilters(next);
@@ -107,7 +113,11 @@ export function TradesContent() {
       {isMobile ? (
         <InfiniteTradesList filters={filters} />
       ) : (
-        <PaginatedTradesList filters={filters} page={page} onPageChange={setPage} />
+        <PaginatedTradesList
+          filters={filters}
+          page={page}
+          onPageChange={setPage}
+        />
       )}
     </>
   );
@@ -156,7 +166,7 @@ function PaginatedTradesList({
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {trades.map((trade: any) => (
+        {trades.map((trade: TradePostDTO) => (
           <TradeCard key={trade.id} trade={trade} />
         ))}
       </div>
@@ -174,25 +184,22 @@ function PaginatedTradesList({
 function InfiniteTradesList({ filters }: { filters: TradeFilterState }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const {
-    data,
-    isLoading,
-    isFetchingNextPage,
-    fetchNextPage,
-    hasNextPage,
-  } = useInfiniteQuery({
-    queryKey: ["trades-infinite", filters],
-    queryFn: async ({ pageParam = 1 }) => {
-      const res = await fetch(`/api/trades?${buildParams(filters, pageParam as number)}`);
-      return res.json();
-    },
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const { page, limit, total } = lastPage;
-      const totalPages = Math.ceil(total / limit);
-      return page < totalPages ? page + 1 : undefined;
-    },
-  });
+  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =
+    useInfiniteQuery({
+      queryKey: ["trades-infinite", filters],
+      queryFn: async ({ pageParam = 1 }) => {
+        const res = await fetch(
+          `/api/trades?${buildParams(filters, pageParam as number)}`,
+        );
+        return res.json();
+      },
+      initialPageParam: 1,
+      getNextPageParam: (lastPage) => {
+        const { page, limit, total } = lastPage;
+        const totalPages = Math.ceil(total / limit);
+        return page < totalPages ? page + 1 : undefined;
+      },
+    });
 
   // IntersectionObserver — fire fetchNextPage when sentinel enters viewport
   useEffect(() => {
@@ -204,7 +211,7 @@ function InfiniteTradesList({ filters }: { filters: TradeFilterState }) {
           fetchNextPage();
         }
       },
-      { rootMargin: "200px" }
+      { rootMargin: "200px" },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -232,7 +239,7 @@ function InfiniteTradesList({ filters }: { filters: TradeFilterState }) {
 
   return (
     <div className="grid grid-cols-1 gap-2.5">
-      {allTrades.map((trade: any) => (
+      {allTrades.map((trade: TradePostDTO) => (
         <TradeCard key={trade.id} trade={trade} />
       ))}
       {/* Sentinel for IntersectionObserver */}

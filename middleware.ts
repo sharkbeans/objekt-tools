@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 // Optional preview-site gate: only active when TEST_SITE_PASSWORD is configured.
 function unauthorized() {
@@ -10,9 +10,7 @@ function unauthorized() {
   });
 }
 
-const BOT_USER_AGENTS = [
-  "Discordbot",
-];
+const BOT_USER_AGENTS = ["Discordbot"];
 
 export function middleware(request: NextRequest) {
   const password = process.env.TEST_SITE_PASSWORD;
@@ -56,7 +54,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

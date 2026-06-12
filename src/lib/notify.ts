@@ -1,6 +1,6 @@
+import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tradeNotification, user } from "@/lib/db/schema";
-import { inArray } from "drizzle-orm";
 import { redis } from "@/lib/redis";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -20,7 +20,9 @@ interface NotificationRow {
  * Drop-in replacement for:
  *   await db.insert(tradeNotification).values([...])
  */
-export async function notify(rows: NotificationRow | NotificationRow[]): Promise<void> {
+export async function notify(
+  rows: NotificationRow | NotificationRow[],
+): Promise<void> {
   const items = Array.isArray(rows) ? rows : [rows];
   if (items.length === 0) return;
 
@@ -41,7 +43,7 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
     columns: { id: true, discordId: true },
   });
   const discordIdByUserId = new Map(
-    users.filter((u) => u.discordId).map((u) => [u.id, u.discordId!])
+    users.filter((u) => u.discordId).map((u) => [u.id, u.discordId!]),
   );
 
   await Promise.all(
@@ -53,9 +55,7 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
         ? `${process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my"}/active-trades/${item.activeTradeId}`
         : null;
 
-      const content = tradeUrl
-        ? `${item.message}\n${tradeUrl}`
-        : item.message;
+      const content = tradeUrl ? `${item.message}\n${tradeUrl}` : item.message;
 
       try {
         await dmUser(discordId, content);
@@ -67,9 +67,12 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
           err instanceof Error ? err.message : String(err),
         );
         const failKey = `discord-dm-fail:${item.userId}`;
-        redis.incr(failKey).then(() => redis.expire(failKey, 86400)).catch(() => {});
+        redis
+          .incr(failKey)
+          .then(() => redis.expire(failKey, 86400))
+          .catch(() => {});
       }
-    })
+    }),
   );
 }
 
@@ -89,7 +92,7 @@ async function dmUser(discordId: string, content: string): Promise<void> {
     throw new Error(`Failed to open DM channel: ${channelRes.status} ${body}`);
   }
 
-  const channel = await channelRes.json() as { id: string };
+  const channel = (await channelRes.json()) as { id: string };
 
   // Step 2: send the message
   const msgRes = await fetch(`${DISCORD_API}/channels/${channel.id}/messages`, {

@@ -30,5 +30,10 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "drizzle.config.ts", "cosmo-web", "objekt-explorer"]
+  "exclude": [
+    "node_modules",
+    "drizzle.config.ts",
+    "cosmo-web",
+    "objekt-explorer"
+  ]
 }

@@ -36,8 +36,7 @@ function getDisclaimerText(pathname: string | null): string {
 export function SiteDisclaimerFooter() {
   const pathname = usePathname();
 
-  if (!pathname || pathname?.startsWith("/spin"))
-    return null;
+  if (!pathname || pathname?.startsWith("/spin")) return null;
 
   return (
     <footer className="pointer-events-none fixed inset-x-0 bottom-2 z-30 flex justify-center px-4">

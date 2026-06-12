@@ -22,13 +22,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
+import type { ObjektEntry } from "@/lib/cosmo/types";
 import {
   fetchInventoryByNickname,
   getInventoryArtist,
   getInventoryType,
   type OwnedEntry,
 } from "@/lib/cosmo-inventory";
-import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { ObjektStructuralFilters } from "@/lib/filter-utils";
 import { validOnlineTypes } from "@/lib/filters";
 import { objektMatchesSearch } from "@/lib/objekt-search";
@@ -69,7 +69,7 @@ export function CosmoPickerDialog({
   open,
   onOpenChange,
   initialNickname = "",
-  isLinked = false,
+  isLinked: _isLinked = false,
   onConfirm,
 }: CosmoPickerDialogProps) {
   const filterOptions = useFilterOptions();
@@ -488,7 +488,11 @@ export function CosmoPickerDialog({
                       />
                     </div>
                     <div className="hidden sm:flex items-center gap-2 ml-auto shrink-0">
-                      <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                      >
                         Cancel
                       </Button>
                       <Button

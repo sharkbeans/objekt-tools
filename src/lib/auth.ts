@@ -1,17 +1,15 @@
-import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { betterAuth } from "better-auth";
+import { eq } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "./db/schema";
-import { eq } from "drizzle-orm";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
   }),
-  trustedOrigins: [
-    process.env.BETTER_AUTH_URL ?? "https://objekt.my",
-  ],
+  trustedOrigins: [process.env.BETTER_AUTH_URL ?? "https://objekt.my"],
   socialProviders: {
     discord: {
       clientId: process.env.DISCORD_CLIENT_ID!,

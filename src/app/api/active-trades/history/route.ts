@@ -1,8 +1,8 @@
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade } from "@/lib/db/schema";
-import { or, eq, and, desc, inArray } from "drizzle-orm";
 
 // GET /api/active-trades/history — list completed/cancelled/disputed trades for current user
 export async function GET() {
@@ -19,14 +19,21 @@ export async function GET() {
         eq(activeTrade.initiatorUserId, session.user.id),
         eq(activeTrade.recipientUserId, session.user.id),
       ),
-      inArray(activeTrade.status, ["completed", "cancelled", "countered", "disputed"]),
+      inArray(activeTrade.status, [
+        "completed",
+        "cancelled",
+        "countered",
+        "disputed",
+      ]),
     ),
     with: {
       sides: {
         with: {
           user: {
             columns: { id: true, name: true, image: true },
-            with: { cosmoAccount: { columns: { nickname: true, address: true } } },
+            with: {
+              cosmoAccount: { columns: { nickname: true, address: true } },
+            },
           },
         },
       },
@@ -43,6 +50,7 @@ export async function GET() {
       },
     },
     orderBy: [desc(activeTrade.updatedAt)],
+    limit: 100,
   });
 
   const mapped = trades.map((t) => ({

@@ -1,13 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
+import { tradePost, tradePostHave, tradePostWant } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
-import {
-  tradePost,
-  tradePostHave,
-  tradePostWant,
-} from "@/lib/db/schema";
-import { eq, and, ne, inArray, isNull } from "drizzle-orm";
 
 // GET /api/trades/[id]/matches — find matching trades
 // A match is a trade where:
@@ -15,7 +11,7 @@ import { eq, and, ne, inArray, isNull } from "drizzle-orm";
 //   - Their "want" items overlap with our "have" items
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -33,7 +29,7 @@ export async function GET(
   if (attempts > 10) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again later." },
-      { status: 429 }
+      { status: 429 },
     );
   }
 
@@ -63,13 +59,23 @@ export async function GET(
   const theyHaveWhatIWant = await db
     .selectDistinct({ tradePostId: tradePostHave.tradePostId })
     .from(tradePostHave)
-    .where(and(inArray(tradePostHave.collectionId, myWantCollections), isNull(tradePostHave.deletedAt)));
+    .where(
+      and(
+        inArray(tradePostHave.collectionId, myWantCollections),
+        isNull(tradePostHave.deletedAt),
+      ),
+    );
 
   // Find trades where someone wants what I have
   const theyWantWhatIHave = await db
     .selectDistinct({ tradePostId: tradePostWant.tradePostId })
     .from(tradePostWant)
-    .where(and(inArray(tradePostWant.collectionId, myHaveCollections), isNull(tradePostWant.deletedAt)));
+    .where(
+      and(
+        inArray(tradePostWant.collectionId, myHaveCollections),
+        isNull(tradePostWant.deletedAt),
+      ),
+    );
 
   // Intersect: trades that appear in both sets
   const haveSet = new Set(theyHaveWhatIWant.map((r) => r.tradePostId));
@@ -86,7 +92,7 @@ export async function GET(
     where: and(
       inArray(tradePost.id, matchingIds),
       eq(tradePost.status, "open"),
-      ne(tradePost.userId, sourceTrade.userId)
+      ne(tradePost.userId, sourceTrade.userId),
     ),
     with: {
       haves: { where: (h, { isNull }) => isNull(h.deletedAt) },

@@ -1,16 +1,13 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+
+import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import {
-  tradePost,
-  tradePostHave,
-  cosmoAccount,
-} from "@/lib/db/schema";
+import { collections, objekts } from "@/lib/db/indexer-schema";
+import { cosmoAccount, tradePost, tradePostHave } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { objekts, collections } from "@/lib/db/indexer-schema";
-import { eq, and, inArray } from "drizzle-orm";
 
 export async function POST() {
   let session;
@@ -25,7 +22,10 @@ export async function POST() {
     where: eq(cosmoAccount.userId, session.user.id),
   });
   if (!linked) {
-    return NextResponse.json({ error: "Cosmo account not linked" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Cosmo account not linked" },
+      { status: 404 },
+    );
   }
 
   // Get all open trades for this user with their haves
@@ -47,7 +47,11 @@ export async function POST() {
   ];
 
   if (allCollectionIds.length === 0) {
-    return NextResponse.json({ checked: trades.length, removed: 0, updated: 0 });
+    return NextResponse.json({
+      checked: trades.length,
+      removed: 0,
+      updated: 0,
+    });
   }
 
   // Query indexer: get all objekts owned by this user matching these collections
@@ -104,9 +108,10 @@ export async function POST() {
       // Some haves gone — remove unavailable ones
       const removedLabels = unavailableHaves
         .map((h) => {
-          const name = h.member && h.collectionNo
-            ? `${h.member} ${h.collectionNo}`
-            : h.collectionId;
+          const name =
+            h.member && h.collectionNo
+              ? `${h.member} ${h.collectionNo}`
+              : h.collectionId;
           return h.serial != null ? `${name} #${h.serial}` : name;
         })
         .join(", ");
@@ -120,9 +125,7 @@ export async function POST() {
 
   // Execute deletions and removals
   if (tradesToDelete.length > 0) {
-    await db
-      .delete(tradePost)
-      .where(inArray(tradePost.id, tradesToDelete));
+    await db.delete(tradePost).where(inArray(tradePost.id, tradesToDelete));
   }
   if (havesToRemove.length > 0) {
     await db
@@ -144,6 +147,9 @@ export async function POST() {
   return NextResponse.json({
     checked: trades.length,
     removed: tradesToDelete.length,
-    updated: havesToRemove.length > 0 ? notifications.length - tradesToDelete.length : 0,
+    updated:
+      havesToRemove.length > 0
+        ? notifications.length - tradesToDelete.length
+        : 0,
   });
 }

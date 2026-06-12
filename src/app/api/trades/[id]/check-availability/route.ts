@@ -1,17 +1,14 @@
-export const dynamic = 'force-dynamic';
-import { NextRequest, NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+
+import { and, eq, inArray } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import {
-  tradePost,
-  tradePostHave,
-  cosmoAccount,
-} from "@/lib/db/schema";
+import { collections, objekts } from "@/lib/db/indexer-schema";
+import { cosmoAccount, tradePost, tradePostHave } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { objekts, collections } from "@/lib/db/indexer-schema";
-import { eq, and, inArray } from "drizzle-orm";
 import { redis } from "@/lib/redis";
-import { requireSession } from "@/lib/auth-server";
 
 export async function POST(
   _request: NextRequest,
@@ -19,17 +16,22 @@ export async function POST(
 ) {
   const { id: tradeId } = await params;
 
-  // Rate limit: 10 requests per 60 seconds (requires auth)
+  let session;
   try {
-    const session = await requireSession();
-    const rateLimitKey = `rate-limit:check-avail:${session.user.id}`;
-    const attempts = await redis.incr(rateLimitKey);
-    if (attempts === 1) await redis.expire(rateLimitKey, 60);
-    if (attempts > 10) {
-      return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
-    }
+    session = await requireSession();
   } catch {
-    // Allow unauthenticated access but without rate limiting by user
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 10 requests per 60 seconds
+  const rateLimitKey = `rate-limit:check-avail:${session.user.id}`;
+  const attempts = await redis.incr(rateLimitKey);
+  if (attempts === 1) await redis.expire(rateLimitKey, 60);
+  if (attempts > 10) {
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      { status: 429 },
+    );
   }
 
   // Get the trade with haves and owner info
@@ -39,7 +41,10 @@ export async function POST(
   });
 
   if (!trade) {
-    return NextResponse.json({ error: "Trade not found or not open" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Trade not found or not open" },
+      { status: 404 },
+    );
   }
 
   if (trade.haves.length === 0) {
@@ -56,9 +61,7 @@ export async function POST(
     return NextResponse.json({ available: true, unverifiable: true });
   }
 
-  const allCollectionIds = [
-    ...new Set(trade.haves.map((h) => h.collectionId)),
-  ];
+  const allCollectionIds = [...new Set(trade.haves.map((h) => h.collectionId))];
 
   // Query indexer for owned objekts
   const ownedRows = await indexer
@@ -118,9 +121,12 @@ export async function POST(
         })
         .join(", ");
 
-      await db
-        .delete(tradePostHave)
-        .where(inArray(tradePostHave.id, unavailableHaves.map((h) => h.id)));
+      await db.delete(tradePostHave).where(
+        inArray(
+          tradePostHave.id,
+          unavailableHaves.map((h) => h.id),
+        ),
+      );
       await notify({
         userId: trade.userId,
         tradePostId: tradeId,

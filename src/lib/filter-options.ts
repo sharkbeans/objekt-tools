@@ -70,7 +70,11 @@ export function compareSeasons(a: string, b: string) {
 const memberPriority: Map<string, number> = (() => {
   const map = new Map<string, number>();
   // Order: tripleS first, then artms, then idntt — earlier artists win on ties.
-  const artistOrder: (keyof typeof membersByArtist)[] = ["tripleS", "artms", "idntt"];
+  const artistOrder: (keyof typeof membersByArtist)[] = [
+    "tripleS",
+    "artms",
+    "idntt",
+  ];
   let rank = 0;
   for (const artist of artistOrder) {
     for (const member of membersByArtist[artist]) {

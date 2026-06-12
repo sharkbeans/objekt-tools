@@ -1,28 +1,15 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useSession } from "@/lib/auth-client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { TradeCard } from "@/components/trades/trade-card";
-import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
-import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
-import { SignInDialog } from "@/components/sign-in-dialog";
-import { DiscordNudge } from "@/components/discord-nudge";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
-import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
+import { use, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { DiscordNudge } from "@/components/discord-nudge";
+import { SignInDialog } from "@/components/sign-in-dialog";
+import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
+import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
+import { TradeCard } from "@/components/trades/trade-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +20,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { useSession } from "@/lib/auth-client";
+import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
+import type { TradePostDTO } from "@/lib/trade-types";
 
 interface TradeItem {
   id: number;
@@ -51,9 +51,17 @@ function formatSerial(serial: number) {
   return `#${String(serial).padStart(5, "0")}`;
 }
 
-function objektTopUrl(item: TradeItem, cosmoNickname?: string | null): string | null {
+function objektTopUrl(
+  item: TradeItem,
+  cosmoNickname?: string | null,
+): string | null {
   if (!cosmoNickname || item.isAny) return null;
-  const parts = [item.artist, item.season, item.member, item.collectionNo].filter(Boolean);
+  const parts = [
+    item.artist,
+    item.season,
+    item.member,
+    item.collectionNo,
+  ].filter(Boolean);
   if (item.serial != null) parts.push(`#${item.serial}`);
   if (!parts.length) return null;
   return `https://objekt.top/@${cosmoNickname}?search=${encodeURIComponent(parts.join(" "))}`;
@@ -61,7 +69,12 @@ function objektTopUrl(item: TradeItem, cosmoNickname?: string | null): string | 
 
 function objektTopUrlWant(item: TradeItem): string | null {
   if (item.isAny) return null;
-  const parts = [item.artist, item.season, item.member, item.collectionNo].filter(Boolean);
+  const parts = [
+    item.artist,
+    item.season,
+    item.member,
+    item.collectionNo,
+  ].filter(Boolean);
   if (!parts.length) return null;
   return `https://objekt.top/?search=${encodeURIComponent(parts.join(" "))}`;
 }
@@ -138,7 +151,9 @@ function ObjektImages({
             );
           }
           const url = images.get(item.collectionId);
-          const link = isWant ? objektTopUrlWant(item) : objektTopUrl(item, cosmoNickname);
+          const link = isWant
+            ? objektTopUrlWant(item)
+            : objektTopUrl(item, cosmoNickname);
           const imgEl = url ? (
             <img
               src={url}
@@ -151,15 +166,24 @@ function ObjektImages({
           return (
             <div key={item.id} className="flex flex-col items-center gap-1">
               {link ? (
-                <a href={link} target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity">
+                <a
+                  href={link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity"
+                >
                   {imgEl}
                 </a>
-              ) : imgEl}
+              ) : (
+                imgEl
+              )}
               <span className="text-xs text-muted-foreground text-center max-w-20 truncate">
                 {formatShortLabel(item)}
               </span>
               {showSerial && item.serial != null && (
-                <span className="text-xs text-muted-foreground">{formatSerial(item.serial)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {formatSerial(item.serial)}
+                </span>
               )}
             </div>
           );
@@ -169,28 +193,54 @@ function ObjektImages({
   );
 }
 
-function ObjektList({ items, label, showSerial, images }: { items: TradeItem[]; label: string; showSerial?: boolean; images?: Map<string, string> }) {
+function ObjektList({
+  items,
+  label,
+  showSerial,
+  images,
+}: {
+  items: TradeItem[];
+  label: string;
+  showSerial?: boolean;
+  images?: Map<string, string>;
+}) {
   return (
     <div>
       <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
       <TooltipPrimitive.Provider delayDuration={200}>
         <div className="flex flex-col gap-1">
           {items.map((item) => {
-            const right = item.isAny ? null : [
-              item.class,
-              showSerial && item.serial != null ? formatSerial(item.serial) : null,
-            ].filter(Boolean).join(" ") || null;
-            const imgUrl = !item.isAny ? images?.get(item.collectionId) : undefined;
+            const right = item.isAny
+              ? null
+              : [
+                  item.class,
+                  showSerial && item.serial != null
+                    ? formatSerial(item.serial)
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ") || null;
+            const imgUrl = !item.isAny
+              ? images?.get(item.collectionId)
+              : undefined;
             const rowContent = (
               <>
-                <span className="text-sm">{item.isAny ? anyWantLabel(item) : formatShortLabel(item)}</span>
+                <span className="text-sm">
+                  {item.isAny ? anyWantLabel(item) : formatShortLabel(item)}
+                </span>
                 {right && (
-                  <span className="text-sm text-muted-foreground ml-4 shrink-0">{right}</span>
+                  <span className="text-sm text-muted-foreground ml-4 shrink-0">
+                    {right}
+                  </span>
                 )}
               </>
             );
             if (!imgUrl) {
-              return <div key={item.id} className="objekt-list-row">{rowContent}</div>;
+              return (
+                <div key={item.id} className="objekt-list-row">
+                  {rowContent}
+                </div>
+              );
             }
             return (
               <TooltipPrimitive.Root key={item.id}>
@@ -203,7 +253,11 @@ function ObjektList({ items, label, showSerial, images }: { items: TradeItem[]; 
                     sideOffset={8}
                     className="z-50 rounded-md border bg-popover p-1 shadow-md"
                   >
-                    <img src={imgUrl} alt={item.collectionId} className="w-24 h-auto rounded" />
+                    <img
+                      src={imgUrl}
+                      alt={item.collectionId}
+                      className="w-24 h-auto rounded"
+                    />
                   </TooltipPrimitive.Content>
                 </TooltipPrimitive.Portal>
               </TooltipPrimitive.Root>
@@ -231,7 +285,9 @@ export default function TradeDetailClient({
   // For non-owners: direct initiation (no own trade post required)
   const [directInitiateOpen, setDirectInitiateOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState<"close" | "delete" | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<"close" | "delete" | null>(
+    null,
+  );
 
   const { data: trade, isLoading: tradeLoading } = useQuery({
     queryKey: ["trade", id],
@@ -251,7 +307,6 @@ export default function TradeDetailClient({
     enabled: !!trade,
   });
 
-
   const haveImages = useObjektImages(trade?.haves ?? []);
   const wantImages = useObjektImages(trade?.wants ?? []);
 
@@ -267,7 +322,7 @@ export default function TradeDetailClient({
       if (!res.ok) throw new Error("Failed to close trade");
       toast.success("Trade closed");
       router.refresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to close trade");
     }
   }
@@ -278,7 +333,7 @@ export default function TradeDetailClient({
       if (!res.ok) throw new Error("Failed to delete trade");
       toast.success("Trade deleted");
       router.push("/trades");
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete trade");
     }
   }
@@ -300,13 +355,17 @@ export default function TradeDetailClient({
   useEffect(() => {
     if (!availabilityData) return;
     if (availabilityData.deleted) {
-      toast.error("Trade removed — all offered objekts are no longer available.");
+      toast.error(
+        "Trade removed — all offered objekts are no longer available.",
+      );
       queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["my-trades"] });
       queryClient.invalidateQueries({ queryKey: ["check-availability"] });
       router.push("/trades");
     } else if (availabilityData.removed > 0) {
-      toast.warning(`${availabilityData.removed} objekt(s) removed — no longer in trader's inventory.`);
+      toast.warning(
+        `${availabilityData.removed} objekt(s) removed — no longer in trader's inventory.`,
+      );
       queryClient.invalidateQueries({ queryKey: ["trade", id] });
       queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["my-trades"] });
@@ -369,7 +428,11 @@ export default function TradeDetailClient({
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-md bg-[#5865F2] px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#4752C4]"
                 >
-                  <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                  <svg
+                    className="h-4 w-4 fill-current"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
                     <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
                   </svg>
                   Contact @{trade.discordUsername ?? trade.user.name}
@@ -377,10 +440,18 @@ export default function TradeDetailClient({
               )}
               {isOwner && trade.status === "open" && (
                 <>
-                  <Button variant="outline" size="sm" onClick={() => setConfirmDialog("close")}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmDialog("close")}
+                  >
                     Close Trade
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => setConfirmDialog("delete")}>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setConfirmDialog("delete")}
+                  >
                     Delete
                   </Button>
                 </>
@@ -390,13 +461,29 @@ export default function TradeDetailClient({
         </CardHeader>
         {trade.haves?.length > 0 && trade.wants?.length > 0 && (
           <div className="px-6 pb-4 flex gap-6">
-            <ObjektImages items={trade.haves} images={haveImages} label="HAVE" showSerial cosmoNickname={trade.cosmoNickname} />
+            <ObjektImages
+              items={trade.haves}
+              images={haveImages}
+              label="HAVE"
+              showSerial
+              cosmoNickname={trade.cosmoNickname}
+            />
             <Separator orientation="vertical" className="h-auto" />
-            <ObjektImages items={trade.wants} images={wantImages} label="WANT" isWant />
+            <ObjektImages
+              items={trade.wants}
+              images={wantImages}
+              label="WANT"
+              isWant
+            />
           </div>
         )}
         <CardContent className="space-y-4">
-          <ObjektList items={trade.haves} label="HAVE" showSerial images={haveImages} />
+          <ObjektList
+            items={trade.haves}
+            label="HAVE"
+            showSerial
+            images={haveImages}
+          />
           <Separator />
           <ObjektList items={trade.wants} label="WANT" images={wantImages} />
           {trade.description && (
@@ -416,7 +503,9 @@ export default function TradeDetailClient({
           <CardContent className="py-4 space-y-3">
             {trade.wantsOnly && session && (
               <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-sm text-yellow-200">
-                This trader only accepts offers that include at least one objekt from their want list. Your offer will be rejected if none of your objekts match.
+                This trader only accepts offers that include at least one objekt
+                from their want list. Your offer will be rejected if none of
+                your objekts match.
               </div>
             )}
             <div className="flex items-center justify-between gap-4">
@@ -425,7 +514,9 @@ export default function TradeDetailClient({
               </p>
               <Button
                 size="sm"
-                onClick={() => session ? setDirectInitiateOpen(true) : setSignInOpen(true)}
+                onClick={() =>
+                  session ? setDirectInitiateOpen(true) : setSignInOpen(true)
+                }
               >
                 Send a Trade Offer
               </Button>
@@ -451,7 +542,7 @@ export default function TradeDetailClient({
             <p className="text-muted-foreground">Finding matches...</p>
           ) : matchData?.matches?.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {matchData.matches.map((match: any) => (
+              {matchData.matches.map((match: TradePostDTO) => (
                 <div key={match.id} className="flex flex-col gap-2">
                   <TradeCard trade={match} />
                   <Button
@@ -480,17 +571,29 @@ export default function TradeDetailClient({
       )}
 
       {/* Close trade confirmation */}
-      <AlertDialog open={confirmDialog === "close"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+      <AlertDialog
+        open={confirmDialog === "close"}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDialog(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Close this trade?</AlertDialogTitle>
             <AlertDialogDescription>
-              This trade will no longer be visible to others or accept new offers. You can&apos;t reopen it.
+              This trade will no longer be visible to others or accept new
+              offers. You can&apos;t reopen it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleClose(); }}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setConfirmDialog(null);
+                handleClose();
+              }}
+            >
               Close trade
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -498,17 +601,29 @@ export default function TradeDetailClient({
       </AlertDialog>
 
       {/* Delete trade confirmation */}
-      <AlertDialog open={confirmDialog === "delete"} onOpenChange={(open) => { if (!open) setConfirmDialog(null); }}>
+      <AlertDialog
+        open={confirmDialog === "delete"}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDialog(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this trade?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the trade post. This cannot be undone.
+              This will permanently delete the trade post. This cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => { setConfirmDialog(null); handleDelete(); }}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setConfirmDialog(null);
+                handleDelete();
+              }}
+            >
               Delete trade
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -519,7 +634,9 @@ export default function TradeDetailClient({
       {initiateTarget && (
         <InitiateTradeDialog
           open={!!initiateTarget}
-          onOpenChange={(open) => { if (!open) setInitiateTarget(null); }}
+          onOpenChange={(open) => {
+            if (!open) setInitiateTarget(null);
+          }}
           myTradePostId={id}
           myHaves={trade?.haves ?? []}
           matchedTradePostId={initiateTarget.matchedTradePostId}

@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 @keyframes glow-flash {
-  0%, 100% { text-shadow: 0 0 4px rgba(255,255,255,0.2), 0 0 8px rgba(255,255,255,0.1); }
-  50% { text-shadow: 0 0 10px rgba(255,255,255,1), 0 0 20px rgba(255,255,255,0.6); }
+  0%,
+  100% {
+    text-shadow:
+      0 0 4px rgba(255, 255, 255, 0.2),
+      0 0 8px rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    text-shadow:
+      0 0 10px rgba(255, 255, 255, 1),
+      0 0 20px rgba(255, 255, 255, 0.6);
+  }
 }
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";

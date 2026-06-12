@@ -1,12 +1,14 @@
+import { and, count, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { activeTrade, activeTradeSide, tradeBan, user } from "@/lib/db/schema";
-import { eq, and, or, inArray, isNull, count } from "drizzle-orm";
 
 /**
  * Returns the blocking active trade ID if the user has an accepted/partial trade
  * where they have NOT yet sent all their objekts. Returns null if the user is free to act.
  */
-export async function getBlockingTradeId(userId: string): Promise<string | null> {
+export async function getBlockingTradeId(
+  userId: string,
+): Promise<string | null> {
   const trades = await db.query.activeTrade.findMany({
     where: and(
       or(
@@ -36,17 +38,19 @@ export async function getBlockingTradeId(userId: string): Promise<string | null>
  */
 export async function getActiveBan(userId: string) {
   return db.query.tradeBan.findFirst({
-    where: and(
-      eq(tradeBan.userId, userId),
-      isNull(tradeBan.liftedAt),
-    ),
+    where: and(eq(tradeBan.userId, userId), isNull(tradeBan.liftedAt)),
   });
 }
 
 /**
  * Issues a trade ban for a user who defaulted on a trade.
  */
-export async function issueBan(userId: string, cosmoId: string, activeTradeId: string, reason: string) {
+export async function issueBan(
+  userId: string,
+  cosmoId: string,
+  activeTradeId: string,
+  reason: string,
+) {
   // Don't double-ban for the same trade
   const existing = await db.query.tradeBan.findFirst({
     where: and(
@@ -94,10 +98,11 @@ export async function propagateResolution(terminalTradeId: string) {
   let depth = 0;
   while (currentId && depth < MAX_DEPTH) {
     ancestorIds.push(currentId);
-    const row: { counterOfferToId: string | null } | undefined = await db.query.activeTrade.findFirst({
-      where: eq(activeTrade.id, currentId),
-      columns: { counterOfferToId: true },
-    });
+    const row: { counterOfferToId: string | null } | undefined =
+      await db.query.activeTrade.findFirst({
+        where: eq(activeTrade.id, currentId),
+        columns: { counterOfferToId: true },
+      });
     currentId = row?.counterOfferToId ?? null;
     depth++;
   }
@@ -112,7 +117,7 @@ export async function propagateResolution(terminalTradeId: string) {
       and(
         inArray(activeTrade.id, ancestorIds),
         isNull(activeTrade.resolvedByTradeId),
-      )
+      ),
     );
 }
 
@@ -121,7 +126,9 @@ export async function propagateResolution(terminalTradeId: string) {
  * Quota = user.tradeOfferQuota − count of pending active trades where the user is the initiator.
  * Returns { allowed: true, remaining } or { allowed: false, quota, used }.
  */
-export async function checkTradeOfferQuota(userId: string): Promise<
+export async function checkTradeOfferQuota(
+  userId: string,
+): Promise<
   | { allowed: true; remaining: number }
   | { allowed: false; quota: number; used: number }
 > {
@@ -140,7 +147,7 @@ export async function checkTradeOfferQuota(userId: string): Promise<
       and(
         eq(activeTrade.initiatorUserId, userId),
         eq(activeTrade.status, "pending"),
-      )
+      ),
     );
 
   if (used >= quota) {
@@ -170,7 +177,8 @@ export async function tryLiftBan(userId: string, activeTradeId: string) {
     ),
   });
 
-  const allConfirmed = sides.length > 0 && sides.every((s) => s.status === "confirmed");
+  const allConfirmed =
+    sides.length > 0 && sides.every((s) => s.status === "confirmed");
   if (allConfirmed) {
     await db
       .update(tradeBan)

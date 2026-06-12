@@ -1,9 +1,9 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { signIn } from "@/lib/auth-client";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -11,8 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { signIn } from "@/lib/auth-client";
 
 export default function SignInPage() {
   const [code, setCode] = useState("");
@@ -57,7 +57,9 @@ export default function SignInPage() {
         <CardContent className="flex flex-col gap-4">
           <Button
             className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white"
-            onClick={() => signIn.social({ provider: "discord", callbackURL: "/" })}
+            onClick={() =>
+              signIn.social({ provider: "discord", callbackURL: "/" })
+            }
           >
             Continue with Discord
           </Button>
@@ -67,9 +69,7 @@ export default function SignInPage() {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">
-                or
-              </span>
+              <span className="bg-card px-2 text-muted-foreground">or</span>
             </div>
           </div>
 

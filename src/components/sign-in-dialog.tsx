@@ -1,7 +1,9 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { signIn } from "@/lib/auth-client";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,10 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { signIn } from "@/lib/auth-client";
 
 interface SignInDialogProps {
   open: boolean;
@@ -74,7 +74,9 @@ export function SignInDialog({ open, onOpenChange }: SignInDialogProps) {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">or</span>
+              <span className="bg-background px-2 text-muted-foreground">
+                or
+              </span>
             </div>
           </div>
 
@@ -100,7 +102,11 @@ export function SignInDialog({ open, onOpenChange }: SignInDialogProps) {
                 onClick={handleCodeLogin}
                 disabled={code.length !== 6 || verifying}
               >
-                {verifying ? <Loader2 className="size-4 animate-spin" /> : "Login"}
+                {verifying ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  "Login"
+                )}
               </Button>
             </div>
           </div>

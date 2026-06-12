@@ -745,7 +745,8 @@
       transparent 31%,
       rgb(255 255 255 / 0.95) 49%,
       transparent 62%
-    ), radial-gradient(circle, rgb(128 85 255 / 0.55), transparent 52%);
+    ),
+    radial-gradient(circle, rgb(128 85 255 / 0.55), transparent 52%);
   filter: blur(2px);
   animation: flareIn 3.2s ease both;
 }
@@ -928,7 +929,8 @@
       transparent 0 42%,
       rgb(255 255 255 / 0.65) 48%,
       transparent 56%
-    ), linear-gradient(140deg, #0e2b1c, #20b661 52%, #0b2a19);
+    ),
+    linear-gradient(140deg, #0e2b1c, #20b661 52%, #0b2a19);
   animation: revealInfoBack 4.8s linear both;
 }
 

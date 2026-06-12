@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { redis } from "@/lib/redis";
 import {
   activeTrade,
   activeTradeSide,
@@ -9,10 +9,14 @@ import {
   tradePost,
 } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { eq, and } from "drizzle-orm";
-import { getBlockingTradeId, getActiveBan, checkTradeOfferQuota } from "@/lib/trade-guards";
-import { validateWantsOnly } from "@/lib/wants-only-validation";
 import { publishTradeEvent } from "@/lib/realtime";
+import { redis } from "@/lib/redis";
+import {
+  checkTradeOfferQuota,
+  getActiveBan,
+  getBlockingTradeId,
+} from "@/lib/trade-guards";
+import { validateWantsOnly } from "@/lib/wants-only-validation";
 
 interface SideInput {
   objektId: string;
@@ -52,7 +56,7 @@ async function getChainDepth(tradeId: string): Promise<number> {
 //   theirObjekts: array of objekts they want from the other party (1–10)
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -63,7 +67,10 @@ export async function POST(
 
   const activeBan = await getActiveBan(session.user.id);
   if (activeBan) {
-    return NextResponse.json({ error: "You are trade banned and cannot perform this action." }, { status: 403 });
+    return NextResponse.json(
+      { error: "You are trade banned and cannot perform this action." },
+      { status: 403 },
+    );
   }
 
   // Rate limit: 10 requests per 60 seconds (general)
@@ -75,7 +82,7 @@ export async function POST(
   if (attempts > 10) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again later." },
-      { status: 429 }
+      { status: 429 },
     );
   }
 
@@ -93,7 +100,9 @@ export async function POST(
   }
 
   // Per-pair rate limit: max 3 counter-offers per hour between the same two users
-  const sortedPair = [session.user.id, originalTrade.initiatorUserId].sort().join(":");
+  const sortedPair = [session.user.id, originalTrade.initiatorUserId]
+    .sort()
+    .join(":");
   const pairRateLimitKey = `rate-limit:counter:${sortedPair}`;
   const pairAttempts = await redis.incr(pairRateLimitKey);
   if (pairAttempts === 1) {
@@ -101,8 +110,11 @@ export async function POST(
   }
   if (pairAttempts > 3) {
     return NextResponse.json(
-      { error: "Counter-offer limit between you and this user reached (max 3 per hour). Try again later." },
-      { status: 429 }
+      {
+        error:
+          "Counter-offer limit between you and this user reached (max 3 per hour). Try again later.",
+      },
+      { status: 429 },
     );
   }
 
@@ -113,38 +125,62 @@ export async function POST(
   };
 
   if (!myObjekts?.length || !theirObjekts?.length) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing required fields" },
+      { status: 400 },
+    );
   }
 
   if (myObjekts.length > 10 || theirObjekts.length > 10) {
-    return NextResponse.json({ error: "Maximum 10 objekts per side" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Maximum 10 objekts per side" },
+      { status: 400 },
+    );
   }
 
   for (const o of myObjekts) {
     if (!o.objektId) {
-      return NextResponse.json({ error: "All your objekts must have an objektId" }, { status: 400 });
+      return NextResponse.json(
+        { error: "All your objekts must have an objektId" },
+        { status: 400 },
+      );
     }
   }
 
   for (const o of theirObjekts) {
     if (!o.objektId) {
-      return NextResponse.json({ error: "All requested objekts must have an objektId. Please select a specific serial." }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "All requested objekts must have an objektId. Please select a specific serial.",
+        },
+        { status: 400 },
+      );
     }
   }
 
   // Caller must be the recipient of the original trade
   if (originalTrade.recipientUserId !== session.user.id) {
-    return NextResponse.json({ error: "Only the recipient can counter-offer" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Only the recipient can counter-offer" },
+      { status: 403 },
+    );
   }
 
   // Explicit check: cannot counter your own trade as initiator
   if (originalTrade.initiatorUserId === session.user.id) {
-    return NextResponse.json({ error: "Cannot counter-offer your own trade" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Cannot counter-offer your own trade" },
+      { status: 403 },
+    );
   }
 
   // Original trade must be pending
   if (originalTrade.status !== "pending") {
-    return NextResponse.json({ error: "Can only counter-offer a pending trade" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Can only counter-offer a pending trade" },
+      { status: 400 },
+    );
   }
 
   // Validate wants-only restriction on the original initiator's trade post
@@ -157,8 +193,11 @@ export async function POST(
       const result = validateWantsOnly(myObjekts, initiatorPost.wants);
       if (!result.valid) {
         return NextResponse.json(
-          { error: "The other party's trade only accepts offers matching their want list." },
-          { status: 400 }
+          {
+            error:
+              "The other party's trade only accepts offers matching their want list.",
+          },
+          { status: 400 },
         );
       }
     }
@@ -168,8 +207,12 @@ export async function POST(
   const blockingTradeId = await getBlockingTradeId(session.user.id);
   if (blockingTradeId) {
     return NextResponse.json(
-      { error: "You must send all your objekts in your current active trade before creating a counter-offer", activeTradeId: blockingTradeId },
-      { status: 403 }
+      {
+        error:
+          "You must send all your objekts in your current active trade before creating a counter-offer",
+        activeTradeId: blockingTradeId,
+      },
+      { status: 403 },
     );
   }
 
@@ -177,8 +220,10 @@ export async function POST(
   const quota = await checkTradeOfferQuota(session.user.id);
   if (!quota.allowed) {
     return NextResponse.json(
-      { error: `You've reached your trade offer limit (${quota.quota}). Accept, decline, or cancel existing offers to free up space.` },
-      { status: 403 }
+      {
+        error: `You've reached your trade offer limit (${quota.quota}). Accept, decline, or cancel existing offers to free up space.`,
+      },
+      { status: 403 },
     );
   }
 
@@ -186,8 +231,10 @@ export async function POST(
   const depth = await getChainDepth(originalTradeId);
   if (depth >= MAX_CHAIN_DEPTH) {
     return NextResponse.json(
-      { error: `Counter-offer chain limit reached (max ${MAX_CHAIN_DEPTH} rounds)` },
-      { status: 400 }
+      {
+        error: `Counter-offer chain limit reached (max ${MAX_CHAIN_DEPTH} rounds)`,
+      },
+      { status: 400 },
     );
   }
 
@@ -202,10 +249,16 @@ export async function POST(
   ]);
 
   if (!counterOffererCosmo) {
-    return NextResponse.json({ error: "Link your Cosmo account first" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Link your Cosmo account first" },
+      { status: 403 },
+    );
   }
   if (!otherPartyCosmo) {
-    return NextResponse.json({ error: "Other party has no linked Cosmo account" }, { status: 422 });
+    return NextResponse.json(
+      { error: "Other party has no linked Cosmo account" },
+      { status: 422 },
+    );
   }
 
   // Load original trade sides for diff summary in notification
@@ -213,115 +266,141 @@ export async function POST(
     where: eq(activeTradeSide.activeTradeId, originalTradeId),
   });
 
-  function formatObjektLabel(o: { member?: string | null; collectionNo?: string | null; collectionId: string }) {
-    return o.member && o.collectionNo ? `${o.member} ${o.collectionNo}` : o.collectionId;
+  function formatObjektLabel(o: {
+    member?: string | null;
+    collectionNo?: string | null;
+    collectionId: string;
+  }) {
+    return o.member && o.collectionNo
+      ? `${o.member} ${o.collectionNo}`
+      : o.collectionId;
   }
 
   // Compute diff: what changed between original and counter-offer
   // "my" objekts in the counter-offer = what counter-offerer sends (was recipient's side in original)
   // "their" objekts in the counter-offer = what they want from the other party (was initiator's side in original)
   const originalRecipientObjektIds = new Set(
-    originalSides.filter((s) => s.userId === session.user.id).map((s) => s.objektId)
+    originalSides
+      .filter((s) => s.userId === session.user.id)
+      .map((s) => s.objektId),
   );
   const originalInitiatorObjektIds = new Set(
-    originalSides.filter((s) => s.userId === originalTrade.initiatorUserId).map((s) => s.objektId)
+    originalSides
+      .filter((s) => s.userId === originalTrade.initiatorUserId)
+      .map((s) => s.objektId),
   );
 
   const diffParts: string[] = [];
-  const addedMy = myObjekts.filter((o) => !originalRecipientObjektIds.has(o.objektId));
-  const removedMy = originalSides
-    .filter((s) => s.userId === session.user.id && !myObjekts.some((o) => o.objektId === s.objektId));
-  const addedTheir = theirObjekts.filter((o) => !originalInitiatorObjektIds.has(o.objektId));
-  const removedTheir = originalSides
-    .filter((s) => s.userId === originalTrade.initiatorUserId && !theirObjekts.some((o) => o.objektId === s.objektId));
+  const addedMy = myObjekts.filter(
+    (o) => !originalRecipientObjektIds.has(o.objektId),
+  );
+  const removedMy = originalSides.filter(
+    (s) =>
+      s.userId === session.user.id &&
+      !myObjekts.some((o) => o.objektId === s.objektId),
+  );
+  const addedTheir = theirObjekts.filter(
+    (o) => !originalInitiatorObjektIds.has(o.objektId),
+  );
+  const removedTheir = originalSides.filter(
+    (s) =>
+      s.userId === originalTrade.initiatorUserId &&
+      !theirObjekts.some((o) => o.objektId === s.objektId),
+  );
 
   for (const o of addedMy) diffParts.push(`+${formatObjektLabel(o)}`);
   for (const s of removedMy) diffParts.push(`-${formatObjektLabel(s)}`);
-  for (const o of addedTheir) diffParts.push(`+${formatObjektLabel(o)} (wanted)`);
-  for (const s of removedTheir) diffParts.push(`-${formatObjektLabel(s)} (wanted)`);
+  for (const o of addedTheir)
+    diffParts.push(`+${formatObjektLabel(o)} (wanted)`);
+  for (const s of removedTheir)
+    diffParts.push(`-${formatObjektLabel(s)} (wanted)`);
 
-  const diffSummary = diffParts.length > 0
-    ? ` Changes: ${diffParts.slice(0, 4).join(", ")}${diffParts.length > 4 ? ` +${diffParts.length - 4} more` : ""}`
-    : "";
+  const diffSummary =
+    diffParts.length > 0
+      ? ` Changes: ${diffParts.slice(0, 4).join(", ")}${diffParts.length > 4 ? ` +${diffParts.length - 4} more` : ""}`
+      : "";
 
   // Create the counter-offer in a transaction
   let result;
   try {
     result = await db.transaction(async (tx) => {
-    // Race condition protection: re-verify original trade is still pending inside tx
-    const [updated] = await tx
-      .update(activeTrade)
-      .set({ status: "countered", updatedAt: new Date() })
-      .where(
-        and(
-          eq(activeTrade.id, originalTradeId),
-          eq(activeTrade.status, "pending"),
+      // Race condition protection: re-verify original trade is still pending inside tx
+      const [updated] = await tx
+        .update(activeTrade)
+        .set({ status: "countered", updatedAt: new Date() })
+        .where(
+          and(
+            eq(activeTrade.id, originalTradeId),
+            eq(activeTrade.status, "pending"),
+          ),
         )
-      )
-      .returning();
+        .returning();
 
-    if (!updated) {
-      throw new Error("TRADE_NOT_PENDING");
-    }
+      if (!updated) {
+        throw new Error("TRADE_NOT_PENDING");
+      }
 
-    // Create new counter-offer trade
-    // Roles flip: current user (was recipient) becomes initiator, original initiator becomes recipient
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    const [newTrade] = await tx
-      .insert(activeTrade)
-      .values({
-        counterOfferToId: originalTradeId,
-        // Counter-offerer's post is the original matched post, other party's post is the original initiator's post
-        tradePostId: originalTrade.matchedTradePostId,
-        matchedTradePostId: originalTrade.tradePostId,
-        initiatorUserId: session.user.id,
-        recipientUserId: originalTrade.initiatorUserId,
-        status: "pending",
-        expiresAt,
-      })
-      .returning();
+      // Create new counter-offer trade
+      // Roles flip: current user (was recipient) becomes initiator, original initiator becomes recipient
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      const [newTrade] = await tx
+        .insert(activeTrade)
+        .values({
+          counterOfferToId: originalTradeId,
+          // Counter-offerer's post is the original matched post, other party's post is the original initiator's post
+          tradePostId: originalTrade.matchedTradePostId,
+          matchedTradePostId: originalTrade.tradePostId,
+          initiatorUserId: session.user.id,
+          recipientUserId: originalTrade.initiatorUserId,
+          status: "pending",
+          expiresAt,
+        })
+        .returning();
 
-    // Counter-offerer's sides (what they will send)
-    await tx.insert(activeTradeSide).values(
-      myObjekts.map((o) => ({
-        activeTradeId: newTrade.id,
-        userId: session.user.id,
-        address: counterOffererCosmo.address,
-        recipientAddress: otherPartyCosmo.address,
-        objektId: o.objektId,
-        collectionId: o.collectionId,
-        collectionNo: o.collectionNo ?? null,
-        member: o.member ?? null,
-        serial: o.serial ?? null,
-        thumbnailUrl: o.thumbnailUrl ?? null,
-        status: "pending" as const,
-      }))
-    );
+      // Counter-offerer's sides (what they will send)
+      await tx.insert(activeTradeSide).values(
+        myObjekts.map((o) => ({
+          activeTradeId: newTrade.id,
+          userId: session.user.id,
+          address: counterOffererCosmo.address,
+          recipientAddress: otherPartyCosmo.address,
+          objektId: o.objektId,
+          collectionId: o.collectionId,
+          collectionNo: o.collectionNo ?? null,
+          member: o.member ?? null,
+          serial: o.serial ?? null,
+          thumbnailUrl: o.thumbnailUrl ?? null,
+          status: "pending" as const,
+        })),
+      );
 
-    // Other party's sides (what counter-offerer wants from them)
-    await tx.insert(activeTradeSide).values(
-      theirObjekts.map((o) => ({
-        activeTradeId: newTrade.id,
-        userId: originalTrade.initiatorUserId,
-        address: otherPartyCosmo.address,
-        recipientAddress: counterOffererCosmo.address,
-        objektId: o.objektId,
-        collectionId: o.collectionId,
-        collectionNo: o.collectionNo ?? null,
-        member: o.member ?? null,
-        serial: o.serial ?? null,
-        thumbnailUrl: o.thumbnailUrl ?? null,
-        status: "pending" as const,
-      }))
-    );
+      // Other party's sides (what counter-offerer wants from them)
+      await tx.insert(activeTradeSide).values(
+        theirObjekts.map((o) => ({
+          activeTradeId: newTrade.id,
+          userId: originalTrade.initiatorUserId,
+          address: otherPartyCosmo.address,
+          recipientAddress: counterOffererCosmo.address,
+          objektId: o.objektId,
+          collectionId: o.collectionId,
+          collectionNo: o.collectionNo ?? null,
+          member: o.member ?? null,
+          serial: o.serial ?? null,
+          thumbnailUrl: o.thumbnailUrl ?? null,
+          status: "pending" as const,
+        })),
+      );
 
-    return newTrade;
-  });
+      return newTrade;
+    });
   } catch (e) {
     if (e instanceof Error && e.message === "TRADE_NOT_PENDING") {
       return NextResponse.json(
-        { error: "Trade is no longer pending (it may have been accepted, cancelled, or already countered)" },
-        { status: 409 }
+        {
+          error:
+            "Trade is no longer pending (it may have been accepted, cancelled, or already countered)",
+        },
+        { status: 409 },
       );
     }
     throw e;

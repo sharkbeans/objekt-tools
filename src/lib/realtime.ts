@@ -37,7 +37,7 @@ export function getPusherServer(): Pusher | null {
 export async function publishTradeEvent(
   tradeId: string,
   event: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ): Promise<void> {
   const pusher = getPusher();
   if (!pusher) return;
@@ -51,7 +51,7 @@ export async function publishTradeEvent(
 export async function publishUserEvent(
   userId: string,
   event: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ): Promise<void> {
   const pusher = getPusher();
   if (!pusher) return;

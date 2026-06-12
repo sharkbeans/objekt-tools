@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "active_trade_unique_pending_pair" ON "active_trade" USING btree ("trade_post_id","matched_trade_post_id","initiator_user_id") WHERE status = 'pending';

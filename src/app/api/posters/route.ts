@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
 
   if (!session) {
-    return NextResponse.json({ error: "Sign in to save your poster" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Sign in to save your poster" },
+      { status: 401 },
+    );
   }
 
   const key = `rate-limit:poster-create:${session.user.id}`;

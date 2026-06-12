@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Input } from "@/components/ui/input";
 import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
-import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import {
   getArtistForMember,
   getOnOffline,

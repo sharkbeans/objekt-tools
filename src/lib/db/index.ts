@@ -1,5 +1,5 @@
-import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import * as schema from "./schema";
 
 function createDb(pool: Pool) {
@@ -23,7 +23,6 @@ if (!globalForDb._dbPool) {
   });
 }
 
-export const db =
-  globalForDb.db ?? createDb(globalForDb._dbPool);
+export const db = globalForDb.db ?? createDb(globalForDb._dbPool);
 
 if (process.env.NODE_ENV !== "production") globalForDb.db = db;

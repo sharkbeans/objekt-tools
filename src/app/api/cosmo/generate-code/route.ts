@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { eq } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
-import { redis } from "@/lib/redis";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { redis } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
   let session;
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   if (attempts > 5) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },
-      { status: 429 }
+      { status: 429 },
     );
   }
 
@@ -41,14 +41,19 @@ export async function POST(request: NextRequest) {
   if (existing) {
     return NextResponse.json(
       { error: "This Cosmo account is already linked" },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
   // Generate verification code
   const code = `verify-${randomBytes(3).toString("hex")}`;
   const redisKey = `cosmo-verify:${session.user.id}:${address}`;
-  await redis.set(redisKey, JSON.stringify({ code, cosmoId, nickname, artistId }), "EX", 120);
+  await redis.set(
+    redisKey,
+    JSON.stringify({ code, cosmoId, nickname, artistId }),
+    "EX",
+    120,
+  );
 
   return NextResponse.json({ code, expiresIn: 120 });
 }

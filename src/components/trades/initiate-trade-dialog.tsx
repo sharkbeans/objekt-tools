@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Portal } from "radix-ui";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ObjektGridPicker } from "@/components/objekt/objekt-grid-picker";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,11 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Portal } from "radix-ui";
-import { ObjektGridPicker } from "@/components/objekt/objekt-grid-picker";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { cn } from "@/lib/utils";
 
 const thumbnailCache = new Map<string, string | null>();
 
@@ -25,8 +25,15 @@ function fetchThumbnail(collectionId: string): Promise<string | null> {
   return fetch(`/api/objekts/search?q=${encodeURIComponent(collectionId)}`)
     .then((res) => res.json())
     .then((data) => {
-      const match = data.results?.find((r: { collectionId: string }) => r.collectionId === collectionId);
-      const url = (match as { thumbnailImage?: string; frontImage?: string } | undefined)?.thumbnailImage ?? (match as { thumbnailImage?: string; frontImage?: string } | undefined)?.frontImage ?? null;
+      const match = data.results?.find(
+        (r: { collectionId: string }) => r.collectionId === collectionId,
+      );
+      const url =
+        (match as { thumbnailImage?: string; frontImage?: string } | undefined)
+          ?.thumbnailImage ??
+        (match as { thumbnailImage?: string; frontImage?: string } | undefined)
+          ?.frontImage ??
+        null;
       thumbnailCache.set(collectionId, url);
       return url;
     })
@@ -76,7 +83,12 @@ function tradeItemToObjektEntry(item: TradeItem): ObjektEntry {
   };
 }
 
-function formatLabel(item: { collectionId: string; collectionNo?: string | null; member?: string | null; serial?: number | null }) {
+function formatLabel(item: {
+  collectionId: string;
+  collectionNo?: string | null;
+  member?: string | null;
+  serial?: number | null;
+}) {
   const name =
     item.collectionNo && item.member
       ? `${item.member} ${item.collectionNo}`
@@ -117,16 +129,17 @@ function ObjektOption({
         "flex items-center justify-between rounded-md border px-3 py-2 text-sm text-left transition-colors w-full",
         selected
           ? "border-primary bg-primary/10"
-          : "border-border hover:border-primary/50"
+          : "border-border hover:border-primary/50",
       )}
     >
       <span>
         <span className="text-muted-foreground">{item.artist}</span>{" "}
-        {item.member}{" "}
-        <span className="font-mono">{item.collectionNo}</span>
+        {item.member} <span className="font-mono">{item.collectionNo}</span>
       </span>
       {rightMeta && (
-        <span className="text-xs text-muted-foreground shrink-0 ml-3">{rightMeta}</span>
+        <span className="text-xs text-muted-foreground shrink-0 ml-3">
+          {rightMeta}
+        </span>
       )}
     </button>
   );
@@ -144,39 +157,54 @@ export function InitiateTradeDialog({
   const [mySelected, setMySelected] = useState<Set<number>>(new Set());
   const [theirSelected, setTheirSelected] = useState<ObjektEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ my?: string; their?: string; myObjektId?: string; theirObjektId?: string }>({});
+  const [errors, setErrors] = useState<{
+    my?: string;
+    their?: string;
+    myObjektId?: string;
+    theirObjektId?: string;
+  }>({});
   const [hoverImage, setHoverImage] = useState<string | null>(null);
-  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+  const [hoverPos, setHoverPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   const baseEntries = useMemo(
     () => theirHaves.map(tradeItemToObjektEntry),
     [theirHaves],
   );
-  const [theirObjektEntries, setTheirObjektEntries] = useState<ObjektEntry[]>(baseEntries);
+  const [theirObjektEntries, setTheirObjektEntries] =
+    useState<ObjektEntry[]>(baseEntries);
 
   useEffect(() => {
     setTheirObjektEntries(baseEntries);
     const missing = baseEntries.filter((e) => !e.thumbnailImage);
     if (missing.length === 0) return;
     const uniqueIds = [...new Set(missing.map((e) => e.collectionId))];
-    Promise.all(uniqueIds.map((id) => fetchThumbnail(id).then((url) => ({ id, url })))).then(
-      (results) => {
-        const byId = new Map(results.map(({ id, url }) => [id, url]));
-        setTheirObjektEntries((prev) =>
-          prev.map((e) =>
-            e.thumbnailImage ? e : { ...e, thumbnailImage: byId.get(e.collectionId) ?? undefined }
-          )
-        );
-      }
-    );
+    Promise.all(
+      uniqueIds.map((id) => fetchThumbnail(id).then((url) => ({ id, url }))),
+    ).then((results) => {
+      const byId = new Map(results.map(({ id, url }) => [id, url]));
+      setTheirObjektEntries((prev) =>
+        prev.map((e) =>
+          e.thumbnailImage
+            ? e
+            : { ...e, thumbnailImage: byId.get(e.collectionId) ?? undefined },
+        ),
+      );
+    });
   }, [baseEntries]);
 
-  function handleMouseEnter(e: React.MouseEvent<HTMLButtonElement>, item: TradeItem) {
+  function handleMouseEnter(
+    e: React.MouseEvent<HTMLButtonElement>,
+    item: TradeItem,
+  ) {
     const rect = e.currentTarget.getBoundingClientRect();
     const previewHeight = 160;
-    const top = rect.bottom + previewHeight > window.innerHeight
-      ? Math.max(8, rect.bottom - previewHeight)
-      : rect.top;
+    const top =
+      rect.bottom + previewHeight > window.innerHeight
+        ? Math.max(8, rect.bottom - previewHeight)
+        : rect.top;
     setHoverPos({ top, left: rect.right + 8 });
     const collectionId = item.collectionId;
     const cached = thumbnailCache.get(collectionId);
@@ -194,7 +222,8 @@ export function InitiateTradeDialog({
       const next = new Set(prev);
       if (next.has(item.id)) next.delete(item.id);
       else if (next.size < 10) next.add(item.id);
-      if (next.size > 0) setErrors((e) => ({ ...e, my: undefined, myObjektId: undefined }));
+      if (next.size > 0)
+        setErrors((e) => ({ ...e, my: undefined, myObjektId: undefined }));
       return next;
     });
   }
@@ -207,15 +236,19 @@ export function InitiateTradeDialog({
   function handleTheirDeselect(o: ObjektEntry) {
     setTheirSelected((prev) =>
       prev.filter((h) =>
-        o.serial != null ? h.serial !== o.serial : h.collectionId !== o.collectionId
-      )
+        o.serial != null
+          ? h.serial !== o.serial
+          : h.collectionId !== o.collectionId,
+      ),
     );
   }
 
   async function handleSubmit() {
     const newErrors: { my?: string; their?: string } = {};
-    if (mySelected.size === 0) newErrors.my = "You must select at least 1 objekt to offer.";
-    if (theirSelected.length === 0) newErrors.their = "You must select at least 1 objekt to receive.";
+    if (mySelected.size === 0)
+      newErrors.my = "You must select at least 1 objekt to offer.";
+    if (theirSelected.length === 0)
+      newErrors.their = "You must select at least 1 objekt to receive.";
     if (newErrors.my || newErrors.their) {
       setErrors(newErrors);
       return;
@@ -226,13 +259,19 @@ export function InitiateTradeDialog({
 
     const missingObjektId = myItems.find((i) => !i.objektId);
     if (missingObjektId) {
-      setErrors((e) => ({ ...e, myObjektId: `"${formatLabel(missingObjektId)}" has no objekt ID. Please use serial-specific have items.` }));
+      setErrors((e) => ({
+        ...e,
+        myObjektId: `"${formatLabel(missingObjektId)}" has no objekt ID. Please use serial-specific have items.`,
+      }));
       return;
     }
 
     const missingTheirObjektId = theirItems.find((o) => !o.objektId);
     if (missingTheirObjektId) {
-      setErrors((e) => ({ ...e, theirObjektId: `"${formatLabel(missingTheirObjektId)}" has no objekt ID. Please select a specific serial.` }));
+      setErrors((e) => ({
+        ...e,
+        theirObjektId: `"${formatLabel(missingTheirObjektId)}" has no objekt ID. Please select a specific serial.`,
+      }));
       return;
     }
 
@@ -286,7 +325,8 @@ export function InitiateTradeDialog({
 
   const myRatio = mySelected.size;
   const theirRatio = theirSelected.length;
-  const ratioLabel = myRatio > 0 && theirRatio > 0 ? ` (${myRatio}:${theirRatio})` : "";
+  const ratioLabel =
+    myRatio > 0 && theirRatio > 0 ? ` (${myRatio}:${theirRatio})` : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -294,21 +334,36 @@ export function InitiateTradeDialog({
         <DialogHeader>
           <DialogTitle>Send a Trade Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
-            Select the objekts you will send and those you want to receive. Up to 10 per side.
+            Select the objekts you will send and those you want to receive. Up
+            to 10 per side.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
             <p className="text-sm font-medium mb-2">
-              You offer{mySelected.size > 0 ? ` (${mySelected.size} selected)` : ""}
-              {mySelected.size >= 10 && <span className="text-xs text-muted-foreground font-normal ml-2">Maximum 10 reached</span>}
+              You offer
+              {mySelected.size > 0 ? ` (${mySelected.size} selected)` : ""}
+              {mySelected.size >= 10 && (
+                <span className="text-xs text-muted-foreground font-normal ml-2">
+                  Maximum 10 reached
+                </span>
+              )}
             </p>
-            {errors.my && <p className="text-sm text-destructive mb-2">{errors.my}</p>}
-            {errors.myObjektId && <p className="text-sm text-destructive mb-2">{errors.myObjektId}</p>}
+            {errors.my && (
+              <p className="text-sm text-destructive mb-2">{errors.my}</p>
+            )}
+            {errors.myObjektId && (
+              <p className="text-sm text-destructive mb-2">
+                {errors.myObjektId}
+              </p>
+            )}
             <div className="flex flex-col gap-2">
               {myHaves.length === 0 && (
-                <p className="text-sm text-muted-foreground">Your trade post has no have items to offer. Add some to your post first.</p>
+                <p className="text-sm text-muted-foreground">
+                  Your trade post has no have items to offer. Add some to your
+                  post first.
+                </p>
               )}
               {myHaves.map((item) => (
                 <ObjektOption
@@ -325,13 +380,28 @@ export function InitiateTradeDialog({
 
           <div>
             <p className="text-sm font-medium mb-2">
-              You will receive{theirSelected.length > 0 ? ` (${theirSelected.length} selected)` : ""}
-              {theirSelected.length >= 10 && <span className="text-xs text-muted-foreground font-normal ml-2">Maximum 10 reached</span>}
+              You will receive
+              {theirSelected.length > 0
+                ? ` (${theirSelected.length} selected)`
+                : ""}
+              {theirSelected.length >= 10 && (
+                <span className="text-xs text-muted-foreground font-normal ml-2">
+                  Maximum 10 reached
+                </span>
+              )}
             </p>
-            {errors.their && <p className="text-sm text-destructive mb-2">{errors.their}</p>}
-            {errors.theirObjektId && <p className="text-sm text-destructive mb-2">{errors.theirObjektId}</p>}
+            {errors.their && (
+              <p className="text-sm text-destructive mb-2">{errors.their}</p>
+            )}
+            {errors.theirObjektId && (
+              <p className="text-sm text-destructive mb-2">
+                {errors.theirObjektId}
+              </p>
+            )}
             {theirObjektEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">The other user has no have items listed on their post.</p>
+              <p className="text-sm text-muted-foreground">
+                The other user has no have items listed on their post.
+              </p>
             ) : (
               <ObjektGridPicker
                 items={theirObjektEntries}
@@ -360,10 +430,7 @@ export function InitiateTradeDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={loading}
-          >
+          <Button onClick={handleSubmit} disabled={loading}>
             {loading ? "Initiating..." : "Send a Trade Offer"}
           </Button>
         </DialogFooter>

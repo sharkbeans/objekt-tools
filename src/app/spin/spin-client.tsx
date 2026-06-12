@@ -9,9 +9,9 @@ import {
   SparklesIcon,
   XIcon,
 } from "lucide-react";
+import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import styles from "./spin.module.css";
@@ -130,7 +130,6 @@ function assignedMember(seasonIndex: number, members: string[]): string {
   return members[seasonIndex] ?? "";
 }
 
-
 function spinKey(collection: Pick<SpinCollection, "artist" | "season">) {
   return `${collection.artist}::${collection.season}`;
 }
@@ -154,19 +153,75 @@ type SpinWeight = { outcome: SpinClass | "Fail"; chance: number };
 // Per-season spin probabilities sourced from official Cosmo spin info.
 // Key format: "artist::Season##" (artist lowercased, season as stored in indexer).
 const spinRates: Record<string, SpinWeight[]> = {
-  "triples::Atom01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
-  "triples::Binary01": [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
-  "triples::Cream01":  [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
-  "triples::Divine01": [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
-  "triples::Ever01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
-  "triples::Atom02":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
-  "triples::Binary02": [{ outcome: "First", chance: 90.63 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
-  "triples::Cream02":  [{ outcome: "First", chance: 90.63 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
-  "artms::Atom01":     [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
-  "artms::Binary01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Fail", chance: 9.37 }],
-  "artms::Cream01":    [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
-  "artms::Divine01":   [{ outcome: "First", chance: 87.5 }, { outcome: "Special", chance: 3.13 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
-  "artms::Ever01":     [{ outcome: "First", chance: 90.63 }, { outcome: "Premier", chance: 0.06 }, { outcome: "Fail", chance: 9.31 }],
+  "triples::Atom01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Fail", chance: 9.37 },
+  ],
+  "triples::Binary01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Fail", chance: 9.37 },
+  ],
+  "triples::Cream01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Fail", chance: 9.37 },
+  ],
+  "triples::Divine01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Fail", chance: 9.37 },
+  ],
+  "triples::Ever01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Premier", chance: 0.06 },
+    { outcome: "Fail", chance: 9.31 },
+  ],
+  "triples::Atom02": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Premier", chance: 0.06 },
+    { outcome: "Fail", chance: 9.31 },
+  ],
+  "triples::Binary02": [
+    { outcome: "First", chance: 90.63 },
+    { outcome: "Premier", chance: 0.06 },
+    { outcome: "Fail", chance: 9.31 },
+  ],
+  "triples::Cream02": [
+    { outcome: "First", chance: 90.63 },
+    { outcome: "Premier", chance: 0.06 },
+    { outcome: "Fail", chance: 9.31 },
+  ],
+  "artms::Atom01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Fail", chance: 9.37 },
+  ],
+  "artms::Binary01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Fail", chance: 9.37 },
+  ],
+  "artms::Cream01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Premier", chance: 0.06 },
+    { outcome: "Fail", chance: 9.31 },
+  ],
+  "artms::Divine01": [
+    { outcome: "First", chance: 87.5 },
+    { outcome: "Special", chance: 3.13 },
+    { outcome: "Premier", chance: 0.06 },
+    { outcome: "Fail", chance: 9.31 },
+  ],
+  "artms::Ever01": [
+    { outcome: "First", chance: 90.63 },
+    { outcome: "Premier", chance: 0.06 },
+    { outcome: "Fail", chance: 9.31 },
+  ],
 };
 
 // idntt rates are uniform across all seasons.
@@ -315,7 +370,13 @@ function TiltCard({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
+  const [state, setState] = useState({
+    rx: 0,
+    ry: 0,
+    gx: 50,
+    gy: 50,
+    active: false,
+  });
 
   function applyFromPoint(clientX: number, clientY: number) {
     const el = ref.current;
@@ -465,7 +526,9 @@ export function SpinClient() {
   const [selected, setSelected] = useState<SpinCollection | null>(null);
   const [result, setResult] = useState<SpinResult | null>(null);
   const [gridResults, setGridResults] = useState<SpinResult[]>([]);
-  const [preGeneratedResults, setPreGeneratedResults] = useState<SpinResult[] | null>(null);
+  const [preGeneratedResults, setPreGeneratedResults] = useState<
+    SpinResult[] | null
+  >(null);
   const [pickedIndex, setPickedIndex] = useState<number | null>(null);
   const [pendingPickIndex, setPendingPickIndex] = useState<number | null>(null);
   const [revealedGridOpen, setRevealedGridOpen] = useState(false);
@@ -474,7 +537,9 @@ export function SpinClient() {
 
   useEffect(() => {
     document.body.dataset.page = "spin";
-    return () => { delete document.body.dataset.page; };
+    return () => {
+      delete document.body.dataset.page;
+    };
   }, []);
 
   useEffect(() => {
@@ -488,7 +553,9 @@ export function SpinClient() {
         setMemberOrder(map);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -557,7 +624,13 @@ export function SpinClient() {
       const key = spinKey(collection);
 
       if (!pools.has(key)) {
-        pools.set(key, { First: [], Basic: [], Special: [], Premier: [], Unit: [] });
+        pools.set(key, {
+          First: [],
+          Basic: [],
+          Special: [],
+          Premier: [],
+          Unit: [],
+        });
       }
       pools.get(key)?.[normalizedClass].push(collection);
 
@@ -689,7 +762,11 @@ export function SpinClient() {
         {page === "spin" && (
           <section className={styles.spinPage}>
             <header className={cn(styles.header, styles.ghostHeader)}>
-              <Link href="/" className={styles.backButton} aria-label="Back to home">
+              <Link
+                href="/"
+                className={styles.backButton}
+                aria-label="Back to home"
+              >
                 <ChevronLeftIcon className="size-5" />
               </Link>
             </header>
@@ -804,38 +881,42 @@ export function SpinClient() {
               </div>
             )}
 
-            {!loadingCollections && !loadError && sortedSpinChoices.length === 0 && (
-              <div className={styles.selectMessage}>
-                Spin objekts are unavailable right now.
-              </div>
-            )}
+            {!loadingCollections &&
+              !loadError &&
+              sortedSpinChoices.length === 0 && (
+                <div className={styles.selectMessage}>
+                  Spin objekts are unavailable right now.
+                </div>
+              )}
 
-            {!loadingCollections && !loadError && sortedSpinChoices.length > 0 && (
-              <div className={styles.seasonGrid}>
-                {sortedSpinChoices
-                  .filter((o) => o.artist.toLowerCase() === selectTab)
-                  .map((objekt) => (
-                    <button
-                      type="button"
-                      key={spinKey(objekt)}
-                      className={cn(
-                        styles.seasonChoice,
-                        selected &&
-                          spinKey(selected) === spinKey(objekt) &&
-                          styles.seasonChoiceSelected,
-                      )}
-                      onClick={() => {
-                        setSelected(objekt);
-                        setPage("spin");
-                      }}
-                    >
-                      <ObjektCard objekt={objekt} />
-                      <span>{objekt.season}</span>
-                      <small>{objekt.member}</small>
-                    </button>
-                  ))}
-              </div>
-            )}
+            {!loadingCollections &&
+              !loadError &&
+              sortedSpinChoices.length > 0 && (
+                <div className={styles.seasonGrid}>
+                  {sortedSpinChoices
+                    .filter((o) => o.artist.toLowerCase() === selectTab)
+                    .map((objekt) => (
+                      <button
+                        type="button"
+                        key={spinKey(objekt)}
+                        className={cn(
+                          styles.seasonChoice,
+                          selected &&
+                            spinKey(selected) === spinKey(objekt) &&
+                            styles.seasonChoiceSelected,
+                        )}
+                        onClick={() => {
+                          setSelected(objekt);
+                          setPage("spin");
+                        }}
+                      >
+                        <ObjektCard objekt={objekt} />
+                        <span>{objekt.season}</span>
+                        <small>{objekt.member}</small>
+                      </button>
+                    ))}
+                </div>
+              )}
           </section>
         )}
 

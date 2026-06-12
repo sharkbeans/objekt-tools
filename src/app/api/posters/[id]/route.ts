@@ -188,71 +188,77 @@ export async function PATCH(
   if (body.username !== undefined) updateValues.username = body.username;
   if (body.cosmoId !== undefined) updateValues.cosmoId = body.cosmoId;
   if (body.theme !== undefined) updateValues.theme = body.theme;
-  if (body.groupByMember !== undefined) updateValues.groupByMember = body.groupByMember;
-  if (body.groupByNumbers !== undefined) updateValues.groupByNumbers = body.groupByNumbers;
+  if (body.groupByMember !== undefined)
+    updateValues.groupByMember = body.groupByMember;
+  if (body.groupByNumbers !== undefined)
+    updateValues.groupByNumbers = body.groupByNumbers;
   if (body.colsPerRow !== undefined) updateValues.colsPerRow = body.colsPerRow;
   if (body.haveTitle !== undefined) updateValues.haveTitle = body.haveTitle;
   if (body.wantTitle !== undefined) updateValues.wantTitle = body.wantTitle;
   if (sanitizedNotes !== undefined) updateValues.notes = sanitizedNotes;
 
-  const [updated] = await db
-    .update(poster)
-    .set({ ...updateValues, version: sql`${poster.version} + 1` })
-    .where(eq(poster.id, id))
-    .returning({ version: poster.version });
+  const version = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(poster)
+      .set({ ...updateValues, version: sql`${poster.version} + 1` })
+      .where(eq(poster.id, id))
+      .returning({ version: poster.version });
 
-  // Replace items if provided
-  if (haves !== undefined) {
-    await db.delete(posterHave).where(eq(posterHave.posterId, id));
-    if (haves.length > 0) {
-      await db.insert(posterHave).values(
-        haves.map((h, i) => ({
-          posterId: id,
-          collectionId: h.collectionId ?? null,
-          collectionNo: h.collectionNo ?? null,
-          member: h.member ?? null,
-          season: h.season ?? null,
-          class: h.class ?? null,
-          thumbnailUrl: h.thumbnailUrl ?? null,
-          serial: h.serial ?? null,
-          objektId: h.objektId ?? null,
-          quantity: h.quantity ?? 1,
-          freeform: h.freeform ?? false,
-          rawLabel: h.rawLabel ?? null,
-          onOffline: h.onOffline ?? null,
-          position: h.position ?? i,
-        })),
-      );
+    // Replace items if provided
+    if (haves !== undefined) {
+      await tx.delete(posterHave).where(eq(posterHave.posterId, id));
+      if (haves.length > 0) {
+        await tx.insert(posterHave).values(
+          haves.map((h, i) => ({
+            posterId: id,
+            collectionId: h.collectionId ?? null,
+            collectionNo: h.collectionNo ?? null,
+            member: h.member ?? null,
+            season: h.season ?? null,
+            class: h.class ?? null,
+            thumbnailUrl: h.thumbnailUrl ?? null,
+            serial: h.serial ?? null,
+            objektId: h.objektId ?? null,
+            quantity: h.quantity ?? 1,
+            freeform: h.freeform ?? false,
+            rawLabel: h.rawLabel ?? null,
+            onOffline: h.onOffline ?? null,
+            position: h.position ?? i,
+          })),
+        );
+      }
     }
-  }
 
-  if (wants !== undefined) {
-    await db.delete(posterWant).where(eq(posterWant.posterId, id));
-    if (wants.length > 0) {
-      await db.insert(posterWant).values(
-        wants.map((w, i) => ({
-          posterId: id,
-          collectionId: w.collectionId ?? null,
-          collectionNo: w.collectionNo ?? null,
-          member: w.member ?? null,
-          season: w.season ?? null,
-          class: w.class ?? null,
-          thumbnailUrl: w.thumbnailUrl ?? null,
-          serial: w.serial ?? null,
-          objektId: w.objektId ?? null,
-          quantity: w.quantity ?? 1,
-          freeform: w.freeform ?? false,
-          rawLabel: w.rawLabel ?? null,
-          onOffline: w.onOffline ?? null,
-          position: w.position ?? i,
-        })),
-      );
+    if (wants !== undefined) {
+      await tx.delete(posterWant).where(eq(posterWant.posterId, id));
+      if (wants.length > 0) {
+        await tx.insert(posterWant).values(
+          wants.map((w, i) => ({
+            posterId: id,
+            collectionId: w.collectionId ?? null,
+            collectionNo: w.collectionNo ?? null,
+            member: w.member ?? null,
+            season: w.season ?? null,
+            class: w.class ?? null,
+            thumbnailUrl: w.thumbnailUrl ?? null,
+            serial: w.serial ?? null,
+            objektId: w.objektId ?? null,
+            quantity: w.quantity ?? 1,
+            freeform: w.freeform ?? false,
+            rawLabel: w.rawLabel ?? null,
+            onOffline: w.onOffline ?? null,
+            position: w.position ?? i,
+          })),
+        );
+      }
     }
-  }
+
+    return updated?.version ?? 1;
+  });
 
   await redis.del(posterCacheKey(id));
 
-  return NextResponse.json({ id, version: updated?.version ?? 1 });
+  return NextResponse.json({ id, version });
 }
 
 // DELETE /api/posters/[id] — delete own poster
@@ -275,7 +281,10 @@ export async function DELETE(
   });
 
   if (!row || row.userId !== session.user.id) {
-    return NextResponse.json({ error: "Not found or not yours" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Not found or not yours" },
+      { status: 404 },
+    );
   }
 
   await db.delete(poster).where(eq(poster.id, id));

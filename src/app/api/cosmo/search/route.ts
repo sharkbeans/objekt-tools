@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { searchUsers } from "@/lib/cosmo/client";
 import { redis } from "@/lib/redis";
@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
   const attempts = await redis.incr(rateLimitKey);
   if (attempts === 1) await redis.expire(rateLimitKey, 60);
   if (attempts > 10) {
-    return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+    return NextResponse.json(
+      { error: "Too many requests. Try again later." },
+      { status: 429 },
+    );
   }
 
   const query = request.nextUrl.searchParams.get("q");
@@ -31,7 +34,7 @@ export async function GET(request: NextRequest) {
     console.error("Cosmo search failed:", error);
     return NextResponse.json(
       { error: "Failed to search Cosmo users" },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }

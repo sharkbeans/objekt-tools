@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "@/lib/auth-client";
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { XIcon } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { useSession } from "@/lib/auth-client";
+import type { ActiveTradeDTO, TradeStatus } from "@/lib/trade-types";
 import { cn } from "@/lib/utils";
 
-type TradeStatus = "pending" | "accepted" | "partial" | "completed" | "cancelled" | "countered" | "disputed";
-
-const statusVariant: Record<TradeStatus, "default" | "secondary" | "outline" | "destructive"> = {
+const statusVariant: Record<
+  TradeStatus,
+  "default" | "secondary" | "outline" | "destructive"
+> = {
   pending: "secondary",
   accepted: "default",
   partial: "default",
@@ -45,7 +47,12 @@ function saveDismissed(ids: Set<string>) {
   localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]));
 }
 
-const terminalStatuses: TradeStatus[] = ["completed", "cancelled", "countered", "disputed"];
+const terminalStatuses: TradeStatus[] = [
+  "completed",
+  "cancelled",
+  "countered",
+  "disputed",
+];
 
 export function ActiveTradesBanner() {
   const { data: session } = useSession();
@@ -71,7 +78,7 @@ export function ActiveTradesBanner() {
 
   // Active (non-terminal) trades are never dismissable — always shown
   // Terminal trades can be dismissed via X button
-  const visibleTrades = allTrades.filter((t: any) => {
+  const visibleTrades = allTrades.filter((t: ActiveTradeDTO) => {
     if (!terminalStatuses.includes(t.status)) return true; // always show active
     return !dismissed.has(t.id); // terminal: show unless dismissed
   });
@@ -89,7 +96,7 @@ export function ActiveTradesBanner() {
 
   return (
     <div className="space-y-2">
-      {visibleTrades.map((trade: any) => {
+      {visibleTrades.map((trade: ActiveTradeDTO) => {
         const isRecipient = trade.recipientUserId === userId;
         const otherUser = isRecipient ? trade.initiator : trade.recipient;
         const needsAccept = isRecipient && trade.status === "pending";
@@ -100,10 +107,10 @@ export function ActiveTradesBanner() {
           trade.status === "completed"
             ? "border-green-300 bg-green-500/20 dark:border-green-800 dark:bg-green-500/20 hover:bg-green-500/25"
             : trade.status === "pending"
-            ? "border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 hover:bg-amber-500/40"
-            : trade.status === "cancelled" || trade.status === "disputed"
-            ? "border-destructive/40 bg-destructive/15 dark:bg-destructive/20 hover:bg-destructive/20"
-            : "border-border hover:bg-muted/50"
+              ? "border-amber-200 bg-amber-500/35 dark:border-amber-900 dark:bg-amber-500/35 hover:bg-amber-500/40"
+              : trade.status === "cancelled" || trade.status === "disputed"
+                ? "border-destructive/40 bg-destructive/15 dark:bg-destructive/20 hover:bg-destructive/20"
+                : "border-border hover:bg-muted/50",
         );
 
         const isCounterOffer = !!trade.counterOfferToId;
@@ -118,7 +125,10 @@ export function ActiveTradesBanner() {
               className="flex flex-1 items-center justify-between gap-3 min-w-0"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <Badge variant={statusVariant[trade.status as TradeStatus]} className="shrink-0">
+                <Badge
+                  variant={statusVariant[trade.status as TradeStatus]}
+                  className="shrink-0"
+                >
                   {statusLabel[trade.status as TradeStatus]}
                 </Badge>
                 <span className="text-sm truncate">

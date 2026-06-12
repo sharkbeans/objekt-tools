@@ -1,8 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { tradePost, tradePostHave, tradePostWant, activeTrade } from "@/lib/db/schema";
-import { eq, and, or, inArray, isNull } from "drizzle-orm";
+import {
+  activeTrade,
+  tradePost,
+  tradePostHave,
+  tradePostWant,
+} from "@/lib/db/schema";
 
 interface TradeItemInput {
   collectionId: string;
@@ -20,7 +25,7 @@ interface TradeItemInput {
 // GET /api/trades/[id] — get single trade with full details
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: tradeId } = await params;
 
@@ -30,7 +35,13 @@ export async function GET(
       haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
       wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
       user: {
-        columns: { id: true, name: true, image: true, discordId: true, discordUsername: true },
+        columns: {
+          id: true,
+          name: true,
+          image: true,
+          discordId: true,
+          discordUsername: true,
+        },
         with: {
           cosmoAccount: {
             columns: { nickname: true, address: true },
@@ -59,7 +70,7 @@ export async function GET(
 // Haves/wants can only be edited when "open" AND no active trades reference this post.
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -70,7 +81,12 @@ export async function PATCH(
 
   const { id: tradeId } = await params;
   const body = await request.json();
-  const { status: newStatus, description, haves, wants } = body as {
+  const {
+    status: newStatus,
+    description,
+    haves,
+    wants,
+  } = body as {
     status?: string;
     description?: string | null;
     haves?: TradeItemInput[];
@@ -78,28 +94,42 @@ export async function PATCH(
   };
 
   const existing = await db.query.tradePost.findFirst({
-    where: and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
+    where: and(
+      eq(tradePost.id, tradeId),
+      eq(tradePost.userId, session.user.id),
+    ),
     columns: { id: true, status: true },
   });
 
   if (!existing) {
-    return NextResponse.json({ error: "Trade not found or not yours" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Trade not found or not yours" },
+      { status: 404 },
+    );
   }
 
   // Status change
   if (newStatus !== undefined) {
     if (existing.status === "in_trade") {
-      return NextResponse.json({ error: "Cannot modify a trade post while it is part of an active trade" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "Cannot modify a trade post while it is part of an active trade",
+        },
+        { status: 400 },
+      );
     }
     const validStatuses = ["open", "closed"] as const;
-    if (!validStatuses.includes(newStatus as typeof validStatuses[number])) {
+    if (!validStatuses.includes(newStatus as (typeof validStatuses)[number])) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
     const [updated] = await db
       .update(tradePost)
       .set({ status: newStatus, updatedAt: new Date() })
-      .where(and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)))
+      .where(
+        and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
+      )
       .returning();
 
     return NextResponse.json(updated);
@@ -108,12 +138,17 @@ export async function PATCH(
   // Description-only edit (allowed even with active trades)
   if (description !== undefined && !haves && !wants) {
     if (description && description.length > 500) {
-      return NextResponse.json({ error: "Description must be 500 characters or less" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Description must be 500 characters or less" },
+        { status: 400 },
+      );
     }
     const [updated] = await db
       .update(tradePost)
       .set({ description: description?.trim() || null, updatedAt: new Date() })
-      .where(and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)))
+      .where(
+        and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
+      )
       .returning();
 
     return NextResponse.json(updated);
@@ -122,7 +157,10 @@ export async function PATCH(
   // Haves/wants edit — only when "open" and no active trades
   if (haves || wants) {
     if (existing.status !== "open") {
-      return NextResponse.json({ error: "Can only edit haves/wants on an open trade post" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Can only edit haves/wants on an open trade post" },
+        { status: 400 },
+      );
     }
 
     // Check for active trades referencing this post
@@ -139,8 +177,11 @@ export async function PATCH(
 
     if (hasActiveTrade) {
       return NextResponse.json(
-        { error: "Cannot edit haves/wants while this post has active trades. Cancel or complete them first." },
-        { status: 400 }
+        {
+          error:
+            "Cannot edit haves/wants while this post has active trades. Cancel or complete them first.",
+        },
+        { status: 400 },
       );
     }
 
@@ -148,13 +189,21 @@ export async function PATCH(
 
     if (haves) {
       if (haves.length === 0) {
-        return NextResponse.json({ error: "Must have at least one 'have' item" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Must have at least one 'have' item" },
+          { status: 400 },
+        );
       }
       // Soft-delete existing haves
       await db
         .update(tradePostHave)
         .set({ deletedAt: now })
-        .where(and(eq(tradePostHave.tradePostId, tradeId), isNull(tradePostHave.deletedAt)));
+        .where(
+          and(
+            eq(tradePostHave.tradePostId, tradeId),
+            isNull(tradePostHave.deletedAt),
+          ),
+        );
 
       // Insert new haves
       await db.insert(tradePostHave).values(
@@ -168,20 +217,26 @@ export async function PATCH(
           thumbnailUrl: h.thumbnailUrl ?? null,
           serial: h.serial ?? null,
           objektId: h.objektId ?? null,
-        }))
+        })),
       );
     }
 
     if (wants) {
       if (wants.length === 0) {
-        return NextResponse.json({ error: "Must have at least one 'want' item" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Must have at least one 'want' item" },
+          { status: 400 },
+        );
       }
       // Validate ANY wants
       for (const w of wants) {
         if (w.isAny && !w.artist && !w.member && !w.season && !w.class) {
           return NextResponse.json(
-            { error: "ANY want items must specify at least one filter (artist, member, season, or class)" },
-            { status: 400 }
+            {
+              error:
+                "ANY want items must specify at least one filter (artist, member, season, or class)",
+            },
+            { status: 400 },
           );
         }
       }
@@ -189,7 +244,12 @@ export async function PATCH(
       await db
         .update(tradePostWant)
         .set({ deletedAt: now })
-        .where(and(eq(tradePostWant.tradePostId, tradeId), isNull(tradePostWant.deletedAt)));
+        .where(
+          and(
+            eq(tradePostWant.tradePostId, tradeId),
+            isNull(tradePostWant.deletedAt),
+          ),
+        );
 
       // Insert new wants
       await db.insert(tradePostWant).values(
@@ -203,14 +263,17 @@ export async function PATCH(
           thumbnailUrl: w.thumbnailUrl ?? null,
           isAny: w.isAny ?? false,
           artist: w.artist ?? null,
-        }))
+        })),
       );
     }
 
     // Update description if provided alongside haves/wants
     if (description !== undefined) {
       if (description && description.length > 500) {
-        return NextResponse.json({ error: "Description must be 500 characters or less" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Description must be 500 characters or less" },
+          { status: 400 },
+        );
       }
       await db
         .update(tradePost)
@@ -232,7 +295,7 @@ export async function PATCH(
 // DELETE /api/trades/[id] — delete own trade
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   let session;
   try {
@@ -244,21 +307,34 @@ export async function DELETE(
   const { id: tradeId } = await params;
 
   const existing = await db.query.tradePost.findFirst({
-    where: and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
+    where: and(
+      eq(tradePost.id, tradeId),
+      eq(tradePost.userId, session.user.id),
+    ),
     columns: { id: true, status: true },
   });
 
   if (!existing) {
-    return NextResponse.json({ error: "Trade not found or not yours" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Trade not found or not yours" },
+      { status: 404 },
+    );
   }
 
   if (existing.status === "in_trade") {
-    return NextResponse.json({ error: "Cannot delete a trade post while it is part of an active trade" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: "Cannot delete a trade post while it is part of an active trade",
+      },
+      { status: 400 },
+    );
   }
 
   await db
     .delete(tradePost)
-    .where(and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)));
+    .where(
+      and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
+    );
 
   return NextResponse.json({ success: true });
 }
