@@ -1,4 +1,5 @@
 import { and, count, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
+import { getCached } from "@/lib/server-cache";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -80,40 +81,45 @@ export async function GET(
     eq(activeTrade.recipientUserId, userId),
   );
 
-  const [
-    [{ value: completedCount }],
-    [{ value: cancelledCount }],
-    [{ value: openPostCount }],
-    activeBan,
-    defaultedTrades,
-  ] = await Promise.all([
-    db
-      .select({ value: count() })
-      .from(activeTrade)
-      .where(and(userTradeFilter, eq(activeTrade.status, "completed"))),
-    db
-      .select({ value: count() })
-      .from(activeTrade)
-      .where(and(userTradeFilter, eq(activeTrade.status, "cancelled"))),
-    db
-      .select({ value: count() })
-      .from(tradePost)
-      .where(and(eq(tradePost.userId, userId), eq(tradePost.status, "open"))),
-    db.query.tradeBan.findFirst({
-      where: and(eq(tradeBan.userId, userId), isNull(tradeBan.liftedAt)),
-      columns: { id: true, reason: true, createdAt: true },
-    }),
-    // Defaulted: cancelled after acceptance, user had unsent sides
-    db.query.activeTrade.findMany({
-      where: and(
-        userTradeFilter,
-        eq(activeTrade.status, "cancelled"),
-        isNotNull(activeTrade.acceptedAt),
-      ),
-      with: { sides: true },
-      columns: { id: true },
-    }),
-  ]);
+  const { completedCount, cancelledCount, openPostCount, activeBan, defaultedTrades } =
+    await getCached(`user-profile-stats:${userId}`, 60_000, async () => {
+      const [
+        [{ value: completedCount }],
+        [{ value: cancelledCount }],
+        [{ value: openPostCount }],
+        activeBan,
+        defaultedTrades,
+      ] = await Promise.all([
+        db
+          .select({ value: count() })
+          .from(activeTrade)
+          .where(and(userTradeFilter, eq(activeTrade.status, "completed"))),
+        db
+          .select({ value: count() })
+          .from(activeTrade)
+          .where(and(userTradeFilter, eq(activeTrade.status, "cancelled"))),
+        db
+          .select({ value: count() })
+          .from(tradePost)
+          .where(and(eq(tradePost.userId, userId), eq(tradePost.status, "open"))),
+        db.query.tradeBan.findFirst({
+          where: and(eq(tradeBan.userId, userId), isNull(tradeBan.liftedAt)),
+          columns: { id: true, reason: true, createdAt: true },
+        }),
+        // Defaulted: cancelled after acceptance, user had unsent sides
+        db.query.activeTrade.findMany({
+          where: and(
+            userTradeFilter,
+            eq(activeTrade.status, "cancelled"),
+            isNotNull(activeTrade.acceptedAt),
+          ),
+          with: { sides: true },
+          columns: { id: true },
+          limit: 500,
+        }),
+      ]);
+      return { completedCount, cancelledCount, openPostCount, activeBan, defaultedTrades };
+    });
 
   const defaultedCount = defaultedTrades.filter((t) =>
     t.sides.some((s) => s.userId === userId && s.status === "pending"),

@@ -6,6 +6,7 @@
 import type { PosterData, PosterTheme } from "@/components/poster/poster-canvas";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
 
 const DARK = {
   bg: "#0f0f14", fg: "#e4e4e7", muted: "#a1a1aa",
@@ -24,24 +25,6 @@ const LABEL_H = 20; // space below card for label text
 interface DisplayItem {
   item: ResolvedPosterItem;
   quantity: number;
-}
-
-function getItemQuantity(item: ResolvedPosterItem): number {
-  return item.parsed.quantity && item.parsed.quantity > 1
-    ? item.parsed.quantity
-    : 1;
-}
-
-function getNumberGroupKey(item: ResolvedPosterItem): string {
-  if (item.entry) return `entry:${item.entry.collectionId}`;
-  return [
-    "parsed",
-    item.parsed.member ?? "",
-    item.parsed.season,
-    item.parsed.collectionNo,
-    item.parsed.onOffline ?? "",
-    item.parsed.raw,
-  ].join("|");
 }
 
 function getDisplayItems(

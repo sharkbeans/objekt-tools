@@ -154,7 +154,7 @@ export async function PATCH(
     wants?: PosterItemInput[];
   };
 
-  const { haves, wants, notes, ...rest } = body;
+  const { haves, wants, notes } = body;
 
   if ((haves?.length ?? 0) + (wants?.length ?? 0) > 200) {
     return NextResponse.json(
@@ -173,10 +173,26 @@ export async function PATCH(
     );
   }
 
-  const updateValues: Record<string, unknown> = {
-    ...rest,
-    updatedAt: new Date(),
-  };
+  const updateValues: {
+    username?: string;
+    cosmoId?: string;
+    theme?: string;
+    groupByMember?: boolean;
+    groupByNumbers?: boolean;
+    colsPerRow?: number;
+    haveTitle?: string;
+    wantTitle?: string;
+    notes?: string | null;
+    updatedAt: Date;
+  } = { updatedAt: new Date() };
+  if (body.username !== undefined) updateValues.username = body.username;
+  if (body.cosmoId !== undefined) updateValues.cosmoId = body.cosmoId;
+  if (body.theme !== undefined) updateValues.theme = body.theme;
+  if (body.groupByMember !== undefined) updateValues.groupByMember = body.groupByMember;
+  if (body.groupByNumbers !== undefined) updateValues.groupByNumbers = body.groupByNumbers;
+  if (body.colsPerRow !== undefined) updateValues.colsPerRow = body.colsPerRow;
+  if (body.haveTitle !== undefined) updateValues.haveTitle = body.haveTitle;
+  if (body.wantTitle !== undefined) updateValues.wantTitle = body.wantTitle;
   if (sanitizedNotes !== undefined) updateValues.notes = sanitizedNotes;
 
   const [updated] = await db

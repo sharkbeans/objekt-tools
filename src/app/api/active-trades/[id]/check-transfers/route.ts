@@ -178,7 +178,7 @@ export async function POST(
         await tx
           .update(activeTrade)
           .set({ status: "completed", acceptedAt: now, updatedAt: now })
-          .where(eq(activeTrade.id, tradeId));
+          .where(and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")));
 
         const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
         if (postIds.length > 0) {
@@ -229,7 +229,7 @@ export async function POST(
         await tx
           .update(activeTrade)
           .set({ status: "accepted", acceptedAt: now, updatedAt: now })
-          .where(eq(activeTrade.id, tradeId));
+          .where(and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")));
 
         const postIds = [trade.tradePostId, trade.matchedTradePostId].filter((id): id is string => id !== null);
         if (postIds.length > 0) {
@@ -255,7 +255,10 @@ export async function POST(
       const notifMsg = `The other party has already sent all their objekts before you accepted. You can accept as normal, or cancel — if you cancel, please return the objekts to them.`;
       // Only query notifications if we actually need to dedup this message
       const existingNotifs = await db.query.tradeNotification.findMany({
-        where: inArray(tradeNotification.userId, [trade.recipientUserId]),
+        where: and(
+          inArray(tradeNotification.userId, [trade.recipientUserId]),
+          eq(tradeNotification.activeTradeId, tradeId),
+        ),
       });
       const notifMessages = new Set(existingNotifs.map((n) => n.message));
       if (!notifMessages.has(notifMsg)) {
@@ -516,7 +519,10 @@ export async function POST(
           // Lazy-load existing return notification messages once
           if (existingReturnMsgs === null) {
             const existingReturnNotifs = await db.query.tradeNotification.findMany({
-              where: inArray(tradeNotification.userId, [trade.initiatorUserId, trade.recipientUserId]),
+              where: and(
+                inArray(tradeNotification.userId, [trade.initiatorUserId, trade.recipientUserId]),
+                eq(tradeNotification.activeTradeId, tradeId),
+              ),
             });
             existingReturnMsgs = new Set(existingReturnNotifs.map((n) => n.message));
           }

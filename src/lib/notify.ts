@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { tradeNotification, user } from "@/lib/db/schema";
 import { inArray } from "drizzle-orm";
+import { redis } from "@/lib/redis";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -60,7 +61,13 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
         await dmUser(discordId, content);
       } catch (err) {
         // Non-fatal — site notifications already saved to DB
-        console.error(`[notify] Discord DM failed for user ${item.userId}:`, err);
+        const tradeRef = item.activeTradeId ?? "no-trade";
+        console.error(
+          `[notify] Discord DM failed userId=${item.userId} tradeId=${tradeRef}`,
+          err instanceof Error ? err.message : String(err),
+        );
+        const failKey = `discord-dm-fail:${item.userId}`;
+        redis.incr(failKey).then(() => redis.expire(failKey, 86400)).catch(() => {});
       }
     })
   );

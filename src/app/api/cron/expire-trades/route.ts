@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { activeTrade, activeTradeSide, cosmoAccount, tradePost, tradeTransferLog } from "@/lib/db/schema";
@@ -10,8 +11,16 @@ import { issueBan, propagateResolution } from "@/lib/trade-guards";
 // 1. Closes trade posts older than 30 days (does NOT cancel their associated accepted/partial active trades)
 // 2. Cancels pending (not yet accepted) active trades older than 30 days
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
+  let authorized = false;
+  try {
+    authorized = authHeader.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+  } catch {
+    authorized = false;
+  }
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

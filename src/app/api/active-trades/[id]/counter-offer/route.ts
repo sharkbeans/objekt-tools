@@ -99,7 +99,7 @@ export async function POST(
   if (pairAttempts === 1) {
     await redis.expire(pairRateLimitKey, 3600);
   }
-  if (pairAttempts > 6767) {
+  if (pairAttempts > 3) {
     return NextResponse.json(
       { error: "Counter-offer limit between you and this user reached (max 3 per hour). Try again later." },
       { status: 429 }

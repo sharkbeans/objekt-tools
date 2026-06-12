@@ -13,7 +13,7 @@ function getPusherClient(): Pusher | null {
   const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
   if (!key || !cluster) return null;
   if (!_client) {
-    _client = new Pusher(key, { cluster });
+    _client = new Pusher(key, { cluster, authEndpoint: "/api/pusher/auth" });
   }
   return _client;
 }
@@ -33,7 +33,7 @@ export function useTradeRealtime(tradeId: string) {
     const pusher = getPusherClient();
     if (!pusher) return;
 
-    const channel = pusher.subscribe(`trade-${tradeId}`);
+    const channel = pusher.subscribe(`private-trade-${tradeId}`);
     channelRef.current = channel;
 
     channel.bind("trade:accepted", () => {
@@ -64,7 +64,7 @@ export function useTradeRealtime(tradeId: string) {
     });
 
     return () => {
-      pusher.unsubscribe(`trade-${tradeId}`);
+      pusher.unsubscribe(`private-trade-${tradeId}`);
       channelRef.current = null;
     };
   }, [tradeId, queryClient]);
@@ -82,7 +82,7 @@ export function useUserRealtime(userId: string | undefined) {
     const pusher = getPusherClient();
     if (!pusher) return;
 
-    const channel = pusher.subscribe(`user-${userId}`);
+    const channel = pusher.subscribe(`private-user-${userId}`);
 
     channel.bind("notification:new", (data: { message: string }) => {
       queryClient.invalidateQueries({ queryKey: ["notification-unread-count"] });
@@ -92,7 +92,7 @@ export function useUserRealtime(userId: string | undefined) {
     });
 
     return () => {
-      pusher.unsubscribe(`user-${userId}`);
+      pusher.unsubscribe(`private-user-${userId}`);
     };
   }, [userId, queryClient]);
 }

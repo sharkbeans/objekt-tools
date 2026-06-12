@@ -57,12 +57,20 @@ export async function issueBan(userId: string, cosmoId: string, activeTradeId: s
   });
   if (existing) return existing;
 
-  const [ban] = await db.insert(tradeBan).values({
-    cosmoId,
-    userId,
-    reason,
-    activeTradeId,
-  }).returning();
+  const [ban] = await db
+    .insert(tradeBan)
+    .values({ cosmoId, userId, reason, activeTradeId })
+    .onConflictDoNothing()
+    .returning();
+  if (!ban) {
+    return db.query.tradeBan.findFirst({
+      where: and(
+        eq(tradeBan.userId, userId),
+        eq(tradeBan.activeTradeId, activeTradeId),
+        isNull(tradeBan.liftedAt),
+      ),
+    });
+  }
   return ban;
 }
 

@@ -1,6 +1,7 @@
 import { forwardRef, useState, useRef, useEffect } from "react";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
 import { getSeasonPrefix } from "@/lib/season-prefix";
+import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
 
 export type PosterTheme = "dark" | "light";
 
@@ -41,24 +42,6 @@ interface DisplayItem {
   item: ResolvedPosterItem;
   index: number;
   quantity: number;
-}
-
-function getItemQuantity(item: ResolvedPosterItem): number {
-  return item.parsed.quantity && item.parsed.quantity > 1
-    ? item.parsed.quantity
-    : 1;
-}
-
-function getNumberGroupKey(item: ResolvedPosterItem): string {
-  if (item.entry) return `entry:${item.entry.collectionId}`;
-  return [
-    "parsed",
-    item.parsed.member ?? "",
-    item.parsed.season,
-    item.parsed.collectionNo,
-    item.parsed.onOffline ?? "",
-    item.parsed.raw,
-  ].join("|");
 }
 
 function getDisplayItems(

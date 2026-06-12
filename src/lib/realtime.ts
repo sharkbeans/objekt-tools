@@ -17,6 +17,10 @@ function getPusher(): Pusher | null {
   return _pusher;
 }
 
+export function getPusherServer(): Pusher | null {
+  return getPusher();
+}
+
 // Channel: `trade-{tradeId}`
 // Events:
 //   trade:accepted       — { activeTradeId }
@@ -38,7 +42,7 @@ export async function publishTradeEvent(
   const pusher = getPusher();
   if (!pusher) return;
   try {
-    await pusher.trigger(`trade-${tradeId}`, event, data);
+    await pusher.trigger(`private-trade-${tradeId}`, event, data);
   } catch {
     // Non-fatal — realtime is best-effort
   }
@@ -52,7 +56,7 @@ export async function publishUserEvent(
   const pusher = getPusher();
   if (!pusher) return;
   try {
-    await pusher.trigger(`user-${userId}`, event, data);
+    await pusher.trigger(`private-user-${userId}`, event, data);
   } catch {
     // Non-fatal — realtime is best-effort
   }
