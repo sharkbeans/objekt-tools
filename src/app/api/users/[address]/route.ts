@@ -24,25 +24,29 @@ export async function GET(
   const { address: identifier } = await params;
   const session = await getSession();
 
-  type CosmoRow = Awaited<ReturnType<typeof db.query.cosmoAccount.findFirst>>;
+  const userColumns = {
+    id: true,
+    name: true,
+    image: true,
+    email: true,
+    discordId: true,
+    discordUsername: true,
+  } as const;
+
+  type CosmoRow = Awaited<
+    ReturnType<
+      typeof db.query.cosmoAccount.findFirst<{
+        with: { user: { columns: typeof userColumns } };
+      }>
+    >
+  >;
   let cosmo: CosmoRow;
 
   if (isWalletAddress(identifier)) {
     // Direct address lookup
     cosmo = await db.query.cosmoAccount.findFirst({
       where: eq(cosmoAccount.address, identifier.toLowerCase()),
-      with: {
-        user: {
-          columns: {
-            id: true,
-            name: true,
-            image: true,
-            email: true,
-            discordId: true,
-            discordUsername: true,
-          },
-        },
-      },
+      with: { user: { columns: userColumns } },
     });
     // If the user has a nickname, redirect to the prettier /@nickname URL
     if (cosmo?.nickname) {
@@ -52,18 +56,7 @@ export async function GET(
     // Treat as nickname — try DB first (case-insensitive)
     cosmo = await db.query.cosmoAccount.findFirst({
       where: ilike(cosmoAccount.nickname, identifier),
-      with: {
-        user: {
-          columns: {
-            id: true,
-            name: true,
-            image: true,
-            email: true,
-            discordId: true,
-            discordUsername: true,
-          },
-        },
-      },
+      with: { user: { columns: userColumns } },
     });
 
     if (!cosmo) {
