@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth-server";
 import { redis } from "@/lib/redis";
 
 export async function POST() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

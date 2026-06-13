@@ -9,7 +9,7 @@ const PAGE_LIMIT = 12;
 
 // GET /api/active-trades — list active trades for current user
 export async function GET(request: NextRequest) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

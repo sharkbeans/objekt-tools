@@ -24,7 +24,8 @@ export async function GET(
   const { address: identifier } = await params;
   const session = await getSession();
 
-  let cosmo;
+  type CosmoRow = Awaited<ReturnType<typeof db.query.cosmoAccount.findFirst>>;
+  let cosmo: CosmoRow;
 
   if (isWalletAddress(identifier)) {
     // Direct address lookup

@@ -118,21 +118,9 @@ export default function PublicProfilePage({
   const decoded = decodeURIComponent(rawAddress);
   const router = useRouter();
 
-  // Profile URLs must start with @ (e.g. /@username) to avoid clashing with
-  // static routes like /trades, /notifications, etc.
-  if (!decoded.startsWith("@")) {
-    return (
-      <div className="max-w-2xl mx-auto py-12 text-center">
-        <h1 className="text-2xl font-bold mb-2">Page not found</h1>
-        <p className="text-muted-foreground">
-          Looking for a user profile? Try{" "}
-          <span className="font-mono">/@username</span>
-        </p>
-      </div>
-    );
-  }
+  const isValidProfile = decoded.startsWith("@");
+  const identifier = isValidProfile ? decoded.slice(1) : "";
 
-  const identifier = decoded.slice(1);
   const [emailVisible, setEmailVisible] = useState(false);
 
   const {
@@ -157,6 +145,7 @@ export default function PublicProfilePage({
       if (!res.ok) throw new Error("User not found");
       return res.json();
     },
+    enabled: isValidProfile,
   });
 
   const isOwner = !!profile?.viewer.isOwner;
@@ -191,6 +180,20 @@ export default function PublicProfilePage({
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       );
   }, [activeData?.trades, historyData?.trades, isOwner]);
+
+  // Profile URLs must start with @ (e.g. /@username) to avoid clashing with
+  // static routes like /trades, /notifications, etc.
+  if (!isValidProfile) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center">
+        <h1 className="text-2xl font-bold mb-2">Page not found</h1>
+        <p className="text-muted-foreground">
+          Looking for a user profile? Try{" "}
+          <span className="font-mono">/@username</span>
+        </p>
+      </div>
+    );
+  }
 
   if (isLoading || profile === null) {
     return (
@@ -522,8 +525,6 @@ function StatCard({
       <TooltipPrimitive.Trigger asChild>
         <div
           className="rounded-lg border px-4 py-3 text-center cursor-help"
-          tabIndex={0}
-          aria-label={`${label}: ${tooltip}`}
         >
           <div className="flex items-center justify-center gap-1.5 mb-1">
             {icon}

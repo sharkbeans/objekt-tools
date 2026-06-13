@@ -6,7 +6,7 @@ import { activeTrade } from "@/lib/db/schema";
 
 // GET /api/active-trades/history — list completed/cancelled/disputed trades for current user
 export async function GET() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

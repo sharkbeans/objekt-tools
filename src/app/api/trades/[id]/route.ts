@@ -72,7 +72,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -297,7 +297,7 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

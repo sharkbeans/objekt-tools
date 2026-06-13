@@ -14,7 +14,7 @@ const REMBG_TIMEOUT_MS = 120_000;
 let backgroundRemovalQueue = Promise.resolve();
 
 export async function POST(request: Request) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

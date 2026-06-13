@@ -35,7 +35,8 @@ export async function createUser(
       email: overrides.email ?? `${id.slice(0, 8)}@test.example`,
     })
     .returning();
-  return row!;
+  if (!row) throw new Error("insert returned no row");
+  return row;
 }
 
 export async function createCosmoAccount(
@@ -52,13 +53,15 @@ export async function createCosmoAccount(
       cosmoId: overrides.cosmoId ?? null,
     })
     .returning();
-  return row!;
+  if (!row) throw new Error("insert returned no row");
+  return row;
 }
 
 export async function createTradePost(userId: string) {
   const d = await db();
   const [row] = await d.insert(tradePost).values({ userId }).returning();
-  return row!;
+  if (!row) throw new Error("insert returned no row");
+  return row;
 }
 
 export async function createActiveTrade(opts: {
@@ -81,7 +84,8 @@ export async function createActiveTrade(opts: {
       acceptedAt: opts.acceptedAt,
     })
     .returning();
-  return row!;
+  if (!row) throw new Error("insert returned no row");
+  return row;
 }
 
 export async function createTradeSide(
@@ -102,7 +106,8 @@ export async function createTradeSide(
       status: opts.status ?? "pending",
     })
     .returning();
-  return row!;
+  if (!row) throw new Error("insert returned no row");
+  return row;
 }
 
 export async function createBan(
@@ -120,5 +125,6 @@ export async function createBan(
       reason: overrides.reason ?? "test ban",
     })
     .returning();
-  return row!;
+  if (!row) throw new Error("insert returned no row");
+  return row;
 }

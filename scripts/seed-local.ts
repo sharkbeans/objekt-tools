@@ -9,9 +9,9 @@
  */
 
 import { loadEnvConfig } from "@next/env";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "../src/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 loadEnvConfig(process.cwd());
 
@@ -23,7 +23,7 @@ const COSMO_ACCESS_TOKEN = "";
 const COSMO_REFRESH_TOKEN = "";
 // ============================================================
 
-const db = drizzle(process.env.DATABASE_URL!, { schema });
+const db = drizzle(process.env.DATABASE_URL ?? "", { schema });
 
 // Test user credentials — only works in local dev
 const TEST_EMAIL = "seoyeon@local.wav";
@@ -46,13 +46,17 @@ async function main() {
   let userId: string;
 
   if (existing) {
-    console.log(`Test user already exists (id: ${existing.id}), skipping user creation.`);
+    console.log(
+      `Test user already exists (id: ${existing.id}), skipping user creation.`,
+    );
     userId = existing.id;
   } else {
     // ── 2. Call the Better Auth sign-up API to create the user properly ──────
     // This ensures the password hash is stored in the format Better Auth expects.
     console.log("Creating test user via Better Auth sign-up API...");
-    console.log("(Make sure `npm run dev` is running on http://localhost:3000)\n");
+    console.log(
+      "(Make sure `npm run dev` is running on http://localhost:3000)\n",
+    );
 
     const res = await fetch("http://localhost:3000/api/auth/sign-up/email", {
       method: "POST",
@@ -74,7 +78,9 @@ async function main() {
     });
 
     if (!created) {
-      throw new Error("User was not found in DB after sign-up. Check API response.");
+      throw new Error(
+        "User was not found in DB after sign-up. Check API response.",
+      );
     }
 
     userId = created.id;
@@ -87,7 +93,9 @@ async function main() {
   });
 
   if (existingCosmo) {
-    console.log(`Cosmo account already linked (${existingCosmo.nickname}), skipping.`);
+    console.log(
+      `Cosmo account already linked (${existingCosmo.nickname}), skipping.`,
+    );
   } else {
     await db.insert(schema.cosmoAccount).values({
       userId,
@@ -95,7 +103,9 @@ async function main() {
       nickname: FAKE_COSMO_NICKNAME,
       cosmoId: FAKE_COSMO_ID,
     });
-    console.log(`Linked fake Cosmo account: ${FAKE_COSMO_NICKNAME} (${FAKE_COSMO_ADDRESS})`);
+    console.log(
+      `Linked fake Cosmo account: ${FAKE_COSMO_NICKNAME} (${FAKE_COSMO_ADDRESS})`,
+    );
   }
 
   // ── 4. Insert cosmo_token ─────────────────────────────────────────────────
@@ -110,7 +120,9 @@ async function main() {
     });
     console.log("Inserted cosmo_token.");
   } else {
-    console.log("No Cosmo token provided — skipping. Cosmo search/objekt lookup won't work.");
+    console.log(
+      "No Cosmo token provided — skipping. Cosmo search/objekt lookup won't work.",
+    );
   }
 
   console.log(`

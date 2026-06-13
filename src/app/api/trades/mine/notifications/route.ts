@@ -6,7 +6,7 @@ import { tradeNotification } from "@/lib/db/schema";
 
 // GET — list notifications for current user
 export async function GET() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -27,7 +27,7 @@ export async function GET() {
 
 // PATCH — dismiss notifications by IDs
 export async function PATCH(request: NextRequest) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

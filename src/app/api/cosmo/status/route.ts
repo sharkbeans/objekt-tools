@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
 
 export async function GET() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

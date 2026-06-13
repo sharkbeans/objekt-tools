@@ -6,7 +6,7 @@ import { tradeNotification } from "@/lib/db/schema";
 
 // GET /api/notifications/unread-count — count undismissed notifications
 export async function GET() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

@@ -7,7 +7,7 @@ import { tradePost, tradePostHave, tradePostWant } from "@/lib/db/schema";
 // GET /api/trades/mine/matches-count — total match count across all user's open trades
 // Batched: 3 queries total instead of 3*N
 export async function GET() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

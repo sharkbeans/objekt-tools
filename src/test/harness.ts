@@ -3,8 +3,8 @@ export const hasTestDb = Boolean(
 );
 
 export function setupTestEnv() {
-  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL!;
-  process.env.INDEXER_DATABASE_URL = process.env.TEST_INDEXER_DATABASE_URL!;
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? "";
+  process.env.INDEXER_DATABASE_URL = process.env.TEST_INDEXER_DATABASE_URL ?? "";
   if (process.env.TEST_REDIS_URL) {
     process.env.REDIS_URL = process.env.TEST_REDIS_URL;
   }

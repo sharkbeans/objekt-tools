@@ -58,7 +58,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -321,7 +321,7 @@ export async function POST(
       : "";
 
   // Create the counter-offer in a transaction
-  let result;
+  let result: { id: string };
   try {
     result = await db.transaction(async (tx) => {
       // Race condition protection: re-verify original trade is still pending inside tx

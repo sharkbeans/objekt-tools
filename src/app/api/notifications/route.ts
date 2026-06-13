@@ -6,7 +6,7 @@ import { tradeNotification } from "@/lib/db/schema";
 
 // GET /api/notifications — list all notifications (dismissed + undismissed) with pagination
 export async function GET(request: NextRequest) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/notifications/mark-all-read — dismiss all undismissed notifications
 export async function POST() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

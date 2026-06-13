@@ -10,7 +10,7 @@ import { cosmoAccount, tradePost, tradePostHave } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
 
 export async function POST() {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

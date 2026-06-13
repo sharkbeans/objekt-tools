@@ -16,7 +16,7 @@ export async function POST(
 ) {
   const { id: tradeId } = await params;
 
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {

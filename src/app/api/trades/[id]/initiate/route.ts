@@ -40,7 +40,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
@@ -235,7 +235,7 @@ export async function POST(
   }
 
   // Create the active trade and all sides in one transaction
-  let result;
+  let result: { id: string };
   try {
     result = await db.transaction(async (tx) => {
       const [trade] = await tx

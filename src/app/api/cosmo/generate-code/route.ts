@@ -7,7 +7,7 @@ import { cosmoAccount } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
-  let session;
+  let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();
   } catch {
