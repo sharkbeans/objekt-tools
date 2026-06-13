@@ -207,6 +207,10 @@ npm run db:migrate   # Run migrations
 npm run db:push      # Push schema directly to the database
 ```
 
+## Credit / Acknowledgment
+
+- [objekt-explorer](https://github.com/izrin96/objekt-explorer) for the Subsquid-based Objekt indexer database, which powers collection progress lookups and transfer verification.
+
 ## Contributing
 
 This is a personal project. For feature requests or bug reports, please open an issue.
