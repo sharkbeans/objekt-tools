@@ -1,11 +1,12 @@
-import { and, asc, eq, ilike } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
-import { fetchUserByNickname } from "@/lib/cosmo/client";
-import { db } from "@/lib/db";
+import {
+  resolveNickname,
+  validateNickname,
+} from "@/lib/cosmo/resolve-nickname";
 import { indexer } from "@/lib/db/indexer";
 import { collections, objekts } from "@/lib/db/indexer-schema";
-import { cosmoAccount } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
 
@@ -20,7 +21,7 @@ export async function GET(
 ) {
   const { nickname } = await params;
 
-  if (!nickname || nickname.length < 1) {
+  if (!nickname || !validateNickname(nickname)) {
     return NextResponse.json({ error: "Nickname required" }, { status: 400 });
   }
 
@@ -41,48 +42,38 @@ export async function GET(
     );
   }
 
-  // Resolve nickname → address: try our DB first, fall back to Cosmo API
-  let address: string | null = null;
-
-  const linked = await db.query.cosmoAccount.findFirst({
-    where: ilike(cosmoAccount.nickname, nickname),
-    columns: { address: true },
-  });
-
-  if (linked) {
-    address = linked.address;
-  } else {
-    const resolved = await fetchUserByNickname(nickname);
-    if (!resolved) {
-      return NextResponse.json(
-        { error: "Cosmo user not found" },
-        { status: 404 },
-      );
-    }
-    address = resolved.address.toLowerCase();
+  const resolved = await resolveNickname(nickname);
+  if (!resolved) {
+    return NextResponse.json(
+      { error: "Cosmo user not found" },
+      { status: 404 },
+    );
   }
+  const address = resolved.address;
 
-  const rows = await getCached(
-    `objekts:nickname:v1:${address.toLowerCase()}`,
-    90_000,
-    () =>
-      indexer
-        .select({
-          collectionId: collections.collectionId,
-          artist: collections.artist,
-          member: collections.member,
-          collectionNo: collections.collectionNo,
-          season: collections.season,
-          class: collections.class,
-          thumbnailImage: collections.thumbnailImage,
-          serial: objekts.serial,
-          objektId: objekts.id,
-        })
-        .from(objekts)
-        .innerJoin(collections, eq(objekts.collectionId, collections.id))
-        .where(and(eq(objekts.owner, address), eq(objekts.transferable, true)))
-        .orderBy(asc(collections.member), asc(collections.collectionNo))
-        .limit(500),
+  const rows = await getCached(`objekts:nickname:v1:${address}`, 90_000, () =>
+    indexer
+      .select({
+        collectionId: collections.collectionId,
+        artist: collections.artist,
+        member: collections.member,
+        collectionNo: collections.collectionNo,
+        season: collections.season,
+        class: collections.class,
+        thumbnailImage: collections.thumbnailImage,
+        serial: objekts.serial,
+        objektId: objekts.id,
+      })
+      .from(objekts)
+      .innerJoin(collections, eq(objekts.collectionId, collections.id))
+      .where(
+        and(
+          eq(objekts.owner, resolved.address),
+          eq(objekts.transferable, true),
+        ),
+      )
+      .orderBy(asc(collections.member), asc(collections.collectionNo))
+      .limit(500),
   );
 
   const results = rows.map((r) => ({

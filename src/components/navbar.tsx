@@ -6,6 +6,7 @@ import {
   BellIcon,
   ChevronLeftIcon,
   ImageIcon,
+  LibraryIcon,
   LinkIcon,
   LogInIcon,
   LogOutIcon,
@@ -152,6 +153,12 @@ export function Navbar() {
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Spin
+              </Link>
+              <Link
+                href="/progress"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Dex
               </Link>
             </nav>
           </div>
@@ -422,6 +429,10 @@ function MobileNav({
             <SparklesIcon className="size-4" />
             Spin
           </MobileNavLink>
+          <MobileNavLink href="/progress" onClick={() => setOpen(false)}>
+            <LibraryIcon className="size-4" />
+            Dex
+          </MobileNavLink>
           {session && (
             <MobileNavLink href="/notifications" onClick={() => setOpen(false)}>
               <span className="flex items-center gap-2">
@@ -533,6 +544,7 @@ function getMobilePageTitle(pathname: string): string {
   if (pathname.startsWith("/list")) return "Lists";
   if (pathname.startsWith("/post")) return "Lists";
   if (pathname.startsWith("/spin")) return "Spin";
+  if (pathname.startsWith("/progress")) return "Dex";
   if (pathname.startsWith("/link")) return "Link Cosmo";
   if (pathname.startsWith("/sign-in")) return "Sign in";
   if (pathname.startsWith("/@")) return "Profile";
