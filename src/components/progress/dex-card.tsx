@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { DexDetailDialog } from "./dex-detail-dialog";
 import type { ProgressCollection } from "@/lib/progress/types";
+import { DexDetailDialog } from "./dex-detail-dialog";
 
 interface Props {
   collection: ProgressCollection;
