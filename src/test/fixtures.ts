@@ -83,7 +83,20 @@ export async function createActiveTrade(opts: {
       createdAt: opts.createdAt,
       acceptedAt: opts.acceptedAt,
     })
-    .returning();
+    .returning()
+    .catch((e: unknown) => {
+      const detail =
+        e instanceof Error && "detail" in e
+          ? ` PG detail: ${(e as { detail?: string }).detail}`
+          : "";
+      const code =
+        e instanceof Error && "code" in e
+          ? ` PG code: ${(e as { code?: string }).code}`
+          : "";
+      throw new Error(`createActiveTrade insert failed:${code}${detail}`, {
+        cause: e,
+      });
+    });
   if (!row) throw new Error("insert returned no row");
   return row;
 }
