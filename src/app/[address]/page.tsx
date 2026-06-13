@@ -523,9 +523,7 @@ function StatCard({
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>
-        <div
-          className="rounded-lg border px-4 py-3 text-center cursor-help"
-        >
+        <div className="rounded-lg border px-4 py-3 text-center cursor-help">
           <div className="flex items-center justify-center gap-1.5 mb-1">
             {icon}
             <span className="text-2xl font-bold">{value}</span>

@@ -35,7 +35,10 @@ export function DexDetailDialog({ collection, onOpenChange }: Props) {
               </DialogHeader>
               <div className="text-sm text-muted-foreground space-y-0.5">
                 <p>{collection.season}</p>
-                <p>{collection.class} · {collection.onOffline === "online" ? "Digital" : "Physical"}</p>
+                <p>
+                  {collection.class} ·{" "}
+                  {collection.onOffline === "online" ? "Digital" : "Physical"}
+                </p>
                 <p className="font-medium text-foreground">
                   {collection.ownedCount > 0
                     ? `Owned ×${collection.ownedCount}`
