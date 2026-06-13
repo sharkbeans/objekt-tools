@@ -87,11 +87,13 @@ describe("trade-guards (integration)", {
     const a = await createActiveTrade({
       initiatorUserId: u1.id,
       recipientUserId: u2.id,
+      status: "countered",
     });
     const b = await createActiveTrade({
       initiatorUserId: u1.id,
       recipientUserId: u2.id,
       counterOfferToId: a.id,
+      status: "countered",
     });
     const c = await createActiveTrade({
       initiatorUserId: u1.id,
@@ -114,9 +116,12 @@ describe("trade-guards (integration)", {
       }),
     ]);
 
-    assert.equal(aRow?.resolvedByTradeId, c.id, "A resolved by C");
-    assert.equal(bRow?.resolvedByTradeId, c.id, "B resolved by C");
-    assert.equal(cRow?.resolvedByTradeId, null, "C itself unchanged");
+    assert.ok(aRow, "A exists");
+    assert.ok(bRow, "B exists");
+    assert.ok(cRow, "C exists");
+    assert.equal(aRow.resolvedByTradeId, c.id, "A resolved by C");
+    assert.equal(bRow.resolvedByTradeId, c.id, "B resolved by C");
+    assert.equal(cRow.resolvedByTradeId, null, "C itself unchanged");
   });
 
   it("propagateResolution is idempotent and respects existing resolution", async () => {
@@ -125,15 +130,18 @@ describe("trade-guards (integration)", {
     const other = await createActiveTrade({
       initiatorUserId: u1.id,
       recipientUserId: u2.id,
+      status: "completed",
     });
     const a = await createActiveTrade({
       initiatorUserId: u1.id,
       recipientUserId: u2.id,
+      status: "countered",
     });
     const b = await createActiveTrade({
       initiatorUserId: u1.id,
       recipientUserId: u2.id,
       counterOfferToId: a.id,
+      status: "countered",
     });
     const c = await createActiveTrade({
       initiatorUserId: u1.id,
@@ -190,13 +198,19 @@ describe("trade-guards (integration)", {
     const u1 = await createUser();
     const u2 = await createUser();
 
-    // Build chain of 14: trades[0] root, trades[13] terminal
+    // Build chain of 14: trades[0] root, trades[13] terminal.
+    // Intermediate trades are "countered" (real counter-offer chain state),
+    // only the terminal is "pending". This avoids conflicting with the
+    // partial unique index on (trade_post_id, matched_trade_post_id, initiator_user_id)
+    // WHERE status = 'pending' when trade_post_id/matched_trade_post_id are both null.
     const trades: Array<{ id: string }> = [];
     for (let i = 0; i < 14; i++) {
+      const isTerminal = i === 13;
       const t = await createActiveTrade({
         initiatorUserId: u1.id,
         recipientUserId: u2.id,
         counterOfferToId: i === 0 ? null : trades[i - 1]!.id,
+        status: isTerminal ? "pending" : "countered",
       });
       trades.push(t);
     }
@@ -219,8 +233,9 @@ describe("trade-guards (integration)", {
     const root = await db.query.activeTrade.findFirst({
       where: eq(schema.activeTrade.id, trades[0]!.id),
     });
+    assert.ok(root, "root exists");
     assert.equal(
-      root?.resolvedByTradeId,
+      root.resolvedByTradeId,
       null,
       "root (13th ancestor) should not be resolved",
     );
