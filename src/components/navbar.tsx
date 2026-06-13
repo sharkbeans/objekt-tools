@@ -158,7 +158,7 @@ export function Navbar() {
                 href="/progress"
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
-                Dex
+                Collection
               </Link>
             </nav>
           </div>
@@ -544,7 +544,7 @@ function getMobilePageTitle(pathname: string): string {
   if (pathname.startsWith("/list")) return "Lists";
   if (pathname.startsWith("/post")) return "Lists";
   if (pathname.startsWith("/spin")) return "Spin";
-  if (pathname.startsWith("/progress")) return "Dex";
+  if (pathname.startsWith("/progress")) return "Collection";
   if (pathname.startsWith("/link")) return "Link Cosmo";
   if (pathname.startsWith("/sign-in")) return "Sign in";
   if (pathname.startsWith("/@")) return "Profile";

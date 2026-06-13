@@ -118,7 +118,7 @@ const tools: {
     CustomIcon: SpinIcon,
   },
   {
-    title: "Dex",
+    title: "Collection",
     description: "Track your collection progress.",
     href: "/progress",
     Icon: Library,

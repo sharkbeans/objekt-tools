@@ -28,7 +28,7 @@ export default async function ProgressPage() {
   return (
     <div className="max-w-xl mx-auto py-12 px-4 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Collection Dex</h1>
+        <h1 className="text-2xl font-bold">Collection</h1>
         <p className="text-muted-foreground mt-1">
           Look up any Cosmo user to see their collection progress.
         </p>

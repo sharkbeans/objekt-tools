@@ -29,7 +29,7 @@ export default async function MemberDexPage({
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft className="h-4 w-4" />
-        Back to {nickname}'s Dex
+        Back to {nickname}'s Collection
       </Link>
       <MemberDexContent nickname={nickname} member={member} />
     </div>
