@@ -23,21 +23,21 @@ export function MemberProgressCard({
 
   return (
     <Link href={`/progress/${nickname}/${member}`}>
-      <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 hover:border-white/40 transition-colors">
+      <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-3.5 hover:border-white/40 transition-colors">
         <div className="flex items-center gap-3">
           <div className="shrink-0 self-stretch flex items-center">
             {imageUrl ? (
-              <div className="relative h-12 w-8 rounded overflow-hidden">
+              <div className="relative h-[52px] w-[52px] rounded-full overflow-hidden">
                 <Image
                   src={imageUrl}
                   alt={member}
                   fill
-                  className="object-cover"
-                  sizes="32px"
+                  className="object-cover object-top"
+                  sizes="(max-resolution: 1dppx) 52px, 104px"
                 />
               </div>
             ) : (
-              <div className="h-12 w-8 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground select-none">
+              <div className="h-[52px] w-[52px] rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground select-none">
                 {member.charAt(0)}
               </div>
             )}

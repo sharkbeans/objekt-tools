@@ -172,14 +172,14 @@ export function ProgressOverviewContent({ nickname }: Props) {
     return (
       <div className="space-y-4">
         <div className="h-6 w-40 bg-muted animate-pulse rounded" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
             <div
               key={id}
               className="rounded-lg border border-border bg-card p-3 space-y-2"
             >
               <div className="flex gap-3">
-                <div className="h-12 w-8 bg-muted animate-pulse rounded" />
+                <div className="h-[52px] w-[52px] bg-muted animate-pulse rounded-full" />
                 <div className="flex-1 space-y-1.5">
                   <div className="h-4 w-20 bg-muted animate-pulse rounded" />
                   <div className="h-3 w-12 bg-muted animate-pulse rounded" />
@@ -229,7 +229,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
               {artist === "artms" ? "ARTMS" : artist}
             </h2>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {[...real.entries()].map(([member, rollups]) => (
               <MemberProgressCard
                 key={member}
@@ -241,7 +241,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
             ))}
           </div>
           {showOthers && others.size > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {[...others.entries()].map(([member, rollups]) => (
                 <MemberProgressCard
                   key={member}
