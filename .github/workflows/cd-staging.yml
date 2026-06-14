@@ -19,5 +19,5 @@ jobs:
             cd ~/objekt-trade-staging
             git fetch origin
             git reset --hard origin/testing
-            docker compose -p objekt-staging -f docker-compose.yml -f docker-compose.staging.yml build
-            docker compose -p objekt-staging -f docker-compose.yml -f docker-compose.staging.yml up -d --remove-orphans --force-recreate
+            docker compose -p objekt-staging -f docker-compose.staging.yml build
+            docker compose -p objekt-staging -f docker-compose.staging.yml up -d --remove-orphans --force-recreate
