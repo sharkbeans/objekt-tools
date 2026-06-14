@@ -1,0 +1,27 @@
+# Staging override — used together with docker-compose.yml for the staging stack (testing branch).
+# Run with:
+#   docker compose -p objekt-staging -f docker-compose.yml -f docker-compose.staging.yml up -d
+#
+# Overrides what would otherwise collide with the production stack on the same VPS:
+#   - container names (production hardcodes objekt-trade-*)
+#   - host port bindings (app 3000, postgres 5432, redis 6379)
+# Volumes are already isolated because the compose project name differs (objekt-staging).
+
+services:
+  postgres:
+    container_name: objekt-staging-postgres
+    ports: !override
+      - "127.0.0.1:5433:5432"
+
+  redis:
+    container_name: objekt-staging-redis
+    ports: !override
+      - "127.0.0.1:6380:6379"
+
+  app:
+    container_name: objekt-staging-app
+    ports: !override
+      - "127.0.0.1:3001:3000"
+
+  cron:
+    container_name: objekt-staging`-cron
