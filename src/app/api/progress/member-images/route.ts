@@ -15,13 +15,13 @@ const COSMO_ARTISTS = ["tripleS", "artms", "idntt"] as const;
 
 // idntt: /uploads/member-profile/idntt-{Korean}.jpg (only verified members)
 const IDNTT_KOREAN: Record<string, string> = {
-  DoHun:    "도훈",
-  HeeJu:    "희주",
-  TaeIn:    "태인",
+  DoHun: "도훈",
+  HeeJu: "희주",
+  TaeIn: "태인",
   JaeYoung: "재영",
-  JuHo:     "주호",
-  JiWoon:   "지운",
-  HwanHee:  "환희",
+  JuHo: "주호",
+  JiWoon: "지운",
+  HwanHee: "환희",
   MinGyeol: "민결",
 };
 
@@ -71,9 +71,11 @@ async function fetchCosmoProfileImages(): Promise<Record<string, string>> {
       if (!res.ok) return [];
       const data = (await res.json()) as CosmoArtistResponse;
       const artistId = normalizeArtistId(artist);
-      return data.artist.members
-        .filter((m) => m.profileImageUrl)
-        .map((m) => [`${artistId}|${m.name}`, m.profileImageUrl!] as const);
+      return data.artist.members.flatMap((m) =>
+        m.profileImageUrl
+          ? [[`${artistId}|${m.name}`, m.profileImageUrl] as const]
+          : [],
+      );
     }),
   );
 
@@ -102,7 +104,9 @@ async function fetchWelcomeFallbackImages(): Promise<Record<string, string>> {
     }
   }
 
-  return Object.fromEntries([...best.entries()].map(([k, v]) => [k, v.frontImage]));
+  return Object.fromEntries(
+    [...best.entries()].map(([k, v]) => [k, v.frontImage]),
+  );
 }
 
 export async function GET() {
