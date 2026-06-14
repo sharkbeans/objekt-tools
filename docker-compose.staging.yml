@@ -24,4 +24,4 @@ services:
       - "127.0.0.1:3001:3000"
 
   cron:
-    container_name: objekt-staging`-cron
+    container_name: objekt-staging-cron
