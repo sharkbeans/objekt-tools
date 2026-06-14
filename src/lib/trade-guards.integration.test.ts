@@ -104,27 +104,24 @@ describe("trade-guards (integration)", {
     await guards.propagateResolution(c.id);
 
     const db = await getDb();
-    const [aRows, bRows, cRows] = await Promise.all([
-      db
-        .select({ resolvedByTradeId: schema.activeTrade.resolvedByTradeId })
-        .from(schema.activeTrade)
-        .where(eq(schema.activeTrade.id, a.id)),
-      db
-        .select({ resolvedByTradeId: schema.activeTrade.resolvedByTradeId })
-        .from(schema.activeTrade)
-        .where(eq(schema.activeTrade.id, b.id)),
-      db
-        .select({ resolvedByTradeId: schema.activeTrade.resolvedByTradeId })
-        .from(schema.activeTrade)
-        .where(eq(schema.activeTrade.id, c.id)),
+    const [aRow, bRow, cRow] = await Promise.all([
+      db.query.activeTrade.findFirst({
+        where: eq(schema.activeTrade.id, a.id),
+      }),
+      db.query.activeTrade.findFirst({
+        where: eq(schema.activeTrade.id, b.id),
+      }),
+      db.query.activeTrade.findFirst({
+        where: eq(schema.activeTrade.id, c.id),
+      }),
     ]);
 
-    assert.equal(aRows.length, 1, "A exists");
-    assert.equal(bRows.length, 1, "B exists");
-    assert.equal(cRows.length, 1, "C exists");
-    assert.equal(aRows[0]!.resolvedByTradeId, c.id, "A resolved by C");
-    assert.equal(bRows[0]!.resolvedByTradeId, c.id, "B resolved by C");
-    assert.equal(cRows[0]!.resolvedByTradeId, null, "C itself unchanged");
+    assert.ok(aRow, "A exists");
+    assert.ok(bRow, "B exists");
+    assert.ok(cRow, "C exists");
+    assert.equal(aRow.resolvedByTradeId, c.id, "A resolved by C");
+    assert.equal(bRow.resolvedByTradeId, c.id, "B resolved by C");
+    assert.equal(cRow.resolvedByTradeId, null, "C itself unchanged");
   });
 
   it("propagateResolution is idempotent and respects existing resolution", async () => {
@@ -161,11 +158,9 @@ describe("trade-guards (integration)", {
     await guards.propagateResolution(c.id);
 
     const sel = (id: string) =>
-      db
-        .select({ resolvedByTradeId: schema.activeTrade.resolvedByTradeId })
-        .from(schema.activeTrade)
-        .where(eq(schema.activeTrade.id, id))
-        .then((rows) => rows[0]);
+      db.query.activeTrade.findFirst({
+        where: eq(schema.activeTrade.id, id),
+      });
 
     const [aRow, bRow] = await Promise.all([sel(a.id), sel(b.id)]);
     assert.equal(
@@ -216,11 +211,9 @@ describe("trade-guards (integration)", {
     const db = await getDb();
 
     const sel = (id: string) =>
-      db
-        .select({ resolvedByTradeId: schema.activeTrade.resolvedByTradeId })
-        .from(schema.activeTrade)
-        .where(eq(schema.activeTrade.id, id))
-        .then((rows) => rows[0]);
+      db.query.activeTrade.findFirst({
+        where: eq(schema.activeTrade.id, id),
+      });
 
     for (let i = 1; i <= 12; i++) {
       const row = await sel(trades[i]!.id);
