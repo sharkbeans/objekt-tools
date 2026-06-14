@@ -5,12 +5,16 @@ type TotalsRow = {
   artist: string;
   member: string;
   class: string;
+  season: string;
+  onOffline: string;
   total: number;
 };
 type OwnedRow = {
   artist: string;
   member: string;
   class: string;
+  season: string;
+  onOffline: string;
   owned: number;
 };
 
@@ -22,11 +26,13 @@ export function mergeProgressRollups(
 
   for (const row of totals) {
     const artist = normalizeArtistId(row.artist);
-    const key = `${artist}|${row.member}|${row.class}`;
+    const key = `${artist}|${row.member}|${row.class}|${row.season}|${row.onOffline}`;
     map.set(key, {
       artist,
       member: row.member,
       class: row.class,
+      season: row.season,
+      onOffline: row.onOffline,
       owned: 0,
       total: row.total,
     });
@@ -34,7 +40,7 @@ export function mergeProgressRollups(
 
   for (const row of owned) {
     const artist = normalizeArtistId(row.artist);
-    const key = `${artist}|${row.member}|${row.class}`;
+    const key = `${artist}|${row.member}|${row.class}|${row.season}|${row.onOffline}`;
     const existing = map.get(key);
     if (existing) {
       existing.owned = row.owned;
@@ -43,6 +49,8 @@ export function mergeProgressRollups(
         artist,
         member: row.member,
         class: row.class,
+        season: row.season,
+        onOffline: row.onOffline,
         owned: row.owned,
         total: 0,
       });

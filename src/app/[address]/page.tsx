@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -24,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { cn } from "@/lib/utils";
 
 function maskEmail(email: string): string {
@@ -149,6 +150,8 @@ export default function PublicProfilePage({
   });
 
   const isOwner = !!profile?.viewer.isOwner;
+  const queryClient = useQueryClient();
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
 
   const { data: activeData } = useQuery({
     queryKey: ["my-active-trades"],
@@ -220,6 +223,16 @@ export default function PublicProfilePage({
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <UnlinkCosmoDialog
+        open={unlinkOpen}
+        onOpenChange={setUnlinkOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["cosmo-link-status"] });
+          queryClient.invalidateQueries({
+            queryKey: ["user-profile", identifier],
+          });
+        }}
+      />
       <Card className="relative flex flex-col gap-6 overflow-hidden rounded-xl border bg-card py-6 text-card-foreground shadow-sm">
         {isSjarkbean && (
           <>
@@ -378,6 +391,18 @@ export default function PublicProfilePage({
               />
             </TooltipPrimitive.Provider>
           </div>
+
+          {isOwner && profile.nickname && (
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setUnlinkOpen(true)}
+              >
+                Unlink Cosmo
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

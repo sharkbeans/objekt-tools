@@ -161,6 +161,54 @@ export const shortformMembers: Record<string, string> = {
   mj: "MinJun",
 };
 
+// Canonical real members per artist (used to bucket system-created entries as "Others")
+export const realMembersByArtist: Record<ValidArtist, string[]> = {
+  tripleS: [
+    "SeoYeon",
+    "HyeRin",
+    "JiWoo",
+    "ChaeYeon",
+    "YooYeon",
+    "SooMin",
+    "NaKyoung",
+    "YuBin",
+    "Kaede",
+    "DaHyun",
+    "Kotone",
+    "YeonJi",
+    "Nien",
+    "SoHyun",
+    "Xinyu",
+    "Mayu",
+    "Lynn",
+    "JooBin",
+    "HaYeon",
+    "ShiOn",
+    "ChaeWon",
+    "Sullin",
+    "SeoAh",
+    "JiYeon",
+  ],
+  artms: ["HeeJin", "HaSeul", "KimLip", "JinSoul", "Choerry"],
+  idntt: [
+    "JiWoon",
+    "DoHun",
+    "CheongMyeong",
+    "TaeIn",
+    "YeJoon",
+    "Towa",
+    "JuHo",
+    "SeongJun",
+    "HeeJu",
+    "JaeYoung",
+    "GyeongBeen",
+    "NuRi",
+    "EunSoo",
+    "HwanHee",
+    "KyuHyuk",
+  ],
+};
+
 // Members grouped by artist
 export const membersByArtist: Record<ValidArtist, string[]> = {
   tripleS: [

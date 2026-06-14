@@ -2,6 +2,8 @@ export type ProgressRollup = {
   artist: string;
   member: string;
   class: string;
+  season: string;
+  onOffline: string;
   owned: number;
   total: number;
 };

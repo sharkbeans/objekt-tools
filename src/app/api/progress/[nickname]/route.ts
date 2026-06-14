@@ -51,29 +51,45 @@ export async function GET(
   }
 
   const [totals, owned] = await Promise.all([
-    getCached("progress:totals:v1", 10 * 60_000, () =>
+    getCached("progress:totals:v2", 10 * 60_000, () =>
       indexer
         .select({
           artist: collections.artist,
           member: collections.member,
           class: collections.class,
+          season: collections.season,
+          onOffline: collections.onOffline,
           total: count(),
         })
         .from(collections)
-        .groupBy(collections.artist, collections.member, collections.class),
+        .groupBy(
+          collections.artist,
+          collections.member,
+          collections.class,
+          collections.season,
+          collections.onOffline,
+        ),
     ),
-    getCached(`progress:owned:v1:${resolved.address}`, 90_000, () =>
+    getCached(`progress:owned:v2:${resolved.address}`, 90_000, () =>
       indexer
         .select({
           artist: collections.artist,
           member: collections.member,
           class: collections.class,
+          season: collections.season,
+          onOffline: collections.onOffline,
           owned: countDistinct(objekts.collectionId),
         })
         .from(objekts)
         .innerJoin(collections, eq(objekts.collectionId, collections.id))
         .where(eq(objekts.owner, resolved.address))
-        .groupBy(collections.artist, collections.member, collections.class),
+        .groupBy(
+          collections.artist,
+          collections.member,
+          collections.class,
+          collections.season,
+          collections.onOffline,
+        ),
     ),
   ]);
 
