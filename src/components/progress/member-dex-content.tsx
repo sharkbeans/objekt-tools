@@ -10,8 +10,6 @@ interface SeasonColorsResponse {
   colors: Record<string, string>;
 }
 
-const DEFAULT_EXCLUDED = new Set(["Welcome", "Zero"]);
-
 interface Props {
   nickname: string;
   member: string;
@@ -36,9 +34,7 @@ export function MemberDexContent({ nickname, member }: Props) {
     retry: false,
   });
 
-  const [excludedClasses, setExcludedClasses] = useState<Set<string>>(
-    new Set(DEFAULT_EXCLUDED),
-  );
+  const [activeClass, setActiveClass] = useState<string | null>(null);
   const [activeSeason, setActiveSeason] = useState<string | null>(null);
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
@@ -77,10 +73,10 @@ export function MemberDexContent({ nickname, member }: Props) {
     if (!data) return [];
     return data.collections.filter(
       (c) =>
-        !excludedClasses.has(c.class) &&
+        (activeClass === null || c.class === activeClass) &&
         (activeSeason === null || c.season === activeSeason),
     );
-  }, [data, excludedClasses, activeSeason]);
+  }, [data, activeClass, activeSeason]);
 
   // Full filter including ownership toggles (used for display)
   const filtered = useMemo(
@@ -108,15 +104,6 @@ export function MemberDexContent({ nickname, member }: Props) {
     const owned = baseFiltered.filter((c) => c.ownedCount > 0).length;
     return { owned, total: baseFiltered.length };
   }, [baseFiltered]);
-
-  function toggleClass(cls: string) {
-    setExcludedClasses((prev) => {
-      const next = new Set(prev);
-      if (next.has(cls)) next.delete(cls);
-      else next.add(cls);
-      return next;
-    });
-  }
 
   if (isLoading) {
     return (
@@ -163,7 +150,7 @@ export function MemberDexContent({ nickname, member }: Props) {
           <button
             type="button"
             onClick={() => setActiveSeason(null)}
-            className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
               activeSeason === null
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-transparent text-muted-foreground border-border hover:text-foreground"
@@ -179,7 +166,7 @@ export function MemberDexContent({ nickname, member }: Props) {
                 key={s}
                 type="button"
                 onClick={() => setActiveSeason(s)}
-                className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
+                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
                   isActive
                     ? "text-white"
                     : "bg-transparent text-muted-foreground hover:text-foreground"
@@ -203,15 +190,26 @@ export function MemberDexContent({ nickname, member }: Props) {
 
       {allClasses.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveClass(null)}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+              activeClass === null
+                ? "bg-muted text-foreground border-transparent"
+                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+            }`}
+          >
+            All
+          </button>
           {allClasses.map((cls) => (
             <button
               key={cls}
               type="button"
-              onClick={() => toggleClass(cls)}
-              className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
-                excludedClasses.has(cls)
-                  ? "bg-transparent text-muted-foreground/50 border-border/50 line-through"
-                  : "bg-muted text-foreground border-transparent"
+              onClick={() => setActiveClass(cls)}
+              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+                activeClass === cls
+                  ? "bg-muted text-foreground border-transparent"
+                  : "bg-transparent text-muted-foreground border-border hover:text-foreground"
               }`}
             >
               {cls}
@@ -222,9 +220,8 @@ export function MemberDexContent({ nickname, member }: Props) {
 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Unowned only</span>
+          <span className="text-sm text-muted-foreground">Unowned only</span>
           <Switch
-            size="sm"
             checked={unownedOnly}
             onCheckedChange={(v) => {
               setUnownedOnly(v);
@@ -233,9 +230,8 @@ export function MemberDexContent({ nickname, member }: Props) {
           />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Owned only</span>
+          <span className="text-sm text-muted-foreground">Owned only</span>
           <Switch
-            size="sm"
             checked={ownedOnly}
             onCheckedChange={(v) => {
               setOwnedOnly(v);

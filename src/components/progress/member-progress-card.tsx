@@ -27,17 +27,17 @@ export function MemberProgressCard({
         <div className="flex items-center gap-3">
           <div className="shrink-0 self-stretch flex items-center">
             {imageUrl ? (
-              <div className="relative h-[52px] w-[52px] rounded-full overflow-hidden">
+              <div className="relative h-13 w-13 rounded-full overflow-hidden">
                 <Image
                   src={imageUrl}
                   alt={member}
                   fill
                   className="object-cover object-top"
-                  sizes="(max-resolution: 1dppx) 52px, 104px"
+                  sizes="104px"
                 />
               </div>
             ) : (
-              <div className="h-[52px] w-[52px] rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground select-none">
+              <div className="h-13 w-13 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground select-none">
                 {member.charAt(0)}
               </div>
             )}

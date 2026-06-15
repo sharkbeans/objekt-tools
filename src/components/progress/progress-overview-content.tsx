@@ -8,7 +8,6 @@ import {
   TradeFilters,
 } from "@/components/trades/trade-filters";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
-import { Switch } from "@/components/ui/switch";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
 import type {
@@ -56,8 +55,6 @@ export function ProgressOverviewContent({ nickname }: Props) {
   const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
   const [initialized, setInitialized] = useState(false);
   const [showOthers, setShowOthers] = useState(false);
-  const [unownedOnly, setUnownedOnly] = useState(false);
-  const [ownedOnly, setOwnedOnly] = useState(false);
 
   // Default the artist filter to whichever has the most owned items
   useEffect(() => {
@@ -161,27 +158,10 @@ export function ProgressOverviewContent({ nickname }: Props) {
           }
         }
 
-        if (unownedOnly || ownedOnly) {
-          for (const [member, rollups] of realMap) {
-            const owned = rollups.reduce((s, r) => s + r.owned, 0);
-            const total = rollups.reduce((s, r) => s + r.total, 0);
-            if (total === 0) continue;
-            if (unownedOnly && owned === total) realMap.delete(member);
-            else if (ownedOnly && owned < total) realMap.delete(member);
-          }
-          for (const [member, rollups] of othersMap) {
-            const owned = rollups.reduce((s, r) => s + r.owned, 0);
-            const total = rollups.reduce((s, r) => s + r.total, 0);
-            if (total === 0) continue;
-            if (unownedOnly && owned === total) othersMap.delete(member);
-            else if (ownedOnly && owned < total) othersMap.delete(member);
-          }
-        }
-
         return [artist, { real: realMap, others: othersMap }] as const;
       }),
     );
-  }, [data, filteredRollups, activeArtists, unownedOnly, ownedOnly]);
+  }, [data, filteredRollups, activeArtists]);
 
   const hasOthers = useMemo(
     () => [...artistGroups.values()].some((g) => g.others.size > 0),
@@ -240,32 +220,8 @@ export function ProgressOverviewContent({ nickname }: Props) {
         showSearch={false}
         showSort={false}
         showFilterMode={false}
+        showMember={false}
       />
-
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Unowned only</span>
-          <Switch
-            size="sm"
-            checked={unownedOnly}
-            onCheckedChange={(v) => {
-              setUnownedOnly(v);
-              if (v) setOwnedOnly(false);
-            }}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Owned only</span>
-          <Switch
-            size="sm"
-            checked={ownedOnly}
-            onCheckedChange={(v) => {
-              setOwnedOnly(v);
-              if (v) setUnownedOnly(false);
-            }}
-          />
-        </div>
-      </div>
 
       {[...artistGroups.entries()].map(([artist, { real, others }]) => (
         <div key={artist} className="space-y-3">

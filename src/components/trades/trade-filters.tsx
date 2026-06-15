@@ -42,6 +42,7 @@ interface TradeFiltersProps {
   showSearch?: boolean;
   showSort?: boolean;
   showFilterMode?: boolean;
+  showMember?: boolean;
 }
 
 function hasActiveFilters(filters: TradeFilterState): boolean {
@@ -61,6 +62,7 @@ export function TradeFilters({
   showSearch = true,
   showSort = true,
   showFilterMode = true,
+  showMember = true,
 }: TradeFiltersProps) {
   const filterOptions = useFilterOptions();
 
@@ -142,64 +144,54 @@ export function TradeFilters({
 
       {/* Filter row */}
       <div className="space-y-2">
-        {/* Top row: Have/Want toggle + Sort + Reset */}
-        <div className="flex flex-wrap gap-2 items-center">
-          {/* Have/Want toggle */}
-          {showFilterMode && (
-            <div className="flex gap-0.5 rounded-md border p-0.5">
-              <button
-                type="button"
-                onClick={() => update({ filterMode: "haves" })}
-                className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Haves
-              </button>
-              <button
-                type="button"
-                onClick={() => update({ filterMode: "wants" })}
-                className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Wants
-              </button>
-            </div>
-          )}
+        {/* Top row: Have/Want toggle + Sort */}
+        {(showFilterMode || showSort) && (
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Have/Want toggle */}
+            {showFilterMode && (
+              <div className="flex gap-0.5 rounded-md border p-0.5">
+                <button
+                  type="button"
+                  onClick={() => update({ filterMode: "haves" })}
+                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Haves
+                </button>
+                <button
+                  type="button"
+                  onClick={() => update({ filterMode: "wants" })}
+                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Wants
+                </button>
+              </div>
+            )}
 
-          {showSort && (
-            <div className="flex gap-1 ml-auto">
-              <Button
-                variant={filters.sort === "newest" ? "default" : "outline"}
-                size="sm"
-                onClick={() => update({ sort: "newest" })}
-                className="h-9 text-xs"
-              >
-                Newest
-              </Button>
-              <Button
-                variant={filters.sort === "oldest" ? "default" : "outline"}
-                size="sm"
-                onClick={() => update({ sort: "oldest" })}
-                className="h-9 text-xs"
-              >
-                Oldest
-              </Button>
-            </div>
-          )}
-
-          {active && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange(defaultFilters)}
-              className={`h-9 text-xs text-muted-foreground${showSort ? "" : " ml-auto"}`}
-            >
-              <XIcon className="h-3.5 w-3.5 mr-1" />
-              Reset
-            </Button>
-          )}
-        </div>
+            {showSort && (
+              <div className="flex gap-1 ml-auto">
+                <Button
+                  variant={filters.sort === "newest" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => update({ sort: "newest" })}
+                  className="h-9 text-xs"
+                >
+                  Newest
+                </Button>
+                <Button
+                  variant={filters.sort === "oldest" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => update({ sort: "oldest" })}
+                  className="h-9 text-xs"
+                >
+                  Oldest
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Filter dropdowns: 2-col grid on mobile, inline on desktop */}
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 items-center">
           <MultiSelect
             options={filterOptions.artists}
             value={filters.artist}
@@ -208,13 +200,15 @@ export function TradeFilters({
             className="w-full sm:w-auto sm:min-w-28"
           />
 
-          <MultiSelect
-            options={availableMembers.map((m) => ({ label: m, value: m }))}
-            value={filters.member}
-            onChange={(v) => update({ member: v })}
-            placeholder="Member"
-            className="w-full sm:w-auto sm:min-w-32"
-          />
+          {showMember && (
+            <MultiSelect
+              options={availableMembers.map((m) => ({ label: m, value: m }))}
+              value={filters.member}
+              onChange={(v) => update({ member: v })}
+              placeholder="Member"
+              className="w-full sm:w-auto sm:min-w-32"
+            />
+          )}
 
           <SeasonMultiSelect
             options={availableSeasons}
@@ -244,6 +238,18 @@ export function TradeFilters({
             placeholder="Type"
             className="w-full sm:w-auto sm:min-w-24"
           />
+
+          {active && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange(defaultFilters)}
+              className="h-9 text-xs text-muted-foreground ml-auto"
+            >
+              <XIcon className="h-3.5 w-3.5 mr-1" />
+              Reset
+            </Button>
+          )}
         </div>
       </div>
 
