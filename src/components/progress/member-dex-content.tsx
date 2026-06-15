@@ -2,8 +2,13 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Switch } from "@/components/ui/switch";
 import type { ProgressMemberResponse } from "@/lib/progress/types";
 import { SeasonSection } from "./season-section";
+
+interface SeasonColorsResponse {
+  colors: Record<string, string>;
+}
 
 const DEFAULT_EXCLUDED = new Set(["Welcome", "Zero"]);
 
@@ -35,10 +40,22 @@ export function MemberDexContent({ nickname, member }: Props) {
     new Set(DEFAULT_EXCLUDED),
   );
   const [activeSeason, setActiveSeason] = useState<string | null>(null);
+  const [unownedOnly, setUnownedOnly] = useState(false);
+  const [ownedOnly, setOwnedOnly] = useState(false);
+
+  const { data: seasonColorsData } = useQuery<SeasonColorsResponse>({
+    queryKey: ["progress-season-colors"],
+    queryFn: async () => {
+      const res = await fetch("/api/progress/season-colors");
+      if (!res.ok) return { colors: {} };
+      return res.json();
+    },
+    staleTime: 10 * 60_000,
+  });
+  const seasonColors = seasonColorsData?.colors ?? {};
 
   const allSeasons = useMemo(() => {
     if (!data) return [];
-    // Preserve server sort order (seasons appear in sorted order already)
     const seen = new Set<string>();
     const out: string[] = [];
     for (const c of data.collections) {
@@ -55,7 +72,8 @@ export function MemberDexContent({ nickname, member }: Props) {
     return [...new Set(data.collections.map((c) => c.class))].sort();
   }, [data]);
 
-  const filtered = useMemo(() => {
+  // Base filter: class + season only (used for accurate totals)
+  const baseFiltered = useMemo(() => {
     if (!data) return [];
     return data.collections.filter(
       (c) =>
@@ -63,6 +81,17 @@ export function MemberDexContent({ nickname, member }: Props) {
         (activeSeason === null || c.season === activeSeason),
     );
   }, [data, excludedClasses, activeSeason]);
+
+  // Full filter including ownership toggles (used for display)
+  const filtered = useMemo(
+    () =>
+      baseFiltered.filter(
+        (c) =>
+          (!unownedOnly || c.ownedCount === 0) &&
+          (!ownedOnly || c.ownedCount > 0),
+      ),
+    [baseFiltered, unownedOnly, ownedOnly],
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<string, typeof filtered>();
@@ -74,10 +103,11 @@ export function MemberDexContent({ nickname, member }: Props) {
     return map;
   }, [filtered]);
 
+  // Totals from base (not affected by ownership toggles)
   const totals = useMemo(() => {
-    const owned = filtered.filter((c) => c.ownedCount > 0).length;
-    return { owned, total: filtered.length };
-  }, [filtered]);
+    const owned = baseFiltered.filter((c) => c.ownedCount > 0).length;
+    return { owned, total: baseFiltered.length };
+  }, [baseFiltered]);
 
   function toggleClass(cls: string) {
     setExcludedClasses((prev) => {
@@ -141,20 +171,33 @@ export function MemberDexContent({ nickname, member }: Props) {
           >
             All
           </button>
-          {allSeasons.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setActiveSeason(s)}
-              className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
-                activeSeason === s
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+          {allSeasons.map((s) => {
+            const color = seasonColors[`${data.artist}|${s}`] ?? null;
+            const isActive = activeSeason === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setActiveSeason(s)}
+                className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
+                  isActive
+                    ? "text-white"
+                    : "bg-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                style={
+                  color
+                    ? isActive
+                      ? { backgroundColor: color, borderColor: color }
+                      : { borderColor: color }
+                    : isActive
+                      ? undefined
+                      : { borderColor: "hsl(var(--border))" }
+                }
+              >
+                {s}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -176,6 +219,31 @@ export function MemberDexContent({ nickname, member }: Props) {
           ))}
         </div>
       )}
+
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Unowned only</span>
+          <Switch
+            size="sm"
+            checked={unownedOnly}
+            onCheckedChange={(v) => {
+              setUnownedOnly(v);
+              if (v) setOwnedOnly(false);
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Owned only</span>
+          <Switch
+            size="sm"
+            checked={ownedOnly}
+            onCheckedChange={(v) => {
+              setOwnedOnly(v);
+              if (v) setUnownedOnly(false);
+            }}
+          />
+        </div>
+      </div>
 
       <div className="space-y-8">
         {[...grouped.entries()].map(([season, cols]) => (

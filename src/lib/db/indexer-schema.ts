@@ -19,6 +19,7 @@ export const collections = pgTable("collection", {
   thumbnailImage: text("thumbnail_image").notNull(),
   frontImage: text("front_image").notNull(),
   backImage: text("back_image").notNull(),
+  accentColor: text("accent_color").notNull(),
   onOffline: text("on_offline").notNull().$type<"online" | "offline">(),
 });
 
