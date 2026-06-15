@@ -1,8 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Loader2Icon, ShareIcon } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { shareOrDownloadCanvas } from "@/lib/download-canvas";
+import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type { ProgressMemberResponse } from "@/lib/progress/types";
 import { SeasonSection } from "./season-section";
 
@@ -105,6 +110,63 @@ export function MemberDexContent({ nickname, member }: Props) {
     return { owned, total: baseFiltered.length };
   }, [baseFiltered]);
 
+  const [sharing, setSharing] = useState(false);
+  const handleShare = useCallback(async () => {
+    if (!data) return;
+    setSharing(true);
+    try {
+      // Rarest owned / still-hunting from the current (class+season) view.
+      const withSupply = baseFiltered.filter((c) => c.supply != null);
+      const bySupply = (a: { supply?: number }, b: { supply?: number }) =>
+        (a.supply ?? Infinity) - (b.supply ?? Infinity);
+      const rarestOwned = withSupply
+        .filter((c) => c.ownedCount > 0)
+        .sort(bySupply)[0];
+      const rarestMissing = withSupply
+        .filter((c) => c.ownedCount === 0)
+        .sort(bySupply)[0];
+
+      const canvas = await renderProgressCardToCanvas(
+        {
+          username: data.nickname,
+          title: data.member,
+          subtitle: data.artist === "artms" ? "ARTMS" : data.artist,
+          date: new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }),
+          owned: totals.owned,
+          total: totals.total,
+          items: baseFiltered.map((c) => ({
+            thumbnailImage: c.thumbnailImage,
+            owned: c.ownedCount > 0,
+            scarcityTier: c.scarcityTier,
+          })),
+          verifyHandle: data.nickname,
+          highlights: {
+            rarestOwned: rarestOwned?.collectionNo,
+            rarestMissing: rarestMissing?.collectionNo,
+          },
+        },
+        "dark",
+      );
+      const outcome = await shareOrDownloadCanvas(
+        canvas,
+        `${data.member}-progress-${Date.now()}.png`,
+      );
+      if (outcome === "shared") toast.success("Card shared!");
+      else if (outcome === "downloaded") toast.success("Card downloaded!");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Failed to generate progress card:", err);
+      toast.error(`Failed: ${msg}`);
+    } finally {
+      setSharing(false);
+    }
+  }, [data, baseFiltered, totals]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -138,11 +200,27 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold">{data.member}</h1>
-        <p className="text-sm text-muted-foreground">
-          {totals.owned}/{totals.total} collected
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">{data.member}</h1>
+          <p className="text-sm text-muted-foreground">
+            {totals.owned}/{totals.total} collected
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleShare}
+          disabled={sharing || totals.total === 0}
+          className="shrink-0 gap-2"
+        >
+          {sharing ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <ShareIcon className="h-4 w-4" />
+          )}
+          Share card
+        </Button>
       </div>
 
       {allSeasons.length > 1 && (

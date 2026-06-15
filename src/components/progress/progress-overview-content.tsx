@@ -1,15 +1,20 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { Loader2Icon, ShareIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   defaultFilters,
   type TradeFilterState,
   TradeFilters,
 } from "@/components/trades/trade-filters";
+import { Button } from "@/components/ui/button";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { normalizeArtistId } from "@/lib/artist-utils";
+import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
+import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
   ProgressOverviewResponse,
   ProgressRollup,
@@ -168,6 +173,85 @@ export function ProgressOverviewContent({ nickname }: Props) {
     [artistGroups],
   );
 
+  const [sharing, setSharing] = useState(false);
+  const handleShare = useCallback(async () => {
+    if (!data) return;
+    const artist = activeArtists[0];
+    if (!artist) return;
+    setSharing(true);
+    try {
+      // Aggregate owned/total per member for the active artist.
+      const memberAgg = new Map<string, { owned: number; total: number }>();
+      for (const r of filteredRollups) {
+        if (r.artist !== artist) continue;
+        const agg = memberAgg.get(r.member) ?? { owned: 0, total: 0 };
+        agg.owned += r.owned;
+        agg.total += r.total;
+        memberAgg.set(r.member, agg);
+      }
+
+      // Order by roster, then any remaining members.
+      const roster = realMembersByArtist[artist as ValidArtist] ?? [];
+      const ordered: { member: string; owned: number; total: number }[] = [];
+      const seen = new Set<string>();
+      for (const m of roster) {
+        const agg = memberAgg.get(m);
+        if (agg) {
+          ordered.push({ member: m, ...agg });
+          seen.add(m);
+        }
+      }
+      for (const [m, agg] of memberAgg) {
+        if (!seen.has(m)) ordered.push({ member: m, ...agg });
+      }
+
+      if (ordered.length === 0) {
+        toast.error("Nothing to share for this filter.");
+        return;
+      }
+
+      const owned = ordered.reduce((s, e) => s + e.owned, 0);
+      const total = ordered.reduce((s, e) => s + e.total, 0);
+
+      const canvas = await renderProgressCardToCanvas(
+        {
+          username: data.nickname,
+          title: artist === "artms" ? "ARTMS" : artist,
+          date: new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }),
+          owned,
+          total,
+          square: true,
+          items: ordered.map((e) => ({
+            thumbnailImage: memberImages[`${artist}|${e.member}`] ?? "",
+            owned: true,
+            caption:
+              e.total > 0 ? `${Math.round((e.owned / e.total) * 100)}%` : "0%",
+          })),
+          verifyHandle: data.nickname,
+        },
+        "dark",
+        Math.min(8, ordered.length),
+      );
+      const outcome = await shareOrDownloadCanvas(
+        canvas,
+        `${artist}-progress-${Date.now()}.png`,
+      );
+      if (outcome === "shared") toast.success("Card shared!");
+      else if (outcome === "downloaded") toast.success("Card downloaded!");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Failed to generate progress card:", err);
+      toast.error(`Failed: ${msg}`);
+    } finally {
+      setSharing(false);
+    }
+  }, [data, activeArtists, filteredRollups, memberImages]);
+
   if (error) {
     const status = (error as Error & { status?: number }).status;
     return (
@@ -212,7 +296,23 @@ export function ProgressOverviewContent({ nickname }: Props) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">{data.nickname}&apos;s Collection</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">{data.nickname}&apos;s Collection</h1>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleShare}
+          disabled={sharing}
+          className="shrink-0 gap-2"
+        >
+          {sharing ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <ShareIcon className="h-4 w-4" />
+          )}
+          Share card
+        </Button>
+      </div>
 
       <TradeFilters
         filters={filters}
