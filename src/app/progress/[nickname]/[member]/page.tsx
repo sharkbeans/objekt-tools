@@ -23,7 +23,7 @@ export default async function MemberDexPage({
   const { nickname, member } = await params;
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4 space-y-4">
+    <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
       <Link
         href={`/progress/${nickname}`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"

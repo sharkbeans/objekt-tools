@@ -1,10 +1,32 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2Icon, ShareIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import {
+  ChevronDownIcon,
+  LayoutGridIcon,
+  Loader2Icon,
+  ShareIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
@@ -43,6 +65,12 @@ export function MemberDexContent({ nickname, member }: Props) {
   const [activeSeason, setActiveSeason] = useState<string | null>(null);
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
+  // Objekts per row: 5 on desktop, 2 on mobile (set after mount to avoid a
+  // hydration mismatch). User can override via the dropdown.
+  const [perRow, setPerRow] = useState(5);
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 639px)").matches) setPerRow(2);
+  }, []);
 
   const { data: seasonColorsData } = useQuery<SeasonColorsResponse>({
     queryKey: ["progress-season-colors"],
@@ -111,12 +139,27 @@ export function MemberDexContent({ nickname, member }: Props) {
   }, [baseFiltered]);
 
   const [sharing, setSharing] = useState(false);
-  const handleShare = useCallback(async () => {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Above this many cards the share image gets large/slow — warn first.
+  const SHARE_WARN_THRESHOLD = 100;
+
+  const doShare = useCallback(async () => {
     if (!data) return;
+    // Share the exact set on screen so the card follows every active filter
+    // (season, class, owned/unowned only).
+    const shareCols = filtered;
+    if (shareCols.length === 0) {
+      toast.error("Nothing to share for this filter.");
+      return;
+    }
     setSharing(true);
     try {
-      // Rarest owned / still-hunting from the current (class+season) view.
-      const withSupply = baseFiltered.filter((c) => c.supply != null);
+      const owned = shareCols.filter((c) => c.ownedCount > 0).length;
+      const total = shareCols.length;
+
+      // Rarest owned / still-hunting from the current filtered view.
+      const withSupply = shareCols.filter((c) => c.supply != null);
       const bySupply = (a: { supply?: number }, b: { supply?: number }) =>
         (a.supply ?? Infinity) - (b.supply ?? Infinity);
       const rarestOwned = withSupply
@@ -126,19 +169,35 @@ export function MemberDexContent({ nickname, member }: Props) {
         .filter((c) => c.ownedCount === 0)
         .sort(bySupply)[0];
 
+      // Subtitle carries the active artist + season (+ class) filter context.
+      const artistLabel = data.artist === "artms" ? "ARTMS" : data.artist;
+      const ownershipLabel = unownedOnly
+        ? "Missing"
+        : ownedOnly
+          ? "Owned"
+          : null;
+      const subtitle = [
+        artistLabel,
+        activeSeason ?? "All seasons",
+        activeClass,
+        ownershipLabel,
+      ]
+        .filter(Boolean)
+        .join("  ·  ");
+
       const canvas = await renderProgressCardToCanvas(
         {
           username: data.nickname,
           title: data.member,
-          subtitle: data.artist === "artms" ? "ARTMS" : data.artist,
+          subtitle,
           date: new Date().toLocaleDateString("en-US", {
             year: "numeric",
             month: "short",
             day: "numeric",
           }),
-          owned: totals.owned,
-          total: totals.total,
-          items: baseFiltered.map((c) => ({
+          owned,
+          total,
+          items: shareCols.map((c) => ({
             thumbnailImage: c.thumbnailImage,
             owned: c.ownedCount > 0,
             scarcityTier: c.scarcityTier,
@@ -148,6 +207,7 @@ export function MemberDexContent({ nickname, member }: Props) {
             rarestOwned: rarestOwned?.collectionNo,
             rarestMissing: rarestMissing?.collectionNo,
           },
+          strictImages: true,
         },
         "dark",
       );
@@ -165,17 +225,32 @@ export function MemberDexContent({ nickname, member }: Props) {
     } finally {
       setSharing(false);
     }
-  }, [data, baseFiltered, totals]);
+  }, [data, filtered, activeSeason, activeClass, unownedOnly, ownedOnly]);
+
+  const handleShare = useCallback(() => {
+    if (filtered.length > SHARE_WARN_THRESHOLD) {
+      setConfirmOpen(true);
+      return;
+    }
+    void doShare();
+  }, [filtered.length, doShare]);
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="h-6 w-48 bg-muted animate-pulse rounded" />
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-          {Array.from({ length: 15 }, (_, i) => `sk-${i}`).map((id) => (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2Icon className="h-4 w-4 animate-spin" />
+          <span>Loading {member}&apos;s objekts</span>
+        </div>
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: perRow * 4 }, (_, i) => `sk-${i}`).map((id) => (
             <div
               key={id}
-              className="aspect-[63/88] rounded bg-muted animate-pulse"
+              className="aspect-63/88 rounded bg-muted animate-pulse"
             />
           ))}
         </div>
@@ -296,7 +371,7 @@ export function MemberDexContent({ nickname, member }: Props) {
         </div>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Unowned only</span>
           <Switch
@@ -317,13 +392,58 @@ export function MemberDexContent({ nickname, member }: Props) {
             }}
           />
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="ml-auto gap-1.5">
+              <LayoutGridIcon className="h-4 w-4" />
+              {perRow} / row
+              <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup
+              value={String(perRow)}
+              onValueChange={(v) => setPerRow(Number(v))}
+            >
+              {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <DropdownMenuRadioItem key={n} value={String(n)}>
+                  {n} per row
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="space-y-8">
         {[...grouped.entries()].map(([season, cols]) => (
-          <SeasonSection key={season} season={season} collections={cols} />
+          <SeasonSection
+            key={season}
+            season={season}
+            collections={cols}
+            perRow={perRow}
+          />
         ))}
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generate a large card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will render {filtered.length} objekts into one image. It may
+              take a while and produce a large file. You can narrow the filters
+              (season, class, owned/unowned) to make it smaller.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void doShare()}>
+              Generate anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

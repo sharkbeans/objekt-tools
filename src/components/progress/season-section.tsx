@@ -6,9 +6,10 @@ import { DexGrid } from "./dex-grid";
 interface Props {
   season: string;
   collections: ProgressCollection[];
+  perRow: number;
 }
 
-export function SeasonSection({ season, collections }: Props) {
+export function SeasonSection({ season, collections, perRow }: Props) {
   const owned = collections.filter((c) => c.ownedCount > 0).length;
   const total = collections.length;
 
@@ -20,7 +21,7 @@ export function SeasonSection({ season, collections }: Props) {
           {owned}/{total}
         </span>
       </div>
-      <DexGrid collections={collections} />
+      <DexGrid collections={collections} perRow={perRow} />
     </div>
   );
 }

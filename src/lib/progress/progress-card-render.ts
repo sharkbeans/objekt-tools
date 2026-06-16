@@ -47,6 +47,9 @@ export interface ProgressCardInput {
   square?: boolean; // square cards (member avatars) instead of 11/17 objekts
   verifyHandle?: string; // cosmo nickname for the verify link
   highlights?: { rarestOwned?: string; rarestMissing?: string };
+  // When true, throw if any objekt image fails to load instead of drawing a
+  // placeholder — used by the dex share so a card is never silently incomplete.
+  strictImages?: boolean;
 }
 
 async function loadImage(url: string): Promise<HTMLImageElement> {
@@ -112,8 +115,7 @@ export async function renderProgressCardToCanvas(
   const headerH = 52;
   const statH = 56; // big percent + progress bar
   const gridH = rows > 0 ? rows * rowStride : 0;
-  const highlightsH =
-    input.highlights?.rarestOwned || input.highlights?.rarestMissing ? 28 : 0;
+  const highlightsH = input.highlights?.rarestOwned ? 28 : 0;
   const footerH = 48;
 
   const cardH =
@@ -184,17 +186,23 @@ export async function renderProgressCardToCanvas(
   y += statH + 20;
 
   // ── Card grid ───────────────────────────────────────────────────────────
-  const urls = [...new Set(input.items.map((i) => i.thumbnailImage))];
+  const urls = [...new Set(input.items.map((i) => i.thumbnailImage))].filter(
+    Boolean,
+  );
   const images = new Map<string, HTMLImageElement>();
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     urls.map(async (url) => {
-      try {
-        images.set(url, await loadImage(url));
-      } catch {
-        // missing — placeholder drawn instead
-      }
+      images.set(url, await loadImage(url));
     }),
   );
+  if (input.strictImages) {
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) {
+      throw new Error(
+        `${failed} objekt image${failed === 1 ? "" : "s"} failed to load. Please try again.`,
+      );
+    }
+  }
 
   for (let i = 0; i < input.items.length; i++) {
     const item = input.items[i];
@@ -250,8 +258,6 @@ export async function renderProgressCardToCanvas(
     const parts: string[] = [];
     if (input.highlights?.rarestOwned)
       parts.push(`Rarest owned: ${input.highlights.rarestOwned}`);
-    if (input.highlights?.rarestMissing)
-      parts.push(`Still hunting: ${input.highlights.rarestMissing}`);
     ctx.font = "12px Helvetica, Arial, sans-serif";
     ctx.fillStyle = t.muted;
     ctx.textAlign = "center";
