@@ -50,15 +50,39 @@ export interface ProgressCardInput {
   // When true, throw if any objekt image fails to load instead of drawing a
   // placeholder — used by the dex share so a card is never silently incomplete.
   strictImages?: boolean;
+  // Reports image-loading progress (unique URLs) so callers can show a toast.
+  onProgress?: (loaded: number, total: number) => void;
 }
 
-async function loadImage(url: string): Promise<HTMLImageElement> {
+// Browsers cap ~6 concurrent connections per host, and the indexer rate-limits
+// bursts. Loading every objekt at once made a handful always fail; capping
+// concurrency keeps each request well-behaved.
+const IMAGE_CONCURRENCY = 6; // fast first pass
+const RETRY_CONCURRENCY = 2; // gentler passes over the stragglers
+const MAX_RETRY_ROUNDS = 6;
+const FETCH_TIMEOUT_MS = 20_000;
+
+async function loadImage(
+  url: string,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<HTMLImageElement> {
   // Fetch to a blob URL so the image is same-origin — avoids canvas taint and
   // mobile Safari CORS cache poisoning. (Mirrors poster-canvas-render.ts.)
-  const res = await fetch(url, { mode: "cors", cache: "no-store" });
-  if (!res.ok) throw new Error(`fetch ${res.status}: ${url}`);
-  const blob = await res.blob();
-  const blobUrl = URL.createObjectURL(blob);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let blobUrl: string;
+  try {
+    const res = await fetch(url, {
+      mode: "cors",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`fetch ${res.status}: ${url}`);
+    const blob = await res.blob();
+    blobUrl = URL.createObjectURL(blob);
+  } finally {
+    clearTimeout(timer);
+  }
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -71,6 +95,53 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
     };
     img.src = blobUrl;
   });
+}
+
+// Native image pipeline — the same path the dex grid uses to render thumbnails,
+// so it reuses the browser's HTTP cache. crossOrigin keeps the canvas untainted
+// (it only resolves when the host returns CORS headers).
+function loadImageViaElement(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`img element load failed: ${url}`));
+    img.src = url;
+  });
+}
+
+// Try the direct cors load first (blob-fetch, then native <img>), and finally
+// fall back to our same-origin proxy. Some cosmo.fans CDN hosts serve images
+// without CORS headers, so they render in an <img> but can't be drawn onto a
+// canvas directly — the proxy re-serves them from our origin (canvas-safe).
+async function loadOne(url: string): Promise<HTMLImageElement> {
+  try {
+    return await loadImage(url);
+  } catch {
+    try {
+      return await loadImageViaElement(url);
+    } catch {
+      return await loadImage(`/api/image-proxy?url=${encodeURIComponent(url)}`);
+    }
+  }
+}
+
+// Runs `worker` over `items` with at most `limit` in flight at once.
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const runner = async () => {
+    while (next < items.length) {
+      const i = next++;
+      await worker(items[i], i);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, runner),
+  );
 }
 
 function roundRect(
@@ -190,18 +261,33 @@ export async function renderProgressCardToCanvas(
     Boolean,
   );
   const images = new Map<string, HTMLImageElement>();
-  const results = await Promise.allSettled(
-    urls.map(async (url) => {
-      images.set(url, await loadImage(url));
-    }),
-  );
-  if (input.strictImages) {
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      throw new Error(
-        `${failed} objekt image${failed === 1 ? "" : "s"} failed to load. Please try again.`,
-      );
-    }
+  const pending = new Set(urls);
+  input.onProgress?.(0, urls.length);
+
+  // Load in rounds: a fast first pass, then retry only the stragglers at low
+  // concurrency with a growing delay. Retrying *after* the initial burst (and
+  // over just the failures) lets the host's rate limiter recover — that is what
+  // actually clears the "N images failed" error. A flat concurrent pass keeps
+  // the host saturated, so the same images keep getting throttled.
+  for (let round = 0; round < MAX_RETRY_ROUNDS && pending.size > 0; round++) {
+    if (round > 0) await new Promise((r) => setTimeout(r, 600 * round));
+    const concurrency = round === 0 ? IMAGE_CONCURRENCY : RETRY_CONCURRENCY;
+    await runWithConcurrency([...pending], concurrency, async (url) => {
+      try {
+        images.set(url, await loadOne(url));
+        pending.delete(url);
+        input.onProgress?.(urls.length - pending.size, urls.length);
+      } catch {
+        // Leave in `pending` for the next round.
+      }
+    });
+  }
+
+  if (input.strictImages && pending.size > 0) {
+    const n = pending.size;
+    throw new Error(
+      `${n} objekt image${n === 1 ? "" : "s"} failed to load. Please try again.`,
+    );
   }
 
   for (let i = 0; i < input.items.length; i++) {

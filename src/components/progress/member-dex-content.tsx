@@ -154,6 +154,11 @@ export function MemberDexContent({ nickname, member }: Props) {
       return;
     }
     setSharing(true);
+    const toastId = `progress-card-${data.member}-${Date.now()}`;
+    toast.loading(`Generating ${data.member} card…`, {
+      id: toastId,
+      description: "Loading objekts — you can keep browsing while this runs.",
+    });
     try {
       const owned = shareCols.filter((c) => c.ownedCount > 0).length;
       const total = shareCols.length;
@@ -208,20 +213,40 @@ export function MemberDexContent({ nickname, member }: Props) {
             rarestMissing: rarestMissing?.collectionNo,
           },
           strictImages: true,
+          onProgress: (done, total) => {
+            const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+            toast.loading(`Generating ${data.member} card… ${pct}%`, {
+              id: toastId,
+              description: `Loaded ${done}/${total} objekts — you can keep browsing.`,
+            });
+          },
         },
         "dark",
       );
+      toast.loading("Finishing card…", {
+        id: toastId,
+        description: "Almost there.",
+      });
       const outcome = await shareOrDownloadCanvas(
         canvas,
         `${data.member}-progress-${Date.now()}.png`,
       );
-      if (outcome === "shared") toast.success("Card shared!");
-      else if (outcome === "downloaded") toast.success("Card downloaded!");
+      if (outcome === "shared")
+        toast.success("Card shared!", { id: toastId, description: undefined });
+      else if (outcome === "downloaded")
+        toast.success("Card downloaded!", {
+          id: toastId,
+          description: undefined,
+        });
+      else toast.dismiss(toastId);
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") return;
+      if (err instanceof Error && err.name === "AbortError") {
+        toast.dismiss(toastId);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       console.error("Failed to generate progress card:", err);
-      toast.error(`Failed: ${msg}`);
+      toast.error("Couldn't generate card", { id: toastId, description: msg });
     } finally {
       setSharing(false);
     }
