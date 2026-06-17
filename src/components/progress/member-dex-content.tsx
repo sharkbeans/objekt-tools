@@ -61,8 +61,9 @@ export function MemberDexContent({ nickname, member }: Props) {
     retry: false,
   });
 
-  const [activeClass, setActiveClass] = useState<string | null>(null);
-  const [activeSeason, setActiveSeason] = useState<string | null>(null);
+  const [activeClasses, setActiveClasses] = useState<string[]>([]);
+  const [activeSeasons, setActiveSeasons] = useState<string[]>([]);
+  const [seasonInitialized, setSeasonInitialized] = useState(false);
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
   // Objekts per row: 5 on desktop, 2 on mobile (set after mount to avoid a
@@ -101,15 +102,24 @@ export function MemberDexContent({ nickname, member }: Props) {
     return [...new Set(data.collections.map((c) => c.class))].sort();
   }, [data]);
 
-  // Base filter: class + season only (used for accurate totals)
+  // Default to the latest (current) season once data loads. allSeasons is in
+  // ascending season order, so the last entry is the most recent.
+  useEffect(() => {
+    if (seasonInitialized || allSeasons.length === 0) return;
+    setActiveSeasons([allSeasons[allSeasons.length - 1]]);
+    setSeasonInitialized(true);
+  }, [allSeasons, seasonInitialized]);
+
+  // Base filter: class + season only (used for accurate totals). Empty arrays
+  // mean "all".
   const baseFiltered = useMemo(() => {
     if (!data) return [];
     return data.collections.filter(
       (c) =>
-        (activeClass === null || c.class === activeClass) &&
-        (activeSeason === null || c.season === activeSeason),
+        (activeClasses.length === 0 || activeClasses.includes(c.class)) &&
+        (activeSeasons.length === 0 || activeSeasons.includes(c.season)),
     );
-  }, [data, activeClass, activeSeason]);
+  }, [data, activeClasses, activeSeasons]);
 
   // Full filter including ownership toggles (used for display)
   const filtered = useMemo(
@@ -181,12 +191,11 @@ export function MemberDexContent({ nickname, member }: Props) {
         : ownedOnly
           ? "Owned"
           : null;
-      const subtitle = [
-        artistLabel,
-        activeSeason ?? "All seasons",
-        activeClass,
-        ownershipLabel,
-      ]
+      const seasonLabel =
+        activeSeasons.length === 0 ? "All seasons" : activeSeasons.join(", ");
+      const classLabel =
+        activeClasses.length === 0 ? null : activeClasses.join(", ");
+      const subtitle = [artistLabel, seasonLabel, classLabel, ownershipLabel]
         .filter(Boolean)
         .join("  ·  ");
 
@@ -250,7 +259,7 @@ export function MemberDexContent({ nickname, member }: Props) {
     } finally {
       setSharing(false);
     }
-  }, [data, filtered, activeSeason, activeClass, unownedOnly, ownedOnly]);
+  }, [data, filtered, activeSeasons, activeClasses, unownedOnly, ownedOnly]);
 
   const handleShare = useCallback(() => {
     if (filtered.length > SHARE_WARN_THRESHOLD) {
@@ -327,9 +336,9 @@ export function MemberDexContent({ nickname, member }: Props) {
         <div className="flex gap-1.5 flex-wrap">
           <button
             type="button"
-            onClick={() => setActiveSeason(null)}
+            onClick={() => setActiveSeasons([])}
             className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-              activeSeason === null
+              activeSeasons.length === 0
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-transparent text-muted-foreground border-border hover:text-foreground"
             }`}
@@ -338,12 +347,18 @@ export function MemberDexContent({ nickname, member }: Props) {
           </button>
           {allSeasons.map((s) => {
             const color = seasonColors[`${data.artist}|${s}`] ?? null;
-            const isActive = activeSeason === s;
+            const isActive = activeSeasons.includes(s);
             return (
               <button
                 key={s}
                 type="button"
-                onClick={() => setActiveSeason(s)}
+                onClick={() =>
+                  setActiveSeasons((prev) =>
+                    prev.includes(s)
+                      ? prev.filter((x) => x !== s)
+                      : [...prev, s],
+                  )
+                }
                 className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
                   isActive
                     ? "text-white"
@@ -370,9 +385,9 @@ export function MemberDexContent({ nickname, member }: Props) {
         <div className="flex gap-1.5 flex-wrap">
           <button
             type="button"
-            onClick={() => setActiveClass(null)}
+            onClick={() => setActiveClasses([])}
             className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-              activeClass === null
+              activeClasses.length === 0
                 ? "bg-muted text-foreground border-transparent"
                 : "bg-transparent text-muted-foreground border-border hover:text-foreground"
             }`}
@@ -383,9 +398,15 @@ export function MemberDexContent({ nickname, member }: Props) {
             <button
               key={cls}
               type="button"
-              onClick={() => setActiveClass(cls)}
+              onClick={() =>
+                setActiveClasses((prev) =>
+                  prev.includes(cls)
+                    ? prev.filter((x) => x !== cls)
+                    : [...prev, cls],
+                )
+              }
               className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                activeClass === cls
+                activeClasses.includes(cls)
                   ? "bg-muted text-foreground border-transparent"
                   : "bg-transparent text-muted-foreground border-border hover:text-foreground"
               }`}
