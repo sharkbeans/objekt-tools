@@ -1,19 +1,32 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { artistLabel } from "@/lib/artist-utils";
-import { membersByArtist } from "@/lib/filters";
+import { Loader2Icon, ShareIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  defaultFilters,
+  type TradeFilterState,
+  TradeFilters,
+} from "@/components/trades/trade-filters";
+import { Button } from "@/components/ui/button";
+import { decodeGroupedValue } from "@/components/ui/class-multi-select";
+import { normalizeArtistId } from "@/lib/artist-utils";
+import { shareOrDownloadCanvas } from "@/lib/download-canvas";
+import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
+import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
   ProgressOverviewResponse,
   ProgressRollup,
 } from "@/lib/progress/types";
 import { MemberProgressCard } from "./member-progress-card";
 
-const DEFAULT_EXCLUDED = new Set(["Welcome", "Zero"]);
-
 interface Props {
   nickname: string;
+}
+
+interface MemberImagesResponse {
+  images: Record<string, string>;
 }
 
 export function ProgressOverviewContent({ nickname }: Props) {
@@ -33,118 +46,211 @@ export function ProgressOverviewContent({ nickname }: Props) {
     retry: false,
   });
 
-  const [activeArtist, setActiveArtist] = useState<string | null>(null);
-  const [excludedClasses, setExcludedClasses] = useState<Set<string>>(
-    new Set(DEFAULT_EXCLUDED),
-  );
-  const [showUnowned, setShowUnowned] = useState(false);
+  const { data: imagesData } = useQuery<MemberImagesResponse>({
+    queryKey: ["progress-member-images"],
+    queryFn: async () => {
+      const res = await fetch("/api/progress/member-images");
+      if (!res.ok) return { images: {} };
+      return res.json();
+    },
+    staleTime: 10 * 60_000,
+  });
+  const memberImages = imagesData?.images ?? {};
 
-  const artistsWithData = useMemo(() => {
-    if (!data) return [];
-    const sums = new Map<string, number>();
+  const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
+  const [initialized, setInitialized] = useState(false);
+  const [showOthers, setShowOthers] = useState(false);
+
+  // Default the artist filter to whichever has the most owned items
+  useEffect(() => {
+    if (!data || initialized) return;
+    const ownedSums = new Map<string, number>();
+    const totalSums = new Map<string, number>();
     for (const r of data.rollups) {
-      sums.set(r.artist, (sums.get(r.artist) ?? 0) + r.owned);
+      ownedSums.set(r.artist, (ownedSums.get(r.artist) ?? 0) + r.owned);
+      totalSums.set(r.artist, (totalSums.get(r.artist) ?? 0) + r.total);
     }
-    return [...sums.entries()]
-      .filter(([, owned]) => owned > 0)
-      .map(([artist]) => artist);
-  }, [data]);
-
-  const displayArtist = useMemo(() => {
-    if (activeArtist) return activeArtist;
-    if (artistsWithData.length === 0 && data?.rollups.length) {
-      // fallback: pick artist with highest total
-      const sums = new Map<string, number>();
-      for (const r of data.rollups) {
-        sums.set(r.artist, (sums.get(r.artist) ?? 0) + r.total);
-      }
-      return [...sums.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    }
-    if (artistsWithData.length > 0) {
-      // pick artist with highest owned sum
-      const sums = new Map<string, number>();
-      for (const r of data?.rollups ?? []) {
-        sums.set(r.artist, (sums.get(r.artist) ?? 0) + r.owned);
-      }
-      return (
-        [...sums.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
-        artistsWithData[0]
-      );
-    }
-    return null;
-  }, [activeArtist, artistsWithData, data]);
-
-  const allClasses = useMemo(() => {
-    if (!data) return [];
-    return [...new Set(data.rollups.map((r) => r.class))].sort();
-  }, [data]);
+    const sorted = [...ownedSums.entries()].sort((a, b) => b[1] - a[1]);
+    const best =
+      (sorted[0]?.[1] ?? 0) > 0
+        ? sorted[0][0]
+        : ([...totalSums.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+          null);
+    if (best) setFilters((f) => ({ ...f, artist: [best] }));
+    setInitialized(true);
+  }, [data, initialized]);
 
   const filteredRollups = useMemo(() => {
     if (!data) return [];
-    return data.rollups.filter(
-      (r) => r.artist === displayArtist && !excludedClasses.has(r.class),
-    );
-  }, [data, displayArtist, excludedClasses]);
-
-  // Group by member, preserving roster order
-  const memberRollups = useMemo(() => {
-    if (!displayArtist || !data) return new Map<string, ProgressRollup[]>();
-    const artistKey = Object.keys(membersByArtist).find(
-      (k) =>
-        k.toLowerCase() === displayArtist.toLowerCase() || k === displayArtist,
-    ) as keyof typeof membersByArtist | undefined;
-    const rosterOrder = artistKey ? membersByArtist[artistKey] : [];
-    const map = new Map<string, ProgressRollup[]>();
-    for (const member of rosterOrder) {
-      const memberData = filteredRollups.filter((r) => r.member === member);
+    return data.rollups.filter((r) => {
       if (
-        memberData.length > 0 ||
-        data.rollups.some(
-          (r) => r.member === member && r.artist === displayArtist,
-        )
-      ) {
-        map.set(
-          member,
-          filteredRollups.filter((r) => r.member === member),
-        );
-      }
-    }
-    // Also include members not in roster order
-    for (const r of filteredRollups) {
-      if (!map.has(r.member)) map.set(r.member, []);
-      const arr = map.get(r.member);
-      if (arr && !arr.includes(r)) arr.push(r);
-    }
-    return map;
-  }, [filteredRollups, displayArtist, data]);
-
-  function toggleClass(cls: string) {
-    setExcludedClasses((prev) => {
-      const next = new Set(prev);
-      if (next.has(cls)) next.delete(cls);
-      else next.add(cls);
-      return next;
+        filters.artist.length &&
+        !filters.artist.some((a) => normalizeArtistId(a) === r.artist)
+      )
+        return false;
+      if (filters.member.length && !filters.member.includes(r.member))
+        return false;
+      if (
+        filters.season.length &&
+        !filters.season.some((s) => {
+          const d = decodeGroupedValue(s);
+          return d
+            ? d.item === r.season && normalizeArtistId(d.artistId) === r.artist
+            : s === r.season;
+        })
+      )
+        return false;
+      if (
+        filters.class.length &&
+        !filters.class.some((c) => {
+          const d = decodeGroupedValue(c);
+          return d
+            ? d.item === r.class && normalizeArtistId(d.artistId) === r.artist
+            : c === r.class;
+        })
+      )
+        return false;
+      if (
+        filters.on_offline.length &&
+        !filters.on_offline.includes(r.onOffline)
+      )
+        return false;
+      return true;
     });
-  }
+  }, [data, filters]);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="h-6 w-40 bg-muted animate-pulse rounded" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
-            <div
-              key={id}
-              className="rounded-lg border border-border bg-card p-3 space-y-2"
-            >
-              <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-              <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
-            </div>
-          ))}
-        </div>
-      </div>
+  const activeArtists = useMemo(() => {
+    if (!data) return [];
+    if (filters.artist.length) return filters.artist.map(normalizeArtistId);
+    return [...new Set(data.rollups.map((r) => r.artist))];
+  }, [data, filters.artist]);
+
+  // Group by artist → { real members, others }
+  const artistGroups = useMemo(() => {
+    if (!data)
+      return new Map<
+        string,
+        {
+          real: Map<string, ProgressRollup[]>;
+          others: Map<string, ProgressRollup[]>;
+        }
+      >();
+    return new Map(
+      activeArtists.map((artist) => {
+        const roster = realMembersByArtist[artist as ValidArtist] ?? [];
+        const rosterSet = new Set(roster);
+        const realMap = new Map<string, ProgressRollup[]>();
+        const othersMap = new Map<string, ProgressRollup[]>();
+
+        // Pre-populate roster members that have any data in the unfiltered set
+        for (const member of roster) {
+          if (
+            data.rollups.some((r) => r.artist === artist && r.member === member)
+          ) {
+            realMap.set(member, []);
+          }
+        }
+
+        // Assign filtered rollups
+        for (const r of filteredRollups) {
+          if (r.artist !== artist) continue;
+          if (rosterSet.has(r.member)) {
+            if (!realMap.has(r.member)) realMap.set(r.member, []);
+            realMap.get(r.member)?.push(r);
+          } else {
+            if (!othersMap.has(r.member)) othersMap.set(r.member, []);
+            othersMap.get(r.member)?.push(r);
+          }
+        }
+
+        return [artist, { real: realMap, others: othersMap }] as const;
+      }),
     );
-  }
+  }, [data, filteredRollups, activeArtists]);
+
+  const hasOthers = useMemo(
+    () => [...artistGroups.values()].some((g) => g.others.size > 0),
+    [artistGroups],
+  );
+
+  const [sharing, setSharing] = useState(false);
+  const handleShare = useCallback(async () => {
+    if (!data) return;
+    const artist = activeArtists[0];
+    if (!artist) return;
+    setSharing(true);
+    try {
+      // Aggregate owned/total per member for the active artist.
+      const memberAgg = new Map<string, { owned: number; total: number }>();
+      for (const r of filteredRollups) {
+        if (r.artist !== artist) continue;
+        const agg = memberAgg.get(r.member) ?? { owned: 0, total: 0 };
+        agg.owned += r.owned;
+        agg.total += r.total;
+        memberAgg.set(r.member, agg);
+      }
+
+      // Order by roster, then any remaining members.
+      const roster = realMembersByArtist[artist as ValidArtist] ?? [];
+      const ordered: { member: string; owned: number; total: number }[] = [];
+      const seen = new Set<string>();
+      for (const m of roster) {
+        const agg = memberAgg.get(m);
+        if (agg) {
+          ordered.push({ member: m, ...agg });
+          seen.add(m);
+        }
+      }
+      for (const [m, agg] of memberAgg) {
+        if (!seen.has(m)) ordered.push({ member: m, ...agg });
+      }
+
+      if (ordered.length === 0) {
+        toast.error("Nothing to share for this filter.");
+        return;
+      }
+
+      const owned = ordered.reduce((s, e) => s + e.owned, 0);
+      const total = ordered.reduce((s, e) => s + e.total, 0);
+
+      const canvas = await renderProgressCardToCanvas(
+        {
+          username: data.nickname,
+          title: artist === "artms" ? "ARTMS" : artist,
+          date: new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }),
+          owned,
+          total,
+          square: true,
+          items: ordered.map((e) => ({
+            thumbnailImage: memberImages[`${artist}|${e.member}`] ?? "",
+            owned: true,
+            caption:
+              e.total > 0 ? `${Math.round((e.owned / e.total) * 100)}%` : "0%",
+          })),
+          verifyHandle: data.nickname,
+        },
+        "dark",
+        Math.min(8, ordered.length),
+      );
+      const outcome = await shareOrDownloadCanvas(
+        canvas,
+        `${artist}-progress-${Date.now()}.png`,
+      );
+      if (outcome === "shared") toast.success("Card shared!");
+      else if (outcome === "downloaded") toast.success("Card downloaded!");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Failed to generate progress card:", err);
+      toast.error(`Failed: ${msg}`);
+    } finally {
+      setSharing(false);
+    }
+  }, [data, activeArtists, filteredRollups, memberImages]);
 
   if (error) {
     const status = (error as Error & { status?: number }).status;
@@ -159,79 +265,109 @@ export function ProgressOverviewContent({ nickname }: Props) {
     );
   }
 
+  if (isLoading || !initialized) {
+    return (
+      <div className="space-y-4">
+        <div className="h-6 w-40 bg-muted animate-pulse rounded" />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2Icon className="h-4 w-4 animate-spin" />
+          <span>Loading {nickname}&apos;s collection</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
+            <div
+              key={id}
+              className="rounded-lg border border-border bg-card p-3 space-y-2"
+            >
+              <div className="flex gap-3">
+                <div className="h-[52px] w-[52px] bg-muted animate-pulse rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                  <div className="h-3 w-12 bg-muted animate-pulse rounded" />
+                </div>
+              </div>
+              <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (!data) return null;
 
-  const artists = [...new Set(data.rollups.map((r) => r.artist))];
-  const showTabs = artists.length > 1;
+  const showArtistLabel = activeArtists.length > 1;
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold">{data.nickname}'s Collection</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">{data.nickname}&apos;s Collection</h1>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleShare}
+          disabled={sharing}
+          className="shrink-0 gap-2"
+        >
+          {sharing ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <ShareIcon className="h-4 w-4" />
+          )}
+          Share card
+        </Button>
       </div>
 
-      {showTabs && (
-        <div className="flex gap-2 flex-wrap">
-          {artists.map((artist) => (
-            <button
-              key={artist}
-              type="button"
-              onClick={() => setActiveArtist(artist)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                displayArtist === artist
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-              }`}
-            >
-              {artistLabel(artist)}
-            </button>
-          ))}
+      <TradeFilters
+        filters={filters}
+        onChange={setFilters}
+        showSearch={false}
+        showSort={false}
+        showFilterMode={false}
+        showMember={false}
+      />
+
+      {[...artistGroups.entries()].map(([artist, { real, others }]) => (
+        <div key={artist} className="space-y-3">
+          {showArtistLabel && (
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              {artist === "artms" ? "ARTMS" : artist}
+            </h2>
+          )}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {[...real.entries()].map(([member, rollups]) => (
+              <MemberProgressCard
+                key={member}
+                nickname={data.nickname}
+                member={member}
+                rollups={rollups}
+                imageUrl={memberImages[`${artist}|${member}`]}
+              />
+            ))}
+          </div>
+          {showOthers && others.size > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {[...others.entries()].map(([member, rollups]) => (
+                <MemberProgressCard
+                  key={member}
+                  nickname={data.nickname}
+                  member={member}
+                  rollups={rollups}
+                  imageUrl={memberImages[`${artist}|${member}`]}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      ))}
 
-      {allClasses.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap">
-          {allClasses.map((cls) => (
-            <button
-              key={cls}
-              type="button"
-              onClick={() => toggleClass(cls)}
-              className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors border ${
-                excludedClasses.has(cls)
-                  ? "bg-transparent text-muted-foreground/50 border-border/50 line-through"
-                  : "bg-muted text-foreground border-transparent"
-              }`}
-            >
-              {cls}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {[...memberRollups.entries()]
-          .filter(
-            ([, rollups]) => showUnowned || rollups.some((r) => r.owned > 0),
-          )
-          .map(([member, rollups]) => (
-            <MemberProgressCard
-              key={member}
-              nickname={data.nickname}
-              member={member}
-              rollups={rollups}
-            />
-          ))}
-      </div>
-
-      {[...memberRollups.values()].some((rollups) =>
-        rollups.every((r) => r.owned === 0),
-      ) && (
+      {hasOthers && (
         <button
           type="button"
-          onClick={() => setShowUnowned((v) => !v)}
+          onClick={() => setShowOthers((v) => !v)}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          {showUnowned ? "Hide unowned members" : "Show unowned members"}
+          {showOthers ? "Hide others" : "Show others"}
         </button>
       )}
     </div>

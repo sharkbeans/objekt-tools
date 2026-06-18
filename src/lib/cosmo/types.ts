@@ -18,6 +18,16 @@ export interface CosmoUserProfile {
   statusMessage?: string;
 }
 
+export interface CosmoSeasonMeta {
+  title: string;
+  color?: string;
+  backgroundColor?: string;
+}
+
+export interface CosmoArtistDetail {
+  seasons?: CosmoSeasonMeta[];
+}
+
 export interface ObjektEntry {
   collectionId: string;
   artist: string;

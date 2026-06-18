@@ -1,16 +1,25 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const LAST_NICKNAME_KEY = "progress-last-nickname";
 
 export function ProgressSearch() {
   const router = useRouter();
   const [value, setValue] = useState("");
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem(LAST_NICKNAME_KEY);
+    if (saved) setValue(saved);
+  }, []);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = value.trim();
     if (!trimmed) return;
+    localStorage.setItem(LAST_NICKNAME_KEY, trimmed);
     router.push(`/progress/${trimmed}`);
   }
 

@@ -39,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { useUserRealtime } from "@/hooks/use-realtime";
 import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -76,9 +77,9 @@ function useUnreadNotificationCount() {
   return data?.count ?? 0;
 }
 
-function useMyProfileHref() {
+function useCosmoLink() {
   const { data: session } = useSession();
-  const { data } = useQuery<CosmoLinkStatus | null>({
+  const { data, refetch } = useQuery<CosmoLinkStatus | null>({
     queryKey: ["cosmo-link-status"],
     queryFn: async () => {
       const res = await fetch("/api/cosmo/status");
@@ -89,18 +90,23 @@ function useMyProfileHref() {
     enabled: !!session,
   });
 
-  if (!session) return "/sign-in";
-  if (!data) return "/link";
-  return `/@${data.nickname ?? data.address}`;
+  const profileHref = !session
+    ? "/sign-in"
+    : !data
+      ? "/link"
+      : `/@${data.nickname ?? data.address}`;
+
+  return { profileHref, isLinked: !!data, refetch };
 }
 
 export function Navbar() {
   const { data: session } = useSession();
   const matchCount = useMatchCount();
   const unreadCount = useUnreadNotificationCount();
-  const profileHref = useMyProfileHref();
+  const { profileHref, isLinked, refetch: refetchCosmoLink } = useCosmoLink();
   const [loginCodeOpen, setLoginCodeOpen] = useState(false);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
 
   // Subscribe to per-user realtime events so notification count updates without polling
   useUserRealtime(session?.user?.id);
@@ -212,12 +218,19 @@ export function Navbar() {
                       My Lists
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/link">
+                  {isLinked ? (
+                    <DropdownMenuItem onClick={() => setUnlinkOpen(true)}>
                       <LinkIcon className="size-4 mr-2" />
-                      Link Cosmo
-                    </Link>
-                  </DropdownMenuItem>
+                      Unlink Cosmo
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem asChild>
+                      <Link href="/link">
+                        <LinkIcon className="size-4 mr-2" />
+                        Link Cosmo
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => setLoginCodeOpen(true)}>
                     <SmartphoneIcon className="size-4 mr-2" />
                     Login Code
@@ -246,10 +259,17 @@ export function Navbar() {
         matchCount={matchCount}
         unreadCount={unreadCount}
         profileHref={profileHref}
+        isLinked={isLinked}
         onLoginCode={() => setLoginCodeOpen(true)}
         onSignOut={() => setSignOutConfirmOpen(true)}
+        onUnlink={() => setUnlinkOpen(true)}
       />
 
+      <UnlinkCosmoDialog
+        open={unlinkOpen}
+        onOpenChange={setUnlinkOpen}
+        onSuccess={() => refetchCosmoLink()}
+      />
       <LoginCodeDialog open={loginCodeOpen} onOpenChange={setLoginCodeOpen} />
 
       <AlertDialog
@@ -288,15 +308,19 @@ function MobileNav({
   matchCount,
   unreadCount,
   profileHref,
+  isLinked,
   onLoginCode,
   onSignOut,
+  onUnlink,
 }: {
   session: ReturnType<typeof useSession>["data"];
   matchCount: number;
   unreadCount: number;
   profileHref: string;
+  isLinked: boolean;
   onLoginCode: () => void;
   onSignOut: () => void;
+  onUnlink: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -481,10 +505,24 @@ function MobileNav({
                 <ImageIcon className="size-4" />
                 My Lists
               </MobileNavLink>
-              <MobileNavLink href="/link" onClick={() => setOpen(false)}>
-                <LinkIcon className="size-4" />
-                Link Cosmo
-              </MobileNavLink>
+              {isLinked ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onUnlink();
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                >
+                  <LinkIcon className="size-4" />
+                  Unlink Cosmo
+                </button>
+              ) : (
+                <MobileNavLink href="/link" onClick={() => setOpen(false)}>
+                  <LinkIcon className="size-4" />
+                  Link Cosmo
+                </MobileNavLink>
+              )}
               <button
                 type="button"
                 onClick={() => {

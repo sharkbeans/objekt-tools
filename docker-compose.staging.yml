@@ -1,0 +1,89 @@
+# Standalone staging compose — does not inherit from docker-compose.yml.
+# Run with: docker compose -p objekt-staging -f docker-compose.staging.yml up -d --build
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: objekt-staging-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: objekt_trade
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d objekt_trade"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: objekt-staging-redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_PUSHER_KEY: ${NEXT_PUBLIC_PUSHER_KEY:-}
+        NEXT_PUBLIC_PUSHER_CLUSTER: ${NEXT_PUBLIC_PUSHER_CLUSTER:-}
+    container_name: objekt-staging-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_INVITE_URL: ${DISCORD_INVITE_URL:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      INDEXER_DATABASE_URL: ${INDEXER_DATABASE_URL:-}
+      REMBG_SERVICE_URL: ${REMBG_SERVICE_URL:-http://rembg:7000}
+      REMBG_MODEL: ${REMBG_MODEL:-u2net_human_seg}
+      PUSHER_APP_ID: ${PUSHER_APP_ID:-}
+      PUSHER_KEY: ${PUSHER_KEY:-}
+      PUSHER_SECRET: ${PUSHER_SECRET:-}
+      PUSHER_CLUSTER: ${PUSHER_CLUSTER:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+    ports:
+      - "127.0.0.1:3002:3000"
+
+  cron:
+    image: alpine:3.20
+    container_name: objekt-staging-cron
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-}
+      APP_URL: http://app:3000
+    command: >
+      sh -c "
+        echo '0 2 * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/expire-trades' | crontab - &&
+        crond -f -l 2
+      "
+
+volumes:
+  pgdata:
+  redisdata:

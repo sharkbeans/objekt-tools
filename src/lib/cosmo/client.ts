@@ -2,7 +2,12 @@ import { desc, eq } from "drizzle-orm";
 import { ofetch } from "ofetch";
 import { db } from "@/lib/db";
 import { cosmoToken } from "@/lib/db/schema";
-import type { CosmoSearchResult, CosmoUserProfile, ValidArtist } from "./types";
+import type {
+  CosmoArtistDetail,
+  CosmoSearchResult,
+  CosmoUserProfile,
+  ValidArtist,
+} from "./types";
 
 const COSMO_API = "https://api.cosmo.fans";
 
@@ -92,6 +97,18 @@ export async function fetchUserByNickname(
   try {
     return await cosmoFetchWithRefresh<{ nickname: string; address: string }>(
       `/bff/v3/users/by-nickname/${encodeURIComponent(nickname)}`,
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchArtistDetail(
+  artistId: ValidArtist,
+): Promise<CosmoArtistDetail | null> {
+  try {
+    return await cosmoFetchWithRefresh<CosmoArtistDetail>(
+      `/bff/v3/artists/${artistId}`,
     );
   } catch {
     return null;

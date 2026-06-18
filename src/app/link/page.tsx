@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { useSession } from "@/lib/auth-client";
 import type { CosmoPublicUser, ValidArtist } from "@/lib/cosmo/types";
 
@@ -56,6 +57,8 @@ export default function LinkCosmoPage() {
   const [typedCode, setTypedCode] = useState("");
   const [linkedAs, setLinkedAs] = useState("");
   const [deletingCode, setDeletingCode] = useState("");
+  const [existingNickname, setExistingNickname] = useState<string | null>(null);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
   const doneEditProfileRef = useRef<HTMLDivElement>(null);
 
   // Redirect if not authenticated
@@ -64,6 +67,17 @@ export default function LinkCosmoPage() {
       router.push("/sign-in");
     }
   }, [session, router]);
+
+  // Check if already linked
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/cosmo/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.nickname) setExistingNickname(data.nickname);
+      })
+      .catch(() => {});
+  }, [session]);
 
   // Auto-transition mockup on verify step
   useEffect(() => {
@@ -208,6 +222,14 @@ export default function LinkCosmoPage() {
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center">
+      <UnlinkCosmoDialog
+        open={unlinkOpen}
+        onOpenChange={setUnlinkOpen}
+        onSuccess={() => {
+          setExistingNickname(null);
+          setStep("search");
+        }}
+      />
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Link Cosmo Account</CardTitle>
@@ -219,6 +241,24 @@ export default function LinkCosmoPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Already linked — show status and unlink option */}
+          {existingNickname && step === "search" && (
+            <div className="space-y-4 pb-4 mb-4 border-b border-border">
+              <p className="text-sm text-muted-foreground">
+                Currently linked as{" "}
+                <span className="font-semibold text-foreground">
+                  @{existingNickname}
+                </span>
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setUnlinkOpen(true)}
+              >
+                Unlink Cosmo
+              </Button>
+            </div>
+          )}
           {/* Step 1: Search */}
           {step === "search" && (
             <div className="space-y-4">
