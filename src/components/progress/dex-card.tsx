@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { formatCount } from "@/lib/progress/scarcity-tier";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { DexDetailDialog } from "./dex-detail-dialog";
 
@@ -37,12 +36,6 @@ export function DexCard({ collection }: Props) {
         </div>
         <p className="text-[10px] text-center text-muted-foreground leading-tight truncate">
           {collection.collectionNo}
-          {collection.supply != null && (
-            <span className="text-muted-foreground/60">
-              {" "}
-              · {formatCount(collection.supply)}
-            </span>
-          )}
         </p>
       </button>
 

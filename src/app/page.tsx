@@ -120,7 +120,7 @@ const tools: {
   {
     title: "Collection",
     description: "Track your collection progress.",
-    href: "/progress",
+    href: "/collection",
     Icon: Library,
   },
 ];

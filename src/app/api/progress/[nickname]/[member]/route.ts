@@ -10,7 +10,6 @@ import { indexer } from "@/lib/db/indexer";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { compareSeasons } from "@/lib/filter-options";
 import { membersByArtist } from "@/lib/filters";
-import { getMemberScarcity } from "@/lib/progress/scarcity";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
@@ -67,7 +66,7 @@ export async function GET(
     );
   }
 
-  const [allCollections, ownedCounts, scarcity] = await Promise.all([
+  const [allCollections, ownedCounts] = await Promise.all([
     getCached(
       `progress:collections:v2:${member.toLowerCase()}`,
       10 * 60_000,
@@ -101,7 +100,6 @@ export async function GET(
           .where(eq(objekts.owner, resolved.address))
           .groupBy(objekts.collectionId),
     ),
-    getMemberScarcity(member),
   ]);
 
   const ownedMap = new Map<string, number>();
@@ -146,27 +144,19 @@ export async function GET(
   const artist = artistForMember(member);
 
   const result: ProgressCollection[] = deduped
-    .map((c) => {
-      // Scarcity is keyed by the collection UUID. For A/Z pairs it attaches to
-      // whichever copy is displayed (prefer-Z, above); A/Z supplies aren't summed.
-      const s = scarcity.get(c.id);
-      return {
-        collectionId: c.collectionId,
-        collectionNo: c.collectionNo,
-        season: c.season,
-        class: c.class,
-        onOffline: c.onOffline,
-        thumbnailImage: c.thumbnailImage,
-        frontImage: c.frontImage,
-        accentColor: c.accentColor,
-        member,
-        artist,
-        ownedCount: ownedMap.get(c.id) ?? 0,
-        supply: s?.supply,
-        transferable: s?.transferable,
-        scarcityTier: s?.tier,
-      };
-    })
+    .map((c) => ({
+      collectionId: c.collectionId,
+      collectionNo: c.collectionNo,
+      season: c.season,
+      class: c.class,
+      onOffline: c.onOffline,
+      thumbnailImage: c.thumbnailImage,
+      frontImage: c.frontImage,
+      accentColor: c.accentColor,
+      member,
+      artist,
+      ownedCount: ownedMap.get(c.id) ?? 0,
+    }))
     .sort((a, b) => {
       const sc = compareSeasons(a.season, b.season);
       if (sc !== 0) return sc;

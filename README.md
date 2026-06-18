@@ -12,7 +12,7 @@ All-in-one Cosmo tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the G
 
 **[Proofshot](https://objekt.my/proofshot)** — Generate photocard proofshot images for trades and collections.
 
-**[Collection](https://objekt.my/progress)** — Browse and track objekt collection progress by member and season.
+**[Collection](https://objekt.my/collection)** — Browse and track objekt collection progress by member and season.
 
 **[Objekt Poster](https://objekt.my/post)** — Turn your trade list into a clean, shareable image.
 

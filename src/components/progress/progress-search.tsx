@@ -20,7 +20,7 @@ export function ProgressSearch() {
     const trimmed = value.trim();
     if (!trimmed) return;
     localStorage.setItem(LAST_NICKNAME_KEY, trimmed);
-    router.push(`/progress/${trimmed}`);
+    router.push(`/collection/${trimmed}`);
   }
 
   return (

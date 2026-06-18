@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatCount, SCARCITY_TIER_META } from "@/lib/progress/scarcity-tier";
 import type { ProgressCollection } from "@/lib/progress/types";
 
 interface Props {
@@ -27,13 +26,6 @@ export function DexDetailDialog({ collection, onOpenChange }: Props) {
   const title = c
     ? [c.season, c.member, c.collectionNo].filter(Boolean).join(" ")
     : "";
-
-  const tier = c?.scarcityTier ? SCARCITY_TIER_META[c.scarcityTier] : null;
-
-  const transferablePct =
-    c?.supply && c.supply > 0 && c.transferable != null
-      ? (c.transferable / c.supply) * 100
-      : null;
 
   return (
     <Dialog open={c !== null} onOpenChange={onOpenChange}>
@@ -55,7 +47,7 @@ export function DexDetailDialog({ collection, onOpenChange }: Props) {
               <DialogHeader>
                 <DialogTitle className="text-lg">{title}</DialogTitle>
                 <DialogDescription className="sr-only">
-                  Objekt attributes and on-chain scarcity for {title}
+                  Objekt attributes for {title}
                 </DialogDescription>
               </DialogHeader>
 
@@ -79,46 +71,11 @@ export function DexDetailDialog({ collection, onOpenChange }: Props) {
                 )}
               </div>
 
-              {/* On-chain scarcity */}
-              {c.supply != null && (
-                <div className="flex flex-wrap gap-1.5">
-                  <Chip label="Copies" value={formatCount(c.supply)} />
-                  {c.transferable != null && (
-                    <>
-                      <Chip
-                        label="Spin"
-                        value={formatCount(c.supply - c.transferable)}
-                      />
-                      <Chip
-                        label="Non-Spin"
-                        value={formatCount(c.transferable)}
-                      />
-                      {transferablePct != null && (
-                        <Chip
-                          label="Transferable"
-                          value={`${transferablePct
-                            .toFixed(2)
-                            .replace(/\.?0+$/, "")}% (${c.transferable})`}
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Ownership + rarity */}
+              {/* Ownership */}
               <div className="flex items-center gap-3 pt-1 text-sm">
                 <span className="font-medium text-foreground">
                   {c.ownedCount > 0 ? `Owned ×${c.ownedCount}` : "Not owned"}
                 </span>
-                {tier && (
-                  <span
-                    className="text-xs font-semibold uppercase tracking-wide"
-                    style={{ color: tier.color }}
-                  >
-                    {tier.label}
-                  </span>
-                )}
               </div>
             </div>
           </div>
