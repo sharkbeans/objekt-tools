@@ -13,7 +13,7 @@ import { notify } from "@/lib/notify";
 import { issueBan, propagateResolution } from "@/lib/trade-guards";
 
 // GET /api/cron/expire-trades
-// Called by Vercel Cron once per day.
+// Called by the cron container once per day.
 // 1. Closes trade posts older than 30 days (does NOT cancel their associated accepted/partial active trades)
 // 2. Cancels pending (not yet accepted) active trades older than 30 days
 export async function GET(request: NextRequest) {

@@ -16,11 +16,7 @@
     "test:watch": "tsx --test --watch --test-concurrency=1 'src/**/*.test.ts'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "vercel:env:pull:preview": "npx vercel env pull .env.preview.local --environment=preview",
-    "vercel:env:pull:production": "npx vercel env pull .env.production.local --environment=production",
-    "vercel:build:preview": "npx vercel build",
-    "vercel:build:production": "npx vercel build --prod"
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.5.3",

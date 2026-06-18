@@ -91,7 +91,7 @@ services:
     ports:
       - "3000:3000"
 
-  # Cron replacement for vercel.json "0 2 * * *" → /api/cron/expire-trades
+  # Daily cron trigger ("0 2 * * *") → /api/cron/expire-trades
   cron:
     image: alpine:3.20
     container_name: objekt-trade-cron

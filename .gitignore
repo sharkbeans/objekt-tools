@@ -73,8 +73,9 @@ session-tokens*
 *.dump
 *.backup
 
-# vercel
-.vercel
+# local reference repos
+/cosmo-web/
+/objekt-explorer/
 
 # typescript
 *.tsbuildinfo
