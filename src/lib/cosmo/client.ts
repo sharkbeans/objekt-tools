@@ -1,3 +1,4 @@
+import { createCipheriv, randomBytes } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { ofetch } from "ofetch";
 import { db } from "@/lib/db";
@@ -35,15 +36,32 @@ async function getLatestToken() {
   return latest;
 }
 
+function encryptPayload(plaintext: string, keyBase64: string): string {
+  const key = Buffer.from(keyBase64, "base64");
+  const iv = randomBytes(16);
+  const cipher = createCipheriv("aes-256-cbc", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  return Buffer.concat([iv, encrypted]).toString("base64");
+}
+
 async function refreshAccessToken(tokenRow: {
   id: number;
   refreshToken: string;
 }) {
+  const key = process.env.COSMO_KEY;
+  if (!key) throw new Error("COSMO_KEY env var is not set");
+
+  const body = encryptPayload(JSON.stringify({ refreshToken: tokenRow.refreshToken }), key);
+
   const result = await ofetch<{
     credentials: { accessToken: string; refreshToken: string };
-  }>(`${COSMO_API}/auth/v1/refresh`, {
+  }>(`${COSMO_API}/bff/v3/users/refresh-access-token`, {
     method: "POST",
-    body: { refreshToken: tokenRow.refreshToken },
+    body,
+    headers: {
+      "Content-Type": "text/plain",
+      "x-cosmo-encrypted": "1",
+    },
   });
 
   const { accessToken, refreshToken: newRefreshToken } = result.credentials;
