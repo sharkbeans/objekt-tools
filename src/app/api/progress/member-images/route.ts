@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { normalizeArtistId } from "@/lib/artist-utils";
+import { fetchArtistDetail } from "@/lib/cosmo/client";
 import { indexer } from "@/lib/db/indexer";
 import { collections } from "@/lib/db/indexer-schema";
 import { realMembersByArtist, validSeasons } from "@/lib/filters";
@@ -50,28 +51,12 @@ const seasonOrder: Record<string, number> = Object.fromEntries(
   validSeasons.map((s, i) => [s, i]),
 );
 
-interface CosmoMember {
-  name: string;
-  order: number;
-  profileImageUrl?: string;
-}
-
-interface CosmoArtistResponse {
-  artist: {
-    members: CosmoMember[];
-  };
-}
-
 async function fetchCosmoProfileImages(): Promise<Record<string, string>> {
   const results = await Promise.all(
     COSMO_ARTISTS.map(async (artist) => {
-      const res = await fetch(`https://api.cosmo.fans/artist/v1/${artist}`, {
-        next: { revalidate: 604800 },
-      });
-      if (!res.ok) return [];
-      const data = (await res.json()) as CosmoArtistResponse;
+      const detail = await fetchArtistDetail(artist);
       const artistId = normalizeArtistId(artist);
-      return data.artist.members.flatMap((m) =>
+      return (detail?.artistMembers ?? []).flatMap((m) =>
         m.profileImageUrl
           ? [[`${artistId}|${m.name}`, m.profileImageUrl] as const]
           : [],
