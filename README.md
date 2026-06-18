@@ -26,6 +26,7 @@ All-in-one Cosmo tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the G
 ## Acknowledgements
 
 - [objekt-explorer](https://github.com/izrin96/objekt-explorer) for the Subsquid-based Objekt indexer, which powers collection progress lookups and transfer verification.
+- [cosmo-web](https://apollo.cafe) for the approach used to proxy objekt images around Cosmo's CloudFront CORS cache poisoning.
 
 ## Contact
 
