@@ -40,7 +40,10 @@ function encryptPayload(plaintext: string, keyBase64: string): string {
   const key = Buffer.from(keyBase64, "base64");
   const iv = randomBytes(16);
   const cipher = createCipheriv("aes-256-cbc", key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
   return Buffer.concat([iv, encrypted]).toString("base64");
 }
 
@@ -51,7 +54,10 @@ async function refreshAccessToken(tokenRow: {
   const key = process.env.COSMO_KEY;
   if (!key) throw new Error("COSMO_KEY env var is not set");
 
-  const body = encryptPayload(JSON.stringify({ refreshToken: tokenRow.refreshToken }), key);
+  const body = encryptPayload(
+    JSON.stringify({ refreshToken: tokenRow.refreshToken }),
+    key,
+  );
 
   const result = await ofetch<{
     credentials: { accessToken: string; refreshToken: string };
