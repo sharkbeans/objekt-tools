@@ -2,6 +2,7 @@ import { count, countDistinct, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import {
+  CosmoUnavailableError,
   resolveNickname,
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
@@ -42,7 +43,18 @@ export async function GET(
     // Redis unavailable — skip rate limiting
   }
 
-  const resolved = await resolveNickname(nickname);
+  let resolved: Awaited<ReturnType<typeof resolveNickname>>;
+  try {
+    resolved = await resolveNickname(nickname);
+  } catch (error) {
+    if (error instanceof CosmoUnavailableError) {
+      return NextResponse.json(
+        { error: "Cosmo is temporarily unavailable. Try again later." },
+        { status: 503 },
+      );
+    }
+    throw error;
+  }
   if (!resolved) {
     return NextResponse.json(
       { error: "Cosmo user not found" },

@@ -6,6 +6,18 @@ import { redis } from "@/lib/redis";
 
 const RESERVED_NICKNAMES = new Set(["cosmo-spin"]);
 
+/**
+ * Thrown when nickname resolution fails because Cosmo is unreachable
+ * (timeout, 5xx, token-refresh failure) — as opposed to the user genuinely
+ * not existing. Callers should map this to a 503, not a 404.
+ */
+export class CosmoUnavailableError extends Error {
+  constructor() {
+    super("Cosmo is temporarily unavailable");
+    this.name = "CosmoUnavailableError";
+  }
+}
+
 export function validateNickname(nickname: string): boolean {
   return nickname.length >= 1 && nickname.length <= 30 && !/\s/.test(nickname);
 }
@@ -33,7 +45,15 @@ export async function resolveNickname(
     if (cached) return null;
   } catch {}
 
-  const resolved = await fetchUserByNickname(nickname);
+  let resolved: { nickname: string; address: string } | null;
+  try {
+    resolved = await fetchUserByNickname(nickname);
+  } catch {
+    // Transient upstream error — don't poison the negative cache. Signal the
+    // caller to return a 503 so clients retry, rather than a misleading 404.
+    throw new CosmoUnavailableError();
+  }
+
   if (!resolved) {
     try {
       await redis.set(cacheKey, "1", "EX", 3600);

@@ -122,8 +122,17 @@ export async function fetchUserByNickname(
     return await cosmoFetchWithRefresh<{ nickname: string; address: string }>(
       `/bff/v3/users/by-nickname/${encodeURIComponent(nickname)}`,
     );
-  } catch {
-    return null;
+  } catch (error: unknown) {
+    const status =
+      error && typeof error === "object" && "status" in error
+        ? (error as { status: number }).status
+        : undefined;
+    // Only a genuine 404 means "no such user" — return null so it can be
+    // negative-cached. Any other failure (timeout, 5xx, token refresh) is
+    // transient and must propagate so callers don't cache a valid user as
+    // not-found.
+    if (status === 404) return null;
+    throw error;
   }
 }
 
