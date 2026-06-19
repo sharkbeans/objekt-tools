@@ -1,5 +1,7 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { TiltCard } from "@/components/tilt-card";
 import { Badge } from "@/components/ui/badge";
@@ -10,10 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ProgressCollection } from "@/lib/progress/types";
+import type {
+  ProgressCollection,
+  ProgressSerialsResponse,
+} from "@/lib/progress/types";
 
 interface Props {
   collection: ProgressCollection | null;
+  address: string;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -85,7 +91,83 @@ function FlipCard({ collection }: { collection: ProgressCollection }) {
   );
 }
 
-export function DexDetailDialog({ collection, onOpenChange }: Props) {
+function SerialsTable({
+  address,
+  collectionId,
+}: {
+  address: string;
+  collectionId: string;
+}) {
+  const { data, isLoading, error } = useQuery<ProgressSerialsResponse>({
+    queryKey: ["progress-serials", address, collectionId],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/progress/serials?address=${encodeURIComponent(address)}&collectionId=${encodeURIComponent(collectionId)}`,
+      );
+      if (!res.ok) throw new Error("Failed to load serials");
+      return res.json();
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+        <Loader2Icon className="h-4 w-4 animate-spin" />
+        <span>Loading serials</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <p className="py-2 text-sm text-muted-foreground">
+        Couldn&apos;t load serials.
+      </p>
+    );
+  }
+
+  const serials = data?.serials ?? [];
+  if (serials.length === 0) return null;
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Serial</th>
+            <th className="px-3 py-2 font-medium">Token ID</th>
+            <th className="px-3 py-2 font-medium">Transferable</th>
+          </tr>
+        </thead>
+        <tbody>
+          {serials.map((s) => (
+            <tr
+              key={s.objektId}
+              className="border-b border-border last:border-0"
+            >
+              <td className="px-3 py-2 font-medium tabular-nums">{s.serial}</td>
+              <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                {s.objektId || "—"}
+              </td>
+              <td className="px-3 py-2">
+                <Badge
+                  variant={s.transferable ? "secondary" : "outline"}
+                  className="rounded px-1.5 py-0.5 text-xs font-normal"
+                >
+                  {s.transferable ? "Yes" : "No"}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function DexDetailDialog({ collection, address, onOpenChange }: Props) {
   const c = collection;
   const artist = artistLabel(c?.artist);
 
@@ -134,6 +216,11 @@ export function DexDetailDialog({ collection, onOpenChange }: Props) {
                   {c.ownedCount > 0 ? `Owned ×${c.ownedCount}` : "Not owned"}
                 </span>
               </div>
+
+              {/* Serials owned */}
+              {c.ownedCount > 0 && (
+                <SerialsTable address={address} collectionId={c.collectionId} />
+              )}
             </div>
           </div>
         )}

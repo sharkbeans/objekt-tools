@@ -7,18 +7,23 @@ import type { ProgressOverviewResponse } from "@/lib/progress/types";
 
 const LAST_NICKNAME_KEY = "progress-last-nickname";
 
-export function ProgressSearch() {
+export function ProgressSearch({
+  defaultNickname,
+}: {
+  defaultNickname?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(defaultNickname ?? "");
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (defaultNickname) return;
     const saved = localStorage.getItem(LAST_NICKNAME_KEY);
     if (saved) setValue(saved);
-  }, []);
+  }, [defaultNickname]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
