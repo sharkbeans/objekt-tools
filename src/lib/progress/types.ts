@@ -22,10 +22,11 @@ export type ProgressCollection = {
   onOffline: string;
   thumbnailImage: string;
   frontImage: string;
+  backImage: string;
+  accentColor: string;
   ownedCount: number;
   member?: string;
   artist?: string;
-  accentColor?: string;
 };
 
 export type ProgressMemberResponse = {

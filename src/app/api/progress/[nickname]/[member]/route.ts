@@ -80,7 +80,7 @@ export async function GET(
 
   const [allCollections, ownedCounts] = await Promise.all([
     getCached(
-      `progress:collections:v2:${member.toLowerCase()}`,
+      `progress:collections:v3:${member.toLowerCase()}`,
       10 * 60_000,
       () =>
         indexer
@@ -93,6 +93,7 @@ export async function GET(
             onOffline: collections.onOffline,
             thumbnailImage: collections.thumbnailImage,
             frontImage: collections.frontImage,
+            backImage: collections.backImage,
             accentColor: collections.accentColor,
           })
           .from(collections)
@@ -164,6 +165,7 @@ export async function GET(
       onOffline: c.onOffline,
       thumbnailImage: c.thumbnailImage,
       frontImage: c.frontImage,
+      backImage: c.backImage,
       accentColor: c.accentColor,
       member,
       artist,
