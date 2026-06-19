@@ -25,7 +25,7 @@ export default async function MemberDexPage({
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
       <Link
-        href={`/progress/${nickname}`}
+        href={`/collection/${nickname}`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft className="h-4 w-4" />

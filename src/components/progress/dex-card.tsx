@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { formatCount } from "@/lib/progress/scarcity-tier";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { DexDetailDialog } from "./dex-detail-dialog";
 
@@ -30,19 +29,13 @@ export function DexCard({ collection }: Props) {
           />
           {!owned && <div className="absolute inset-0 bg-black/[0.715]" />}
           {owned && collection.ownedCount > 1 && (
-            <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[10px] font-bold text-white leading-none">
-              ×{collection.ownedCount}
+            <span className="absolute bottom-1 right-1 flex h-5.5 w-5.5 items-center justify-center rounded-full border-2 border-white/30 bg-black text-[11px] font-bold text-white leading-none">
+              {collection.ownedCount}
             </span>
           )}
         </div>
         <p className="text-[10px] text-center text-muted-foreground leading-tight truncate">
           {collection.collectionNo}
-          {collection.supply != null && (
-            <span className="text-muted-foreground/60">
-              {" "}
-              · {formatCount(collection.supply)}
-            </span>
-          )}
         </p>
       </button>
 

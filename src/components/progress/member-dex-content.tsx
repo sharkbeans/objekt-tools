@@ -173,17 +173,6 @@ export function MemberDexContent({ nickname, member }: Props) {
       const owned = shareCols.filter((c) => c.ownedCount > 0).length;
       const total = shareCols.length;
 
-      // Rarest owned / still-hunting from the current filtered view.
-      const withSupply = shareCols.filter((c) => c.supply != null);
-      const bySupply = (a: { supply?: number }, b: { supply?: number }) =>
-        (a.supply ?? Infinity) - (b.supply ?? Infinity);
-      const rarestOwned = withSupply
-        .filter((c) => c.ownedCount > 0)
-        .sort(bySupply)[0];
-      const rarestMissing = withSupply
-        .filter((c) => c.ownedCount === 0)
-        .sort(bySupply)[0];
-
       // Subtitle carries the active artist + season (+ class) filter context.
       const artistLabel = data.artist === "artms" ? "ARTMS" : data.artist;
       const ownershipLabel = unownedOnly
@@ -214,13 +203,8 @@ export function MemberDexContent({ nickname, member }: Props) {
           items: shareCols.map((c) => ({
             thumbnailImage: c.thumbnailImage,
             owned: c.ownedCount > 0,
-            scarcityTier: c.scarcityTier,
           })),
           verifyHandle: data.nickname,
-          highlights: {
-            rarestOwned: rarestOwned?.collectionNo,
-            rarestMissing: rarestMissing?.collectionNo,
-          },
           strictImages: true,
           onProgress: (done, total) => {
             const pct = total > 0 ? Math.round((done / total) * 100) : 0;

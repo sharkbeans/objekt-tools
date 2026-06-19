@@ -21,7 +21,7 @@ export default async function ProgressPage() {
       columns: { nickname: true },
     });
     if (linked?.nickname) {
-      redirect(`/progress/${linked.nickname}`);
+      redirect(`/collection/${linked.nickname}`);
     }
   }
 

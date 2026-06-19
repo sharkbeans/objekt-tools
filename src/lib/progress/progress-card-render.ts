@@ -5,7 +5,6 @@
  */
 
 import type { PosterTheme } from "@/components/poster/poster-canvas";
-import type { ScarcityTier } from "@/lib/progress/scarcity-tier";
 
 const DARK = {
   bg: "#0f0f14",
@@ -32,7 +31,6 @@ const PAD = 32;
 export interface ProgressCardItem {
   thumbnailImage: string;
   owned: boolean;
-  scarcityTier?: ScarcityTier;
   caption?: string; // optional label drawn under the card (e.g. "87%")
 }
 
@@ -46,7 +44,6 @@ export interface ProgressCardInput {
   items: ProgressCardItem[];
   square?: boolean; // square cards (member avatars) instead of 11/17 objekts
   verifyHandle?: string; // cosmo nickname for the verify link
-  highlights?: { rarestOwned?: string; rarestMissing?: string };
   // When true, throw if any objekt image fails to load instead of drawing a
   // placeholder — used by the dex share so a card is never silently incomplete.
   strictImages?: boolean;
@@ -186,11 +183,9 @@ export async function renderProgressCardToCanvas(
   const headerH = 52;
   const statH = 56; // big percent + progress bar
   const gridH = rows > 0 ? rows * rowStride : 0;
-  const highlightsH = input.highlights?.rarestOwned ? 28 : 0;
   const footerH = 48;
 
-  const cardH =
-    PAD + headerH + 16 + statH + 20 + gridH + highlightsH + footerH + PAD;
+  const cardH = PAD + headerH + 16 + statH + 20 + gridH + footerH + PAD;
 
   const canvas = document.createElement("canvas");
   canvas.width = cardW * pixelRatio;
@@ -338,19 +333,6 @@ export async function renderProgressCardToCanvas(
   }
 
   y += gridH;
-
-  // ── Highlights ──────────────────────────────────────────────────────────
-  if (highlightsH > 0) {
-    const parts: string[] = [];
-    if (input.highlights?.rarestOwned)
-      parts.push(`Rarest owned: ${input.highlights.rarestOwned}`);
-    ctx.font = "12px Helvetica, Arial, sans-serif";
-    ctx.fillStyle = t.muted;
-    ctx.textAlign = "center";
-    ctx.fillText(parts.join("    ·    "), cardW / 2, y + 6, innerW);
-    ctx.textAlign = "left";
-    y += highlightsH;
-  }
 
   // ── Footer ──────────────────────────────────────────────────────────────
   const disclaimer = input.verifyHandle

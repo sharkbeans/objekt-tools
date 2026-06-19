@@ -22,7 +22,7 @@ export function MemberProgressCard({
   const pct = total > 0 ? Math.round((owned / total) * 100) : 0;
 
   return (
-    <Link href={`/progress/${nickname}/${member}`}>
+    <Link href={`/collection/${nickname}/${member}`}>
       <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-3.5 hover:border-white/40 transition-colors">
         <div className="flex items-center gap-3">
           <div className="shrink-0 self-stretch flex items-center">

@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 import { db } from "@/lib/db";

@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { redis } from "@/lib/redis";
