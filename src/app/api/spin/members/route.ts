@@ -1,30 +1,18 @@
 import { NextResponse } from "next/server";
+import { fetchArtistDetail } from "@/lib/cosmo/client";
+import type { ValidArtist } from "@/lib/cosmo/types";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
-const COSMO_ARTISTS = ["tripleS", "artms", "idntt"];
-
-interface CosmoMember {
-  name: string;
-  order: number;
-}
-
-interface CosmoArtistResponse {
-  artist: {
-    members: CosmoMember[];
-  };
-}
+const COSMO_ARTISTS: ValidArtist[] = ["tripleS", "artms", "idntt"];
 
 async function fetchMemberOrder(
-  artist: string,
+  artist: ValidArtist,
 ): Promise<{ artist: string; members: string[] }> {
-  const res = await fetch(`https://api.cosmo.fans/artist/v1/${artist}`, {
-    next: { revalidate: 604800 },
-  });
-  if (!res.ok) throw new Error(`cosmo.fans ${artist} returned ${res.status}`);
-  const data = (await res.json()) as CosmoArtistResponse;
-  const members = data.artist.members
+  const detail = await fetchArtistDetail(artist);
+  if (!detail) throw new Error(`cosmo.fans ${artist} returned no data`);
+  const members = (detail.artistMembers ?? [])
     .sort((a, b) => a.order - b.order)
     .map((m) => m.name);
   return { artist: artist.toLowerCase(), members };

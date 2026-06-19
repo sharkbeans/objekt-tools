@@ -24,8 +24,15 @@ export interface CosmoSeasonMeta {
   backgroundColor?: string;
 }
 
+export interface CosmoArtistMember {
+  name: string;
+  order: number;
+  profileImageUrl?: string;
+}
+
 export interface CosmoArtistDetail {
   seasons?: CosmoSeasonMeta[];
+  artistMembers?: CosmoArtistMember[];
 }
 
 export interface ObjektEntry {
