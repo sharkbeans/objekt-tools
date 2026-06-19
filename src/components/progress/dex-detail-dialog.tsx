@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TiltCard } from "@/components/tilt-card";
 import type { ProgressCollection } from "@/lib/progress/types";
 
 interface Props {
@@ -35,9 +36,8 @@ function FlipCard({ collection }: { collection: ProgressCollection }) {
   const [backLoaded, setBackLoaded] = useState(false);
 
   return (
-    <button
-      type="button"
-      className="relative aspect-[11/17] w-full cursor-pointer select-none [perspective:1200px]"
+    <TiltCard
+      className="aspect-11/17 w-full select-none rounded perspective-distant"
       onClick={() => setFlipped((prev) => !prev)}
     >
       <div
@@ -81,7 +81,7 @@ function FlipCard({ collection }: { collection: ProgressCollection }) {
           )}
         </div>
       </div>
-    </button>
+    </TiltCard>
   );
 }
 
@@ -95,11 +95,11 @@ export function DexDetailDialog({ collection, onOpenChange }: Props) {
 
   return (
     <Dialog open={c !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+      <DialogContent className="sm:max-w-3xl! gap-0 overflow-hidden p-0">
         {c && (
           <div className="flex flex-col sm:flex-row">
             {/* Card — left */}
-            <div className="flex w-full shrink-0 items-center justify-center bg-background p-5 sm:w-60">
+            <div className="flex w-full shrink-0 items-center justify-center bg-background p-5 sm:w-90">
               <FlipCard collection={c} />
             </div>
 
