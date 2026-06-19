@@ -91,7 +91,10 @@ services:
     ports:
       - "3000:3000"
 
-  # Daily cron trigger ("0 2 * * *") → /api/cron/expire-trades
+  # Cron triggers:
+  #   "0 2 * * *"   → /api/cron/expire-trades        (daily)
+  #   "*/2 * * * *" → /api/cron/refresh-cosmo-token   (every 2 min, keeps the
+  #                   Cosmo token chain alive so it never expires)
   cron:
     image: alpine:3.20
     container_name: objekt-trade-cron
@@ -103,7 +106,10 @@ services:
       APP_URL: http://app:3000
     command: >
       sh -c "
-        echo '0 2 * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/expire-trades' | crontab - &&
+        printf '%s\n' \
+          '0 2 * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/expire-trades' \
+          '*/2 * * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/refresh-cosmo-token' \
+          | crontab - &&
         crond -f -l 2
       "
 
