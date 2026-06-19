@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TiltCard } from "@/components/tilt-card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -9,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TiltCard } from "@/components/tilt-card";
 import type { ProgressCollection } from "@/lib/progress/types";
 
 interface Props {
