@@ -29,6 +29,16 @@ export type ProgressCollection = {
   artist?: string;
 };
 
+export type ProgressSerial = {
+  serial: number;
+  objektId: string;
+  transferable: boolean;
+};
+
+export type ProgressSerialsResponse = {
+  serials: ProgressSerial[];
+};
+
 export type ProgressMemberResponse = {
   nickname: string;
   address: string;

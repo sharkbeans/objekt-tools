@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ProgressSearch } from "@/components/progress/progress-search";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -15,14 +14,13 @@ export const metadata: Metadata = {
 export default async function ProgressPage() {
   const session = await getSession();
 
+  let linkedNickname: string | undefined;
   if (session) {
     const linked = await db.query.cosmoAccount.findFirst({
       where: eq(cosmoAccount.userId, session.user.id),
       columns: { nickname: true },
     });
-    if (linked?.nickname) {
-      redirect(`/collection/${linked.nickname}`);
-    }
+    linkedNickname = linked?.nickname ?? undefined;
   }
 
   return (
@@ -33,8 +31,8 @@ export default async function ProgressPage() {
           Look up any Cosmo user to see their collection progress.
         </p>
       </div>
-      <ProgressSearch />
-      {session && (
+      <ProgressSearch defaultNickname={linkedNickname} />
+      {session && !linkedNickname && (
         <p className="text-sm text-muted-foreground">
           Want to see your own dex?{" "}
           <Link href="/link" className="underline hover:text-foreground">

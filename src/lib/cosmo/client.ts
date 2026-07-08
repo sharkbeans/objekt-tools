@@ -14,12 +14,24 @@ const COSMO_API = "https://api.cosmo.fans";
 
 const cosmoFetch = ofetch.create({
   baseURL: COSMO_API,
-  retry: 0,
+  retry: 2,
+  retryDelay: 500,
   timeout: 10000,
   headers: {
     "User-Agent": "objekt-trade",
   },
 });
+
+function jwtExpiresAt(token: string): number | null {
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1], "base64").toString("utf8"),
+    ) as { exp?: number };
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
 
 async function getLatestToken() {
   const latest = await db
@@ -78,6 +90,26 @@ async function refreshAccessToken(tokenRow: {
     .where(eq(cosmoToken.id, tokenRow.id));
 
   return accessToken;
+}
+
+// Refresh the access token when it's within this many ms of expiring. Call
+// this on a short interval (e.g. every 2 minutes) so the refresh token is
+// always used well before its own expiry — otherwise the refresh chain can
+// go stale and require a brand-new login to recover.
+const REFRESH_LEAD_TIME_MS = 5 * 60 * 1000;
+
+export async function refreshAccessTokenIfNeeded(): Promise<{
+  refreshed: boolean;
+}> {
+  const token = await getLatestToken();
+  const exp = jwtExpiresAt(token.accessToken);
+
+  if (exp !== null && exp - Date.now() > REFRESH_LEAD_TIME_MS) {
+    return { refreshed: false };
+  }
+
+  await refreshAccessToken(token);
+  return { refreshed: true };
 }
 
 async function cosmoFetchWithRefresh<T>(

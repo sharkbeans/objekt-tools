@@ -6,9 +6,10 @@ import { DexDetailDialog } from "./dex-detail-dialog";
 
 interface Props {
   collection: ProgressCollection;
+  address: string;
 }
 
-export function DexCard({ collection }: Props) {
+export function DexCard({ collection, address }: Props) {
   const owned = collection.ownedCount > 0;
   const [open, setOpen] = useState(false);
 
@@ -41,6 +42,7 @@ export function DexCard({ collection }: Props) {
 
       <DexDetailDialog
         collection={open ? collection : null}
+        address={address}
         onOpenChange={setOpen}
       />
     </>

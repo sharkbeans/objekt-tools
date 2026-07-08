@@ -452,6 +452,7 @@ export function MemberDexContent({ nickname, member }: Props) {
             season={season}
             collections={cols}
             perRow={perRow}
+            address={data.address}
           />
         ))}
       </div>

@@ -80,7 +80,10 @@ services:
       APP_URL: http://app:3000
     command: >
       sh -c "
-        echo '0 2 * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/expire-trades' | crontab - &&
+        printf '%s\n' \
+          '0 2 * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/expire-trades' \
+          '*/2 * * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/refresh-cosmo-token' \
+          | crontab - &&
         crond -f -l 2
       "
 
