@@ -3,8 +3,10 @@ import path from "node:path";
 import { asc, eq } from "drizzle-orm";
 import { ImageResponse } from "next/og";
 import { type NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { db } from "@/lib/db";
 import { poster, posterHave, posterWant } from "@/lib/db/schema";
+import { stripVariantSuffix } from "@/lib/season-prefix";
 
 // Worst-case max slots: maxRows(3) * maxCols(6) = 18, +1 for the +N chip slot
 const HARD_LIMIT = 19;
@@ -28,6 +30,32 @@ const LIGHT = {
 
 function readFont(filename: string): Buffer {
   return fs.readFileSync(path.join(process.cwd(), "public", filename));
+}
+
+/**
+ * Fetch, decode, and re-encode a thumbnail as a PNG data URI at card size.
+ * Satori can't decode webp (some cosmo.fans thumbnails are served that way,
+ * mislabeled as application/octet-stream), so every image is normalized
+ * through sharp before being handed to ImageResponse. Failures resolve to
+ * null so a single bad thumbnail can't break the whole embed.
+ */
+async function loadThumbnail(
+  url: string,
+  width: number,
+  height: number,
+): Promise<string | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const resized = await sharp(buf)
+      .resize(width, height, { fit: "cover" })
+      .png()
+      .toBuffer();
+    return `data:image/png;base64,${resized.toString("base64")}`;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(
@@ -67,8 +95,11 @@ export async function GET(
   const SECTION_LABEL_H = 15 + 10;
   const BODY_H = 630 - PAD * 2 - HEADER_H - NOTES_H - FOOTER_H - 16;
   const GAP = 8;
-  const CARD_W = 72;
-  const CARD_IMG_H = Math.round((CARD_W * 4) / 3);
+  // Real objekt thumbnails are ~314x486 — match that aspect so cover-fit
+  // doesn't crop the top/bottom off the card image.
+  const OBJEKT_ASPECT = 486 / 314;
+  const CARD_W = 64;
+  const CARD_IMG_H = Math.round(CARD_W * OBJEKT_ASPECT);
   const LABEL_H = 4 + 11 + 2 + 11;
   const CARD_H = CARD_IMG_H + LABEL_H;
   const cols = Math.min(meta.colsPerRow, 6);
@@ -143,6 +174,20 @@ export async function GET(
 
   const row = { ...meta };
 
+  // Pre-fetch + normalize every distinct thumbnail once (haves/wants share
+  // duplicates) before handing anything to Satori.
+  const thumbnailUrls = new Set<string>();
+  for (const item of [...haves, ...wants]) {
+    if (item.thumbnailUrl) thumbnailUrls.add(item.thumbnailUrl);
+  }
+  const thumbnailEntries = await Promise.all(
+    [...thumbnailUrls].map(
+      async (url) =>
+        [url, await loadThumbnail(url, CARD_W, CARD_IMG_H)] as const,
+    ),
+  );
+  const thumbnailMap = new Map(thumbnailEntries);
+
   let regularFont: Buffer;
   let boldFont: Buffer;
   try {
@@ -196,9 +241,11 @@ export async function GET(
               const rawParts = item.rawLabel?.split(" ") ?? [];
               const labelLine1 = item.member ?? rawParts[0] ?? "";
               const labelLine2 = item.member
-                ? rawParts.length >= 2
-                  ? rawParts.slice(1).join(" ")
-                  : (item.collectionNo ?? "")
+                ? stripVariantSuffix(
+                    rawParts.length >= 2
+                      ? rawParts.slice(1).join(" ")
+                      : (item.collectionNo ?? ""),
+                  )
                 : "";
               return (
                 <div
@@ -222,25 +269,66 @@ export async function GET(
                       position: "relative",
                     }}
                   >
-                    {item.thumbnailUrl ? (
-                      // biome-ignore lint/performance/noImgElement: Satori requires plain <img>
-                      <img
-                        src={item.thumbnailUrl}
-                        width={CARD_W}
-                        height={CARD_IMG_H}
-                        style={{ objectFit: "cover", borderRadius: 8 }}
-                        alt=""
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          display: "flex",
-                          width: CARD_W,
-                          height: CARD_IMG_H,
-                          background: pal.sectionBg,
-                        }}
-                      />
-                    )}
+                    {(() => {
+                      const imageDataUri = item.thumbnailUrl
+                        ? thumbnailMap.get(item.thumbnailUrl)
+                        : null;
+                      if (imageDataUri) {
+                        return (
+                          // biome-ignore lint/performance/noImgElement: Satori requires plain <img>
+                          <img
+                            src={imageDataUri}
+                            width={CARD_W}
+                            height={CARD_IMG_H}
+                            style={{ objectFit: "cover", borderRadius: 8 }}
+                            alt=""
+                          />
+                        );
+                      }
+                      // Image missing or failed to load — show the label
+                      // text instead of an empty box.
+                      return (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            width: CARD_W,
+                            height: CARD_IMG_H,
+                            background: pal.sectionBg,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 4,
+                            gap: 2,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              fontSize: 10,
+                              color: pal.muted,
+                              fontFamily: "Regular",
+                              textAlign: "center",
+                              lineHeight: "1.3",
+                            }}
+                          >
+                            {labelLine1}
+                          </div>
+                          {labelLine2 && (
+                            <div
+                              style={{
+                                display: "flex",
+                                fontSize: 9,
+                                color: pal.muted,
+                                fontFamily: "Regular",
+                                textAlign: "center",
+                              }}
+                            >
+                              {labelLine2}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {(item.quantity ?? 1) > 1 && (
                       <div
                         style={{

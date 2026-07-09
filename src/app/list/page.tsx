@@ -61,7 +61,7 @@ import {
   resolveForPoster,
 } from "@/lib/poster-resolver";
 import { formatPosterAsText } from "@/lib/poster-text-format";
-import { getSeasonPrefix } from "@/lib/season-prefix";
+import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 
 interface StoredItem {
   id: number;
@@ -197,8 +197,8 @@ function makeItem(entry: ObjektEntry): ResolvedPosterItem {
     parsed: {
       member: entry.member,
       season: entry.season,
-      collectionNo: entry.collectionNo.replace(/[A-Za-z]$/, ""),
-      raw: `${entry.member} ${getSeasonPrefix(entry.season)}${entry.collectionNo}`,
+      collectionNo: stripVariantSuffix(entry.collectionNo),
+      raw: `${entry.member} ${getSeasonPrefix(entry.season)}${stripVariantSuffix(entry.collectionNo)}`,
       ...(entry.serial != null ? { serial: String(entry.serial) } : {}),
     },
     entry,

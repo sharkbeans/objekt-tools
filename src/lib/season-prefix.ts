@@ -29,3 +29,12 @@ export function getSeasonPrefix(season: string | null | undefined): string {
 
   return letter.repeat(num);
 }
+
+/**
+ * Strip the trailing online/offline variant letter (a/z) from a collection
+ * number, e.g. "502Z" -> "502". Display-only — collectionId still carries
+ * the variant for identity/grouping purposes.
+ */
+export function stripVariantSuffix(collectionNo: string): string {
+  return collectionNo.replace(/[az]$/i, "");
+}

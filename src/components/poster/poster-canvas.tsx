@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
-import { getSeasonPrefix } from "@/lib/season-prefix";
+import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 
 export type PosterTheme = "dark" | "light";
 
@@ -830,7 +830,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
     );
     const haveSeasonNumbers = data.haves.map((item) =>
       item.entry
-        ? `${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`
+        ? `${getSeasonPrefix(item.entry.season)}${stripVariantSuffix(item.entry.collectionNo)}`
         : "",
     );
     const wantLabels = data.wants.map(
@@ -838,7 +838,7 @@ export const PosterCanvas = forwardRef<HTMLDivElement, PosterCanvasProps>(
     );
     const wantSeasonNumbers = data.wants.map((item) =>
       item.entry
-        ? `${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`
+        ? `${getSeasonPrefix(item.entry.season)}${stripVariantSuffix(item.entry.collectionNo)}`
         : "",
     );
 

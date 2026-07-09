@@ -57,7 +57,12 @@ export async function generateMetadata({
       : rawNotes
     : `${row.haveCount} Have · ${row.wantCount} Want`;
 
-  const ogUrl = `${APP_URL}/list/${id}/og?v=${row.version}`;
+  // "-2" render revision: bumps the cached OG image past Discord/social
+  // caches after the image-rendering pipeline changed (webp decode fix,
+  // card aspect ratio fix). Bump again if the OG route's rendering changes
+  // without a poster edit to naturally invalidate it.
+  const ogUrl = `${APP_URL}/list/${id}/og?v=${row.version}-2`;
+  const ogImage = { url: ogUrl, width: 1200, height: 630, type: "image/png" };
 
   return {
     title,
@@ -65,13 +70,13 @@ export async function generateMetadata({
     openGraph: {
       title,
       description,
-      images: [ogUrl],
+      images: [ogImage],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [ogUrl],
+      images: [ogImage],
     },
   };
 }
