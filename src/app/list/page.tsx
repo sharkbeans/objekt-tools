@@ -61,6 +61,7 @@ import {
   resolveForPoster,
 } from "@/lib/poster-resolver";
 import { formatPosterAsText } from "@/lib/poster-text-format";
+import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 
 interface StoredItem {
@@ -221,7 +222,9 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   // Redirect legacy ?edit=id URLs to the canonical /list/[id]/edit route
   useEffect(() => {
     if (legacyEditId && !editIdProp) {
-      router.replace(`/list/${legacyEditId}/edit`);
+      router.replace(
+        sectionHref(`/list/${legacyEditId}/edit`, { currentSection: "list" }),
+      );
     }
   }, [editIdProp, legacyEditId, router]);
 
@@ -526,12 +529,14 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           toast.success("Saved!");
           try {
             await navigator.clipboard.writeText(
-              `${window.location.origin}/list/${editId}`,
+              sectionAbsoluteUrl(`/list/${editId}`),
             );
             setLinkCopied(true);
             toast.success("Link copied!");
           } catch {}
-          router.push(`/list/${editId}`);
+          router.push(
+            sectionHref(`/list/${editId}`, { currentSection: "list" }),
+          );
         } else {
           const res = await fetch("/api/posters", {
             method: "POST",
@@ -545,14 +550,14 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
             );
           }
           const { id } = (await res.json()) as { id: string };
-          const listUrl = `${window.location.origin}/list/${id}`;
+          const listUrl = sectionAbsoluteUrl(`/list/${id}`);
           toast.success("Saved!");
           try {
             await navigator.clipboard.writeText(listUrl);
             setLinkCopied(true);
             toast.success("Link copied!");
           } catch {}
-          router.push(`/list/${id}`);
+          router.push(sectionHref(`/list/${id}`, { currentSection: "list" }));
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -641,7 +646,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     );
     signIn.social({
       provider: "discord",
-      callbackURL: `${window.location.origin}/list?restore=1`,
+      callbackURL: sectionAbsoluteUrl("/list?restore=1"),
     });
   }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
 
@@ -802,7 +807,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 size="sm"
                 className="h-10 gap-2 self-start border-border bg-transparent px-4"
               >
-                <Link href="/list/mine">
+                <Link href={sectionHref("/list/mine", { currentSection: "list" })}>
                   <ListIcon className="h-4 w-4" />
                   My Lists
                 </Link>

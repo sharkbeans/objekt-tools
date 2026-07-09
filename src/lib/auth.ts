@@ -3,13 +3,29 @@ import { betterAuth } from "better-auth";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "./db/schema";
+import { allOrigins, rootDomain, subdomainsEnabled } from "./sections";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
   }),
-  trustedOrigins: [process.env.BETTER_AUTH_URL ?? "https://objekt.my"],
+  trustedOrigins: subdomainsEnabled()
+    ? allOrigins()
+    : [process.env.BETTER_AUTH_URL ?? "https://objekt.my"],
+  // Sessions (and the OAuth state cookie — sign-in can start on a subdomain
+  // and complete at the root-domain callback) must be readable on every
+  // section host.
+  ...(subdomainsEnabled()
+    ? {
+        advanced: {
+          crossSubDomainCookies: {
+            enabled: true,
+            domain: `.${rootDomain()}`,
+          },
+        },
+      }
+    : {}),
   socialProviders: {
     discord: {
       clientId: process.env.DISCORD_CLIENT_ID!,

@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { MemberDexContent } from "@/components/progress/member-dex-content";
+import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 
 export async function generateMetadata({
   params,
@@ -12,6 +13,9 @@ export async function generateMetadata({
   return {
     title: `${nickname}'s ${member} Collection | objekt.my`,
     description: `View ${nickname}'s ${member} objekt collection.`,
+    alternates: {
+      canonical: sectionAbsoluteUrl(`/collection/${nickname}/${member}`),
+    },
   };
 }
 
@@ -25,7 +29,9 @@ export default async function MemberDexPage({
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
       <Link
-        href={`/collection/${nickname}`}
+        href={sectionHref(`/collection/${nickname}`, {
+          currentSection: "collect",
+        })}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft className="h-4 w-4" />

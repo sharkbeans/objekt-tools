@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
+import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { TradesContent } from "./trades-content";
 
 function firstValue(value: string | string[] | undefined) {
@@ -31,8 +32,8 @@ export async function generateMetadata({
   const hasQueryFilters = canonicalParams.toString().length > 0;
   const canonical =
     canonicalParams.size > 0
-      ? `/trades?${canonicalParams.toString()}`
-      : "/trades";
+      ? sectionAbsoluteUrl(`/trades?${canonicalParams.toString()}`)
+      : sectionAbsoluteUrl("/trades");
   const shouldIndex = pageNumber === 1 && !hasQueryFilters;
 
   return {
@@ -59,7 +60,9 @@ export default function TradesPage() {
           </p>
         </div>
         <Button asChild size="sm">
-          <Link href="/trades/new">New Trade</Link>
+          <Link href={sectionHref("/trades/new", { currentSection: "trade" })}>
+            New Trade
+          </Link>
         </Button>
       </div>
 

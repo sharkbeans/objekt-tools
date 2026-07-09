@@ -4,11 +4,16 @@ import { XIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
+import type { SectionId } from "@/lib/sections";
 
 const DISMISS_KEY = "discord-banner-dismissed";
 const DISCORD_INVITE = "https://discord.gg/SWEm6RbJD3";
 
-export function DiscordBanner() {
+export function DiscordBanner({
+  currentSection,
+}: {
+  currentSection: SectionId | null;
+}) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [dismissed, setDismissed] = useState(true); // start hidden to avoid flash
@@ -17,7 +22,7 @@ export function DiscordBanner() {
     setDismissed(localStorage.getItem(DISMISS_KEY) === "1");
   }, []);
 
-  if (!session || dismissed || pathname === "/") return null;
+  if (!session || dismissed || (pathname === "/" && !currentSection)) return null;
 
   function handleDismiss() {
     localStorage.setItem(DISMISS_KEY, "1");

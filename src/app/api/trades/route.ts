@@ -13,6 +13,7 @@ import { notify } from "@/lib/notify";
 import { parsePaginationParams } from "@/lib/pagination";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
+import { sectionAbsoluteUrl } from "@/lib/sections";
 import { getCached } from "@/lib/server-cache";
 import { getActiveBan, getBlockingTradeId } from "@/lib/trade-guards";
 import { listTradesPage } from "@/lib/trade-listing";
@@ -301,8 +302,7 @@ export async function POST(request: NextRequest) {
 
       // One notification per unique user (they may have multiple matching posts)
       const uniqueUserIds = [...new Set(matchingTrades.map((t) => t.userId))];
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my";
-      const newPostUrl = `${appUrl}/trades/${post.id}`;
+      const newPostUrl = sectionAbsoluteUrl(`/trades/${post.id}`);
 
       await notify(
         uniqueUserIds.map((userId) => ({

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { tradePost } from "@/lib/db/schema";
+import { sectionAbsoluteUrl } from "@/lib/sections";
 import TradeDetailClient from "./trade-detail-client";
 
 export async function generateMetadata({
@@ -32,9 +33,13 @@ export async function generateMetadata({
   return {
     title,
     description: "",
+    alternates: {
+      canonical: sectionAbsoluteUrl(`/trades/${id}`),
+    },
     openGraph: {
       title,
       description: "",
+      url: sectionAbsoluteUrl(`/trades/${id}`),
     },
   };
 }

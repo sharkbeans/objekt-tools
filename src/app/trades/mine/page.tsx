@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
+import { sectionHref } from "@/lib/sections";
 import type {
   ActiveTradeDTO,
   TradePostDTO,
@@ -119,7 +120,9 @@ function TradeNotifications() {
           return activeTradeId ? (
             <Link
               key={n.id}
-              href={`/active-trades/${activeTradeId}`}
+              href={sectionHref(`/active-trades/${activeTradeId}`, {
+                currentSection: "trade",
+              })}
               className="banner-warning flex items-center justify-between gap-3"
             >
               {inner}
@@ -245,7 +248,9 @@ export default function MyTradesPage() {
           </p>
         </div>
         <Button asChild size="sm">
-          <Link href="/trades/new">New Trade</Link>
+          <Link href={sectionHref("/trades/new", { currentSection: "trade" })}>
+            New Trade
+          </Link>
         </Button>
       </div>
 
@@ -289,7 +294,9 @@ export default function MyTradesPage() {
                 return (
                   <Link
                     key={trade.id}
-                    href={`/active-trades/${trade.id}`}
+                    href={sectionHref(`/active-trades/${trade.id}`, {
+                      currentSection: "trade",
+                    })}
                     className={cardClass}
                   >
                     <Badge
@@ -365,7 +372,10 @@ export default function MyTradesPage() {
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
             You haven&apos;t posted any trades yet.{" "}
-            <Link href="/trades/new" className="text-primary hover:underline">
+            <Link
+              href={sectionHref("/trades/new", { currentSection: "trade" })}
+              className="text-primary hover:underline"
+            >
               Create your first trade
             </Link>
           </CardContent>

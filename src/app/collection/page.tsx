@@ -5,6 +5,7 @@ import { ProgressSearch } from "@/components/progress/progress-search";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
+import { sectionHref } from "@/lib/sections";
 
 export const metadata: Metadata = {
   title: "Collection Progress | objekt.my",
@@ -35,7 +36,7 @@ export default async function ProgressPage() {
       {session && !linkedNickname && (
         <p className="text-sm text-muted-foreground">
           Want to see your own dex?{" "}
-          <Link href="/link" className="underline hover:text-foreground">
+          <Link href={sectionHref("/link")} className="underline hover:text-foreground">
             Link your Cosmo account
           </Link>
           .

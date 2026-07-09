@@ -8,6 +8,7 @@ import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
+import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 type TradeStatus = "completed" | "cancelled" | "countered" | "disputed";
@@ -103,7 +104,7 @@ export default function TradeHistoryPage() {
           <p className="text-muted-foreground">Completed and past trades</p>
         </div>
         <Link
-          href="/trades/mine"
+          href={sectionHref("/trades/mine", { currentSection: "trade" })}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           ← My Trades
@@ -133,7 +134,13 @@ export default function TradeHistoryPage() {
               <div
                 key={trade.id}
                 className="rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer flex items-center gap-3 px-4 py-3"
-                onClick={() => router.push(`/active-trades/${trade.id}`)}
+                onClick={() =>
+                  router.push(
+                    sectionHref(`/active-trades/${trade.id}`, {
+                      currentSection: "trade",
+                    }),
+                  )
+                }
               >
                 <Badge
                   variant={display.variant}
@@ -152,7 +159,9 @@ export default function TradeHistoryPage() {
                 </span>
                 {trade.status === "countered" && trade.counterOfferId && (
                   <Link
-                    href={`/active-trades/${trade.counterOfferId}`}
+                    href={sectionHref(`/active-trades/${trade.counterOfferId}`, {
+                      currentSection: "trade",
+                    })}
                     onClick={(e) => e.stopPropagation()}
                     className="text-xs text-blue-400 hover:text-blue-300 shrink-0"
                   >

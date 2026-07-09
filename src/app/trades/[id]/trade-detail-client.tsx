@@ -34,6 +34,7 @@ import { Separator } from "@/components/ui/separator";
 import { usePerRow } from "@/hooks/use-per-row";
 import { useSession } from "@/lib/auth-client";
 import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
+import { sectionHref } from "@/lib/sections";
 import type { TradePostDTO } from "@/lib/trade-types";
 
 interface TradeItem {
@@ -337,7 +338,7 @@ export default function TradeDetailClient({
       const res = await fetch(`/api/trades/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete trade");
       toast.success("Trade deleted");
-      router.push("/trades");
+      router.push(sectionHref("/trades", { currentSection: "trade" }));
     } catch {
       toast.error("Failed to delete trade");
     }
@@ -366,7 +367,7 @@ export default function TradeDetailClient({
       queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["my-trades"] });
       queryClient.invalidateQueries({ queryKey: ["check-availability"] });
-      router.push("/trades");
+      router.push(sectionHref("/trades", { currentSection: "trade" }));
     } else if (availabilityData.removed > 0) {
       toast.warning(
         `${availabilityData.removed} objekt(s) removed — no longer in trader's inventory.`,

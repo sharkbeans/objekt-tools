@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 
 interface StoredItem {
   id: number;
@@ -124,7 +125,7 @@ export default function ListDetailClient({
   useEffect(() => {
     if (searchParams.get("error") === "not-owner") {
       toast.error("That's not your list.");
-      router.replace(`/list/${id}`);
+      router.replace(sectionHref(`/list/${id}`, { currentSection: "list" }));
     }
   }, [searchParams, id, router]);
 
@@ -207,7 +208,7 @@ export default function ListDetailClient({
   }, [posterRow, id]);
 
   const handleEdit = useCallback(() => {
-    router.push(`/list/${id}/edit`);
+    router.push(sectionHref(`/list/${id}/edit`, { currentSection: "list" }));
   }, [router, id]);
 
   if (loading) {
@@ -227,7 +228,9 @@ export default function ListDetailClient({
           This list may have been deleted or the link is invalid.
         </p>
         <Button asChild variant="outline">
-          <Link href="/list">Make your own</Link>
+          <Link href={sectionHref("/list", { currentSection: "list" })}>
+            Make your own
+          </Link>
         </Button>
       </div>
     );
@@ -254,7 +257,7 @@ export default function ListDetailClient({
         {origin && (
           <ListLinkField
             label="List link"
-            value={`${origin}/list/${id}`}
+            value={sectionAbsoluteUrl(`/list/${id}`)}
             className="sm:max-w-sm"
           />
         )}
@@ -291,7 +294,7 @@ export default function ListDetailClient({
             asChild
             className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
           >
-            <Link href="/list">
+            <Link href={sectionHref("/list", { currentSection: "list" })}>
               <PlusIcon className="h-4 w-4" />
               Create List
             </Link>

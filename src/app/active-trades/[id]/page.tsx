@@ -38,6 +38,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useTradeRealtime } from "@/hooks/use-realtime";
 import { useSession } from "@/lib/auth-client";
+import { sectionHref } from "@/lib/sections";
 import type {
   ActiveTradeDTO,
   SideStatus,
@@ -832,7 +833,9 @@ function NegotiationHistory({
               <span className="font-medium">{entry.label}</span>
             ) : (
               <a
-                href={`/active-trades/${entry.id}`}
+                href={sectionHref(`/active-trades/${entry.id}`, {
+                  currentSection: "trade",
+                })}
                 className="hover:underline text-muted-foreground hover:text-foreground"
               >
                 {entry.label}
@@ -1528,7 +1531,11 @@ export default function ActiveTradePage({
                     </p>
                   </div>
                 </div>
-                <a href={`/active-trades/${trade.counterOfferId}`}>
+                <a
+                  href={sectionHref(`/active-trades/${trade.counterOfferId}`, {
+                    currentSection: "trade",
+                  })}
+                >
                   <Button
                     size="sm"
                     className="w-full bg-blue-600/80 hover:bg-blue-600 text-white"
@@ -1588,7 +1595,9 @@ export default function ActiveTradePage({
               {trade.tradePostId ? (
                 <>
                   <a
-                    href={`/trades/${trade.tradePostId}`}
+                    href={sectionHref(`/trades/${trade.tradePostId}`, {
+                      currentSection: "trade",
+                    })}
                     className="underline hover:text-foreground"
                   >
                     Trade #{trade.tradePostId}
@@ -1597,7 +1606,10 @@ export default function ActiveTradePage({
                     <>
                       {" ↔ "}
                       <a
-                        href={`/trades/${trade.matchedTradePostId}`}
+                        href={sectionHref(
+                          `/trades/${trade.matchedTradePostId}`,
+                          { currentSection: "trade" },
+                        )}
                         className="underline hover:text-foreground"
                       >
                         Trade #{trade.matchedTradePostId}
@@ -1607,7 +1619,9 @@ export default function ActiveTradePage({
                 </>
               ) : (
                 <a
-                  href={`/trades/${trade.matchedTradePostId}`}
+                  href={sectionHref(`/trades/${trade.matchedTradePostId}`, {
+                    currentSection: "trade",
+                  })}
                   className="underline hover:text-foreground"
                 >
                   Trade #{trade.matchedTradePostId}

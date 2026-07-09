@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
+import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 function maskEmail(email: string): string {
@@ -409,7 +410,9 @@ export default function PublicProfilePage({
       {profile.stats.openPosts > 0 && (
         <div className="text-center">
           <Link
-            href={`/trades?user=${encodeURIComponent(profile.nickname ?? profile.address)}`}
+            href={sectionHref(
+              `/trades?user=${encodeURIComponent(profile.nickname ?? profile.address)}`,
+            )}
             className="text-sm text-muted-foreground hover:text-foreground underline transition-colors"
           >
             View {displayName}&apos;s trade posts
@@ -422,7 +425,7 @@ export default function PublicProfilePage({
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold">Trade History</h2>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/trades/history">View full history</Link>
+              <Link href={sectionHref("/trades/history")}>View full history</Link>
             </Button>
           </div>
           {allTrades.length === 0 ? (
@@ -467,7 +470,7 @@ export default function PublicProfilePage({
                       >
                         <td className="px-4 py-2">
                           <Link
-                            href={`/active-trades/${trade.id}`}
+                            href={sectionHref(`/active-trades/${trade.id}`)}
                             className="hover:underline font-medium"
                           >
                             #{trade.id}

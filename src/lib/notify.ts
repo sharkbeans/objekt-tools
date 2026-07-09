@@ -2,6 +2,7 @@ import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tradeNotification, user } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
+import { sectionAbsoluteUrl } from "@/lib/sections";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -52,7 +53,7 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
       if (!discordId) return;
 
       const tradeUrl = item.activeTradeId
-        ? `${process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my"}/active-trades/${item.activeTradeId}`
+        ? sectionAbsoluteUrl(`/active-trades/${item.activeTradeId}`)
         : null;
 
       const content = tradeUrl ? `${item.message}\n${tradeUrl}` : item.message;

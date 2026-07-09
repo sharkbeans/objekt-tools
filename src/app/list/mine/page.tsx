@@ -28,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
+import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 interface PosterSummary {
@@ -130,7 +131,7 @@ function PosterCard({
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(
-        `${window.location.origin}/list/${poster.id}`,
+        sectionAbsoluteUrl(`/list/${poster.id}`),
       );
       setCopied(true);
       toast.success("Link copied!");
@@ -172,7 +173,12 @@ function PosterCard({
             )}
           </Button>
           <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-            <Link href={`/list/${poster.id}/edit`} aria-label="Edit">
+            <Link
+              href={sectionHref(`/list/${poster.id}/edit`, {
+                currentSection: "list",
+              })}
+              aria-label="Edit"
+            >
               <PencilIcon className="h-3.5 w-3.5" />
             </Link>
           </Button>
@@ -199,7 +205,11 @@ function PosterCard({
       )}
 
       <Button variant="outline" size="sm" className="w-full" asChild>
-        <Link href={`/list/${poster.id}`}>View list</Link>
+        <Link
+          href={sectionHref(`/list/${poster.id}`, { currentSection: "list" })}
+        >
+          View list
+        </Link>
       </Button>
     </div>
   );
@@ -257,7 +267,7 @@ export default function MyListsPage() {
           <p className="text-muted-foreground">Manage your trade lists</p>
         </div>
         <Button asChild size="sm" className="gap-1.5">
-          <Link href="/list">
+          <Link href={sectionHref("/list", { currentSection: "list" })}>
             <PlusIcon className="h-4 w-4" />
             New List
           </Link>
@@ -304,7 +314,10 @@ export default function MyListsPage() {
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
             You haven&apos;t created any lists yet.{" "}
-            <Link href="/list" className="text-primary hover:underline">
+            <Link
+              href={sectionHref("/list", { currentSection: "list" })}
+              className="text-primary hover:underline"
+            >
               Create your first list
             </Link>
           </CardContent>

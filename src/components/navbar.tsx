@@ -42,6 +42,11 @@ import {
 import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { useUserRealtime } from "@/hooks/use-realtime";
 import { useSession } from "@/lib/auth-client";
+import {
+  type SectionId,
+  sectionHref,
+  toInternalPath,
+} from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 interface CosmoLinkStatus {
@@ -99,7 +104,11 @@ function useCosmoLink() {
   return { profileHref, isLinked: !!data, refetch };
 }
 
-export function Navbar() {
+export function Navbar({
+  currentSection,
+}: {
+  currentSection: SectionId | null;
+}) {
   const { data: session } = useSession();
   const matchCount = useMatchCount();
   const unreadCount = useUnreadNotificationCount();
@@ -107,6 +116,11 @@ export function Navbar() {
   const [loginCodeOpen, setLoginCodeOpen] = useState(false);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const [unlinkOpen, setUnlinkOpen] = useState(false);
+
+  // Emit the right link form for the host we're being served from (internal
+  // paths when subdomains are off; clean/absolute URLs when on).
+  const href = (internal: string) =>
+    sectionHref(internal, currentSection ? { currentSection } : undefined);
 
   // Subscribe to per-user realtime events so notification count updates without polling
   useUserRealtime(session?.user?.id);
@@ -118,7 +132,7 @@ export function Navbar() {
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-6">
             <Link
-              href="/"
+              href={href("/")}
               className="flex items-center gap-2 font-bold text-lg"
             >
               <ObjektLogo />
@@ -126,7 +140,7 @@ export function Navbar() {
             </Link>
             <nav className="flex items-center gap-4 text-sm">
               <Link
-                href="/trades"
+                href={href("/trades")}
                 className="relative text-muted-foreground hover:text-foreground transition-colors"
               >
                 Trades
@@ -137,31 +151,31 @@ export function Navbar() {
                 )}
               </Link>
               <Link
-                href="/list"
+                href={href("/list")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Lists
               </Link>
               <Link
-                href="/objekt-maker"
+                href={href("/objekt-maker")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Objektify
               </Link>
               <Link
-                href="/proofshot"
+                href={href("/proofshot")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Proofshot
               </Link>
               <Link
-                href="/spin"
+                href={href("/spin")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Spin
               </Link>
               <Link
-                href="/collection"
+                href={href("/collection")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Collection
@@ -172,7 +186,7 @@ export function Navbar() {
           <div className="flex items-center gap-2">
             {session && (
               <Link
-                href="/notifications"
+                href={href("/notifications")}
                 className="relative p-2 text-muted-foreground hover:text-foreground transition-colors"
                 aria-label="Notifications"
               >
@@ -207,13 +221,13 @@ export function Navbar() {
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href={profileHref}>
+                    <Link href={href(profileHref)}>
                       <UserIcon className="size-4 mr-2" />
                       Profile
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/list/mine">
+                    <Link href={href("/list/mine")}>
                       <ImageIcon className="size-4 mr-2" />
                       My Lists
                     </Link>
@@ -225,7 +239,7 @@ export function Navbar() {
                     </DropdownMenuItem>
                   ) : (
                     <DropdownMenuItem asChild>
-                      <Link href="/link">
+                      <Link href={href("/link")}>
                         <LinkIcon className="size-4 mr-2" />
                         Link Cosmo
                       </Link>
@@ -245,7 +259,7 @@ export function Navbar() {
             ) : (
               <div className="flex items-center gap-2">
                 <Button size="sm" asChild>
-                  <Link href="/sign-in">Sign in</Link>
+                  <Link href={href("/sign-in")}>Sign in</Link>
                 </Button>
               </div>
             )}
@@ -255,6 +269,7 @@ export function Navbar() {
 
       {/* Mobile navbar */}
       <MobileNav
+        currentSection={currentSection}
         session={session}
         matchCount={matchCount}
         unreadCount={unreadCount}
@@ -304,6 +319,7 @@ export function Navbar() {
 }
 
 function MobileNav({
+  currentSection,
   session,
   matchCount,
   unreadCount,
@@ -313,6 +329,7 @@ function MobileNav({
   onSignOut,
   onUnlink,
 }: {
+  currentSection: SectionId | null;
   session: ReturnType<typeof useSession>["data"];
   matchCount: number;
   unreadCount: number;
@@ -325,9 +342,23 @@ function MobileNav({
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const isHomeRoute = pathname === "/";
+  const href = (internal: string) =>
+    sectionHref(internal, currentSection ? { currentSection } : undefined);
+  // "/" is only the true landing page on the root host — on a section host
+  // it's that section's own home, which still needs the mobile chrome.
+  const isHomeRoute = !currentSection && pathname === "/";
+  // Next's usePathname() may report either the pre-rewrite (external, clean)
+  // or post-rewrite (internal) path depending on version/config, so match
+  // both forms rather than assume one.
+  const isActiveTradeRoute =
+    pathname.startsWith("/active-trades") ||
+    (currentSection === "trade" &&
+      (pathname === "/active" || pathname.startsWith("/active/")));
   const isTradesRoute =
-    pathname === "/trades" || pathname.startsWith("/trades/");
+    !isActiveTradeRoute &&
+    (currentSection === "trade" ||
+      pathname === "/trades" ||
+      pathname.startsWith("/trades/"));
 
   if (isHomeRoute) {
     return null;
@@ -355,7 +386,7 @@ function MobileNav({
             <ChevronLeftIcon className="h-7 w-7" strokeWidth={2.5} />
           </button>
           <div className="flex-1 px-2 text-center text-sm font-medium text-foreground truncate">
-            {getMobilePageTitle(pathname)}
+            {getMobilePageTitle(pathname, currentSection)}
           </div>
           <div className="h-10 w-10" />
         </div>
@@ -381,7 +412,7 @@ function MobileNav({
             )}
           </button>
           <Link
-            href="/"
+            href={href("/")}
             className="flex items-center gap-2 font-bold text-lg"
             onClick={() => setOpen(false)}
           >
@@ -426,7 +457,7 @@ function MobileNav({
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-          <MobileNavLink href="/trades" onClick={() => setOpen(false)}>
+          <MobileNavLink href={href("/trades")} onClick={() => setOpen(false)}>
             <span className="flex items-center gap-2">
               <ArrowLeftRightIcon className="size-4 shrink-0" />
               Trades
@@ -437,28 +468,34 @@ function MobileNav({
               )}
             </span>
           </MobileNavLink>
-          <MobileNavLink href="/list" onClick={() => setOpen(false)}>
+          <MobileNavLink href={href("/list")} onClick={() => setOpen(false)}>
             <ImageIcon className="size-4" />
             Lists
           </MobileNavLink>
-          <MobileNavLink href="/objekt-maker" onClick={() => setOpen(false)}>
+          <MobileNavLink
+            href={href("/objekt-maker")}
+            onClick={() => setOpen(false)}
+          >
             <SparklesIcon className="size-4" />
             Objektify
           </MobileNavLink>
-          <MobileNavLink href="/proofshot" onClick={() => setOpen(false)}>
+          <MobileNavLink href={href("/proofshot")} onClick={() => setOpen(false)}>
             <UserIcon className="size-4" />
             Proofshot
           </MobileNavLink>
-          <MobileNavLink href="/spin" onClick={() => setOpen(false)}>
+          <MobileNavLink href={href("/spin")} onClick={() => setOpen(false)}>
             <SparklesIcon className="size-4" />
             Spin
           </MobileNavLink>
-          <MobileNavLink href="/collection" onClick={() => setOpen(false)}>
+          <MobileNavLink href={href("/collection")} onClick={() => setOpen(false)}>
             <LibraryIcon className="size-4" />
             Dex
           </MobileNavLink>
           {session && (
-            <MobileNavLink href="/notifications" onClick={() => setOpen(false)}>
+            <MobileNavLink
+              href={href("/notifications")}
+              onClick={() => setOpen(false)}
+            >
               <span className="flex items-center gap-2">
                 <BellIcon className="size-4 shrink-0" />
                 Notifications
@@ -471,7 +508,7 @@ function MobileNav({
             </MobileNavLink>
           )}
           {!session && (
-            <MobileNavLink href="/sign-in" onClick={() => setOpen(false)}>
+            <MobileNavLink href={href("/sign-in")} onClick={() => setOpen(false)}>
               <LogInIcon className="size-4" />
               Sign in
             </MobileNavLink>
@@ -497,11 +534,14 @@ function MobileNav({
               </div>
             </div>
             <div className="space-y-1">
-              <MobileNavLink href={profileHref} onClick={() => setOpen(false)}>
+              <MobileNavLink
+                href={href(profileHref)}
+                onClick={() => setOpen(false)}
+              >
                 <UserIcon className="size-4" />
                 Profile
               </MobileNavLink>
-              <MobileNavLink href="/list/mine" onClick={() => setOpen(false)}>
+              <MobileNavLink href={href("/list/mine")} onClick={() => setOpen(false)}>
                 <ImageIcon className="size-4" />
                 My Lists
               </MobileNavLink>
@@ -518,7 +558,7 @@ function MobileNav({
                   Unlink Cosmo
                 </button>
               ) : (
-                <MobileNavLink href="/link" onClick={() => setOpen(false)}>
+                <MobileNavLink href={href("/link")} onClick={() => setOpen(false)}>
                   <LinkIcon className="size-4" />
                   Link Cosmo
                 </MobileNavLink>
@@ -573,16 +613,42 @@ function MobileNavLink({
   );
 }
 
-function getMobilePageTitle(pathname: string): string {
-  if (pathname.startsWith("/active-trades")) return "Active Trade";
+// `currentSection` disambiguates clean external paths ("/mine" on
+// list.objekt.my) from the internal paths this used to match exclusively
+// ("/list/mine") — see the usePathname() form caveat above.
+function getMobilePageTitle(
+  pathname: string,
+  currentSection: SectionId | null,
+): string {
+  if (
+    pathname.startsWith("/active-trades") ||
+    (currentSection === "trade" &&
+      (pathname === "/active" || pathname.startsWith("/active/")))
+  ) {
+    return "Active Trade";
+  }
   if (pathname.startsWith("/notifications")) return "Notifications";
-  if (pathname.startsWith("/objekt-maker")) return "Objektify";
+  if (pathname.startsWith("/objekt-maker") || currentSection === "create") {
+    return "Objektify";
+  }
   if (pathname.startsWith("/proofshot")) return "Proofshot";
-  if (pathname.startsWith("/list/mine")) return "My Lists";
-  if (pathname.startsWith("/list")) return "Lists";
-  if (pathname.startsWith("/post")) return "Lists";
+  if (
+    pathname.startsWith("/list/mine") ||
+    (currentSection === "list" && pathname === "/mine")
+  ) {
+    return "My Lists";
+  }
+  if (
+    pathname.startsWith("/list") ||
+    pathname.startsWith("/post") ||
+    currentSection === "list"
+  ) {
+    return "Lists";
+  }
   if (pathname.startsWith("/spin")) return "Spin";
-  if (pathname.startsWith("/collection")) return "Collection";
+  if (pathname.startsWith("/collection") || currentSection === "collect") {
+    return "Collection";
+  }
   if (pathname.startsWith("/link")) return "Link Cosmo";
   if (pathname.startsWith("/sign-in")) return "Sign in";
   if (pathname.startsWith("/@")) return "Profile";

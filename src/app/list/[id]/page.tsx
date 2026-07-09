@@ -4,9 +4,8 @@ import { cache, Suspense } from "react";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { poster, posterHave, posterWant } from "@/lib/db/schema";
+import { sectionAbsoluteUrl } from "@/lib/sections";
 import ListDetailClient from "./list-detail-client";
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://objekt.my";
 
 // Deduped per request — generateMetadata and the page component share one DB fetch
 const getPosterMeta = cache(async (id: string) => {
@@ -61,15 +60,20 @@ export async function generateMetadata({
   // caches after the image-rendering pipeline changed (webp decode fix,
   // card aspect ratio fix). Bump again if the OG route's rendering changes
   // without a poster edit to naturally invalidate it.
-  const ogUrl = `${APP_URL}/list/${id}/og?v=${row.version}-2`;
+  const canonical = sectionAbsoluteUrl(`/list/${id}`);
+  const ogUrl = sectionAbsoluteUrl(`/list/${id}/og?v=${row.version}-2`);
   const ogImage = { url: ogUrl, width: 1200, height: 630, type: "image/png" };
 
   return {
     title,
     description,
+    alternates: {
+      canonical,
+    },
     openGraph: {
       title,
       description,
+      url: canonical,
       images: [ogImage],
     },
     twitter: {

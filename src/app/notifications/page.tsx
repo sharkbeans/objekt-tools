@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
+import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -64,8 +65,8 @@ export default function NotificationsPage() {
   }
 
   function getNotificationLink(n: Notification): string | null {
-    if (n.activeTradeId) return `/active-trades/${n.activeTradeId}`;
-    if (n.tradePostId) return `/trades/${n.tradePostId}`;
+    if (n.activeTradeId) return sectionHref(`/active-trades/${n.activeTradeId}`);
+    if (n.tradePostId) return sectionHref(`/trades/${n.tradePostId}`);
     return null;
   }
 

@@ -51,6 +51,7 @@ import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { fetchOwnedInventory } from "@/lib/cosmo-inventory";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
+import { sectionHref } from "@/lib/sections";
 
 export type AnyWant = {
   isAny: true;
@@ -227,7 +228,9 @@ export default function NewTradePage() {
           Please sign in to create a trade.
         </p>
         <Button asChild>
-          <Link href="/sign-in">Sign in</Link>
+          <Link href={sectionHref("/sign-in", { currentSection: "trade" })}>
+            Sign in
+          </Link>
         </Button>
       </div>
     );
@@ -282,7 +285,9 @@ export default function NewTradePage() {
       if (!res.ok) throw new Error(data.error);
 
       toast.success("Trade posted!");
-      router.push(`/trades/${data.id}`);
+      router.push(
+        sectionHref(`/trades/${data.id}`, { currentSection: "trade" }),
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to create trade",

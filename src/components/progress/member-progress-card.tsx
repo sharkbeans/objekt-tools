@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { sectionHref } from "@/lib/sections";
 import type { ProgressRollup } from "@/lib/progress/types";
 
 interface Props {
@@ -22,7 +23,11 @@ export function MemberProgressCard({
   const pct = total > 0 ? Math.round((owned / total) * 100) : 0;
 
   return (
-    <Link href={`/collection/${nickname}/${member}`}>
+    <Link
+      href={sectionHref(`/collection/${nickname}/${member}`, {
+        currentSection: "collect",
+      })}
+    >
       <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-3.5 hover:border-white/40 transition-colors">
         <div className="flex items-center gap-3">
           <div className="shrink-0 self-stretch flex items-center">

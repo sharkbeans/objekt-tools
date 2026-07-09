@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
+import { sectionHref } from "@/lib/sections";
 
 function TradesIcon() {
   return (
@@ -136,7 +137,7 @@ export default function HomePage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {tools.map(
           ({ title, description, href, Icon, iconRotate, CustomIcon }) => (
-            <Link key={href} href={href} className="group">
+            <Link key={href} href={sectionHref(href)} className="group">
               <div className="relative rounded-2xl overflow-hidden bg-[#1a1a1a] aspect-[4/4.5] flex flex-col justify-between border border-white/5 hover:border-white/70 transition-colors p-4">
                 <div className="flex-1 flex items-center justify-center">
                   {CustomIcon ? (

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { session as sessionTable } from "@/lib/db/schema";
+import { rootDomain, subdomainsEnabled } from "@/lib/sections";
 
 export async function POST(request: NextRequest) {
   const isSecure =
@@ -27,18 +28,25 @@ export async function POST(request: NextRequest) {
 
   const res = NextResponse.json({ success: true });
 
-  // Clear both possible cookie names to be safe
+  // Clear both possible cookie names, and both the host-only and
+  // Domain=.<root> variants — a maxAge:0 clear without Domain does not
+  // delete a domain-scoped cookie, and vice versa.
+  const domains: (string | undefined)[] = [undefined];
+  if (subdomainsEnabled()) domains.push(`.${rootDomain()}`);
   for (const name of [
     "better-auth.session_token",
     "__Secure-better-auth.session_token",
   ]) {
-    res.cookies.set(name, "", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isSecure,
-      path: "/",
-      maxAge: 0,
-    });
+    for (const domain of domains) {
+      res.cookies.set(name, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: isSecure,
+        path: "/",
+        maxAge: 0,
+        ...(domain ? { domain } : {}),
+      });
+    }
   }
 
   return res;

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 const thumbnailCache = new Map<string, string | null>();
@@ -309,7 +310,11 @@ export function InitiateTradeDialog({
       const data = await res.json();
 
       if (res.status === 409) {
-        router.push(`/active-trades/${data.id}`);
+        router.push(
+          sectionHref(`/active-trades/${data.id}`, {
+            currentSection: "trade",
+          }),
+        );
         return;
       }
       if (!res.ok) {
@@ -319,7 +324,9 @@ export function InitiateTradeDialog({
 
       toast.success("Trade initiated! Waiting for the other user to accept.");
       onOpenChange(false);
-      router.push(`/active-trades/${data.id}`);
+      router.push(
+        sectionHref(`/active-trades/${data.id}`, { currentSection: "trade" }),
+      );
     } finally {
       setLoading(false);
     }

@@ -22,6 +22,7 @@ import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import { fetchOwnedInventory, fetchUserInventory } from "@/lib/cosmo-inventory";
+import { sectionHref } from "@/lib/sections";
 import type { ObjektSearchResult } from "@/lib/trade-types";
 
 interface TradeSide {
@@ -333,7 +334,9 @@ export function CounterOfferDialog({
 
       toast.success("Counter-offer sent!");
       onOpenChange(false);
-      router.push(`/active-trades/${data.id}`);
+      router.push(
+        sectionHref(`/active-trades/${data.id}`, { currentSection: "trade" }),
+      );
     } finally {
       setLoading(false);
     }

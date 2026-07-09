@@ -5,6 +5,7 @@ import { ProgressOverviewContent } from "@/components/progress/progress-overview
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
+import { sectionAbsoluteUrl } from "@/lib/sections";
 
 export async function generateMetadata({
   params,
@@ -15,6 +16,9 @@ export async function generateMetadata({
   return {
     title: `${nickname}'s Collection Progress | objekt.my`,
     description: `View ${nickname}'s Cosmo collection progress.`,
+    alternates: {
+      canonical: sectionAbsoluteUrl(`/collection/${nickname}`),
+    },
   };
 }
 

@@ -4,6 +4,7 @@ import { getClientIp } from "@/lib/client-ip";
 import { db } from "@/lib/db";
 import { session as sessionTable } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
+import { rootDomain, subdomainsEnabled } from "@/lib/sections";
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -90,6 +91,9 @@ export async function POST(request: NextRequest) {
     secure: isSecure,
     path: "/",
     expires: expiresAt,
+    // Match Better Auth's crossSubDomainCookies so the session is visible on
+    // every section subdomain.
+    ...(subdomainsEnabled() ? { domain: `.${rootDomain()}` } : {}),
   });
 
   return res;

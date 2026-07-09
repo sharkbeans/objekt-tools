@@ -22,6 +22,7 @@ import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import { fetchOwnedInventory } from "@/lib/cosmo-inventory";
+import { sectionHref } from "@/lib/sections";
 import { objektMatchesWant } from "@/lib/wants-only-validation";
 
 interface TradeItem {
@@ -212,7 +213,11 @@ export function InitiateDirectDialog({
       const data = await res.json();
 
       if (res.status === 409) {
-        router.push(`/active-trades/${data.id}`);
+        router.push(
+          sectionHref(`/active-trades/${data.id}`, {
+            currentSection: "trade",
+          }),
+        );
         return;
       }
       if (!res.ok) {
@@ -222,7 +227,9 @@ export function InitiateDirectDialog({
 
       toast.success("Trade initiated! Waiting for the other user to accept.");
       onOpenChange(false);
-      router.push(`/active-trades/${data.id}`);
+      router.push(
+        sectionHref(`/active-trades/${data.id}`, { currentSection: "trade" }),
+      );
     } finally {
       setLoading(false);
     }

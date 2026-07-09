@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ProgressOverviewResponse } from "@/lib/progress/types";
+import { sectionHref } from "@/lib/sections";
 
 const LAST_NICKNAME_KEY = "progress-last-nickname";
 
@@ -45,7 +46,9 @@ export function ProgressSearch({
       const data: ProgressOverviewResponse = await res.json();
       queryClient.setQueryData(["progress", trimmed], data);
       localStorage.setItem(LAST_NICKNAME_KEY, trimmed);
-      router.push(`/collection/${trimmed}`);
+      router.push(
+        sectionHref(`/collection/${trimmed}`, { currentSection: "collect" }),
+      );
     } catch {
       setError("Failed to look up user. Try again.");
     } finally {
