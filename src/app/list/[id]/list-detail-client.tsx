@@ -116,7 +116,6 @@ export default function ListDetailClient({
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [origin, setOrigin] = useState("");
   // Anon owner check: server passes isOwner=false for anon; we check localStorage
   const [anonOwner, setAnonOwner] = useState(false);
 
@@ -130,7 +129,6 @@ export default function ListDetailClient({
   }, [searchParams, id, router]);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
     // Check anon edit token
     const token = localStorage.getItem(`poster-edit-token:${id}`);
     if (token) setAnonOwner(true);
@@ -254,13 +252,11 @@ export default function ListDetailClient({
 
       {/* Poster (read-only) */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        {origin && (
-          <ListLinkField
-            label="List link"
-            value={sectionAbsoluteUrl(`/list/${id}`)}
-            className="sm:max-w-sm"
-          />
-        )}
+        <ListLinkField
+          label="List link"
+          value={sectionAbsoluteUrl(`/list/${id}`)}
+          className="sm:max-w-sm"
+        />
 
         <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center sm:flex-wrap sm:justify-end">
           {canEdit && (

@@ -217,8 +217,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const restoreParam = searchParams.get("restore");
   const editId = editIdProp ?? legacyEditId;
 
-  const [origin, setOrigin] = useState("");
-
   // Redirect legacy ?edit=id URLs to the canonical /list/[id]/edit route
   useEffect(() => {
     if (legacyEditId && !editIdProp) {
@@ -266,7 +264,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   useEffect(() => {
     setIsHydrated(true);
-    setOrigin(window.location.origin);
   }, []);
 
   // Restore stashed draft after Discord login redirect
@@ -1054,11 +1051,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   )}
                 </div>
 
-                {editId && origin && (
+                {editId && (
                   <div className="max-w-md">
                     <ListLinkField
                       label="Edit link"
-                      value={`${origin}/list/${editId}/edit`}
+                      value={sectionAbsoluteUrl(`/list/${editId}/edit`)}
                     />
                   </div>
                 )}
