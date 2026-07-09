@@ -83,8 +83,8 @@ services:
     command: >
       sh -c "
         printf '%s\n' \
-          '0 2 * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/expire-trades' \
-          '*/2 * * * * wget -qO- --header=\"Authorization: Bearer \$CRON_SECRET\" \$APP_URL/api/cron/refresh-cosmo-token' \
+          '0 2 * * * wget -qO- --header=\"Authorization: Bearer $$CRON_SECRET\" $$APP_URL/api/cron/expire-trades' \
+          '*/2 * * * * wget -qO- --header=\"Authorization: Bearer $$CRON_SECRET\" $$APP_URL/api/cron/refresh-cosmo-token' \
           | crontab - &&
         crond -f -l 2
       "
