@@ -80,14 +80,15 @@ services:
     environment:
       CRON_SECRET: ${CRON_SECRET:-}
       APP_URL: http://app:3000
-    command: >
-      sh -c "
-        printf '%s\n' \
-          '0 2 * * * wget -qO- --header=\"Authorization: Bearer $$CRON_SECRET\" $$APP_URL/api/cron/expire-trades' \
-          '*/2 * * * * wget -qO- --header=\"Authorization: Bearer $$CRON_SECRET\" $$APP_URL/api/cron/refresh-cosmo-token' \
-          | crontab - &&
-        crond -f -l 2
-      "
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cat <<'EOF' | crontab -
+        0 2 * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/expire-trades
+        */2 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/refresh-cosmo-token
+        EOF
+        exec crond -f -l 2
 
 volumes:
   pgdata:
