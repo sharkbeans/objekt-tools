@@ -5,8 +5,8 @@ import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import {
-  objektMatchesStructuralFilters,
   type ObjektStructuralFilters,
+  objektMatchesStructuralFilters,
 } from "@/lib/filter-utils";
 import { resolveObjektSearchTerm } from "@/lib/objekt-search";
 import { seasonPrefixMap } from "@/lib/season-prefix";

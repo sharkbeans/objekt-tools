@@ -21,7 +21,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { fetchInventoryByNickname, type OwnedEntry } from "@/lib/cosmo-inventory";
+import {
+  fetchInventoryByNickname,
+  type OwnedEntry,
+} from "@/lib/cosmo-inventory";
 import { objektMatchesStructuralFilters } from "@/lib/filter-utils";
 import { objektMatchesSearch } from "@/lib/objekt-search";
 
@@ -58,7 +61,8 @@ export function CosmoPickerDialog({
   const [haveFilter, setHaveFilter] = useState("");
   const [inventoryFilters, setInventoryFilters] =
     useState<ObjektFilterState>(defaultFilters);
-  const [wantFilters, setWantFilters] = useState<ObjektFilterState>(defaultFilters);
+  const [wantFilters, setWantFilters] =
+    useState<ObjektFilterState>(defaultFilters);
   const [selectedHaves, setSelectedHaves] = useState<ObjektEntry[]>([]);
   const [selectedWants, setSelectedWants] = useState<ObjektEntry[]>([]);
 

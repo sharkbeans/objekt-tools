@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import {
-  objektMatchesStructuralFilters,
   type ObjektStructuralFilters,
+  objektMatchesStructuralFilters,
 } from "@/lib/filter-utils";
 import { objektMatchesSearch } from "@/lib/objekt-search";
 import {
@@ -50,6 +50,12 @@ interface ObjektInventoryPickerProps {
   showFilterBar?: boolean;
   /** Extra controls (e.g. Cancel/Confirm) rendered at the end of the internal filter bar's dropdown row. */
   filterBarActions?: ReactNode;
+  /** When set, the grid uses this many columns instead of the fixed 3/5 layout. */
+  perRow?: number;
+  /** When set together with `perRow`, renders a per-row dropdown in the picker header. */
+  onPerRowChange?: (n: number) => void;
+  /** Entries matching this predicate are sorted before non-matching entries. */
+  prioritize?: (entry: OwnedEntry) => boolean;
 }
 
 export function ObjektInventoryPicker({
@@ -64,6 +70,9 @@ export function ObjektInventoryPicker({
   searchPlaceholder = "Filter your objekts... e.g. JiWoo, Atom02, 108Z",
   showFilterBar = false,
   filterBarActions,
+  perRow,
+  onPerRowChange,
+  prioritize,
 }: ObjektInventoryPickerProps) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<OwnedEntry[]>([]);
@@ -83,7 +92,9 @@ export function ObjektInventoryPicker({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load objekts");
+          setError(
+            err instanceof Error ? err.message : "Failed to load objekts",
+          );
         }
       })
       .finally(() => {
@@ -117,6 +128,16 @@ export function ObjektInventoryPicker({
 
     return result;
   }, [items, query, filters, showFilterBar, internalFilters]);
+
+  const ordered = useMemo(() => {
+    if (!prioritize) return filtered;
+    const top: OwnedEntry[] = [];
+    const rest: OwnedEntry[] = [];
+    for (const entry of filtered) {
+      (prioritize(entry) ? top : rest).push(entry);
+    }
+    return top.length === 0 ? filtered : [...top, ...rest];
+  }, [filtered, prioritize]);
 
   function handleSelect(entry: OwnedEntry) {
     const isSelected = selected.some(
@@ -165,6 +186,8 @@ export function ObjektInventoryPicker({
           compareBySerial
           maxSelections={maxSelections}
           gridClassName={gridClassName}
+          perRow={perRow}
+          onPerRowChange={onPerRowChange}
         />
       ) : error ? (
         <div className="text-sm text-destructive text-center py-4">{error}</div>
@@ -176,7 +199,7 @@ export function ObjektInventoryPicker({
         ))
       ) : (
         <ObjektGridPicker
-          items={filtered}
+          items={ordered}
           selected={selected}
           onSelect={(o) => handleSelect(o as OwnedEntry)}
           onDeselect={onDeselect}
@@ -184,6 +207,8 @@ export function ObjektInventoryPicker({
           maxSelections={maxSelections}
           emptyMessage="No matching objekts"
           gridClassName={gridClassName}
+          perRow={perRow}
+          onPerRowChange={onPerRowChange}
         />
       )}
 

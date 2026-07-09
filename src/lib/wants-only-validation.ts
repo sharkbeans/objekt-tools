@@ -1,4 +1,4 @@
-interface OfferedObjekt {
+export interface OfferedObjekt {
   collectionId: string;
   member?: string | null;
   season?: string | null;
@@ -6,7 +6,7 @@ interface OfferedObjekt {
   artist?: string | null;
 }
 
-interface TradeWant {
+export interface TradeWant {
   isAny: boolean;
   collectionId: string;
   member?: string | null;
@@ -15,7 +15,10 @@ interface TradeWant {
   artist?: string | null;
 }
 
-function objektMatchesWant(objekt: OfferedObjekt, want: TradeWant): boolean {
+export function objektMatchesWant(
+  objekt: OfferedObjekt,
+  want: TradeWant,
+): boolean {
   if (!want.isAny) {
     return objekt.collectionId === want.collectionId;
   }

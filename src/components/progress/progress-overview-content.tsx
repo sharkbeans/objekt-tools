@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   defaultFilters,
-  type ObjektFilterState,
   ObjektFilterBar,
+  type ObjektFilterState,
 } from "@/components/objekt/objekt-filter-bar";
 import { Button } from "@/components/ui/button";
 import { normalizeArtistId } from "@/lib/artist-utils";

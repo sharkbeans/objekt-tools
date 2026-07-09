@@ -6,6 +6,7 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { use, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DiscordNudge } from "@/components/discord-nudge";
+import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { SignInDialog } from "@/components/sign-in-dialog";
 import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
 import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
@@ -30,6 +31,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { usePerRow } from "@/hooks/use-per-row";
 import { useSession } from "@/lib/auth-client";
 import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
 import type { TradePostDTO } from "@/lib/trade-types";
@@ -128,6 +130,7 @@ function ObjektImages({
   showSerial,
   cosmoNickname,
   isWant,
+  gridStyle,
 }: {
   items: TradeItem[];
   images: Map<string, string>;
@@ -135,16 +138,17 @@ function ObjektImages({
   showSerial?: boolean;
   cosmoNickname?: string | null;
   isWant?: boolean;
+  gridStyle: { gridTemplateColumns: string };
 }) {
   return (
     <div className="flex-1 min-w-0">
       <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
-      <div className="flex flex-wrap gap-2 items-start">
+      <div className="grid gap-2 items-start" style={gridStyle}>
         {items.map((item) => {
           if (item.isAny) {
             return (
               <div key={item.id} className="flex flex-col items-center gap-1">
-                <div className="w-20 aspect-80/123 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
+                <div className="w-full aspect-80/123 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
                   {anyWantLabel(item)}
                 </div>
               </div>
@@ -158,10 +162,10 @@ function ObjektImages({
             <img
               src={url}
               alt={item.collectionId}
-              className="w-20 h-auto rounded-md border"
+              className="w-full h-auto rounded-md border"
             />
           ) : (
-            <div className="w-20 aspect-80/123 rounded-md border bg-muted animate-pulse" />
+            <div className="w-full aspect-80/123 rounded-md border bg-muted animate-pulse" />
           );
           return (
             <div key={item.id} className="flex flex-col items-center gap-1">
@@ -177,7 +181,7 @@ function ObjektImages({
               ) : (
                 imgEl
               )}
-              <span className="text-xs text-muted-foreground text-center max-w-20 truncate">
+              <span className="text-xs text-muted-foreground text-center max-w-full truncate">
                 {formatShortLabel(item)}
               </span>
               {showSerial && item.serial != null && (
@@ -309,6 +313,7 @@ export default function TradeDetailClient({
 
   const haveImages = useObjektImages(trade?.haves ?? []);
   const wantImages = useObjektImages(trade?.wants ?? []);
+  const { perRow, setPerRow, gridStyle } = usePerRow();
 
   const isOwnerEarly = session?.user?.id === trade?.user?.id;
 
@@ -460,22 +465,29 @@ export default function TradeDetailClient({
           </div>
         </CardHeader>
         {trade.haves?.length > 0 && trade.wants?.length > 0 && (
-          <div className="px-6 pb-4 flex gap-6">
-            <ObjektImages
-              items={trade.haves}
-              images={haveImages}
-              label="HAVE"
-              showSerial
-              cosmoNickname={trade.cosmoNickname}
-            />
-            <Separator orientation="vertical" className="h-auto" />
-            <ObjektImages
-              items={trade.wants}
-              images={wantImages}
-              label="WANT"
-              isWant
-            />
-          </div>
+          <>
+            <div className="px-6 pb-2 flex justify-end">
+              <PerRowDropdown value={perRow} onChange={setPerRow} />
+            </div>
+            <div className="px-6 pb-4 flex gap-6">
+              <ObjektImages
+                items={trade.haves}
+                images={haveImages}
+                label="HAVE"
+                showSerial
+                cosmoNickname={trade.cosmoNickname}
+                gridStyle={gridStyle}
+              />
+              <Separator orientation="vertical" className="h-auto" />
+              <ObjektImages
+                items={trade.wants}
+                images={wantImages}
+                label="WANT"
+                isWant
+                gridStyle={gridStyle}
+              />
+            </div>
+          </>
         )}
         <CardContent className="space-y-4">
           <ObjektList
@@ -651,6 +663,7 @@ export default function TradeDetailClient({
           onOpenChange={setDirectInitiateOpen}
           tradePostId={id}
           theirHaves={trade?.haves ?? []}
+          theirWants={trade?.wants ?? []}
         />
       )}
 

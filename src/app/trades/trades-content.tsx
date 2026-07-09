@@ -1,16 +1,25 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { XIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ObjektFilterBar,
+  type ObjektFilterState,
+} from "@/components/objekt/objekt-filter-bar";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { TradeCard } from "@/components/trades/trade-card";
-import {
-  type ObjektFilterState,
-  ObjektFilterBar,
-} from "@/components/objekt/objekt-filter-bar";
 import { TradePagination } from "@/components/trades/trade-pagination";
+import { Badge } from "@/components/ui/badge";
 import type { TradePostDTO } from "@/lib/trade-types";
+
+function formatUserFilterLabel(user: string): string {
+  if (/^0x[0-9a-fA-F]{40}$/.test(user)) {
+    return `${user.slice(0, 6)}…${user.slice(-4)}`;
+  }
+  return `@${user}`;
+}
 
 function SkeletonRow() {
   return (
@@ -65,7 +74,7 @@ function filtersFromSearchParams(params: URLSearchParams): ObjektFilterState {
   };
 }
 
-function buildParams(filters: ObjektFilterState, page: number) {
+function buildParams(filters: ObjektFilterState, page: number, user?: string) {
   const p = new URLSearchParams();
   p.set("page", String(page));
   for (const a of filters.artist) p.append("artist", a);
@@ -76,6 +85,7 @@ function buildParams(filters: ObjektFilterState, page: number) {
   if (filters.search) p.set("search", filters.search);
   if (filters.sort) p.set("sort", filters.sort);
   p.set("filter_mode", filters.filterMode);
+  if (user) p.set("user", user);
   return p;
 }
 
@@ -100,9 +110,17 @@ export function TradesContent() {
   const [page, setPage] = useState(() =>
     Number(searchParams.get("page") ?? "1"),
   );
+  const [userFilter, setUserFilter] = useState(
+    () => searchParams.get("user") ?? "",
+  );
 
   const handleFiltersChange = useCallback((next: ObjektFilterState) => {
     setFilters(next);
+    setPage(1);
+  }, []);
+
+  const clearUserFilter = useCallback(() => {
+    setUserFilter("");
     setPage(1);
   }, []);
 
@@ -110,13 +128,24 @@ export function TradesContent() {
     <>
       <ActiveTradesBanner />
       <ObjektFilterBar filters={filters} onChange={handleFiltersChange} />
+      {userFilter && (
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="secondary" className="gap-1 text-xs">
+            Posts by {formatUserFilterLabel(userFilter)}
+            <button type="button" onClick={clearUserFilter}>
+              <XIcon className="h-3 w-3" />
+            </button>
+          </Badge>
+        </div>
+      )}
       {isMobile ? (
-        <InfiniteTradesList filters={filters} />
+        <InfiniteTradesList filters={filters} user={userFilter} />
       ) : (
         <PaginatedTradesList
           filters={filters}
           page={page}
           onPageChange={setPage}
+          user={userFilter}
         />
       )}
     </>
@@ -127,15 +156,19 @@ function PaginatedTradesList({
   filters,
   page,
   onPageChange,
+  user,
 }: {
   filters: ObjektFilterState;
   page: number;
   onPageChange: (p: number) => void;
+  user: string;
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["trades", filters, page],
+    queryKey: ["trades", filters, user, page],
     queryFn: async () => {
-      const res = await fetch(`/api/trades?${buildParams(filters, page)}`);
+      const res = await fetch(
+        `/api/trades?${buildParams(filters, page, user)}`,
+      );
       return res.json();
     },
   });
@@ -158,7 +191,9 @@ function PaginatedTradesList({
   if (trades.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
-        No trades found. Be the first to post one!
+        {user
+          ? "No open trade posts from this user."
+          : "No trades found. Be the first to post one!"}
       </div>
     );
   }
@@ -181,15 +216,21 @@ function PaginatedTradesList({
   );
 }
 
-function InfiniteTradesList({ filters }: { filters: ObjektFilterState }) {
+function InfiniteTradesList({
+  filters,
+  user,
+}: {
+  filters: ObjektFilterState;
+  user: string;
+}) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =
     useInfiniteQuery({
-      queryKey: ["trades-infinite", filters],
+      queryKey: ["trades-infinite", filters, user],
       queryFn: async ({ pageParam = 1 }) => {
         const res = await fetch(
-          `/api/trades?${buildParams(filters, pageParam as number)}`,
+          `/api/trades?${buildParams(filters, pageParam as number, user)}`,
         );
         return res.json();
       },
@@ -232,7 +273,9 @@ function InfiniteTradesList({ filters }: { filters: ObjektFilterState }) {
   if (allTrades.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
-        No trades found. Be the first to post one!
+        {user
+          ? "No open trade posts from this user."
+          : "No trades found. Be the first to post one!"}
       </div>
     );
   }

@@ -1,7 +1,8 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
@@ -20,6 +21,10 @@ interface ObjektGridPickerProps {
   maxSelections?: number;
   emptyMessage?: string;
   gridClassName?: string;
+  /** When set, the grid uses this many columns instead of the fixed 3/5 layout. */
+  perRow?: number;
+  /** When set together with `perRow`, renders a per-row dropdown in the header. */
+  onPerRowChange?: (n: number) => void;
 }
 
 export function ObjektGridPicker({
@@ -32,8 +37,17 @@ export function ObjektGridPicker({
   maxSelections = 10,
   emptyMessage = "No objekts found",
   gridClassName,
+  perRow,
+  onPerRowChange,
 }: ObjektGridPickerProps) {
   const [page, setPage] = useState(1);
+  const gridStyle = useMemo(
+    () =>
+      perRow !== undefined
+        ? { gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }
+        : undefined,
+    [perRow],
+  );
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
 
   // Reset to page 1 when items change (e.g. filter/search)
@@ -84,7 +98,13 @@ export function ObjektGridPicker({
   if (loading) {
     return (
       <div
-        className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}
+        className={cn(
+          perRow === undefined
+            ? "grid grid-cols-3 sm:grid-cols-5 gap-1"
+            : "grid gap-1",
+          gridClassName,
+        )}
+        style={gridStyle}
       >
         {Array.from({ length: PAGE_SIZE }).map((_, i) => (
           <div
@@ -106,7 +126,12 @@ export function ObjektGridPicker({
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        {onPerRowChange && perRow !== undefined ? (
+          <PerRowDropdown value={perRow} onChange={onPerRowChange} />
+        ) : (
+          <span />
+        )}
         <label className="inline-flex items-center justify-between gap-2 text-xs text-muted-foreground cursor-pointer select-none has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50">
           All
           {allPageSelected ? (
@@ -124,7 +149,13 @@ export function ObjektGridPicker({
         </label>
       </div>
       <div
-        className={cn("grid grid-cols-3 sm:grid-cols-5 gap-1", gridClassName)}
+        className={cn(
+          perRow === undefined
+            ? "grid grid-cols-3 sm:grid-cols-5 gap-1"
+            : "grid gap-1",
+          gridClassName,
+        )}
+        style={gridStyle}
       >
         {pageItems.map((entry, i) => {
           const sel = isSelected(entry);
@@ -136,7 +167,10 @@ export function ObjektGridPicker({
             <button
               key={`${key}-${i}`}
               type="button"
-              className="relative rounded-sm overflow-hidden focus:outline-none"
+              className={cn(
+                "relative rounded-sm overflow-hidden focus:outline-none ring-2 ring-inset ring-transparent transition-colors",
+                sel && "ring-green-500",
+              )}
               onClick={() => handleTap(entry)}
             >
               {url ? (
@@ -166,13 +200,14 @@ export function ObjektGridPicker({
                   #{String(entry.serial).padStart(5, "0")}
                 </div>
               )}
-              {/* Selection checkmark overlay */}
+              {/* Selection tint + checkmark badge */}
               {sel && (
-                <div className="absolute inset-0 bg-primary/30 flex items-center justify-center">
-                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
-                    <Check className="w-4 h-4 text-primary-foreground" />
+                <>
+                  <div className="absolute inset-0 bg-black/25" />
+                  <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow">
+                    <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
                   </div>
-                </div>
+                </>
               )}
             </button>
           );

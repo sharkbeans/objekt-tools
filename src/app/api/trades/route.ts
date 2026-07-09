@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, eq, ilike, inArray, isNull, ne } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -41,6 +41,15 @@ function normalizeCacheKey(params: URLSearchParams) {
   return normalized.toString();
 }
 
+function isWalletAddress(value: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(value);
+}
+
+const emptyPageHeaders = {
+  "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
+  "X-Robots-Tag": "noindex, nofollow",
+};
+
 // GET /api/trades — list trades with filters
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -55,12 +64,34 @@ export async function GET(request: NextRequest) {
     | "haves"
     | "wants"
     | "both";
+
+  const userParam = params.get("user")?.trim() ?? "";
+  let userId: string | null = null;
+  if (userParam) {
+    const account = await db.query.cosmoAccount.findFirst({
+      where: isWalletAddress(userParam)
+        ? eq(cosmoAccount.address, userParam.toLowerCase())
+        : ilike(cosmoAccount.nickname, userParam),
+      columns: { userId: true },
+    });
+    if (!account) {
+      return NextResponse.json(
+        { trades: [], page, limit, total: 0 },
+        { headers: emptyPageHeaders },
+      );
+    }
+    userId = account.userId;
+  }
+
   const { trades: enriched, total } = await getCached(
     `trades:list:v1:${normalizeCacheKey(params)}`,
     30_000,
     async () => {
       const { trades, total } = await listTradesPage({
-        where: eq(tradePost.status, status),
+        where:
+          userId !== null
+            ? and(eq(tradePost.status, status), eq(tradePost.userId, userId))
+            : eq(tradePost.status, status),
         filters,
         filterMode,
         sort,
@@ -81,12 +112,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(
     { trades: enriched, page, limit, total },
-    {
-      headers: {
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
-        "X-Robots-Tag": "noindex, nofollow",
-      },
-    },
+    { headers: emptyPageHeaders },
   );
 }
 

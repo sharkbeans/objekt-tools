@@ -409,7 +409,7 @@ export default function PublicProfilePage({
       {profile.stats.openPosts > 0 && (
         <div className="text-center">
           <Link
-            href={`/trades?user=${encodeURIComponent(profile.address)}`}
+            href={`/trades?user=${encodeURIComponent(profile.nickname ?? profile.address)}`}
             className="text-sm text-muted-foreground hover:text-foreground underline transition-colors"
           >
             View {displayName}&apos;s trade posts

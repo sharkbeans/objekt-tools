@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { cn } from "@/lib/utils";
 
@@ -168,6 +169,7 @@ export function InitiateTradeDialog({
     top: number;
     left: number;
   } | null>(null);
+  const { perRow, setPerRow } = usePerRow();
 
   const baseEntries = useMemo(
     () => theirHaves.map(tradeItemToObjektEntry),
@@ -330,7 +332,7 @@ export function InitiateTradeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Send a Trade Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
@@ -410,6 +412,8 @@ export function InitiateTradeDialog({
                 onDeselect={handleTheirDeselect}
                 compareBySerial
                 maxSelections={10}
+                perRow={perRow}
+                onPerRowChange={setPerRow}
               />
             )}
           </div>

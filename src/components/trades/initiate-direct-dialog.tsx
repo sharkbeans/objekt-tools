@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ObjektGridPicker } from "@/components/objekt/objekt-grid-picker";
 import {
@@ -18,8 +18,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import { fetchOwnedInventory } from "@/lib/cosmo-inventory";
+import { objektMatchesWant } from "@/lib/wants-only-validation";
 
 interface TradeItem {
   id: number;
@@ -32,6 +35,7 @@ interface TradeItem {
   serial?: number | null;
   thumbnailUrl?: string | null;
   objektId?: string | null;
+  isAny?: boolean;
 }
 
 interface Props {
@@ -41,6 +45,8 @@ interface Props {
   tradePostId: string;
   // Items the post owner has (initiator picks what they want to receive)
   theirHaves: TradeItem[];
+  // Items the post owner wants (used to nudge matching objekts to the top of "You offer")
+  theirWants?: TradeItem[];
 }
 
 const thumbnailCache = new Map<string, string | null>();
@@ -83,6 +89,7 @@ export function InitiateDirectDialog({
   onOpenChange,
   tradePostId,
   theirHaves,
+  theirWants = [],
 }: Props) {
   const router = useRouter();
   const [mySelected, setMySelected] = useState<ObjektEntry[]>([]);
@@ -93,6 +100,25 @@ export function InitiateDirectDialog({
     their?: string;
     theirObjektId?: string;
   }>({});
+  const { perRow, setPerRow } = usePerRow();
+
+  const wantMatchers = useMemo(
+    () =>
+      theirWants.map((w) => ({
+        isAny: w.isAny ?? false,
+        collectionId: w.collectionId,
+        member: w.member,
+        season: w.season,
+        class: w.class,
+        artist: w.artist,
+      })),
+    [theirWants],
+  );
+  const prioritizeMyOffer = useCallback(
+    (entry: OwnedEntry) =>
+      wantMatchers.some((w) => objektMatchesWant(entry, w)),
+    [wantMatchers],
+  );
 
   const baseEntries = useMemo(
     () => theirHaves.map(tradeItemToObjektEntry),
@@ -209,7 +235,7 @@ export function InitiateDirectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Send a Trade Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
@@ -251,6 +277,9 @@ export function InitiateDirectDialog({
               emptyState={<OwnedInventoryEmptyState />}
               showFilterBar
               maxSelections={10}
+              perRow={perRow}
+              onPerRowChange={setPerRow}
+              prioritize={prioritizeMyOffer}
             />
           </div>
 
@@ -288,6 +317,8 @@ export function InitiateDirectDialog({
                 onDeselect={handleTheirDeselect}
                 compareBySerial
                 maxSelections={10}
+                perRow={perRow}
+                onPerRowChange={setPerRow}
               />
             )}
           </div>

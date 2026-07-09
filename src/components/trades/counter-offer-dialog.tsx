@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowRight, Minus, Plus } from "lucide-react";
+import { ArrowRight, Minus, Plus, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   ObjektInventoryPicker,
@@ -18,7 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import { fetchOwnedInventory, fetchUserInventory } from "@/lib/cosmo-inventory";
 import type { ObjektSearchResult } from "@/lib/trade-types";
 
@@ -115,7 +117,13 @@ function fetchObjektMeta(collectionId: string): Promise<ObjektMeta> {
     });
 }
 
-function ObjektCard({ objekt }: { objekt: ObjektEntry }) {
+function ObjektCard({
+  objekt,
+  onRemove,
+}: {
+  objekt: ObjektEntry;
+  onRemove?: () => void;
+}) {
   const [url, setUrl] = useState<string | null>(objekt.thumbnailImage ?? null);
 
   useEffect(() => {
@@ -128,11 +136,21 @@ function ObjektCard({ objekt }: { objekt: ObjektEntry }) {
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="w-16 h-auto rounded-md border overflow-hidden">
+      <div className="relative w-16 h-auto rounded-md border overflow-hidden">
         {url ? (
           <img src={url} alt={objekt.collectionId} className="w-16 h-auto" />
         ) : (
           <div className="w-16 h-[88px] bg-muted animate-pulse" />
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove"
+            className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black/90"
+          >
+            <XIcon className="w-3 h-3" />
+          </button>
         )}
       </div>
       <span className="text-[10px] text-muted-foreground text-center max-w-16 truncate">
@@ -213,6 +231,24 @@ export function CounterOfferDialog({
   // Track original items to show diff
   const originalMyIds = new Set(mySides.map((s) => s.objektId));
   const originalTheirIds = new Set(theirSides.map((s) => s.objektId));
+
+  const { perRow, setPerRow } = usePerRow();
+  const myOriginalCollectionIds = useMemo(
+    () => new Set(mySides.map((s) => s.collectionId)),
+    [mySides],
+  );
+  const theirOriginalCollectionIds = useMemo(
+    () => new Set(theirSides.map((s) => s.collectionId)),
+    [theirSides],
+  );
+  const prioritizeMine = useCallback(
+    (entry: OwnedEntry) => myOriginalCollectionIds.has(entry.collectionId),
+    [myOriginalCollectionIds],
+  );
+  const prioritizeTheirs = useCallback(
+    (entry: OwnedEntry) => theirOriginalCollectionIds.has(entry.collectionId),
+    [theirOriginalCollectionIds],
+  );
 
   async function handleSubmit() {
     const newErrors: { my?: string; their?: string } = {};
@@ -327,7 +363,7 @@ export function CounterOfferDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Counter-Offer{ratioLabel}</DialogTitle>
           <DialogDescription>
@@ -355,6 +391,15 @@ export function CounterOfferDialog({
                           <ObjektCard
                             key={o.objektId ?? o.collectionId}
                             objekt={o}
+                            onRemove={() =>
+                              setMySelected((prev) =>
+                                prev.filter((h) =>
+                                  o.serial != null
+                                    ? h.serial !== o.serial
+                                    : h.collectionId !== o.collectionId,
+                                ),
+                              )
+                            }
                           />
                         ))
                       ) : (
@@ -375,6 +420,15 @@ export function CounterOfferDialog({
                           <ObjektCard
                             key={o.objektId ?? o.collectionId}
                             objekt={o}
+                            onRemove={() =>
+                              setTheirSelected((prev) =>
+                                prev.filter((h) =>
+                                  o.serial != null
+                                    ? h.serial !== o.serial
+                                    : h.collectionId !== o.collectionId,
+                                ),
+                              )
+                            }
                           />
                         ))
                       ) : (
@@ -433,6 +487,9 @@ export function CounterOfferDialog({
               emptyState={<OwnedInventoryEmptyState />}
               showFilterBar
               maxSelections={10}
+              perRow={perRow}
+              onPerRowChange={setPerRow}
+              prioritize={prioritizeMine}
             />
           </div>
 
@@ -491,6 +548,9 @@ export function CounterOfferDialog({
               }
               showFilterBar
               maxSelections={10}
+              perRow={perRow}
+              onPerRowChange={setPerRow}
+              prioritize={prioritizeTheirs}
             />
           </div>
 

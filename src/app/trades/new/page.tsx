@@ -7,8 +7,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   defaultFilters,
-  type ObjektFilterState,
   ObjektFilterBar,
+  type ObjektFilterState,
 } from "@/components/objekt/objekt-filter-bar";
 import {
   ObjektInventoryPicker,

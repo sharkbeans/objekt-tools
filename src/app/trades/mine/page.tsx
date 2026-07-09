@@ -5,12 +5,12 @@ import { AlertTriangleIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { TradeCard } from "@/components/trades/trade-card";
 import {
   defaultFilters,
-  type ObjektFilterState,
   ObjektFilterBar,
+  type ObjektFilterState,
 } from "@/components/objekt/objekt-filter-bar";
+import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
