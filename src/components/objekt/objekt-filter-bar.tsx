@@ -1,20 +1,21 @@
 "use client";
 
 import { SearchIcon, XIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ClassMultiSelect,
-  decodeGroupedValue,
   SeasonMultiSelect,
 } from "@/components/ui/class-multi-select";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
 import { artistLabel } from "@/lib/artist-utils";
+import { decodeGroupedValue } from "@/lib/filter-utils";
 import { validOnlineTypes } from "@/lib/filters";
 
-export type TradeFilterState = {
+export type ObjektFilterState = {
   search: string;
   artist: string[];
   member: string[];
@@ -25,7 +26,7 @@ export type TradeFilterState = {
   filterMode: "haves" | "wants";
 };
 
-export const defaultFilters: TradeFilterState = {
+export const defaultFilters: ObjektFilterState = {
   search: "",
   artist: [],
   member: [],
@@ -36,16 +37,19 @@ export const defaultFilters: TradeFilterState = {
   filterMode: "haves",
 };
 
-interface TradeFiltersProps {
-  filters: TradeFilterState;
-  onChange: (filters: TradeFilterState) => void;
+interface ObjektFilterBarProps {
+  filters: ObjektFilterState;
+  onChange: (filters: ObjektFilterState) => void;
   showSearch?: boolean;
   showSort?: boolean;
   showFilterMode?: boolean;
   showMember?: boolean;
+  searchPlaceholder?: string;
+  /** Extra controls (e.g. Cancel/Confirm) rendered at the end of the dropdown row. */
+  actions?: ReactNode;
 }
 
-function hasActiveFilters(filters: TradeFilterState): boolean {
+function hasActiveFilters(filters: ObjektFilterState): boolean {
   return (
     !!filters.search ||
     filters.artist.length > 0 ||
@@ -56,17 +60,19 @@ function hasActiveFilters(filters: TradeFilterState): boolean {
   );
 }
 
-export function TradeFilters({
+export function ObjektFilterBar({
   filters,
   onChange,
   showSearch = true,
   showSort = true,
   showFilterMode = true,
   showMember = true,
-}: TradeFiltersProps) {
+  searchPlaceholder = "Quick Search: jw a201z, sy divine, !dco #1-100…",
+  actions,
+}: ObjektFilterBarProps) {
   const filterOptions = useFilterOptions();
 
-  function update(partial: Partial<TradeFilterState>) {
+  function update(partial: Partial<ObjektFilterState>) {
     onChange({ ...filters, ...partial });
   }
 
@@ -126,7 +132,7 @@ export function TradeFilters({
           <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             className="pl-8 pr-8"
-            placeholder="Quick Search: jw a201z, sy divine, !dco #1-100…"
+            placeholder={searchPlaceholder}
             value={filters.search}
             onChange={(e) => update({ search: e.target.value })}
           />
@@ -239,16 +245,21 @@ export function TradeFilters({
             className="w-full sm:w-auto sm:min-w-24"
           />
 
-          {active && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange(defaultFilters)}
-              className="h-9 text-xs text-muted-foreground ml-auto"
-            >
-              <XIcon className="h-3.5 w-3.5 mr-1" />
-              Reset
-            </Button>
+          {(active || actions) && (
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+              {active && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onChange(defaultFilters)}
+                  className="h-9 text-xs text-muted-foreground"
+                >
+                  <XIcon className="h-3.5 w-3.5 mr-1" />
+                  Reset
+                </Button>
+              )}
+              {actions}
+            </div>
           )}
         </div>
       </div>

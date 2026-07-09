@@ -13,6 +13,7 @@ export const validSeasons = [
   "Ever01",
   "Atom02",
   "Binary02",
+  "Cream02",
   // idntt
   "Spring25",
   "Summer25",
@@ -78,6 +79,7 @@ export const seasonArtistMap: { artistId: ValidArtist; seasons: string[] }[] = [
       "Ever01",
       "Atom02",
       "Binary02",
+      "Cream02",
     ],
   },
   {
@@ -90,6 +92,7 @@ export const seasonArtistMap: { artistId: ValidArtist; seasons: string[] }[] = [
       "Ever01",
       "Atom02",
       "Binary02",
+      "Cream02",
     ],
   },
   {

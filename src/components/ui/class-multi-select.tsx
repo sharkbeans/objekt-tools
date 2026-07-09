@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { decodeGroupedValue, encodeGroupedValue } from "@/lib/filter-utils";
 import {
   classArtistMap,
   seasonArtistMap,
@@ -19,17 +20,7 @@ import { cn } from "@/lib/utils";
 
 // Values are stored as "artistId::item" to scope selections per-artist.
 // e.g. "tripleS::Atom01", "artms::Special"
-export function encodeGroupedValue(artistId: string, item: string) {
-  return `${artistId}::${item}`;
-}
-
-export function decodeGroupedValue(
-  value: string,
-): { artistId: string; item: string } | null {
-  const idx = value.indexOf("::");
-  if (idx === -1) return null;
-  return { artistId: value.slice(0, idx), item: value.slice(idx + 2) };
-}
+export { decodeGroupedValue, encodeGroupedValue };
 
 interface GroupedMultiSelectProps {
   columns: { artistId: string; label?: string; items: string[] }[];

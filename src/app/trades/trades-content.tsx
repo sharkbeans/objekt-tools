@@ -6,9 +6,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { TradeCard } from "@/components/trades/trade-card";
 import {
-  type TradeFilterState,
-  TradeFilters,
-} from "@/components/trades/trade-filters";
+  type ObjektFilterState,
+  ObjektFilterBar,
+} from "@/components/objekt/objekt-filter-bar";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import type { TradePostDTO } from "@/lib/trade-types";
 
@@ -52,7 +52,7 @@ function TradeCardSkeleton() {
   );
 }
 
-function filtersFromSearchParams(params: URLSearchParams): TradeFilterState {
+function filtersFromSearchParams(params: URLSearchParams): ObjektFilterState {
   return {
     search: params.get("search") ?? "",
     artist: params.getAll("artist").filter(Boolean),
@@ -65,7 +65,7 @@ function filtersFromSearchParams(params: URLSearchParams): TradeFilterState {
   };
 }
 
-function buildParams(filters: TradeFilterState, page: number) {
+function buildParams(filters: ObjektFilterState, page: number) {
   const p = new URLSearchParams();
   p.set("page", String(page));
   for (const a of filters.artist) p.append("artist", a);
@@ -94,14 +94,14 @@ function useIsMobile() {
 export function TradesContent() {
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
-  const [filters, setFilters] = useState<TradeFilterState>(() =>
+  const [filters, setFilters] = useState<ObjektFilterState>(() =>
     filtersFromSearchParams(searchParams),
   );
   const [page, setPage] = useState(() =>
     Number(searchParams.get("page") ?? "1"),
   );
 
-  const handleFiltersChange = useCallback((next: TradeFilterState) => {
+  const handleFiltersChange = useCallback((next: ObjektFilterState) => {
     setFilters(next);
     setPage(1);
   }, []);
@@ -109,7 +109,7 @@ export function TradesContent() {
   return (
     <>
       <ActiveTradesBanner />
-      <TradeFilters filters={filters} onChange={handleFiltersChange} />
+      <ObjektFilterBar filters={filters} onChange={handleFiltersChange} />
       {isMobile ? (
         <InfiniteTradesList filters={filters} />
       ) : (
@@ -128,7 +128,7 @@ function PaginatedTradesList({
   page,
   onPageChange,
 }: {
-  filters: TradeFilterState;
+  filters: ObjektFilterState;
   page: number;
   onPageChange: (p: number) => void;
 }) {
@@ -181,7 +181,7 @@ function PaginatedTradesList({
   );
 }
 
-function InfiniteTradesList({ filters }: { filters: TradeFilterState }) {
+function InfiniteTradesList({ filters }: { filters: ObjektFilterState }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =

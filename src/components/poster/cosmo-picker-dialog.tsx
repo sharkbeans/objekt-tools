@@ -3,14 +3,14 @@
 import { Loader2Icon, SearchIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  defaultFilters,
+  ObjektFilterBar,
+  type ObjektFilterState,
+} from "@/components/objekt/objekt-filter-bar";
 import { ObjektGridPicker } from "@/components/objekt/objekt-grid-picker";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
 import { Button } from "@/components/ui/button";
-import {
-  ClassMultiSelect,
-  decodeGroupedValue,
-  SeasonMultiSelect,
-} from "@/components/ui/class-multi-select";
 import {
   Dialog,
   DialogContent,
@@ -20,34 +20,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { MultiSelect } from "@/components/ui/multi-select";
-import { useFilterOptions } from "@/hooks/use-filter-options";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import {
-  fetchInventoryByNickname,
-  getInventoryArtist,
-  getInventoryType,
-  type OwnedEntry,
-} from "@/lib/cosmo-inventory";
-import type { ObjektStructuralFilters } from "@/lib/filter-utils";
-import { validOnlineTypes } from "@/lib/filters";
+import { fetchInventoryByNickname, type OwnedEntry } from "@/lib/cosmo-inventory";
+import { objektMatchesStructuralFilters } from "@/lib/filter-utils";
 import { objektMatchesSearch } from "@/lib/objekt-search";
-
-type InventoryFilters = {
-  artist: string[];
-  member: string[];
-  season: string[];
-  class: string[];
-  on_offline: string[];
-};
-
-const emptyInventoryFilters: InventoryFilters = {
-  artist: [],
-  member: [],
-  season: [],
-  class: [],
-  on_offline: [],
-};
 
 type Step = "haves" | "wants";
 
@@ -72,7 +48,6 @@ export function CosmoPickerDialog({
   isLinked: _isLinked = false,
   onConfirm,
 }: CosmoPickerDialogProps) {
-  const filterOptions = useFilterOptions();
   const [step, setStep] = useState<Step>("haves");
   const [nickname, setNickname] = useState(initialNickname);
   const [inventory, setInventory] = useState<OwnedEntry[]>([]);
@@ -81,16 +56,9 @@ export function CosmoPickerDialog({
   const [searchedNickname, setSearchedNickname] = useState<string | null>(null);
 
   const [haveFilter, setHaveFilter] = useState("");
-  const [inventoryFilters, setInventoryFilters] = useState<InventoryFilters>(
-    emptyInventoryFilters,
-  );
-  const [wantFilters, setWantFilters] = useState<ObjektStructuralFilters>({
-    artist: [],
-    member: [],
-    season: [],
-    class: [],
-    on_offline: [],
-  });
+  const [inventoryFilters, setInventoryFilters] =
+    useState<ObjektFilterState>(defaultFilters);
+  const [wantFilters, setWantFilters] = useState<ObjektFilterState>(defaultFilters);
   const [selectedHaves, setSelectedHaves] = useState<ObjektEntry[]>([]);
   const [selectedWants, setSelectedWants] = useState<ObjektEntry[]>([]);
 
@@ -109,14 +77,8 @@ export function CosmoPickerDialog({
       setInventoryError(null);
       setSearchedNickname(null);
       setHaveFilter("");
-      setInventoryFilters(emptyInventoryFilters);
-      setWantFilters({
-        artist: [],
-        member: [],
-        season: [],
-        class: [],
-        on_offline: [],
-      });
+      setInventoryFilters(defaultFilters);
+      setWantFilters(defaultFilters);
       lastSearchAt.current = 0;
       pendingSearchNickname.current = null;
     }
@@ -156,7 +118,7 @@ export function CosmoPickerDialog({
     setSearchedNickname(null);
     setSelectedHaves([]);
     setHaveFilter("");
-    setInventoryFilters(emptyInventoryFilters);
+    setInventoryFilters(defaultFilters);
 
     fetchInventoryByNickname(trimmed)
       .then((results) => {
@@ -196,146 +158,12 @@ export function CosmoPickerDialog({
       result = result.filter((o) => objektMatchesSearch(o, haveFilter));
     }
 
-    if (inventoryFilters.artist.length) {
-      result = result.filter((o) => {
-        const artist = getInventoryArtist(o);
-        return artist ? inventoryFilters.artist.includes(artist) : false;
-      });
-    }
-
-    if (inventoryFilters.member.length) {
-      result = result.filter((o) => inventoryFilters.member.includes(o.member));
-    }
-
-    if (inventoryFilters.season.length) {
-      result = result.filter((o) =>
-        inventoryFilters.season.some((season) => {
-          const decoded = decodeGroupedValue(season);
-          const artist = getInventoryArtist(o);
-          return decoded
-            ? decoded.item === o.season && decoded.artistId === artist
-            : season === o.season;
-        }),
-      );
-    }
-
-    if (inventoryFilters.class.length) {
-      result = result.filter((o) =>
-        inventoryFilters.class.some((className) => {
-          const decoded = decodeGroupedValue(className);
-          const artist = getInventoryArtist(o);
-          return decoded
-            ? decoded.item === o.class && decoded.artistId === artist
-            : className === o.class;
-        }),
-      );
-    }
-
-    if (inventoryFilters.on_offline.length) {
-      result = result.filter((o) =>
-        inventoryFilters.on_offline.includes(getInventoryType(o)),
-      );
-    }
+    result = result.filter((o) =>
+      objektMatchesStructuralFilters(o, inventoryFilters),
+    );
 
     return result;
   }, [inventory, haveFilter, inventoryFilters]);
-
-  const availableSeasons = inventoryFilters.artist.length
-    ? inventoryFilters.artist.flatMap(
-        (artist) => filterOptions.seasonsByArtist[artist] ?? [],
-      )
-    : filterOptions.allSeasons;
-  const availableClasses = inventoryFilters.artist.length
-    ? inventoryFilters.artist.flatMap(
-        (artist) => filterOptions.classesByArtist[artist] ?? [],
-      )
-    : filterOptions.allClasses;
-  const availableMembers = inventoryFilters.artist.length
-    ? inventoryFilters.artist.flatMap(
-        (artist) => filterOptions.membersByArtist[artist] ?? [],
-      )
-    : filterOptions.allMembers;
-  const availableWantSeasons = wantFilters.artist.length
-    ? wantFilters.artist.flatMap(
-        (artist) => filterOptions.seasonsByArtist[artist] ?? [],
-      )
-    : filterOptions.allSeasons;
-  const availableWantClasses = wantFilters.artist.length
-    ? wantFilters.artist.flatMap(
-        (artist) => filterOptions.classesByArtist[artist] ?? [],
-      )
-    : filterOptions.allClasses;
-  const availableWantMembers = wantFilters.artist.length
-    ? wantFilters.artist.flatMap(
-        (artist) => filterOptions.membersByArtist[artist] ?? [],
-      )
-    : filterOptions.allMembers;
-
-  function updateInventoryFilters(partial: Partial<InventoryFilters>) {
-    setInventoryFilters((prev) => ({ ...prev, ...partial }));
-  }
-
-  function handleArtistFilterChange(artists: string[]) {
-    const newSeasons = artists.length
-      ? artists.flatMap((artist) => filterOptions.seasonsByArtist[artist] ?? [])
-      : filterOptions.allSeasons;
-    const newClasses = artists.length
-      ? artists.flatMap((artist) => filterOptions.classesByArtist[artist] ?? [])
-      : filterOptions.allClasses;
-    const newMembers = artists.length
-      ? artists.flatMap((artist) => filterOptions.membersByArtist[artist] ?? [])
-      : filterOptions.allMembers;
-    setInventoryFilters((prev) => ({
-      ...prev,
-      artist: artists,
-      season: prev.season.filter((season) => {
-        const decoded = decodeGroupedValue(season);
-        return decoded
-          ? newSeasons.includes(decoded.item)
-          : newSeasons.includes(season);
-      }),
-      class: prev.class.filter((className) => {
-        const decoded = decodeGroupedValue(className);
-        return decoded
-          ? newClasses.includes(decoded.item)
-          : newClasses.includes(className);
-      }),
-      member: prev.member.filter((member) => newMembers.includes(member)),
-    }));
-  }
-
-  function updateWantFilters(partial: Partial<ObjektStructuralFilters>) {
-    setWantFilters((prev) => ({ ...prev, ...partial }));
-  }
-
-  function handleWantArtistFilterChange(artists: string[]) {
-    const newSeasons = artists.length
-      ? artists.flatMap((artist) => filterOptions.seasonsByArtist[artist] ?? [])
-      : filterOptions.allSeasons;
-    const newClasses = artists.length
-      ? artists.flatMap((artist) => filterOptions.classesByArtist[artist] ?? [])
-      : filterOptions.allClasses;
-    const newMembers = artists.length
-      ? artists.flatMap((artist) => filterOptions.membersByArtist[artist] ?? [])
-      : filterOptions.allMembers;
-    setWantFilters((prev) => ({
-      ...prev,
-      artist: artists,
-      season: prev.season.filter((season) => {
-        const decoded = decodeGroupedValue(season);
-        return decoded
-          ? newSeasons.includes(decoded.item)
-          : newSeasons.includes(season);
-      }),
-      class: prev.class.filter((className) => {
-        const decoded = decodeGroupedValue(className);
-        return decoded
-          ? newClasses.includes(decoded.item)
-          : newClasses.includes(className);
-      }),
-      member: prev.member.filter((member) => newMembers.includes(member)),
-    }));
-  }
 
   function handleConfirmHaves() {
     if (selectedHaves.length === 0) {
@@ -433,77 +261,31 @@ export function CosmoPickerDialog({
                     data-lpignore="true"
                     data-form-type="other"
                   />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 sm:flex-1 sm:min-w-0">
-                      <MultiSelect
-                        options={filterOptions.artists}
-                        value={inventoryFilters.artist}
-                        onChange={handleArtistFilterChange}
-                        placeholder="Artist"
-                        className="w-full sm:w-auto sm:min-w-28"
-                      />
-                      <MultiSelect
-                        options={availableMembers.map((member) => ({
-                          label: member,
-                          value: member,
-                        }))}
-                        value={inventoryFilters.member}
-                        onChange={(value) =>
-                          updateInventoryFilters({ member: value })
-                        }
-                        placeholder="Member"
-                        className="w-full sm:w-auto sm:min-w-32"
-                      />
-                      <SeasonMultiSelect
-                        options={availableSeasons}
-                        columns={filterOptions.seasonColumns}
-                        value={inventoryFilters.season}
-                        onChange={(value) =>
-                          updateInventoryFilters({ season: value })
-                        }
-                        placeholder="Season"
-                        className="w-full sm:w-auto sm:min-w-32"
-                      />
-                      <ClassMultiSelect
-                        options={availableClasses}
-                        columns={filterOptions.classColumns}
-                        value={inventoryFilters.class}
-                        onChange={(value) =>
-                          updateInventoryFilters({ class: value })
-                        }
-                        placeholder="Class"
-                        className="w-full sm:w-auto sm:min-w-28"
-                      />
-                      <MultiSelect
-                        options={validOnlineTypes.map((type) => ({
-                          label: type === "online" ? "Digital" : "Physical",
-                          value: type,
-                        }))}
-                        value={inventoryFilters.on_offline}
-                        onChange={(value) =>
-                          updateInventoryFilters({ on_offline: value })
-                        }
-                        placeholder="Type"
-                        className="w-full sm:w-auto sm:min-w-24"
-                      />
-                    </div>
-                    <div className="hidden sm:flex items-center gap-2 ml-auto shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onOpenChange(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleConfirmHaves}
-                        disabled={selectedHaves.length === 0}
-                      >
-                        Confirm Haves ({selectedHaves.length}) →
-                      </Button>
-                    </div>
-                  </div>
+                  <ObjektFilterBar
+                    filters={inventoryFilters}
+                    onChange={setInventoryFilters}
+                    showSearch={false}
+                    showSort={false}
+                    showFilterMode={false}
+                    actions={
+                      <div className="hidden sm:flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onOpenChange(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleConfirmHaves}
+                          disabled={selectedHaves.length === 0}
+                        >
+                          Confirm Haves ({selectedHaves.length}) →
+                        </Button>
+                      </div>
+                    }
+                  />
                   <ObjektGridPicker
                     items={filteredInventory}
                     selected={selectedHaves}
@@ -553,55 +335,13 @@ export function CosmoPickerDialog({
             </DialogHeader>
 
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 sm:flex-1 sm:min-w-0">
-                  <MultiSelect
-                    options={filterOptions.artists}
-                    value={wantFilters.artist}
-                    onChange={handleWantArtistFilterChange}
-                    placeholder="Artist"
-                    className="w-full sm:w-auto sm:min-w-28"
-                  />
-                  <MultiSelect
-                    options={availableWantMembers.map((member) => ({
-                      label: member,
-                      value: member,
-                    }))}
-                    value={wantFilters.member}
-                    onChange={(value) => updateWantFilters({ member: value })}
-                    placeholder="Member"
-                    className="w-full sm:w-auto sm:min-w-32"
-                  />
-                  <SeasonMultiSelect
-                    options={availableWantSeasons}
-                    columns={filterOptions.seasonColumns}
-                    value={wantFilters.season}
-                    onChange={(value) => updateWantFilters({ season: value })}
-                    placeholder="Season"
-                    className="w-full sm:w-auto sm:min-w-32"
-                  />
-                  <ClassMultiSelect
-                    options={availableWantClasses}
-                    columns={filterOptions.classColumns}
-                    value={wantFilters.class}
-                    onChange={(value) => updateWantFilters({ class: value })}
-                    placeholder="Class"
-                    className="w-full sm:w-auto sm:min-w-28"
-                  />
-                  <MultiSelect
-                    options={validOnlineTypes.map((type) => ({
-                      label: type === "online" ? "Digital" : "Physical",
-                      value: type,
-                    }))}
-                    value={wantFilters.on_offline}
-                    onChange={(value) =>
-                      updateWantFilters({ on_offline: value })
-                    }
-                    placeholder="Type"
-                    className="w-full sm:w-auto sm:min-w-24"
-                  />
-                </div>
-              </div>
+              <ObjektFilterBar
+                filters={wantFilters}
+                onChange={setWantFilters}
+                showSearch={false}
+                showSort={false}
+                showFilterMode={false}
+              />
               <ObjektPicker
                 selected={selectedWants}
                 onSelect={(o) => setSelectedWants((prev) => [...prev, o])}

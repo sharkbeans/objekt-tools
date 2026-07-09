@@ -1,110 +1,122 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Input } from "@/components/ui/input";
-import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import {
-  getArtistForMember,
-  getOnOffline,
+  objektMatchesStructuralFilters,
   type ObjektStructuralFilters,
 } from "@/lib/filter-utils";
 import { objektMatchesSearch } from "@/lib/objekt-search";
+import {
+  defaultFilters,
+  ObjektFilterBar,
+  type ObjektFilterState,
+} from "./objekt-filter-bar";
 import { ObjektGridPicker } from "./objekt-grid-picker";
 
-export type { ObjektStructuralFilters };
-
-async function fetchOwned(): Promise<OwnedEntry[]> {
-  const res = await fetch("/api/objekts/owned");
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.results ?? [];
+export function OwnedInventoryEmptyState() {
+  return (
+    <div className="text-sm text-muted-foreground text-center py-4 space-y-2">
+      <p>No objekts found. Make sure your Cosmo account is linked.</p>
+      <Button
+        variant="ghost"
+        size="sm"
+        asChild
+        className="bg-white! text-black! hover:bg-white/90! hover:text-black!"
+      >
+        <Link href="/link">Link Cosmo Account</Link>
+      </Button>
+    </div>
+  );
 }
 
-interface ObjektOwnedPickerProps {
+interface ObjektInventoryPickerProps {
+  fetchItems: () => Promise<OwnedEntry[]>;
   selected: ObjektEntry[];
   onSelect: (objekt: ObjektEntry) => void;
   onDeselect: (objekt: ObjektEntry) => void;
   maxSelections?: number;
+  /** External structural filters (e.g. a page-level filter bar). */
   filters?: ObjektStructuralFilters;
+  emptyState?: ReactNode;
+  gridClassName?: string;
+  searchPlaceholder?: string;
+  /** Renders an internal structural-only filter bar (artist/member/season/class/type). */
+  showFilterBar?: boolean;
+  /** Extra controls (e.g. Cancel/Confirm) rendered at the end of the internal filter bar's dropdown row. */
+  filterBarActions?: ReactNode;
 }
 
-export function ObjektOwnedPicker({
+export function ObjektInventoryPicker({
+  fetchItems,
   selected,
   onSelect,
   onDeselect,
   maxSelections = 10,
   filters,
-}: ObjektOwnedPickerProps) {
+  emptyState,
+  gridClassName,
+  searchPlaceholder = "Filter your objekts... e.g. JiWoo, Atom02, 108Z",
+  showFilterBar = false,
+  filterBarActions,
+}: ObjektInventoryPickerProps) {
   const [query, setQuery] = useState("");
-  const [owned, setOwned] = useState<OwnedEntry[]>([]);
+  const [items, setItems] = useState<OwnedEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [internalFilters, setInternalFilters] =
+    useState<ObjektFilterState>(defaultFilters);
 
   useEffect(() => {
-    fetchOwned()
+    let cancelled = false;
+    setLoading(true);
+    fetchItems()
       .then((results) => {
-        setOwned(results);
+        if (cancelled) return;
+        setItems(results);
         setError(null);
       })
-      .catch(() => setError("Failed to load your objekts"))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load objekts");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchItems]);
 
   const filtered = useMemo(() => {
-    let result = owned;
+    let result = items;
 
     const searchText = [query.trim(), filters?.search?.trim()]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-
     if (searchText) {
       result = result.filter((o) => objektMatchesSearch(o, searchText));
     }
 
     if (filters) {
-      if (filters.artist.length)
-        result = result.filter((o) =>
-          filters.artist.some((a) => artistMatches(a, o.artist)),
-        );
-      if (filters.member.length)
-        result = result.filter((o) => filters.member.includes(o.member));
-      if (filters.season.length)
-        result = result.filter((o) =>
-          filters.season.some((s) => {
-            const d = decodeGroupedValue(s);
-            return d
-              ? d.item === o.season &&
-                  d.artistId ===
-                    normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
-              : s === o.season;
-          }),
-        );
-      if (filters.class.length)
-        result = result.filter((o) =>
-          filters.class.some((c) => {
-            const d = decodeGroupedValue(c);
-            return d
-              ? d.item === o.class &&
-                  d.artistId ===
-                    normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
-              : c === o.class;
-          }),
-        );
-      if (filters.on_offline.length) {
-        result = result.filter((o) =>
-          filters.on_offline.includes(getOnOffline(o)),
-        );
-      }
+      result = result.filter((o) => objektMatchesStructuralFilters(o, filters));
+    }
+
+    if (showFilterBar) {
+      result = result.filter((o) =>
+        objektMatchesStructuralFilters(o, internalFilters),
+      );
     }
 
     return result;
-  }, [owned, query, filters]);
+  }, [items, query, filters, showFilterBar, internalFilters]);
 
   function handleSelect(entry: OwnedEntry) {
     const isSelected = selected.some(
@@ -127,10 +139,21 @@ export function ObjektOwnedPicker({
   return (
     <div className="space-y-3">
       <Input
-        placeholder="Filter your objekts... e.g. JiWoo, Atom02, 108Z"
+        placeholder={searchPlaceholder}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
+
+      {showFilterBar && (
+        <ObjektFilterBar
+          filters={internalFilters}
+          onChange={setInternalFilters}
+          showSearch={false}
+          showSort={false}
+          showFilterMode={false}
+          actions={filterBarActions}
+        />
+      )}
 
       {loading ? (
         <ObjektGridPicker
@@ -141,21 +164,16 @@ export function ObjektOwnedPicker({
           loading
           compareBySerial
           maxSelections={maxSelections}
+          gridClassName={gridClassName}
         />
       ) : error ? (
         <div className="text-sm text-destructive text-center py-4">{error}</div>
-      ) : owned.length === 0 ? (
-        <div className="text-sm text-muted-foreground text-center py-4 space-y-2">
-          <p>No objekts found. Make sure your Cosmo account is linked.</p>
-          <Button
-            variant="ghost"
-            size="sm"
-            asChild
-            className="bg-white! text-black! hover:bg-white/90! hover:text-black!"
-          >
-            <Link href="/link">Link Cosmo Account</Link>
-          </Button>
-        </div>
+      ) : items.length === 0 ? (
+        (emptyState ?? (
+          <div className="text-sm text-muted-foreground text-center py-4">
+            No objekts found.
+          </div>
+        ))
       ) : (
         <ObjektGridPicker
           items={filtered}
@@ -165,6 +183,7 @@ export function ObjektOwnedPicker({
           compareBySerial
           maxSelections={maxSelections}
           emptyMessage="No matching objekts"
+          gridClassName={gridClassName}
         />
       )}
 

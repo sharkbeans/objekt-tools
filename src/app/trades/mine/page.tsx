@@ -8,9 +8,9 @@ import { useCallback, useEffect, useState } from "react";
 import { TradeCard } from "@/components/trades/trade-card";
 import {
   defaultFilters,
-  type TradeFilterState,
-  TradeFilters,
-} from "@/components/trades/trade-filters";
+  type ObjektFilterState,
+  ObjektFilterBar,
+} from "@/components/objekt/objekt-filter-bar";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ const statusLabel: Record<TradeStatus, string> = {
   disputed: "Disputed",
 };
 
-function buildParams(filters: TradeFilterState, page: number) {
+function buildParams(filters: ObjektFilterState, page: number) {
   const p = new URLSearchParams();
   p.set("page", String(page));
   for (const a of filters.artist) p.append("artist", a);
@@ -153,11 +153,11 @@ export default function MyTradesPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
+  const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
   const [page, setPage] = useState(1);
   const [activePage, setActivePage] = useState(1);
 
-  const handleFiltersChange = useCallback((next: TradeFilterState) => {
+  const handleFiltersChange = useCallback((next: ObjektFilterState) => {
     setFilters(next);
     setPage(1);
   }, []);
@@ -336,7 +336,7 @@ export default function MyTradesPage() {
       </div>
 
       <h2 className="text-lg font-semibold">My Trade Posts</h2>
-      <TradeFilters filters={filters} onChange={handleFiltersChange} />
+      <ObjektFilterBar filters={filters} onChange={handleFiltersChange} />
 
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">

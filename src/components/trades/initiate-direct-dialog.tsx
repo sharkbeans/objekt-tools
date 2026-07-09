@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ObjektGridPicker } from "@/components/objekt/objekt-grid-picker";
-import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
+import {
+  ObjektInventoryPicker,
+  OwnedInventoryEmptyState,
+} from "@/components/objekt/objekt-inventory-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { fetchOwnedInventory } from "@/lib/cosmo-inventory";
 
 interface TradeItem {
   id: number;
@@ -228,7 +232,8 @@ export function InitiateDirectDialog({
             {errors.my && (
               <p className="text-sm text-destructive mb-2">{errors.my}</p>
             )}
-            <ObjektOwnedPicker
+            <ObjektInventoryPicker
+              fetchItems={fetchOwnedInventory}
               selected={mySelected}
               onSelect={(o) => {
                 setMySelected((prev) => [...prev, o]);
@@ -243,6 +248,8 @@ export function InitiateDirectDialog({
                   ),
                 )
               }
+              emptyState={<OwnedInventoryEmptyState />}
+              showFilterBar
               maxSelections={10}
             />
           </div>

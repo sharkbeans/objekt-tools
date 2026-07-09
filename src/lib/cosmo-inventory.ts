@@ -1,15 +1,21 @@
-import { normalizeArtistId } from "@/lib/artist-utils";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { getArtistForMember, getOnOffline } from "@/lib/filter-utils";
 
 export type OwnedEntry = ObjektEntry & { serial: number; objektId: string };
 
-export function getInventoryArtist(entry: ObjektEntry): string | null {
-  return normalizeArtistId(getArtistForMember(entry.member) ?? entry.artist);
+export async function fetchOwnedInventory(): Promise<OwnedEntry[]> {
+  const res = await fetch("/api/objekts/owned");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results ?? [];
 }
 
-export function getInventoryType(entry: ObjektEntry): "online" | "offline" {
-  return getOnOffline(entry);
+export async function fetchUserInventory(
+  address: string,
+): Promise<OwnedEntry[]> {
+  const res = await fetch(`/api/objekts/user/${encodeURIComponent(address)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results ?? [];
 }
 
 const INVENTORY_CACHE_TTL = 90_000;

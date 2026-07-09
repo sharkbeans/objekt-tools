@@ -6,7 +6,7 @@
  * that the backend filtering behaviour is identical.
  */
 
-import { artistMatches } from "@/lib/artist-utils";
+import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
 import {
   makeObjektSearchTags,
   type ObjektSearchItem,
@@ -39,6 +39,24 @@ export type ObjektStructuralFilters = {
   on_offline: string[];
   search?: string;
 };
+
+// ============================================================
+// Grouped values — season/class filter values are scoped per-artist and
+// encoded as "artistId::value" (e.g. "tripleS::Atom01") to disambiguate
+// identically-named values across artists.
+// ============================================================
+
+export function encodeGroupedValue(artistId: string, item: string) {
+  return `${artistId}::${item}`;
+}
+
+export function decodeGroupedValue(
+  value: string,
+): { artistId: string; item: string } | null {
+  const idx = value.indexOf("::");
+  if (idx === -1) return null;
+  return { artistId: value.slice(0, idx), item: value.slice(idx + 2) };
+}
 
 // ============================================================
 // Tag generation — ported from objekt-explorer makeCollectionTags
@@ -81,6 +99,58 @@ export function getArtistForMember(member: string): ValidArtist | null {
     if (members.includes(member)) return artist as ValidArtist;
   }
   return null;
+}
+
+// ============================================================
+// Structural filter predicate — shared by the inventory/global pickers
+// (owned inventory, Cosmo-nickname inventory, catalog search results).
+// ============================================================
+
+export function objektMatchesStructuralFilters(
+  item: TradeFilterItem,
+  filters: ObjektStructuralFilters,
+): boolean {
+  const itemArtist = normalizeArtistId(
+    (item.member ? getArtistForMember(item.member) : null) ?? item.artist,
+  );
+
+  if (
+    filters.artist.length &&
+    !filters.artist.some((a) => artistMatches(a, itemArtist))
+  )
+    return false;
+
+  if (filters.member.length) {
+    if (!item.member || !filters.member.includes(item.member)) return false;
+  }
+
+  if (filters.season.length) {
+    const matches = filters.season.some((s) => {
+      const decoded = decodeGroupedValue(s);
+      return decoded
+        ? decoded.item === item.season &&
+            normalizeArtistId(decoded.artistId) === itemArtist
+        : s === item.season;
+    });
+    if (!matches) return false;
+  }
+
+  if (filters.class.length) {
+    const matches = filters.class.some((c) => {
+      const decoded = decodeGroupedValue(c);
+      return decoded
+        ? decoded.item === item.class &&
+            normalizeArtistId(decoded.artistId) === itemArtist
+        : c === item.class;
+    });
+    if (!matches) return false;
+  }
+
+  if (filters.on_offline.length) {
+    if (!filters.on_offline.includes(getOnOffline(item))) return false;
+  }
+
+  return true;
 }
 
 // ============================================================

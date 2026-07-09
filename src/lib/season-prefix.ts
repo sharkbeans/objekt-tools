@@ -5,6 +5,35 @@ const explicitSeasonPrefixes: Record<string, string> = {
   Winter26: "W",
 };
 
+const seasonBaseByPrefix: Record<string, string> = {
+  A: "Atom",
+  B: "Binary",
+  C: "Cream",
+  D: "Divine",
+  E: "Ever",
+};
+
+/**
+ * Prefix -> season lookup, generated from the same repeated-initial scheme as
+ * getSeasonPrefix below (Atom02 -> AA, Cream02 -> CC, ...), plus idntt's
+ * explicit community prefixes. Shared so every parser recognizes new seasons
+ * without needing its own hardcoded entry.
+ */
+export const seasonPrefixMap: Record<string, string> = {
+  ...Object.fromEntries(
+    Object.entries(seasonBaseByPrefix).flatMap(([prefix, season]) =>
+      Array.from({ length: 9 }, (_, i) => [
+        prefix.repeat(i + 1),
+        `${season}${String(i + 1).padStart(2, "0")}`,
+      ]),
+    ),
+  ),
+  W: "Winter26",
+  SP: "Spring25",
+  SU: "Summer25",
+  AU: "Autumn25",
+};
+
 /**
  * Build compact season prefixes for objekt labels.
  * ARTMS/tripleS seasons use repeated initials (Atom02 -> AA),

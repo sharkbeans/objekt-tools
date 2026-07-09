@@ -6,13 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   defaultFilters,
-  type TradeFilterState,
-  TradeFilters,
-} from "@/components/trades/trade-filters";
+  type ObjektFilterState,
+  ObjektFilterBar,
+} from "@/components/objekt/objekt-filter-bar";
 import { Button } from "@/components/ui/button";
-import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
+import { decodeGroupedValue } from "@/lib/filter-utils";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
@@ -57,7 +57,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
   });
   const memberImages = imagesData?.images ?? {};
 
-  const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
+  const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
   const [initialized, setInitialized] = useState(false);
   const [showOthers, setShowOthers] = useState(false);
 
@@ -318,7 +318,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
         </Button>
       </div>
 
-      <TradeFilters
+      <ObjektFilterBar
         filters={filters}
         onChange={setFilters}
         showSearch={false}

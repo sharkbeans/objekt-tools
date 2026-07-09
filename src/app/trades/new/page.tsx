@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
-import { ObjektPicker } from "@/components/objekt/objekt-picker";
-import { PasteImportDialog } from "@/components/trades/paste-import-dialog";
 import {
   defaultFilters,
-  type TradeFilterState,
-  TradeFilters,
-} from "@/components/trades/trade-filters";
+  type ObjektFilterState,
+  ObjektFilterBar,
+} from "@/components/objekt/objekt-filter-bar";
+import {
+  ObjektInventoryPicker,
+  OwnedInventoryEmptyState,
+} from "@/components/objekt/objekt-inventory-picker";
+import { ObjektPicker } from "@/components/objekt/objekt-picker";
+import { PasteImportDialog } from "@/components/trades/paste-import-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +49,7 @@ import { useFilterOptions } from "@/hooks/use-filter-options";
 import { artistLabel } from "@/lib/artist-utils";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { fetchOwnedInventory } from "@/lib/cosmo-inventory";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
 
 export type AnyWant = {
@@ -125,7 +129,7 @@ export default function NewTradePage() {
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [wantsOnly, setWantsOnly] = useState(false);
-  const [filters, setFilters] = useState<TradeFilterState>(defaultFilters);
+  const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [discordDismissed, setDiscordDismissed] = useState(true);
 
@@ -304,7 +308,7 @@ export default function NewTradePage() {
         />
       </div>
 
-      <TradeFilters
+      <ObjektFilterBar
         filters={filters}
         onChange={setFilters}
         showSort={false}
@@ -331,7 +335,8 @@ export default function NewTradePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0 sm:px-6">
-              <ObjektOwnedPicker
+              <ObjektInventoryPicker
+                fetchItems={fetchOwnedInventory}
                 selected={haves}
                 onSelect={(o) => setHaves((prev) => [...prev, o])}
                 onDeselect={(o) =>
@@ -343,6 +348,7 @@ export default function NewTradePage() {
                     ),
                   )
                 }
+                emptyState={<OwnedInventoryEmptyState />}
                 filters={filters}
               />
             </CardContent>

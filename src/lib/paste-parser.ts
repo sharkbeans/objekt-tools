@@ -30,31 +30,9 @@
 
 import { membersByArtist, shortformMembers } from "@/lib/filters";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
+import { seasonPrefixMap } from "@/lib/season-prefix";
 
 const allMembers = Object.values(membersByArtist).flat();
-
-const seasonBaseByPrefix: Record<string, string> = {
-  A: "Atom",
-  B: "Binary",
-  C: "Cream",
-  D: "Divine",
-  E: "Ever",
-};
-
-const seasonPrefixMap: Record<string, string> = {
-  ...Object.fromEntries(
-    Object.entries(seasonBaseByPrefix).flatMap(([prefix, season]) =>
-      Array.from({ length: 9 }, (_, i) => [
-        prefix.repeat(i + 1),
-        `${season}${String(i + 1).padStart(2, "0")}`,
-      ]),
-    ),
-  ),
-  W: "Winter26",
-  SP: "Spring25",
-  SU: "Summer25",
-  AU: "Autumn25",
-};
 
 const defaultOnOfflineByPrefix: Record<string, "online" | "offline"> = {
   CC: "offline",

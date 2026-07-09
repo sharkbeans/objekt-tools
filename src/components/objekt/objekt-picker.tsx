@@ -3,14 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { decodeGroupedValue } from "@/components/ui/class-multi-select";
 import { Input } from "@/components/ui/input";
-import { artistMatches, normalizeArtistId } from "@/lib/artist-utils";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import {
-  getArtistForMember,
-  getOnOffline,
+  objektMatchesStructuralFilters,
   type ObjektStructuralFilters,
 } from "@/lib/filter-utils";
 import { resolveObjektSearchTerm } from "@/lib/objekt-search";
+import { seasonPrefixMap } from "@/lib/season-prefix";
 import { ObjektGridPicker } from "./objekt-grid-picker";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
@@ -50,20 +49,6 @@ async function fetchByFilters(
   const data = await res.json();
   return data.results ?? [];
 }
-
-const seasonPrefixMap: Record<string, string> = {
-  A: "Atom01",
-  AA: "Atom02",
-  B: "Binary01",
-  BB: "Binary02",
-  C: "Cream01",
-  D: "Divine01",
-  E: "Ever01",
-  W: "Winter26",
-  SP: "Spring25",
-  SU: "Summer25",
-  AU: "Autumn25",
-};
 
 function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
   const terms = query.trim().split(/\s+/);
@@ -190,40 +175,8 @@ export function ObjektPicker({
   const displayResults = useMemo(() => {
     const base = effectiveQuery ? queryResults : filterResults;
     if (!filters || !effectiveQuery) return base;
-    let r = base;
-    if (filters.artist.length)
-      r = r.filter((o) =>
-        filters.artist.some((a) => artistMatches(a, o.artist)),
-      );
-    if (filters.member.length)
-      r = r.filter((o) => filters.member.includes(o.member));
-    if (filters.season.length)
-      r = r.filter((o) =>
-        filters.season.some((s) => {
-          const d = decodeGroupedValue(s);
-          return d
-            ? d.item === o.season &&
-                d.artistId ===
-                  normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
-            : s === o.season;
-        }),
-      );
-    if (filters.class.length)
-      r = r.filter((o) =>
-        filters.class.some((c) => {
-          const d = decodeGroupedValue(c);
-          return d
-            ? d.item === o.class &&
-                d.artistId ===
-                  normalizeArtistId(getArtistForMember(o.member) ?? o.artist)
-            : c === o.class;
-        }),
-      );
-    if (filters.on_offline.length) {
-      r = r.filter((o) => filters.on_offline.includes(getOnOffline(o)));
-    }
-    return r;
-  }, [query, queryResults, filterResults, filters]);
+    return base.filter((o) => objektMatchesStructuralFilters(o, filters));
+  }, [effectiveQuery, queryResults, filterResults, filters]);
 
   function handleSelect(entry: ObjektEntry) {
     const isSelected = selected.some(

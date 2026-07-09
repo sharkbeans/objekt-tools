@@ -2,10 +2,12 @@
 
 import { ArrowRight, Minus, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ObjektOwnedPicker } from "@/components/objekt/objekt-owned-picker";
-import { ObjektUserPicker } from "@/components/objekt/objekt-user-picker";
+import {
+  ObjektInventoryPicker,
+  OwnedInventoryEmptyState,
+} from "@/components/objekt/objekt-inventory-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { fetchOwnedInventory, fetchUserInventory } from "@/lib/cosmo-inventory";
 import type { ObjektSearchResult } from "@/lib/trade-types";
 
 interface TradeSide {
@@ -164,6 +167,11 @@ export function CounterOfferDialog({
     theirObjektId?: string;
     noChange?: string;
   }>({});
+
+  const fetchTheirItems = useCallback(
+    () => fetchUserInventory(theirAddress),
+    [theirAddress],
+  );
 
   // "My objekts" = what the counter-offerer will send
   const [mySelected, setMySelected] = useState<ObjektEntry[]>(() =>
@@ -400,7 +408,8 @@ export function CounterOfferDialog({
                 {errors.myObjektId}
               </p>
             )}
-            <ObjektOwnedPicker
+            <ObjektInventoryPicker
+              fetchItems={fetchOwnedInventory}
               selected={mySelected}
               onSelect={(o) => {
                 setMySelected((prev) => [...prev, o]);
@@ -421,6 +430,8 @@ export function CounterOfferDialog({
                 );
                 setErrors((e) => ({ ...e, noChange: undefined }));
               }}
+              emptyState={<OwnedInventoryEmptyState />}
+              showFilterBar
               maxSelections={10}
             />
           </div>
@@ -450,8 +461,8 @@ export function CounterOfferDialog({
                 {errors.theirObjektId}
               </p>
             )}
-            <ObjektUserPicker
-              address={theirAddress}
+            <ObjektInventoryPicker
+              fetchItems={fetchTheirItems}
               selected={theirSelected}
               onSelect={(o) => {
                 setTheirSelected((prev) => [...prev, o]);
@@ -472,6 +483,13 @@ export function CounterOfferDialog({
                 );
                 setErrors((e) => ({ ...e, noChange: undefined }));
               }}
+              searchPlaceholder="Search their objekts... e.g. JiWoo, Atom02"
+              emptyState={
+                <div className="text-sm text-muted-foreground text-center py-4">
+                  No transferable objekts found for this user.
+                </div>
+              }
+              showFilterBar
               maxSelections={10}
             />
           </div>
