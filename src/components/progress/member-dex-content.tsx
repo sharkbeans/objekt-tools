@@ -29,8 +29,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
+import {
+  EDITION_LABELS,
+  type Edition,
+  getCollectionEdition,
+} from "@/lib/edition";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
-import type { ProgressMemberResponse } from "@/lib/progress/types";
+import type {
+  ProgressCollection,
+  ProgressMemberResponse,
+} from "@/lib/progress/types";
+import { GridSection } from "./grid-section";
 import { SeasonSection } from "./season-section";
 
 interface SeasonColorsResponse {
@@ -63,9 +72,11 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   const [activeClasses, setActiveClasses] = useState<string[]>([]);
   const [activeSeasons, setActiveSeasons] = useState<string[]>([]);
+  const [activeEditions, setActiveEditions] = useState<Edition[]>([]);
   const [seasonInitialized, setSeasonInitialized] = useState(false);
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
+  const [view, setView] = useState<"dex" | "grid">("dex");
   // Objekts per row: 5 on desktop, 2 on mobile (set after mount to avoid a
   // hydration mismatch). User can override via the dropdown.
   const [perRow, setPerRow] = useState(5);
@@ -102,6 +113,24 @@ export function MemberDexContent({ nickname, member }: Props) {
     return [...new Set(data.collections.map((c) => c.class))].sort();
   }, [data]);
 
+  const editionByCollectionId = useMemo(() => {
+    const map = new Map<string, Edition>();
+    if (!data) return map;
+    for (const c of data.collections) {
+      const edition = getCollectionEdition({
+        artist: c.artist,
+        class: c.class,
+        onOffline: c.onOffline,
+        collectionNo: c.collectionNo,
+        season: c.season,
+      });
+      if (edition) map.set(c.collectionId, edition);
+    }
+    return map;
+  }, [data]);
+
+  const hasEditions = editionByCollectionId.size > 0;
+
   // Default to the latest (current) season once data loads. allSeasons is in
   // ascending season order, so the last entry is the most recent.
   useEffect(() => {
@@ -117,9 +146,19 @@ export function MemberDexContent({ nickname, member }: Props) {
     return data.collections.filter(
       (c) =>
         (activeClasses.length === 0 || activeClasses.includes(c.class)) &&
-        (activeSeasons.length === 0 || activeSeasons.includes(c.season)),
+        (activeSeasons.length === 0 || activeSeasons.includes(c.season)) &&
+        (activeEditions.length === 0 ||
+          activeEditions.includes(
+            editionByCollectionId.get(c.collectionId) as Edition,
+          )),
     );
-  }, [data, activeClasses, activeSeasons]);
+  }, [
+    data,
+    activeClasses,
+    activeSeasons,
+    activeEditions,
+    editionByCollectionId,
+  ]);
 
   // Full filter including ownership toggles (used for display)
   const filtered = useMemo(
@@ -141,6 +180,28 @@ export function MemberDexContent({ nickname, member }: Props) {
     }
     return map;
   }, [filtered]);
+
+  // Grid view ignores the class filter (it always needs First + Special
+  // together to build a board) and the owned/unowned toggles (a grid shows
+  // both regardless), but still honors season + edition.
+  const gridGrouped = useMemo(() => {
+    if (!data) return new Map<string, ProgressCollection[]>();
+    const bySeasonEdition = data.collections.filter(
+      (c) =>
+        (activeSeasons.length === 0 || activeSeasons.includes(c.season)) &&
+        (activeEditions.length === 0 ||
+          activeEditions.includes(
+            editionByCollectionId.get(c.collectionId) as Edition,
+          )),
+    );
+    const map = new Map<string, ProgressCollection[]>();
+    for (const c of bySeasonEdition) {
+      const arr = map.get(c.season) ?? [];
+      arr.push(c);
+      map.set(c.season, arr);
+    }
+    return map;
+  }, [data, activeSeasons, activeEditions, editionByCollectionId]);
 
   // Totals from base (not affected by ownership toggles)
   const totals = useMemo(() => {
@@ -300,20 +361,22 @@ export function MemberDexContent({ nickname, member }: Props) {
             {totals.owned}/{totals.total} collected
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleShare}
-          disabled={sharing || totals.total === 0}
-          className="shrink-0 gap-2"
-        >
-          {sharing ? (
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-          ) : (
-            <ShareIcon className="h-4 w-4" />
-          )}
-          Share card
-        </Button>
+        {view === "dex" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleShare}
+            disabled={sharing || totals.total === 0}
+            className="shrink-0 gap-2"
+          >
+            {sharing ? (
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+            ) : (
+              <ShareIcon className="h-4 w-4" />
+            )}
+            Share card
+          </Button>
+        )}
       </div>
 
       {allSeasons.length > 1 && (
@@ -401,61 +464,139 @@ export function MemberDexContent({ nickname, member }: Props) {
         </div>
       )}
 
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Unowned only</span>
-          <Switch
-            checked={unownedOnly}
-            onCheckedChange={(v) => {
-              setUnownedOnly(v);
-              if (v) setOwnedOnly(false);
-            }}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Owned only</span>
-          <Switch
-            checked={ownedOnly}
-            onCheckedChange={(v) => {
-              setOwnedOnly(v);
-              if (v) setUnownedOnly(false);
-            }}
-          />
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="ml-auto gap-1.5">
-              <LayoutGridIcon className="h-4 w-4" />
-              {perRow} / row
-              <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuRadioGroup
-              value={String(perRow)}
-              onValueChange={(v) => setPerRow(Number(v))}
+      {hasEditions && (
+        <div className="flex gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveEditions([])}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+              activeEditions.length === 0
+                ? "bg-muted text-foreground border-transparent"
+                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+            }`}
+          >
+            All editions
+          </button>
+          {([1, 2, 3] as const).map((ed) => (
+            <button
+              key={ed}
+              type="button"
+              onClick={() =>
+                setActiveEditions((prev) =>
+                  prev.includes(ed)
+                    ? prev.filter((x) => x !== ed)
+                    : [...prev, ed],
+                )
+              }
+              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+                activeEditions.includes(ed)
+                  ? "bg-muted text-foreground border-transparent"
+                  : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+              }`}
             >
-              {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <DropdownMenuRadioItem key={n} value={String(n)}>
-                  {n} per row
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+              {EDITION_LABELS[ed]}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <div className="space-y-8">
-        {[...grouped.entries()].map(([season, cols]) => (
-          <SeasonSection
-            key={season}
-            season={season}
-            collections={cols}
-            perRow={perRow}
-            address={data.address}
-          />
-        ))}
-      </div>
+      {hasEditions && (
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setView("dex")}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+              view === "dex"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+            }`}
+          >
+            Dex
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("grid")}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+              view === "grid"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+            }`}
+          >
+            Grid
+          </button>
+        </div>
+      )}
+
+      {view === "dex" && (
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Unowned only</span>
+            <Switch
+              checked={unownedOnly}
+              onCheckedChange={(v) => {
+                setUnownedOnly(v);
+                if (v) setOwnedOnly(false);
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Owned only</span>
+            <Switch
+              checked={ownedOnly}
+              onCheckedChange={(v) => {
+                setOwnedOnly(v);
+                if (v) setUnownedOnly(false);
+              }}
+            />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="ml-auto gap-1.5">
+                <LayoutGridIcon className="h-4 w-4" />
+                {perRow} / row
+                <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuRadioGroup
+                value={String(perRow)}
+                onValueChange={(v) => setPerRow(Number(v))}
+              >
+                {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                  <DropdownMenuRadioItem key={n} value={String(n)}>
+                    {n} per row
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      {view === "dex" ? (
+        <div className="space-y-8">
+          {[...grouped.entries()].map(([season, cols]) => (
+            <SeasonSection
+              key={season}
+              season={season}
+              collections={cols}
+              perRow={perRow}
+              address={data.address}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {[...gridGrouped.entries()].map(([season, cols]) => (
+            <GridSection
+              key={season}
+              season={season}
+              collections={cols}
+              address={data.address}
+            />
+          ))}
+        </div>
+      )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
