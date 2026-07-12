@@ -36,7 +36,10 @@ export default async function ProgressPage() {
       {session && !linkedNickname && (
         <p className="text-sm text-muted-foreground">
           Want to see your own dex?{" "}
-          <Link href={sectionHref("/link")} className="underline hover:text-foreground">
+          <Link
+            href={sectionHref("/link")}
+            className="underline hover:text-foreground"
+          >
             Link your Cosmo account
           </Link>
           .
