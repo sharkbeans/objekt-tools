@@ -78,6 +78,13 @@ function formatDate(dateStr: string) {
 export default function TradeHistoryPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+  function navigateToTrade(tradeId: number) {
+    router.push(
+      sectionHref(`/active-trades/${tradeId}`, {
+        currentSection: "trade",
+      }),
+    );
+  }
 
   useEffect(() => {
     if (!isPending && session === null) router.push("/sign-in");
@@ -133,44 +140,46 @@ export default function TradeHistoryPage() {
             return (
               <div
                 key={trade.id}
-                className="rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer flex items-center gap-3 px-4 py-3"
-                onClick={() =>
-                  router.push(
-                    sectionHref(`/active-trades/${trade.id}`, {
-                      currentSection: "trade",
-                    }),
-                  )
-                }
+                className="rounded-lg border transition-colors flex items-center gap-3 px-4 py-3 hover:bg-muted/50"
               >
-                <Badge
-                  variant={display.variant}
-                  className={cn(
-                    "shrink-0 w-24 justify-center",
-                    display.className,
-                  )}
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  onClick={() => navigateToTrade(trade.id)}
                 >
-                  {display.label}
-                </Badge>
-                <span className="text-sm flex-1 min-w-0 truncate">
-                  Trade #{trade.id} with{" "}
-                  <span className="font-medium">
-                    {otherUser.cosmoNickname ?? otherUser.name}
+                  <Badge
+                    variant={display.variant}
+                    className={cn(
+                      "shrink-0 w-24 justify-center",
+                      display.className,
+                    )}
+                  >
+                    {display.label}
+                  </Badge>
+                  <span className="text-sm flex-1 min-w-0 truncate">
+                    Trade #{trade.id} with{" "}
+                    <span className="font-medium">
+                      {otherUser.cosmoNickname ?? otherUser.name}
+                    </span>
                   </span>
-                </span>
+                  <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                    {formatDate(trade.updatedAt)}
+                  </span>
+                </button>
                 {trade.status === "countered" && trade.counterOfferId && (
                   <Link
-                    href={sectionHref(`/active-trades/${trade.counterOfferId}`, {
-                      currentSection: "trade",
-                    })}
+                    href={sectionHref(
+                      `/active-trades/${trade.counterOfferId}`,
+                      {
+                        currentSection: "trade",
+                      },
+                    )}
                     onClick={(e) => e.stopPropagation()}
                     className="text-xs text-blue-400 hover:text-blue-300 shrink-0"
                   >
                     View counter-offer →
                   </Link>
                 )}
-                <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                  {formatDate(trade.updatedAt)}
-                </span>
               </div>
             );
           })}

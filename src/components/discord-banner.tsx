@@ -22,7 +22,8 @@ export function DiscordBanner({
     setDismissed(localStorage.getItem(DISMISS_KEY) === "1");
   }, []);
 
-  if (!session || dismissed || (pathname === "/" && !currentSection)) return null;
+  if (!session || dismissed || (pathname === "/" && !currentSection))
+    return null;
 
   function handleDismiss() {
     localStorage.setItem(DISMISS_KEY, "1");

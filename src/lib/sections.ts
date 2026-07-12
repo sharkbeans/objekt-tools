@@ -82,7 +82,9 @@ function matchBase(path: string, base: string): string | null {
   return null;
 }
 
-export function sectionForHostname(hostname: string): SectionId | "root" | null {
+export function sectionForHostname(
+  hostname: string,
+): SectionId | "root" | null {
   const domain = rootDomain();
   if (!domain) return null;
   const host = hostname.toLowerCase().split(":")[0];
@@ -116,7 +118,10 @@ export function toExternalPath(
 }
 
 // Clean external path on a section host → internal route path.
-export function toInternalPath(section: SectionId, externalPath: string): string {
+export function toInternalPath(
+  section: SectionId,
+  externalPath: string,
+): string {
   if (section === "trade") {
     const activeRest = matchBase(externalPath, "/active");
     if (activeRest !== null) return `/active-trades${activeRest}`;

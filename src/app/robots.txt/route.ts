@@ -24,7 +24,10 @@ const TRADE_QUERY_PARAMS = [
   "sort",
 ];
 
-function robotsBody(rules: { allow: string[]; disallow: string[] }, host: string) {
+function robotsBody(
+  rules: { allow: string[]; disallow: string[] },
+  host: string,
+) {
   const lines = ["User-agent: *"];
   for (const path of rules.allow) lines.push(`Allow: ${path}`);
   for (const path of rules.disallow) lines.push(`Disallow: ${path}`);
@@ -80,7 +83,10 @@ export async function GET() {
       // Root domain: trade pages no longer live here (they 301 to the
       // subdomain), so only the root-owned private paths need disallowing.
       body = robotsBody(
-        { allow: ["/"], disallow: ["/api/", "/notifications", "/active-trades"] },
+        {
+          allow: ["/"],
+          disallow: ["/api/", "/notifications", "/active-trades"],
+        },
         rootUrl(),
       );
     } else {

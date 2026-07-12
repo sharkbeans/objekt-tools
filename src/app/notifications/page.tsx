@@ -65,7 +65,8 @@ export default function NotificationsPage() {
   }
 
   function getNotificationLink(n: Notification): string | null {
-    if (n.activeTradeId) return sectionHref(`/active-trades/${n.activeTradeId}`);
+    if (n.activeTradeId)
+      return sectionHref(`/active-trades/${n.activeTradeId}`);
     if (n.tradePostId) return sectionHref(`/trades/${n.tradePostId}`);
     return null;
   }
@@ -124,6 +125,7 @@ export default function NotificationsPage() {
                 const link = getNotificationLink(n);
                 const content = (
                   <div
+                    key={n.id}
                     className={cn(
                       "flex items-start gap-3 rounded-md px-3 py-2.5 transition-colors",
                       !n.dismissed && "bg-primary/5",

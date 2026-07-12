@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { sectionHref } from "@/lib/sections";
 import type { ProgressRollup } from "@/lib/progress/types";
+import { sectionHref } from "@/lib/sections";
 
 interface Props {
   nickname: string;

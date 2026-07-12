@@ -42,11 +42,7 @@ import {
 import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { useUserRealtime } from "@/hooks/use-realtime";
 import { useSession } from "@/lib/auth-client";
-import {
-  type SectionId,
-  sectionHref,
-  toInternalPath,
-} from "@/lib/sections";
+import { type SectionId, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 interface CosmoLinkStatus {
@@ -479,7 +475,10 @@ function MobileNav({
             <SparklesIcon className="size-4" />
             Objektify
           </MobileNavLink>
-          <MobileNavLink href={href("/proofshot")} onClick={() => setOpen(false)}>
+          <MobileNavLink
+            href={href("/proofshot")}
+            onClick={() => setOpen(false)}
+          >
             <UserIcon className="size-4" />
             Proofshot
           </MobileNavLink>
@@ -487,7 +486,10 @@ function MobileNav({
             <SparklesIcon className="size-4" />
             Spin
           </MobileNavLink>
-          <MobileNavLink href={href("/collection")} onClick={() => setOpen(false)}>
+          <MobileNavLink
+            href={href("/collection")}
+            onClick={() => setOpen(false)}
+          >
             <LibraryIcon className="size-4" />
             Dex
           </MobileNavLink>
@@ -508,7 +510,10 @@ function MobileNav({
             </MobileNavLink>
           )}
           {!session && (
-            <MobileNavLink href={href("/sign-in")} onClick={() => setOpen(false)}>
+            <MobileNavLink
+              href={href("/sign-in")}
+              onClick={() => setOpen(false)}
+            >
               <LogInIcon className="size-4" />
               Sign in
             </MobileNavLink>
@@ -541,7 +546,10 @@ function MobileNav({
                 <UserIcon className="size-4" />
                 Profile
               </MobileNavLink>
-              <MobileNavLink href={href("/list/mine")} onClick={() => setOpen(false)}>
+              <MobileNavLink
+                href={href("/list/mine")}
+                onClick={() => setOpen(false)}
+              >
                 <ImageIcon className="size-4" />
                 My Lists
               </MobileNavLink>
@@ -558,7 +566,10 @@ function MobileNav({
                   Unlink Cosmo
                 </button>
               ) : (
-                <MobileNavLink href={href("/link")} onClick={() => setOpen(false)}>
+                <MobileNavLink
+                  href={href("/link")}
+                  onClick={() => setOpen(false)}
+                >
                   <LinkIcon className="size-4" />
                   Link Cosmo
                 </MobileNavLink>

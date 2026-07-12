@@ -61,8 +61,8 @@ import {
   resolveForPoster,
 } from "@/lib/poster-resolver";
 import { formatPosterAsText } from "@/lib/poster-text-format";
-import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
+import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 
 interface StoredItem {
   id: number;
@@ -804,7 +804,9 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 size="sm"
                 className="h-10 gap-2 self-start border-border bg-transparent px-4"
               >
-                <Link href={sectionHref("/list/mine", { currentSection: "list" })}>
+                <Link
+                  href={sectionHref("/list/mine", { currentSection: "list" })}
+                >
                   <ListIcon className="h-4 w-4" />
                   My Lists
                 </Link>

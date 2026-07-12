@@ -425,7 +425,9 @@ export default function PublicProfilePage({
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold">Trade History</h2>
             <Button variant="ghost" size="sm" asChild>
-              <Link href={sectionHref("/trades/history")}>View full history</Link>
+              <Link href={sectionHref("/trades/history")}>
+                View full history
+              </Link>
             </Button>
           </div>
           {allTrades.length === 0 ? (

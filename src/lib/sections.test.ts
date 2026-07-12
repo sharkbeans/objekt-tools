@@ -93,7 +93,10 @@ describe("sections (enabled)", () => {
   });
 
   it("toExternalPath maps internal paths to clean section paths", () => {
-    assert.deepEqual(toExternalPath("/trades"), { section: "trade", path: "/" });
+    assert.deepEqual(toExternalPath("/trades"), {
+      section: "trade",
+      path: "/",
+    });
     assert.deepEqual(toExternalPath("/trades/new"), {
       section: "trade",
       path: "/new",
@@ -240,10 +243,7 @@ describe("sections (enabled)", () => {
       sectionAbsoluteUrl("/active-trades/9"),
       "https://trade.objekt.my/active/9",
     );
-    assert.equal(
-      sectionAbsoluteUrl("/trades/1"),
-      "https://trade.objekt.my/1",
-    );
+    assert.equal(sectionAbsoluteUrl("/trades/1"), "https://trade.objekt.my/1");
     assert.equal(
       sectionAbsoluteUrl("/list/abc/og?v=2"),
       "https://list.objekt.my/abc/og?v=2",
@@ -266,9 +266,6 @@ describe("sections (enabled, local dev via lvh.me)", () => {
     assert.equal(sectionOrigin("trade"), "http://trade.lvh.me:3000");
     assert.equal(sectionForHostname("trade.lvh.me"), "trade");
     assert.equal(sectionForHostname("lvh.me"), "root");
-    assert.equal(
-      sectionHref("/trades/new"),
-      "http://trade.lvh.me:3000/new",
-    );
+    assert.equal(sectionHref("/trades/new"), "http://trade.lvh.me:3000/new");
   });
 });
