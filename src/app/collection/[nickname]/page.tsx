@@ -42,7 +42,7 @@ export default async function ProgressNicknamePage({
   const showClaimBanner = !session || !isViewerLinked;
 
   return (
-    <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
+    <div className="mx-auto w-full max-w-[96rem] px-4 py-6 space-y-6">
       {showClaimBanner && <ClaimBanner isSignedIn={!!session} />}
       <ProgressOverviewContent nickname={nickname} />
     </div>

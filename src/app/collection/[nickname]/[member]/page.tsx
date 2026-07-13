@@ -27,7 +27,7 @@ export default async function MemberDexPage({
   const { nickname, member } = await params;
 
   return (
-    <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
+    <div className="mx-auto w-full max-w-[96rem] px-4 py-6 space-y-4">
       <Link
         href={sectionHref(`/collection/${nickname}`, {
           currentSection: "collect",

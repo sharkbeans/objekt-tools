@@ -25,6 +25,8 @@ export type ProgressCollection = {
   backImage: string;
   accentColor: string;
   ownedCount: number;
+  transferableCount: number;
+  gridMintCount: number;
   member?: string;
   artist?: string;
 };

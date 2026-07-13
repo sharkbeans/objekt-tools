@@ -301,7 +301,9 @@ export function ProgressOverviewContent({ nickname }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">{data.nickname}&apos;s Collection</h1>
+        <h1 className="text-2xl font-bold">
+          {data.nickname}&apos;s Collection
+        </h1>
         <Button
           size="sm"
           variant="outline"

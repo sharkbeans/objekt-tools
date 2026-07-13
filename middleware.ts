@@ -120,6 +120,16 @@ export function middleware(request: NextRequest) {
   }
 
   const hostname = request.headers.get("host") ?? "";
+
+  // grid.<domain> isn't a real section — just bounce it to collect.
+  const domain = rootDomain();
+  if (domain && hostname.toLowerCase().split(":")[0] === `grid.${domain}`) {
+    return NextResponse.redirect(
+      `${sectionOrigin("collect")}${request.nextUrl.pathname}${request.nextUrl.search}`,
+      301,
+    );
+  }
+
   const who = sectionForHostname(hostname);
   // Unknown/internal hosts (cron container's app:3000, healthcheck on
   // 127.0.0.1, localhost) are left completely untouched.

@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { indexerPool } from "@/lib/db/indexer";
+import { COSMO_SPIN_ADDRESS, ZERO_ADDRESS } from "@/lib/indexer-constants";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
-
-const COSMO_SPIN_ADDRESS = "0xd3d5f29881ad87bb10c1100e2c709c9596de345f";
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 const spinRewardLines = [
   { artistKey: "triples", artist: "tripleS", className: "First" },

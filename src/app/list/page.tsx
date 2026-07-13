@@ -54,14 +54,15 @@ import { signIn, useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
 import { compareMembers, compareSeasons } from "@/lib/filter-options";
+import { GRID_TRADE_STASH_KEY } from "@/lib/grid-trade-stash";
 import { parsePastedTrade } from "@/lib/paste-parser";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
+import { makePosterItem } from "@/lib/poster-item";
 import {
   type ResolvedPosterItem,
   resolveForPoster,
 } from "@/lib/poster-resolver";
 import { formatPosterAsText } from "@/lib/poster-text-format";
-import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 
 interface StoredItem {
@@ -189,24 +190,6 @@ type Stage = "input" | "resolving" | "preview";
 
 const STASH_KEY = "poster-draft-stash";
 
-function makeItem(entry: ObjektEntry): ResolvedPosterItem {
-  const imageUrl =
-    (entry as ObjektEntry & { frontImage?: string }).thumbnailImage ??
-    (entry as ObjektEntry & { frontImage?: string }).frontImage ??
-    null;
-  return {
-    parsed: {
-      member: entry.member,
-      season: entry.season,
-      collectionNo: stripVariantSuffix(entry.collectionNo),
-      raw: `${entry.member} ${getSeasonPrefix(entry.season)}${stripVariantSuffix(entry.collectionNo)}`,
-      ...(entry.serial != null ? { serial: String(entry.serial) } : {}),
-    },
-    entry,
-    imageUrl,
-  };
-}
-
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
@@ -292,6 +275,24 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       toast.error("Could not restore your draft");
     }
   }, [restoreParam, session]);
+
+  // Prefill from the grid board's "Trade" dialog — no session gate (unlike
+  // the Discord-login restore above) since this is a same-tab handoff, and
+  // no auto-save so the user can review/edit before saving.
+  const prefillParam = searchParams.get("prefill");
+  useEffect(() => {
+    if (prefillParam !== "grid") return;
+    const raw = sessionStorage.getItem(GRID_TRADE_STASH_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(GRID_TRADE_STASH_KEY);
+    try {
+      const stash = JSON.parse(raw) as { posterData: PosterData };
+      setPosterData(stash.posterData);
+      setStage("preview");
+    } catch {
+      toast.error("Could not load your trade list");
+    }
+  }, [prefillParam]);
 
   // Pre-load a stored poster when ?edit=id is in the URL
   useEffect(() => {
@@ -662,7 +663,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           const existingMatch = existing.find(
             (h) => h.entry?.collectionId === e.collectionId,
           );
-          return existingMatch ?? makeItem(e);
+          return existingMatch ?? makePosterItem(e);
         });
         return { ...prev, [key]: [...newItems, ...freeformItems] };
       });
@@ -713,10 +714,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       setStage("resolving");
       try {
         const resolvedHaves = sortObjektEntries(haves).map((entry) =>
-          makeItem(entry),
+          makePosterItem(entry),
         );
         const resolvedWants = sortObjektEntries(wants).map((entry) =>
-          makeItem(entry),
+          makePosterItem(entry),
         );
 
         const now = new Date();
@@ -790,12 +791,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       <section className="overflow-hidden rounded-[1.25rem] border border-background bg-background">
         <div className="border-b border-border px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1">
-              <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                  Trade List
-                </h1>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold">Trade List</h1>
             </div>
             {session && (
               <Button
@@ -818,11 +815,17 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         <div className="px-4 py-4 sm:px-6 sm:py-6">
           {stage === "input" && (
             <section className="space-y-5">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="poster-cosmoid"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Cosmo Username
+                </Label>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     id="poster-cosmoid"
-                    placeholder="Cosmo username"
+                    placeholder="e.g. sharkbeans"
                     value={cosmoId}
                     onChange={(e) => setCosmoId(e.target.value)}
                     onBlur={handleCosmoBlur}
@@ -832,12 +835,12 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                         openPicker();
                       }
                     }}
-                    className="h-11 bg-background sm:max-w-64"
+                    className="h-12 bg-background text-base md:text-base sm:max-w-80"
                   />
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-11 gap-2 border-border bg-transparent px-4 sm:flex-1"
+                    className="h-12 gap-2 border-border bg-transparent px-4 sm:flex-1"
                     onClick={openPicker}
                   >
                     <ImageIcon className="h-4 w-4" />

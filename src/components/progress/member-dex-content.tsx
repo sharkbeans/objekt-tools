@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import {
   EDITION_LABELS,
@@ -44,6 +45,129 @@ import { SeasonSection } from "./season-section";
 
 interface SeasonColorsResponse {
   colors: Record<string, string>;
+}
+
+interface StoredSelection {
+  activeTab?: "dex" | "grid";
+  dexActiveClasses?: string[];
+  dexActiveSeasons?: string[];
+  dexActiveEditions?: Edition[];
+  unownedOnly?: boolean;
+  ownedOnly?: boolean;
+  perRow?: number;
+  gridActiveSeasons?: string[];
+  gridActiveEditions?: Edition[];
+  viewConsumed?: boolean;
+}
+
+function selectionStorageKey(nickname: string, member: string): string {
+  return `collection-selection:${nickname.toLowerCase()}:${member.toLowerCase()}`;
+}
+
+function chipClass(active: boolean): string {
+  return `px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+    active
+      ? "bg-muted text-foreground border-transparent"
+      : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+  }`;
+}
+
+function EditionChipRow({
+  active,
+  onToggle,
+  onClear,
+}: {
+  active: Edition[];
+  onToggle: (edition: Edition) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      <button
+        type="button"
+        onClick={onClear}
+        className={chipClass(active.length === 0)}
+      >
+        All editions
+      </button>
+      {([1, 2, 3] as const).map((ed) => (
+        <button
+          key={ed}
+          type="button"
+          onClick={() => onToggle(ed)}
+          className={chipClass(active.includes(ed))}
+        >
+          {EDITION_LABELS[ed]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SeasonChipRow({
+  seasons,
+  active,
+  artist,
+  seasonColors,
+  onToggle,
+  onClear,
+}: {
+  seasons: string[];
+  active: string[];
+  artist: string;
+  seasonColors: Record<string, string>;
+  onToggle: (season: string) => void;
+  onClear: () => void;
+}) {
+  if (seasons.length <= 1) return null;
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      <button
+        type="button"
+        onClick={onClear}
+        className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+          active.length === 0
+            ? "bg-primary text-primary-foreground border-primary"
+            : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+        }`}
+      >
+        All
+      </button>
+      {seasons.map((s) => {
+        const color = seasonColors[`${artist}|${s}`] ?? null;
+        const isActive = active.includes(s);
+        return (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onToggle(s)}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
+              isActive
+                ? "text-white"
+                : "bg-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            style={
+              color
+                ? isActive
+                  ? { backgroundColor: color, borderColor: color }
+                  : { borderColor: color }
+                : isActive
+                  ? undefined
+                  : { borderColor: "hsl(var(--border))" }
+            }
+          >
+            {s}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function toggleValue<T>(prev: T[], value: T): T[] {
+  return prev.includes(value)
+    ? prev.filter((x) => x !== value)
+    : [...prev, value];
 }
 
 interface Props {
@@ -70,19 +194,100 @@ export function MemberDexContent({ nickname, member }: Props) {
     retry: false,
   });
 
-  const [activeClasses, setActiveClasses] = useState<string[]>([]);
-  const [activeSeasons, setActiveSeasons] = useState<string[]>([]);
-  const [activeEditions, setActiveEditions] = useState<Edition[]>([]);
-  const [seasonInitialized, setSeasonInitialized] = useState(false);
+  const [activeTab, setActiveTab] = useState<"dex" | "grid">("dex");
+
+  // Dex-scoped filters
+  const [dexActiveClasses, setDexActiveClasses] = useState<string[]>([]);
+  const [dexActiveSeasons, setDexActiveSeasons] = useState<string[]>([]);
+  const [dexActiveEditions, setDexActiveEditions] = useState<Edition[]>([]);
+  const [dexSeasonInitialized, setDexSeasonInitialized] = useState(false);
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
-  const [view, setView] = useState<"dex" | "grid">("dex");
   // Objekts per row: 5 on desktop, 2 on mobile (set after mount to avoid a
   // hydration mismatch). User can override via the dropdown.
   const [perRow, setPerRow] = useState(5);
   useEffect(() => {
     if (window.matchMedia("(max-width: 639px)").matches) setPerRow(2);
   }, []);
+
+  // Grid-scoped filters — independent from Dex's. A grid board is always
+  // First+Special, so there's no class dimension here.
+  const [gridActiveSeasons, setGridActiveSeasons] = useState<string[]>([]);
+  const [gridActiveEditions, setGridActiveEditions] = useState<Edition[]>([]);
+  const [gridSeasonInitialized, setGridSeasonInitialized] = useState(false);
+  const [viewConsumed, setViewConsumed] = useState(true);
+
+  // Restore this page's last-used tab/filters from localStorage (client
+  // only — runs after mount to avoid a hydration mismatch). Keyed per
+  // nickname+member so switching pages doesn't leak unrelated selections.
+  const [selectionRestored, setSelectionRestored] = useState(false);
+  useEffect(() => {
+    setSelectionRestored(false);
+    try {
+      const raw = localStorage.getItem(selectionStorageKey(nickname, member));
+      if (raw) {
+        const stored = JSON.parse(raw) as StoredSelection;
+        if (stored.activeTab) setActiveTab(stored.activeTab);
+        if (stored.dexActiveClasses)
+          setDexActiveClasses(stored.dexActiveClasses);
+        if (stored.dexActiveSeasons) {
+          setDexActiveSeasons(stored.dexActiveSeasons);
+          setDexSeasonInitialized(true);
+        }
+        if (stored.dexActiveEditions)
+          setDexActiveEditions(stored.dexActiveEditions);
+        if (stored.unownedOnly != null) setUnownedOnly(stored.unownedOnly);
+        if (stored.ownedOnly != null) setOwnedOnly(stored.ownedOnly);
+        if (stored.perRow != null) setPerRow(stored.perRow);
+        if (stored.gridActiveSeasons) {
+          setGridActiveSeasons(stored.gridActiveSeasons);
+          setGridSeasonInitialized(true);
+        }
+        if (stored.gridActiveEditions)
+          setGridActiveEditions(stored.gridActiveEditions);
+        if (stored.viewConsumed != null) setViewConsumed(stored.viewConsumed);
+      }
+    } catch {
+      // Malformed/unavailable storage — fall back to defaults.
+    }
+    setSelectionRestored(true);
+  }, [nickname, member]);
+
+  // Persist the current selection whenever it changes, once the initial
+  // restore above has run (so we don't clobber storage with defaults first).
+  useEffect(() => {
+    if (!selectionRestored) return;
+    const selection: StoredSelection = {
+      activeTab,
+      dexActiveClasses,
+      dexActiveSeasons,
+      dexActiveEditions,
+      unownedOnly,
+      ownedOnly,
+      perRow,
+      gridActiveSeasons,
+      gridActiveEditions,
+      viewConsumed,
+    };
+    localStorage.setItem(
+      selectionStorageKey(nickname, member),
+      JSON.stringify(selection),
+    );
+  }, [
+    selectionRestored,
+    nickname,
+    member,
+    activeTab,
+    dexActiveClasses,
+    dexActiveSeasons,
+    dexActiveEditions,
+    unownedOnly,
+    ownedOnly,
+    perRow,
+    gridActiveSeasons,
+    gridActiveEditions,
+    viewConsumed,
+  ]);
 
   const { data: seasonColorsData } = useQuery<SeasonColorsResponse>({
     queryKey: ["progress-season-colors"],
@@ -131,32 +336,56 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   const hasEditions = editionByCollectionId.size > 0;
 
-  // Default to the latest (current) season once data loads. allSeasons is in
-  // ascending season order, so the last entry is the most recent.
-  useEffect(() => {
-    if (seasonInitialized || allSeasons.length === 0) return;
-    setActiveSeasons([allSeasons[allSeasons.length - 1]]);
-    setSeasonInitialized(true);
-  }, [allSeasons, seasonInitialized]);
+  // Seasons that actually have grid-eligible (edition-bearing) collections —
+  // a season with only idntt-style non-editioned classes shouldn't show up
+  // as a Grid season chip even if it's a valid Dex season.
+  const gridAllSeasons = useMemo(() => {
+    if (!data) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const c of data.collections) {
+      if (editionByCollectionId.has(c.collectionId) && !seen.has(c.season)) {
+        seen.add(c.season);
+        out.push(c.season);
+      }
+    }
+    return out;
+  }, [data, editionByCollectionId]);
 
-  // Base filter: class + season only (used for accurate totals). Empty arrays
-  // mean "all".
+  // Default each section to the latest (current) season once data loads.
+  // allSeasons/gridAllSeasons are in ascending order, so the last entry is
+  // the most recent.
+  useEffect(() => {
+    if (dexSeasonInitialized || allSeasons.length === 0) return;
+    setDexActiveSeasons([allSeasons[allSeasons.length - 1]]);
+    setDexSeasonInitialized(true);
+  }, [allSeasons, dexSeasonInitialized]);
+
+  useEffect(() => {
+    if (gridSeasonInitialized || gridAllSeasons.length === 0) return;
+    setGridActiveSeasons([gridAllSeasons[gridAllSeasons.length - 1]]);
+    setGridSeasonInitialized(true);
+  }, [gridAllSeasons, gridSeasonInitialized]);
+
+  // Base filter: class + season + edition (used for accurate totals). Empty
+  // arrays mean "all".
   const baseFiltered = useMemo(() => {
     if (!data) return [];
     return data.collections.filter(
       (c) =>
-        (activeClasses.length === 0 || activeClasses.includes(c.class)) &&
-        (activeSeasons.length === 0 || activeSeasons.includes(c.season)) &&
-        (activeEditions.length === 0 ||
-          activeEditions.includes(
+        (dexActiveClasses.length === 0 || dexActiveClasses.includes(c.class)) &&
+        (dexActiveSeasons.length === 0 ||
+          dexActiveSeasons.includes(c.season)) &&
+        (dexActiveEditions.length === 0 ||
+          dexActiveEditions.includes(
             editionByCollectionId.get(c.collectionId) as Edition,
           )),
     );
   }, [
     data,
-    activeClasses,
-    activeSeasons,
-    activeEditions,
+    dexActiveClasses,
+    dexActiveSeasons,
+    dexActiveEditions,
     editionByCollectionId,
   ]);
 
@@ -181,16 +410,15 @@ export function MemberDexContent({ nickname, member }: Props) {
     return map;
   }, [filtered]);
 
-  // Grid view ignores the class filter (it always needs First + Special
-  // together to build a board) and the owned/unowned toggles (a grid shows
-  // both regardless), but still honors season + edition.
+  // Grid tab has its own season+edition scope, independent of Dex's.
   const gridGrouped = useMemo(() => {
     if (!data) return new Map<string, ProgressCollection[]>();
     const bySeasonEdition = data.collections.filter(
       (c) =>
-        (activeSeasons.length === 0 || activeSeasons.includes(c.season)) &&
-        (activeEditions.length === 0 ||
-          activeEditions.includes(
+        (gridActiveSeasons.length === 0 ||
+          gridActiveSeasons.includes(c.season)) &&
+        (gridActiveEditions.length === 0 ||
+          gridActiveEditions.includes(
             editionByCollectionId.get(c.collectionId) as Edition,
           )),
     );
@@ -201,13 +429,15 @@ export function MemberDexContent({ nickname, member }: Props) {
       map.set(c.season, arr);
     }
     return map;
-  }, [data, activeSeasons, activeEditions, editionByCollectionId]);
+  }, [data, gridActiveSeasons, gridActiveEditions, editionByCollectionId]);
 
-  // Totals from base (not affected by ownership toggles)
+  // Header totals are always the member's full, unfiltered collection — they
+  // shouldn't shift depending on which tab or filters are active.
   const totals = useMemo(() => {
-    const owned = baseFiltered.filter((c) => c.ownedCount > 0).length;
-    return { owned, total: baseFiltered.length };
-  }, [baseFiltered]);
+    if (!data) return { owned: 0, total: 0 };
+    const owned = data.collections.filter((c) => c.ownedCount > 0).length;
+    return { owned, total: data.collections.length };
+  }, [data]);
 
   const [sharing, setSharing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -217,8 +447,8 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   const doShare = useCallback(async () => {
     if (!data) return;
-    // Share the exact set on screen so the card follows every active filter
-    // (season, class, owned/unowned only).
+    // Share the exact set on screen so the card follows every active Dex
+    // filter (season, class, owned/unowned only).
     const shareCols = filtered;
     if (shareCols.length === 0) {
       toast.error("Nothing to share for this filter.");
@@ -242,9 +472,11 @@ export function MemberDexContent({ nickname, member }: Props) {
           ? "Owned"
           : null;
       const seasonLabel =
-        activeSeasons.length === 0 ? "All seasons" : activeSeasons.join(", ");
+        dexActiveSeasons.length === 0
+          ? "All seasons"
+          : dexActiveSeasons.join(", ");
       const classLabel =
-        activeClasses.length === 0 ? null : activeClasses.join(", ");
+        dexActiveClasses.length === 0 ? null : dexActiveClasses.join(", ");
       const subtitle = [artistLabel, seasonLabel, classLabel, ownershipLabel]
         .filter(Boolean)
         .join("  ·  ");
@@ -304,7 +536,14 @@ export function MemberDexContent({ nickname, member }: Props) {
     } finally {
       setSharing(false);
     }
-  }, [data, filtered, activeSeasons, activeClasses, unownedOnly, ownedOnly]);
+  }, [
+    data,
+    filtered,
+    dexActiveSeasons,
+    dexActiveClasses,
+    unownedOnly,
+    ownedOnly,
+  ]);
 
   const handleShare = useCallback(() => {
     if (filtered.length > SHARE_WARN_THRESHOLD) {
@@ -352,92 +591,23 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   if (!data) return null;
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">{data.member}</h1>
-          <p className="text-sm text-muted-foreground">
-            {totals.owned}/{totals.total} collected
-          </p>
-        </div>
-        {view === "dex" && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleShare}
-            disabled={sharing || totals.total === 0}
-            className="shrink-0 gap-2"
-          >
-            {sharing ? (
-              <Loader2Icon className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShareIcon className="h-4 w-4" />
-            )}
-            Share card
-          </Button>
-        )}
-      </div>
-
-      {allSeasons.length > 1 && (
-        <div className="flex gap-1.5 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setActiveSeasons([])}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-              activeSeasons.length === 0
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-            }`}
-          >
-            All
-          </button>
-          {allSeasons.map((s) => {
-            const color = seasonColors[`${data.artist}|${s}`] ?? null;
-            const isActive = activeSeasons.includes(s);
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() =>
-                  setActiveSeasons((prev) =>
-                    prev.includes(s)
-                      ? prev.filter((x) => x !== s)
-                      : [...prev, s],
-                  )
-                }
-                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                  isActive
-                    ? "text-white"
-                    : "bg-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                style={
-                  color
-                    ? isActive
-                      ? { backgroundColor: color, borderColor: color }
-                      : { borderColor: color }
-                    : isActive
-                      ? undefined
-                      : { borderColor: "hsl(var(--border))" }
-                }
-              >
-                {s}
-              </button>
-            );
-          })}
-        </div>
-      )}
+  const dexContent = (
+    <div className="space-y-4">
+      <SeasonChipRow
+        seasons={allSeasons}
+        active={dexActiveSeasons}
+        artist={data.artist}
+        seasonColors={seasonColors}
+        onToggle={(s) => setDexActiveSeasons((prev) => toggleValue(prev, s))}
+        onClear={() => setDexActiveSeasons([])}
+      />
 
       {allClasses.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
           <button
             type="button"
-            onClick={() => setActiveClasses([])}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-              activeClasses.length === 0
-                ? "bg-muted text-foreground border-transparent"
-                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-            }`}
+            onClick={() => setDexActiveClasses([])}
+            className={chipClass(dexActiveClasses.length === 0)}
           >
             All
           </button>
@@ -446,17 +616,9 @@ export function MemberDexContent({ nickname, member }: Props) {
               key={cls}
               type="button"
               onClick={() =>
-                setActiveClasses((prev) =>
-                  prev.includes(cls)
-                    ? prev.filter((x) => x !== cls)
-                    : [...prev, cls],
-                )
+                setDexActiveClasses((prev) => toggleValue(prev, cls))
               }
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                activeClasses.includes(cls)
-                  ? "bg-muted text-foreground border-transparent"
-                  : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-              }`}
+              className={chipClass(dexActiveClasses.includes(cls))}
             >
               {cls}
             </button>
@@ -465,137 +627,156 @@ export function MemberDexContent({ nickname, member }: Props) {
       )}
 
       {hasEditions && (
-        <div className="flex gap-1.5 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setActiveEditions([])}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-              activeEditions.length === 0
-                ? "bg-muted text-foreground border-transparent"
-                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-            }`}
-          >
-            All editions
-          </button>
-          {([1, 2, 3] as const).map((ed) => (
-            <button
-              key={ed}
-              type="button"
-              onClick={() =>
-                setActiveEditions((prev) =>
-                  prev.includes(ed)
-                    ? prev.filter((x) => x !== ed)
-                    : [...prev, ed],
-                )
-              }
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                activeEditions.includes(ed)
-                  ? "bg-muted text-foreground border-transparent"
-                  : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-              }`}
+        <EditionChipRow
+          active={dexActiveEditions}
+          onToggle={(ed) =>
+            setDexActiveEditions((prev) => toggleValue(prev, ed))
+          }
+          onClear={() => setDexActiveEditions([])}
+        />
+      )}
+
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Unowned only</span>
+          <Switch
+            checked={unownedOnly}
+            onCheckedChange={(v) => {
+              setUnownedOnly(v);
+              if (v) setOwnedOnly(false);
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Owned only</span>
+          <Switch
+            checked={ownedOnly}
+            onCheckedChange={(v) => {
+              setOwnedOnly(v);
+              if (v) setUnownedOnly(false);
+            }}
+          />
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <LayoutGridIcon className="h-4 w-4" />
+              {perRow} / row
+              <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup
+              value={String(perRow)}
+              onValueChange={(v) => setPerRow(Number(v))}
             >
-              {EDITION_LABELS[ed]}
-            </button>
-          ))}
-        </div>
-      )}
+              {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <DropdownMenuRadioItem key={n} value={String(n)}>
+                  {n} per row
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleShare}
+          disabled={sharing || totals.total === 0}
+          className="ml-auto gap-2"
+        >
+          {sharing ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <ShareIcon className="h-4 w-4" />
+          )}
+          Share card
+        </Button>
+      </div>
 
-      {hasEditions && (
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => setView("dex")}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-              view === "dex"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-            }`}
-          >
-            Dex
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("grid")}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-              view === "grid"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-transparent text-muted-foreground border-border hover:text-foreground"
-            }`}
-          >
-            Grid
-          </button>
-        </div>
-      )}
+      <div className="space-y-8">
+        {[...grouped.entries()].map(([season, cols]) => (
+          <SeasonSection
+            key={season}
+            season={season}
+            collections={cols}
+            perRow={perRow}
+            address={data.address}
+          />
+        ))}
+      </div>
+    </div>
+  );
 
-      {view === "dex" && (
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Unowned only</span>
-            <Switch
-              checked={unownedOnly}
-              onCheckedChange={(v) => {
-                setUnownedOnly(v);
-                if (v) setOwnedOnly(false);
-              }}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Owned only</span>
-            <Switch
-              checked={ownedOnly}
-              onCheckedChange={(v) => {
-                setOwnedOnly(v);
-                if (v) setUnownedOnly(false);
-              }}
-            />
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="ml-auto gap-1.5">
-                <LayoutGridIcon className="h-4 w-4" />
-                {perRow} / row
-                <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuRadioGroup
-                value={String(perRow)}
-                onValueChange={(v) => setPerRow(Number(v))}
-              >
-                {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                  <DropdownMenuRadioItem key={n} value={String(n)}>
-                    {n} per row
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      )}
+  const gridContent = (
+    <div className="space-y-4">
+      <SeasonChipRow
+        seasons={gridAllSeasons}
+        active={gridActiveSeasons}
+        artist={data.artist}
+        seasonColors={seasonColors}
+        onToggle={(s) => setGridActiveSeasons((prev) => toggleValue(prev, s))}
+        onClear={() => setGridActiveSeasons([])}
+      />
 
-      {view === "dex" ? (
-        <div className="space-y-8">
-          {[...grouped.entries()].map(([season, cols]) => (
-            <SeasonSection
-              key={season}
-              season={season}
-              collections={cols}
-              perRow={perRow}
-              address={data.address}
-            />
-          ))}
+      <EditionChipRow
+        active={gridActiveEditions}
+        onToggle={(ed) =>
+          setGridActiveEditions((prev) => toggleValue(prev, ed))
+        }
+        onClear={() => setGridActiveEditions([])}
+      />
+
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">View Consumed</span>
+          <Switch checked={viewConsumed} onCheckedChange={setViewConsumed} />
         </div>
+      </div>
+
+      <div className="space-y-8">
+        {[...gridGrouped.entries()].map(([season, cols]) => (
+          <GridSection
+            key={season}
+            season={season}
+            collections={cols}
+            address={data.address}
+            nickname={data.nickname}
+            viewConsumed={viewConsumed}
+          />
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">{data.member}</h1>
+        <p className="text-muted-foreground">
+          {totals.owned}/{totals.total} collected
+        </p>
+      </div>
+
+      {hasEditions ? (
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "dex" | "grid")}
+        >
+          <TabsList>
+            <TabsTrigger value="grid">Grid</TabsTrigger>
+            <TabsTrigger value="dex">Collection</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="dex" className="pt-4">
+            {dexContent}
+          </TabsContent>
+          <TabsContent value="grid" className="pt-4">
+            {gridContent}
+          </TabsContent>
+        </Tabs>
       ) : (
-        <div className="space-y-8">
-          {[...gridGrouped.entries()].map(([season, cols]) => (
-            <GridSection
-              key={season}
-              season={season}
-              collections={cols}
-              address={data.address}
-            />
-          ))}
-        </div>
+        dexContent
       )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

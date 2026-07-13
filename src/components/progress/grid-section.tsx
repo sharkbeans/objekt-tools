@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import type { Edition } from "@/lib/edition";
 import { getCollectionEdition } from "@/lib/edition";
 import type { ProgressCollection } from "@/lib/progress/types";
@@ -10,11 +10,19 @@ interface Props {
   season: string;
   collections: ProgressCollection[];
   address: string;
+  nickname: string;
+  viewConsumed: boolean;
 }
 
 const EDITIONS: Edition[] = [1, 2, 3];
 
-export function GridSection({ season, collections, address }: Props) {
+export function GridSection({
+  season,
+  collections,
+  address,
+  nickname,
+  viewConsumed,
+}: Props) {
   const byEdition = useMemo(() => {
     const map = new Map<
       Edition,
@@ -40,6 +48,11 @@ export function GridSection({ season, collections, address }: Props) {
           numeric: true,
         }),
       );
+      entry.specials.sort((a, b) =>
+        a.collectionNo.localeCompare(b.collectionNo, undefined, {
+          numeric: true,
+        }),
+      );
     }
     return map;
   }, [collections]);
@@ -52,19 +65,26 @@ export function GridSection({ season, collections, address }: Props) {
 
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold text-sm">{season}</h3>
-      <div className="flex flex-wrap gap-8">
-        {editionsWithData.map((edition) => {
+      <h3 className="font-semibold text-lg">{season}</h3>
+      <div className="flex flex-wrap items-stretch gap-8">
+        {editionsWithData.map((edition, i) => {
           const entry = byEdition.get(edition);
           if (!entry) return null;
           return (
-            <GridBoard
-              key={edition}
-              edition={edition}
-              firsts={entry.firsts}
-              specials={entry.specials}
-              address={address}
-            />
+            <Fragment key={edition}>
+              {i > 0 && (
+                <div className="hidden w-px shrink-0 self-stretch bg-border sm:block" />
+              )}
+              <GridBoard
+                edition={edition}
+                firsts={entry.firsts}
+                specials={entry.specials}
+                address={address}
+                nickname={nickname}
+                seasonCollections={collections}
+                viewConsumed={viewConsumed}
+              />
+            </Fragment>
           );
         })}
       </div>
