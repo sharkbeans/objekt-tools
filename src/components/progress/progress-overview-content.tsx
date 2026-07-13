@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Loader2Icon, ShareIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   defaultFilters,
@@ -58,27 +58,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
   const memberImages = imagesData?.images ?? {};
 
   const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
-  const [initialized, setInitialized] = useState(false);
   const [showOthers, setShowOthers] = useState(false);
-
-  // Default the artist filter to whichever has the most owned items
-  useEffect(() => {
-    if (!data || initialized) return;
-    const ownedSums = new Map<string, number>();
-    const totalSums = new Map<string, number>();
-    for (const r of data.rollups) {
-      ownedSums.set(r.artist, (ownedSums.get(r.artist) ?? 0) + r.owned);
-      totalSums.set(r.artist, (totalSums.get(r.artist) ?? 0) + r.total);
-    }
-    const sorted = [...ownedSums.entries()].sort((a, b) => b[1] - a[1]);
-    const best =
-      (sorted[0]?.[1] ?? 0) > 0
-        ? sorted[0][0]
-        : ([...totalSums.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
-          null);
-    if (best) setFilters((f) => ({ ...f, artist: [best] }));
-    setInitialized(true);
-  }, [data, initialized]);
 
   const filteredRollups = useMemo(() => {
     if (!data) return [];
@@ -265,7 +245,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
     );
   }
 
-  if (isLoading || !initialized) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="h-6 w-40 bg-muted animate-pulse rounded" />

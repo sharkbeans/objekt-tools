@@ -7,6 +7,7 @@ import {
   Loader2Icon,
   ShareIcon,
 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -47,8 +48,9 @@ interface SeasonColorsResponse {
   colors: Record<string, string>;
 }
 
+type ViewTab = "dex" | "grid";
+
 interface StoredSelection {
-  activeTab?: "dex" | "grid";
   dexActiveClasses?: string[];
   dexActiveSeasons?: string[];
   dexActiveEditions?: Edition[];
@@ -176,6 +178,9 @@ interface Props {
 }
 
 export function MemberDexContent({ nickname, member }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { data, isLoading, error } = useQuery<ProgressMemberResponse>({
     queryKey: ["progress", nickname, member],
     queryFn: async () => {
@@ -193,8 +198,6 @@ export function MemberDexContent({ nickname, member }: Props) {
     staleTime: 60_000,
     retry: false,
   });
-
-  const [activeTab, setActiveTab] = useState<"dex" | "grid">("dex");
 
   // Dex-scoped filters
   const [dexActiveClasses, setDexActiveClasses] = useState<string[]>([]);
@@ -217,8 +220,8 @@ export function MemberDexContent({ nickname, member }: Props) {
   const [gridSeasonInitialized, setGridSeasonInitialized] = useState(false);
   const [viewConsumed, setViewConsumed] = useState(true);
 
-  // Restore this page's last-used tab/filters from localStorage (client
-  // only — runs after mount to avoid a hydration mismatch). Keyed per
+  // Restore this page's last-used filters from localStorage (client only —
+  // runs after mount to avoid a hydration mismatch). Keyed per
   // nickname+member so switching pages doesn't leak unrelated selections.
   const [selectionRestored, setSelectionRestored] = useState(false);
   useEffect(() => {
@@ -227,7 +230,6 @@ export function MemberDexContent({ nickname, member }: Props) {
       const raw = localStorage.getItem(selectionStorageKey(nickname, member));
       if (raw) {
         const stored = JSON.parse(raw) as StoredSelection;
-        if (stored.activeTab) setActiveTab(stored.activeTab);
         if (stored.dexActiveClasses)
           setDexActiveClasses(stored.dexActiveClasses);
         if (stored.dexActiveSeasons) {
@@ -253,12 +255,11 @@ export function MemberDexContent({ nickname, member }: Props) {
     setSelectionRestored(true);
   }, [nickname, member]);
 
-  // Persist the current selection whenever it changes, once the initial
+  // Persist the current filters whenever they change, once the initial
   // restore above has run (so we don't clobber storage with defaults first).
   useEffect(() => {
     if (!selectionRestored) return;
     const selection: StoredSelection = {
-      activeTab,
       dexActiveClasses,
       dexActiveSeasons,
       dexActiveEditions,
@@ -277,7 +278,6 @@ export function MemberDexContent({ nickname, member }: Props) {
     selectionRestored,
     nickname,
     member,
-    activeTab,
     dexActiveClasses,
     dexActiveSeasons,
     dexActiveEditions,
@@ -288,6 +288,21 @@ export function MemberDexContent({ nickname, member }: Props) {
     gridActiveEditions,
     viewConsumed,
   ]);
+
+  const activeTab: ViewTab =
+    searchParams.get("view") === "grid" ? "grid" : "dex";
+
+  const setActiveTab = useCallback(
+    (nextTab: ViewTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", nextTab === "grid" ? "grid" : "collection");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
+    },
+    [pathname, router, searchParams],
+  );
 
   const { data: seasonColorsData } = useQuery<SeasonColorsResponse>({
     queryKey: ["progress-season-colors"],
@@ -762,10 +777,24 @@ export function MemberDexContent({ nickname, member }: Props) {
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as "dex" | "grid")}
+          className="gap-4"
         >
-          <TabsList>
-            <TabsTrigger value="grid">Grid</TabsTrigger>
-            <TabsTrigger value="dex">Collection</TabsTrigger>
+          <TabsList
+            variant="line"
+            className="-mx-1 h-auto w-full justify-start overflow-x-auto border-b border-border px-1 pb-0"
+          >
+            <TabsTrigger
+              value="dex"
+              className="rounded-none px-3 pb-3 text-sm font-medium data-[state=active]:after:opacity-100"
+            >
+              Collection
+            </TabsTrigger>
+            <TabsTrigger
+              value="grid"
+              className="rounded-none px-3 pb-3 text-sm font-medium data-[state=active]:after:opacity-100"
+            >
+              Grid
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dex" className="pt-4">

@@ -44,7 +44,7 @@ export default async function ProgressNicknamePage({
   return (
     <div className="mx-auto w-full max-w-[96rem] px-4 py-6 space-y-6">
       {showClaimBanner && <ClaimBanner isSignedIn={!!session} />}
-      <ProgressOverviewContent nickname={nickname} />
+      <ProgressOverviewContent key={nickname} nickname={nickname} />
     </div>
   );
 }
