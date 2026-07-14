@@ -2,6 +2,7 @@ import { and, count, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import { fetchUserByNickname } from "@/lib/cosmo/client";
+import { refreshCosmoAccountIfStale } from "@/lib/cosmo/refresh-account";
 import { db } from "@/lib/db";
 import {
   activeTrade,
@@ -48,6 +49,7 @@ export async function GET(
       where: eq(cosmoAccount.address, identifier.toLowerCase()),
       with: { user: { columns: userColumns } },
     });
+    if (cosmo) cosmo = await refreshCosmoAccountIfStale(cosmo);
     // If the user has a nickname, redirect to the prettier /@nickname URL
     if (cosmo?.nickname) {
       return NextResponse.json({ nickname: cosmo.nickname }, { status: 301 });
@@ -70,6 +72,17 @@ export async function GET(
         { address: resolved.address.toLowerCase() },
         { status: 301 },
       );
+    }
+
+    // Nickname found in DB — revalidate in case it's stale, since the
+    // lookup above matches on the (possibly outdated) cached nickname.
+    cosmo = await refreshCosmoAccountIfStale(cosmo);
+    if (
+      cosmo.nickname &&
+      cosmo.nickname.toLowerCase() !== identifier.toLowerCase()
+    ) {
+      // Cosmo rename discovered — redirect to the canonical new nickname URL
+      return NextResponse.json({ nickname: cosmo.nickname }, { status: 301 });
     }
 
     // Nickname found in DB — already at canonical URL, proceed to profile
