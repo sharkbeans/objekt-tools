@@ -31,6 +31,10 @@ export interface TradeSideDTO {
   thumbnailUrl?: string | null;
   status: SideStatus;
   detectedAt?: string | null;
+  // The objekt that actually satisfied this side, once matched — may differ
+  // from `objektId`/`serial` above since verification matches by collection.
+  actualObjektId?: string | null;
+  actualSerial?: number | null;
   user: TradeUserDTO;
 }
 

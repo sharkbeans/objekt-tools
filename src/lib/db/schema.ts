@@ -269,6 +269,12 @@ export const activeTradeSide = pgTable(
     ownerAtAcceptance: text("owner_at_acceptance"),
     transferHash: text("transfer_hash"),
     detectedAt: timestamp("detected_at"),
+    // The objekt actually transferred for this side, once matched. Since the
+    // indexer's serialization is unreliable, verification matches transfers by
+    // collection rather than the pinned objektId above — this records which
+    // specific serial ended up satisfying the side, for logging/return-tracking.
+    actualObjektId: text("actual_objekt_id"),
+    actualSerial: integer("actual_serial"),
   },
   (t) => [
     index("active_trade_side_trade_idx").on(t.activeTradeId),

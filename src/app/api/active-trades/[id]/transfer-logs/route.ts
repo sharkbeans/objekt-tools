@@ -71,6 +71,7 @@ export async function GET(
   const mapped = logs.map((log) => ({
     id: log.id,
     event: log.event,
+    activeTradeSideId: log.activeTradeSideId,
     objektId: log.objektId,
     collectionId: log.collectionId,
     collectionNo: log.collectionNo,

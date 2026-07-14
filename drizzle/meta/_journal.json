@@ -155,6 +155,13 @@
       "when": 1781239367392,
       "tag": "0021_gigantic_major_mapleleaf",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783988328718,
+      "tag": "0022_numerous_maximus",
+      "breakpoints": true
     }
   ]
 }
