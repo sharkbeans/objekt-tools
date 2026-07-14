@@ -1,4 +1,4 @@
-import { and, eq, ilike, inArray } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";

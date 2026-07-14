@@ -4,7 +4,6 @@ import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import {
   activeTrade,
-  activeTradeSide,
   cosmoAccount,
   tradePost,
   tradeTransferLog,

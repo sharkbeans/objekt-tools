@@ -367,7 +367,11 @@ export default function TradeDetailClient({
         size="sm"
         variant={variant}
         aria-disabled={requiresLink}
-        className={requiresLink ? `${className ?? ""} cursor-not-allowed opacity-50`.trim() : className}
+        className={
+          requiresLink
+            ? `${className ?? ""} cursor-not-allowed opacity-50`.trim()
+            : className
+        }
         onClick={() => {
           if (!session) {
             setSignInOpen(true);
@@ -595,9 +599,9 @@ export default function TradeDetailClient({
             <CardContent className="py-4 space-y-3">
               {trade.wantsOnly && session && (
                 <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-sm text-yellow-200">
-                  This trader only accepts offers that include at least one objekt
-                  from their want list. Your offer will be rejected if none of
-                  your objekts match.
+                  This trader only accepts offers that include at least one
+                  objekt from their want list. Your offer will be rejected if
+                  none of your objekts match.
                 </div>
               )}
               <div className="flex items-center justify-between gap-4">

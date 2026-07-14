@@ -39,9 +39,7 @@ type VerificationResult = {
 };
 
 function getStaleCutoff(now = new Date()) {
-  return new Date(
-    now.getTime() - TRADE_AVAILABILITY_STALE_MINUTES * 60 * 1000,
-  );
+  return new Date(now.getTime() - TRADE_AVAILABILITY_STALE_MINUTES * 60 * 1000);
 }
 
 function formatRemovedLabels(trade: LoadedTrade, removedIds: Set<number>) {
@@ -65,7 +63,10 @@ function getOpenTradeWhere(userId?: string) {
 
 async function loadTradesForVerificationBatch(limit: number, userId?: string) {
   const unchecked = await db.query.tradePost.findMany({
-    where: and(getOpenTradeWhere(userId), isNull(tradePost.availabilityCheckedAt)),
+    where: and(
+      getOpenTradeWhere(userId),
+      isNull(tradePost.availabilityCheckedAt),
+    ),
     orderBy: [asc(tradePost.updatedAt)],
     limit,
     with: {
@@ -334,7 +335,9 @@ export async function verifyOpenTradesForUser(userId: string) {
   };
 }
 
-export async function verifyOpenTradesCron(limit = TRADE_AVAILABILITY_BATCH_LIMIT) {
+export async function verifyOpenTradesCron(
+  limit = TRADE_AVAILABILITY_BATCH_LIMIT,
+) {
   const trades = await loadTradesForVerificationBatch(limit);
   const results = await verifyLoadedTrades(trades);
   return {

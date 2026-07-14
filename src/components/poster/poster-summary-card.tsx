@@ -13,10 +13,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  formatSeasonNumberLabel,
-  formatShortLabel,
-} from "@/lib/objekt-label";
+import { formatSeasonNumberLabel, formatShortLabel } from "@/lib/objekt-label";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
@@ -165,7 +162,9 @@ export function PosterCard({ poster, onDelete, matchCount }: PosterCardProps) {
     wantPreview.entries.length > 0 ||
     havePreview.remaining > 0 ||
     wantPreview.remaining > 0;
-  const viewHref = sectionHref(`/list/${poster.id}`, { currentSection: "list" });
+  const viewHref = sectionHref(`/list/${poster.id}`, {
+    currentSection: "list",
+  });
 
   const handleCopyLink = async () => {
     try {

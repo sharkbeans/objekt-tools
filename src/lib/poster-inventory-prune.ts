@@ -4,8 +4,8 @@ import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { poster, posterHave } from "@/lib/db/schema";
-import { redis } from "@/lib/redis";
 import { syncPosterTradePost } from "@/lib/poster-trade-sync";
+import { redis } from "@/lib/redis";
 
 type PosterRow = {
   id: string;

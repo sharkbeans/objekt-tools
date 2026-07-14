@@ -2,10 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import {
-  formatSeasonNumberLabel,
-  formatShortLabel,
-} from "@/lib/objekt-label";
+import { formatSeasonNumberLabel, formatShortLabel } from "@/lib/objekt-label";
 import type { TradePostDTO, TradePostItem } from "@/lib/trade-types";
 
 function ItemThumb({ item }: { item: TradePostItem }) {

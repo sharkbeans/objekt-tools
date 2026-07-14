@@ -2,12 +2,12 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
+  user as appUser,
   cosmoAccount,
   poster,
   tradePost,
   tradePostHave,
   tradePostWant,
-  user as appUser,
 } from "@/lib/db/schema";
 import { syncPosterTradePost } from "@/lib/poster-trade-sync";
 

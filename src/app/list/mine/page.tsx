@@ -74,9 +74,7 @@ export default function MyListsPage() {
   const displayPosters = [...posters].sort((a, b) => {
     const matchDelta = (matchCounts[b.id] ?? 0) - (matchCounts[a.id] ?? 0);
     if (matchDelta !== 0) return matchDelta;
-    return (
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   });
 
   if (!session) return null;
