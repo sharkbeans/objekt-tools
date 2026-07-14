@@ -20,6 +20,7 @@ import {
   getBlockingTradeId,
   propagateResolution,
 } from "@/lib/trade-guards";
+import { resolveCollectionUuids } from "@/lib/trade-transfer-matching";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
 export async function POST(
@@ -88,42 +89,75 @@ export async function POST(
     where: eq(activeTradeSide.activeTradeId, tradeId),
   });
 
-  // Query indexer for current owners of all objekts in the trade
-  const objektIds = sides.map((s) => s.objektId);
-  const owned = await indexer
-    .select({ id: objekts.id, owner: objekts.owner })
-    .from(objekts)
-    .where(inArray(objekts.id, objektIds));
-  const ownerMap = new Map(owned.map((o) => [o.id, o.owner]));
+  // Pre-delivery is checked by collection, not the pinned objektId — any
+  // objekt of the right collection already sitting at the recipient's wallet
+  // counts. Query all copies of the traded collections currently held by any
+  // of the trade's recipient wallets, then greedily assign one copy per side.
+  const collectionSlugs = [...new Set(sides.map((s) => s.collectionId))];
+  const uuidBySlug = await resolveCollectionUuids(collectionSlugs);
+  const collectionUuids = [...uuidBySlug.values()];
+  const slugByUuid = new Map(
+    [...uuidBySlug.entries()].map(([slug, id]) => [id, slug]),
+  );
+  const recipientAddrs = [
+    ...new Set(sides.map((s) => s.recipientAddress.toLowerCase())),
+  ];
+
+  const ownedRows =
+    collectionUuids.length > 0
+      ? await indexer
+          .select({
+            id: objekts.id,
+            owner: objekts.owner,
+            serial: objekts.serial,
+            collectionId: objekts.collectionId,
+          })
+          .from(objekts)
+          .where(
+            and(
+              inArray(objekts.collectionId, collectionUuids),
+              inArray(objekts.owner, recipientAddrs),
+            ),
+          )
+      : [];
+  const sortedOwned = [...ownedRows].sort((a, b) => a.id.localeCompare(b.id));
+
+  const claimedObjektIds = new Set<string>();
+  const preDelivered: {
+    side: (typeof sides)[number];
+    objektId: string;
+    serial: number;
+  }[] = [];
+
+  for (const side of sides) {
+    const match = sortedOwned.find((o) => {
+      if (claimedObjektIds.has(o.id)) return false;
+      if (
+        !o.collectionId ||
+        slugByUuid.get(o.collectionId) !== side.collectionId
+      )
+        return false;
+      return o.owner.toLowerCase() === side.recipientAddress.toLowerCase();
+    });
+    if (match) {
+      claimedObjektIds.add(match.id);
+      preDelivered.push({ side, objektId: match.id, serial: match.serial });
+    }
+  }
 
   const now = new Date();
 
-  // Identify pre-delivered objekts (already at recipient's address)
-  const preDelivered = sides.filter((s) => {
-    const currentOwner = ownerMap.get(s.objektId);
-    return (
-      currentOwner &&
-      currentOwner.toLowerCase() === s.recipientAddress.toLowerCase()
-    );
-  });
-
   await db.transaction(async (tx) => {
-    // Snapshot each objekt's current owner at acceptance time
-    for (const side of sides) {
-      const currentOwner = ownerMap.get(side.objektId);
-      if (currentOwner) {
-        await tx
-          .update(activeTradeSide)
-          .set({ ownerAtAcceptance: currentOwner })
-          .where(eq(activeTradeSide.id, side.id));
-      }
-    }
-
     // Auto-confirm pre-delivered sides
-    for (const side of preDelivered) {
+    for (const { side, objektId, serial } of preDelivered) {
       await tx
         .update(activeTradeSide)
-        .set({ status: "confirmed", detectedAt: now })
+        .set({
+          status: "confirmed",
+          detectedAt: now,
+          actualObjektId: objektId,
+          actualSerial: serial,
+        })
         .where(eq(activeTradeSide.id, side.id));
 
       const recipientUserId =
@@ -135,11 +169,11 @@ export async function POST(
         activeTradeSideId: side.id,
         fromAddress: side.address,
         toAddress: side.recipientAddress,
-        objektId: side.objektId,
+        objektId,
         collectionId: side.collectionId,
         collectionNo: side.collectionNo,
         member: side.member,
-        serial: side.serial,
+        serial,
         senderUserId: side.userId,
         recipientUserId,
         event: "confirmed",

@@ -5,7 +5,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { indexer } from "@/lib/db/indexer";
-import { collections, objekts, transfers } from "@/lib/db/indexer-schema";
+import { collections, transfers } from "@/lib/db/indexer-schema";
 import {
   activeTrade,
   activeTradeSide,
@@ -16,10 +16,24 @@ import {
 import { notify } from "@/lib/notify";
 import { publishTradeEvent } from "@/lib/realtime";
 import { propagateResolution, tryLiftBan } from "@/lib/trade-guards";
+import {
+  type CollectionTransferEvent,
+  fetchCollectionTransferEvents,
+  fetchSerials,
+  pickTransferForSide,
+} from "@/lib/trade-transfer-matching";
+
+type ActiveTradeSideRow = typeof activeTradeSide.$inferSelect;
 
 // POST /api/active-trades/[id]/check-transfers
 // Queries the indexer for current objekt ownership and updates side statuses.
 // Works for both pending and accepted/partial trades.
+//
+// Matching is done by (fromAddress, toAddress, collection) rather than the
+// pinned objektId a side was created with — the indexer's serial data is
+// unreliable, so any objekt of the right collection sent between the right
+// two wallets satisfies a side. The specific copy that ends up satisfying a
+// side is recorded on activeTradeSide.actualObjektId/actualSerial.
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -59,100 +73,119 @@ export async function POST(
     return NextResponse.json({ status: trade.status, sides: trade.sides });
   }
 
-  const tradeObjektIds = trade.sides.map((s) => s.objektId);
-
-  // Build a set of objekt IDs that are part of this trade for quick lookup
-  const tradeObjektIdSet = new Set(tradeObjektIds);
-
   const loggedEvents = new Set(
-    existingLogs.map((l) => `${l.objektId}:${l.event}`),
+    existingLogs.map((l) => `${l.activeTradeSideId}:${l.event}`),
   );
 
   let updatedCount = 0;
 
   if (trade.status === "pending") {
-    // ── PENDING: detect pre-accept transfers with strict sender/recipient matching ──
-    const transferEvents = await indexer
-      .select({
-        objektId: transfers.objektId,
-        from: transfers.from,
-        to: transfers.to,
-        timestamp: transfers.timestamp,
-      })
-      .from(transfers)
-      .where(
-        and(
-          inArray(transfers.objektId, tradeObjektIds),
-          trade.createdAt
-            ? gte(transfers.timestamp, trade.createdAt)
-            : undefined,
-        ),
-      );
+    // ── PENDING: detect pre-accept transfers, matched by collection ──
+    const collectionSlugs = [
+      ...new Set(trade.sides.map((s) => s.collectionId)),
+    ];
+    const addresses = [
+      ...new Set(
+        trade.sides.flatMap((s) => [
+          s.address.toLowerCase(),
+          s.recipientAddress.toLowerCase(),
+        ]),
+      ),
+    ];
+    const transferEvents = await fetchCollectionTransferEvents({
+      collectionSlugs,
+      addresses,
+      since: trade.createdAt,
+    });
 
-    // Collect inserts to batch
-    const pendingInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
+    // Objekts already bound to a side (from this or a previous poll) can't be
+    // claimed again by another side of the same collection.
+    const claimedObjektIds = new Set(
+      trade.sides
+        .map((s) => s.actualObjektId)
+        .filter((id): id is string => id !== null),
+    );
 
+    const newlyMatched: {
+      side: ActiveTradeSideRow;
+      transfer: CollectionTransferEvent;
+    }[] = [];
     for (const side of trade.sides) {
-      const matchedTransfer = transferEvents.find(
-        (t) =>
-          t.objektId === side.objektId &&
-          t.from.toLowerCase() === side.address.toLowerCase() &&
-          t.to.toLowerCase() === side.recipientAddress.toLowerCase(),
-      );
-      if (!matchedTransfer) {
-        continue;
-      }
+      if (side.actualObjektId) continue; // already bound from a previous poll
+      const matched = pickTransferForSide(transferEvents, {
+        from: side.address,
+        to: side.recipientAddress,
+        collectionSlug: side.collectionId,
+        excludeObjektIds: claimedObjektIds,
+      });
+      if (!matched) continue;
+      claimedObjektIds.add(matched.objektId);
+      newlyMatched.push({ side, transfer: matched });
+    }
 
+    const serialMap = await fetchSerials(
+      newlyMatched.map((m) => m.transfer.objektId),
+    );
+    const matchedBySideId = new Map(
+      newlyMatched.map(({ side, transfer }) => [
+        side.id,
+        {
+          objektId: transfer.objektId,
+          serial: serialMap.get(transfer.objektId) ?? null,
+        },
+      ]),
+    );
+
+    const pendingInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
+    for (const { side, transfer } of newlyMatched) {
       const recipientUserId =
         side.userId === trade.initiatorUserId
           ? trade.recipientUserId
           : trade.initiatorUserId;
+      const serial = serialMap.get(transfer.objektId) ?? null;
 
-      if (!loggedEvents.has(`${side.objektId}:pre_accept_sent`)) {
+      for (const event of [
+        "pre_accept_sent",
+        "pre_accept_confirmed",
+      ] as const) {
         pendingInserts.push({
           activeTradeId: tradeId,
           activeTradeSideId: side.id,
-          fromAddress: side.address,
-          toAddress: side.recipientAddress,
-          objektId: side.objektId,
+          fromAddress: transfer.from,
+          toAddress: transfer.to,
+          objektId: transfer.objektId,
           collectionId: side.collectionId,
           collectionNo: side.collectionNo,
           member: side.member,
-          serial: side.serial,
+          serial,
           senderUserId: side.userId,
           recipientUserId,
-          event: "pre_accept_sent",
+          event,
         });
-        loggedEvents.add(`${side.objektId}:pre_accept_sent`);
-        updatedCount++;
       }
-
-      if (!loggedEvents.has(`${side.objektId}:pre_accept_confirmed`)) {
-        pendingInserts.push({
-          activeTradeId: tradeId,
-          activeTradeSideId: side.id,
-          fromAddress: side.address,
-          toAddress: side.recipientAddress,
-          objektId: side.objektId,
-          collectionId: side.collectionId,
-          collectionNo: side.collectionNo,
-          member: side.member,
-          serial: side.serial,
-          senderUserId: side.userId,
-          recipientUserId,
-          event: "pre_accept_confirmed",
-        });
-        loggedEvents.add(`${side.objektId}:pre_accept_confirmed`);
-        updatedCount++;
-      }
+      loggedEvents.add(`${side.id}:pre_accept_sent`);
+      loggedEvents.add(`${side.id}:pre_accept_confirmed`);
+      updatedCount++;
     }
 
-    if (pendingInserts.length > 0) {
-      await db.insert(tradeTransferLog).values(pendingInserts);
+    if (newlyMatched.length > 0) {
+      await Promise.all([
+        pendingInserts.length > 0
+          ? db.insert(tradeTransferLog).values(pendingInserts)
+          : Promise.resolve(),
+        ...newlyMatched.map(({ side, transfer }) =>
+          db
+            .update(activeTradeSide)
+            .set({
+              actualObjektId: transfer.objektId,
+              actualSerial: serialMap.get(transfer.objektId) ?? null,
+            })
+            .where(eq(activeTradeSide.id, side.id)),
+        ),
+      ]);
     }
 
     // ── AUTO-ACCEPT: if ALL sides for a party are now pre_accept_sent, promote the trade ──
-    // Group sides by user
     const initiatorSides = trade.sides.filter(
       (s) => s.userId === trade.initiatorUserId,
     );
@@ -160,33 +193,34 @@ export async function POST(
       (s) => s.userId === trade.recipientUserId,
     );
 
-    const initiatorAllPreSent = initiatorSides.every((s) =>
-      loggedEvents.has(`${s.objektId}:pre_accept_sent`),
-    );
-    const recipientAllPreSent = recipientSidesForCheck.every((s) =>
-      loggedEvents.has(`${s.objektId}:pre_accept_sent`),
-    );
+    const isPreSent = (s: ActiveTradeSideRow) =>
+      loggedEvents.has(`${s.id}:pre_accept_sent`);
+    const initiatorAllPreSent = initiatorSides.every(isPreSent);
+    const recipientAllPreSent = recipientSidesForCheck.every(isPreSent);
+
+    const resolveActual = (side: ActiveTradeSideRow) =>
+      matchedBySideId.get(side.id) ??
+      (side.actualObjektId
+        ? { objektId: side.actualObjektId, serial: side.actualSerial }
+        : null);
 
     if (initiatorAllPreSent && recipientAllPreSent) {
       // Both parties sent everything pre-accept — promote straight to completed
       const now = new Date();
       await db.transaction(async (tx) => {
-        // Snapshot ownerAtAcceptance and mark all sides confirmed
-        const objektIds2 = trade.sides.map((s) => s.objektId);
-        const owned2 = await indexer
-          .select({ id: objekts.id, owner: objekts.owner })
-          .from(objekts)
-          .where(inArray(objekts.id, objektIds2));
-        const ownerMap2 = new Map(owned2.map((o) => [o.id, o.owner]));
-
         for (const side of trade.sides) {
-          const currentOwner = ownerMap2.get(side.objektId);
+          const actual = resolveActual(side);
           await tx
             .update(activeTradeSide)
             .set({
               status: "confirmed",
-              ownerAtAcceptance: currentOwner ?? null,
               detectedAt: now,
+              ...(actual
+                ? {
+                    actualObjektId: actual.objektId,
+                    actualSerial: actual.serial,
+                  }
+                : {}),
             })
             .where(eq(activeTradeSide.id, side.id));
         }
@@ -222,26 +256,21 @@ export async function POST(
       // Recipient sent all their objekts pre-accept — auto-promote to accepted
       const now = new Date();
       await db.transaction(async (tx) => {
-        const objektIds2 = trade.sides.map((s) => s.objektId);
-        const owned2 = await indexer
-          .select({ id: objekts.id, owner: objekts.owner })
-          .from(objekts)
-          .where(inArray(objekts.id, objektIds2));
-        const ownerMap2 = new Map(owned2.map((o) => [o.id, o.owner]));
-
-        for (const side of trade.sides) {
-          const currentOwner = ownerMap2.get(side.objektId);
-          await tx
-            .update(activeTradeSide)
-            .set({ ownerAtAcceptance: currentOwner ?? null })
-            .where(eq(activeTradeSide.id, side.id));
-        }
-
         // Mark recipient's sides as confirmed (they already arrived)
         for (const side of recipientSidesForCheck) {
+          const actual = resolveActual(side);
           await tx
             .update(activeTradeSide)
-            .set({ status: "confirmed", detectedAt: now })
+            .set({
+              status: "confirmed",
+              detectedAt: now,
+              ...(actual
+                ? {
+                    actualObjektId: actual.objektId,
+                    actualSerial: actual.serial,
+                  }
+                : {}),
+            })
             .where(eq(activeTradeSide.id, side.id));
         }
 
@@ -291,38 +320,42 @@ export async function POST(
       }
     }
   } else {
-    // ── ACCEPTED / PARTIAL: normal transfer tracking ──
-    // Use actual transfer events from the indexer to verify correct sender → recipient
+    // ── ACCEPTED / PARTIAL: normal transfer tracking, matched by collection ──
     const pendingSides = trade.sides.filter((s) => s.status !== "confirmed");
 
     if (pendingSides.length > 0) {
-      const pendingObjektIds = pendingSides.map((s) => s.objektId);
-
-      // Query transfer events for the pending objekts since trade acceptance
-      // (or creation as fallback). Using acceptedAt prevents transfers from
-      // the same moment as acceptance being mis-attributed.
       const transferSince = trade.acceptedAt ?? trade.createdAt;
-      const transferEvents = await indexer
-        .select({
-          objektId: transfers.objektId,
-          from: transfers.from,
-          to: transfers.to,
-          timestamp: transfers.timestamp,
-        })
-        .from(transfers)
-        .where(
-          and(
-            inArray(transfers.objektId, pendingObjektIds),
-            transferSince ? gte(transfers.timestamp, transferSince) : undefined,
-          ),
-        );
+      const collectionSlugs = [
+        ...new Set(pendingSides.map((s) => s.collectionId)),
+      ];
+      const addresses = [
+        ...new Set(
+          trade.sides.flatMap((s) => [
+            s.address.toLowerCase(),
+            s.recipientAddress.toLowerCase(),
+          ]),
+        ),
+      ];
+      const transferEvents = await fetchCollectionTransferEvents({
+        collectionSlugs,
+        addresses,
+        since: transferSince,
+      });
 
-      // Collect inserts to batch
+      // Objekts already bound to any side in this trade (confirmed earlier, or
+      // bound to another pending side in an earlier poll) can't be reclaimed.
+      const claimedObjektIds = new Set(
+        trade.sides
+          .map((s) => s.actualObjektId)
+          .filter((id): id is string => id !== null),
+      );
+
       const sideInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
       const sideUpdates: {
         id: number;
         status: "sent" | "confirmed";
         detectedAt?: Date;
+        actualObjektId?: string;
       }[] = [];
 
       for (const side of pendingSides) {
@@ -331,43 +364,54 @@ export async function POST(
             ? trade.recipientUserId
             : trade.initiatorUserId;
 
-        // Find a transfer event where the correct objekt was sent
-        // from the correct sender to the correct recipient
-        const confirmedTransfer = transferEvents.find(
-          (t) =>
-            t.objektId === side.objektId &&
-            t.from.toLowerCase() === side.address.toLowerCase() &&
-            t.to.toLowerCase() === side.recipientAddress.toLowerCase(),
-        );
-        const wrongRecipientTransfer = transferEvents.find(
-          (t) =>
-            t.objektId === side.objektId &&
-            t.from.toLowerCase() === side.address.toLowerCase() &&
-            t.to.toLowerCase() !== side.recipientAddress.toLowerCase(),
-        );
+        let confirmedTransfer: CollectionTransferEvent | undefined;
+        if (side.actualObjektId) {
+          // Already bound to a specific copy from an earlier poll — only look
+          // for that exact objekt now, so status can progress sent -> confirmed.
+          confirmedTransfer = transferEvents.find(
+            (t) =>
+              t.objektId === side.actualObjektId &&
+              t.from.toLowerCase() === side.address.toLowerCase() &&
+              t.to.toLowerCase() === side.recipientAddress.toLowerCase(),
+          );
+        } else {
+          confirmedTransfer = pickTransferForSide(transferEvents, {
+            from: side.address,
+            to: side.recipientAddress,
+            collectionSlug: side.collectionId,
+            excludeObjektIds: claimedObjektIds,
+          });
+          if (confirmedTransfer)
+            claimedObjektIds.add(confirmedTransfer.objektId);
+        }
+
+        const wrongRecipientTransfer = !confirmedTransfer
+          ? transferEvents.find(
+              (t) =>
+                t.collectionSlug === side.collectionId &&
+                t.from.toLowerCase() === side.address.toLowerCase() &&
+                t.to.toLowerCase() !== side.recipientAddress.toLowerCase() &&
+                !claimedObjektIds.has(t.objektId),
+            )
+          : undefined;
 
         if (confirmedTransfer) {
-          // Skip unsolicited pre-accept transfers
-          if (
-            side.ownerAtAcceptance &&
-            side.ownerAtAcceptance.toLowerCase() ===
-              side.recipientAddress.toLowerCase()
-          ) {
-            continue;
-          }
-
           if (side.status === "pending") {
-            sideUpdates.push({ id: side.id, status: "sent" });
+            sideUpdates.push({
+              id: side.id,
+              status: "sent",
+              actualObjektId: confirmedTransfer.objektId,
+            });
             sideInserts.push({
               activeTradeId: tradeId,
               activeTradeSideId: side.id,
-              fromAddress: side.address,
-              toAddress: side.recipientAddress,
-              objektId: side.objektId,
+              fromAddress: confirmedTransfer.from,
+              toAddress: confirmedTransfer.to,
+              objektId: confirmedTransfer.objektId,
               collectionId: side.collectionId,
               collectionNo: side.collectionNo,
               member: side.member,
-              serial: side.serial,
+              serial: null,
               senderUserId: side.userId,
               recipientUserId,
               event: "sent",
@@ -378,17 +422,18 @@ export async function POST(
               id: side.id,
               status: "confirmed",
               detectedAt: new Date(),
+              actualObjektId: confirmedTransfer.objektId,
             });
             sideInserts.push({
               activeTradeId: tradeId,
               activeTradeSideId: side.id,
-              fromAddress: side.address,
-              toAddress: side.recipientAddress,
-              objektId: side.objektId,
+              fromAddress: confirmedTransfer.from,
+              toAddress: confirmedTransfer.to,
+              objektId: confirmedTransfer.objektId,
               collectionId: side.collectionId,
               collectionNo: side.collectionNo,
               member: side.member,
-              serial: side.serial,
+              serial: null,
               senderUserId: side.userId,
               recipientUserId,
               event: "confirmed",
@@ -397,23 +442,24 @@ export async function POST(
           }
         } else if (
           wrongRecipientTransfer &&
-          !loggedEvents.has(`${side.objektId}:wrong_recipient`)
+          !loggedEvents.has(`${side.id}:wrong_recipient`)
         ) {
+          claimedObjektIds.add(wrongRecipientTransfer.objektId);
           sideInserts.push({
             activeTradeId: tradeId,
             activeTradeSideId: side.id,
             fromAddress: side.address,
             toAddress: wrongRecipientTransfer.to,
-            objektId: side.objektId,
+            objektId: wrongRecipientTransfer.objektId,
             collectionId: side.collectionId,
             collectionNo: side.collectionNo,
             member: side.member,
-            serial: side.serial,
+            serial: null,
             senderUserId: side.userId,
             recipientUserId,
             event: "wrong_recipient",
           });
-          loggedEvents.add(`${side.objektId}:wrong_recipient`);
+          loggedEvents.add(`${side.id}:wrong_recipient`);
           updatedCount++;
         }
 
@@ -425,40 +471,49 @@ export async function POST(
         // original sender and a wrong_recipient was previously logged.
         if (
           !confirmedTransfer &&
-          loggedEvents.has(`${side.objektId}:wrong_recipient`) &&
-          !loggedEvents.has(`${side.objektId}:recovered`)
+          loggedEvents.has(`${side.id}:wrong_recipient`) &&
+          !loggedEvents.has(`${side.id}:recovered`)
         ) {
-          // Look for any transfer to the intended recipient, regardless of sender
           const recoveryTransfer = transferEvents.find(
             (t) =>
-              t.objektId === side.objektId &&
+              t.collectionSlug === side.collectionId &&
               t.to.toLowerCase() === side.recipientAddress.toLowerCase() &&
-              t.from.toLowerCase() !== side.address.toLowerCase(), // not the original sender (that path is confirmedTransfer)
+              t.from.toLowerCase() !== side.address.toLowerCase() &&
+              !claimedObjektIds.has(t.objektId),
           );
           if (recoveryTransfer) {
+            claimedObjektIds.add(recoveryTransfer.objektId);
             sideInserts.push({
               activeTradeId: tradeId,
               activeTradeSideId: side.id,
               fromAddress: recoveryTransfer.from,
               toAddress: recoveryTransfer.to,
-              objektId: side.objektId,
+              objektId: recoveryTransfer.objektId,
               collectionId: side.collectionId,
               collectionNo: side.collectionNo,
               member: side.member,
-              serial: side.serial,
+              serial: null,
               senderUserId: side.userId,
               recipientUserId,
               event: "recovered",
             });
-            loggedEvents.add(`${side.objektId}:recovered`);
+            loggedEvents.add(`${side.id}:recovered`);
             sideUpdates.push({
               id: side.id,
               status: "confirmed",
               detectedAt: new Date(),
+              actualObjektId: recoveryTransfer.objektId,
             });
             updatedCount++;
           }
         }
+      }
+
+      // Batch-resolve serials for every objekt referenced in this pass, then
+      // fill them into the insert rows (placeholder null above).
+      const serialMap = await fetchSerials(sideInserts.map((i) => i.objektId));
+      for (const insert of sideInserts) {
+        insert.serial = serialMap.get(insert.objektId) ?? null;
       }
 
       // Flush all inserts and updates in parallel
@@ -469,11 +524,16 @@ export async function POST(
         ...sideUpdates.map((u) =>
           db
             .update(activeTradeSide)
-            .set(
-              u.detectedAt
-                ? { status: u.status, detectedAt: u.detectedAt }
-                : { status: u.status },
-            )
+            .set({
+              status: u.status,
+              ...(u.detectedAt ? { detectedAt: u.detectedAt } : {}),
+              ...(u.actualObjektId
+                ? {
+                    actualObjektId: u.actualObjektId,
+                    actualSerial: serialMap.get(u.actualObjektId) ?? null,
+                  }
+                : {}),
+            })
             .where(eq(activeTradeSide.id, u.id)),
         ),
       ]);
@@ -484,15 +544,19 @@ export async function POST(
   // A return is when the recipient of a confirmed side sends that same objekt
   // back to the original sender. Detected on accepted/partial trades only.
   // When all confirmed sides that were received by a user have been returned,
-  // either party can cancel the trade without penalty.
+  // either party can cancel the trade without penalty. Uses the actual objekt
+  // that was confirmed for the side (not the originally pinned one).
   if (["accepted", "partial"].includes(trade.status)) {
     const confirmedSides = trade.sides.filter((s) => s.status === "confirmed");
 
     if (confirmedSides.length > 0) {
-      const confirmedObjektIds = confirmedSides.map((s) => s.objektId);
+      const trackedObjektIdBySide = new Map(
+        confirmedSides.map((s) => [s.id, s.actualObjektId ?? s.objektId]),
+      );
+      const confirmedObjektIds = [...trackedObjektIdBySide.values()];
       const transferSince = trade.acceptedAt ?? trade.createdAt;
 
-      // Query the indexer for any transfers of confirmed objekt IDs since acceptance
+      // Query the indexer for any transfers of the confirmed objekt IDs since acceptance
       const returnCandidates = await indexer
         .select({
           objektId: transfers.objektId,
@@ -520,16 +584,20 @@ export async function POST(
       let existingReturnMsgs: Set<string> | null = null;
 
       for (const side of confirmedSides) {
+        const trackedObjektId =
+          trackedObjektIdBySide.get(side.id) ??
+          side.actualObjektId ??
+          side.objektId;
         // A return: the objekt that was sent FROM side.address TO side.recipientAddress
         // is now being sent back FROM side.recipientAddress TO side.address
         const returnTransfer = returnCandidates.find(
           (t) =>
-            t.objektId === side.objektId &&
+            t.objektId === trackedObjektId &&
             t.from.toLowerCase() === side.recipientAddress.toLowerCase() &&
             t.to.toLowerCase() === side.address.toLowerCase(),
         );
 
-        if (returnTransfer && !loggedEvents.has(`${side.objektId}:returned`)) {
+        if (returnTransfer && !loggedEvents.has(`${side.id}:returned`)) {
           const recipientUserId =
             side.userId === trade.initiatorUserId
               ? trade.recipientUserId
@@ -540,17 +608,17 @@ export async function POST(
             activeTradeSideId: side.id,
             fromAddress: side.recipientAddress,
             toAddress: side.address,
-            objektId: side.objektId,
+            objektId: trackedObjektId,
             collectionId: side.collectionId,
             collectionNo: side.collectionNo,
             member: side.member,
-            serial: side.serial,
+            serial: side.actualSerial ?? side.serial,
             // sender of the return = the recipient of the original transfer
             senderUserId: recipientUserId,
             recipientUserId: side.userId,
             event: "returned",
           });
-          loggedEvents.add(`${side.objektId}:returned`);
+          loggedEvents.add(`${side.id}:returned`);
           updatedCount++;
 
           const senderName =
@@ -616,11 +684,10 @@ export async function POST(
   // ── WRONG OBJEKT DETECTION ──
   // Only run for accepted/partial trades. On pending trades the parties' wallets
   // may have unrelated transfers (old or other active trades) that would be
-  // falsely flagged here.
+  // falsely flagged here. A transfer is "wrong" only if its (from, to,
+  // collection) triple isn't one this trade expects at all — sending extra
+  // copies or a different serial of an expected collection is never flagged.
   if (!["accepted", "partial"].includes(trade.status)) {
-    // Skip wrong_objekt detection for pending trades — the parties' wallets may
-    // have unrelated transfers (from old or other active trades) that would be
-    // falsely flagged. Only pre_accept_* events are meaningful here.
     if (updatedCount > 0) {
       void publishTradeEvent(tradeId, "trade:transfer-detected", {
         activeTradeId: tradeId,
@@ -671,7 +738,15 @@ export async function POST(
   }
 
   // Query the indexer's transfer table for actual transfers between trade parties
-  // since the trade was accepted, then flag any non-trade objekts
+  // since the trade was accepted, then flag any transfer whose (from, to,
+  // collection) triple isn't expected by this trade at all.
+
+  const expectedTriples = new Set(
+    trade.sides.map(
+      (s) =>
+        `${s.address.toLowerCase()}>${s.recipientAddress.toLowerCase()}>${s.collectionId}`,
+    ),
+  );
 
   // Sending addresses for each party (side.address = sender's wallet)
   const initiatorSendAddrs = trade.sides
@@ -718,10 +793,37 @@ export async function POST(
       ),
     );
 
-  // Filter to non-trade objekts only
-  const wrongTransfers = recentTransfers.filter(
-    (t) => t.objektId && !tradeObjektIdSet.has(t.objektId),
-  );
+  // Resolve collection slugs for the transferred collections so we can check
+  // triple membership.
+  const transferCollectionUuids = [
+    ...new Set(
+      recentTransfers
+        .map((t) => t.collectionId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const collRows =
+    transferCollectionUuids.length > 0
+      ? await indexer
+          .select({
+            id: collections.id,
+            collectionId: collections.collectionId,
+            collectionNo: collections.collectionNo,
+            member: collections.member,
+          })
+          .from(collections)
+          .where(inArray(collections.id, transferCollectionUuids))
+      : [];
+  const collByUuid = new Map(collRows.map((c) => [c.id, c]));
+
+  // Filter to transfers whose (from, to, collection) triple this trade doesn't expect
+  const wrongTransfers = recentTransfers.filter((t) => {
+    if (!t.objektId || !t.collectionId) return false;
+    const coll = collByUuid.get(t.collectionId);
+    if (!coll) return true; // unresolvable collection — flag to be safe
+    const triple = `${t.from.toLowerCase()}>${t.to.toLowerCase()}>${coll.collectionId}`;
+    return !expectedTriples.has(triple);
+  });
 
   const MAX_WRONG_TRANSFERS_PER_TRADE = 10;
 
@@ -737,49 +839,7 @@ export async function POST(
       const wrongObjektIds = wrongTransfers
         .map((t) => t.objektId)
         .filter((id): id is string => id !== null);
-      const wrongCollectionIds = wrongTransfers
-        .map((t) => t.collectionId)
-        .filter((id): id is string => id !== null);
-
-      // Fetch serial and collection info in parallel
-      const [objs, colls] = await Promise.all([
-        wrongObjektIds.length > 0
-          ? indexer
-              .select({ id: objekts.id, serial: objekts.serial })
-              .from(objekts)
-              .where(inArray(objekts.id, wrongObjektIds))
-          : Promise.resolve([] as { id: string; serial: number }[]),
-        wrongCollectionIds.length > 0
-          ? indexer
-              .select({
-                id: collections.id,
-                collectionId: collections.collectionId,
-                collectionNo: collections.collectionNo,
-                member: collections.member,
-              })
-              .from(collections)
-              .where(inArray(collections.id, [...new Set(wrongCollectionIds)]))
-          : Promise.resolve(
-              [] as {
-                id: string;
-                collectionId: string;
-                collectionNo: string;
-                member: string;
-              }[],
-            ),
-      ]);
-
-      const serialMap = new Map(objs.map((o) => [o.id, o.serial]));
-      const collectionMap = new Map(
-        colls.map((c) => [
-          c.id,
-          {
-            collectionId: c.collectionId,
-            collectionNo: c.collectionNo,
-            member: c.member,
-          },
-        ]),
-      );
+      const serialMap = await fetchSerials(wrongObjektIds);
 
       const wrongInserts: (typeof tradeTransferLog.$inferInsert)[] = [];
       let insertedWrongCount = 0;
@@ -797,7 +857,7 @@ export async function POST(
           ? trade.recipientUserId
           : trade.initiatorUserId;
 
-        const coll = t.collectionId ? collectionMap.get(t.collectionId) : null;
+        const coll = t.collectionId ? collByUuid.get(t.collectionId) : null;
 
         wrongInserts.push({
           activeTradeId: tradeId,
@@ -808,7 +868,7 @@ export async function POST(
           collectionId: coll?.collectionId ?? t.collectionId ?? "unknown",
           collectionNo: coll?.collectionNo ?? null,
           member: coll?.member ?? null,
-          serial: t.objektId ? (serialMap.get(t.objektId) ?? null) : null,
+          serial: serialMap.get(t.objektId) ?? null,
           senderUserId,
           recipientUserId,
           event: "wrong_objekt",
@@ -949,14 +1009,16 @@ export async function POST(
   const recoveredLogs = freshLogs.filter((l) => l.event === "recovered");
   const returnedLogs = freshLogs.filter((l) => l.event === "returned");
 
-  // wrong_recipient logs that have a matching recovered log are no longer suspicious
-  const recoveredObjektIds = new Set(recoveredLogs.map((l) => l.objektId));
+  // wrong_recipient logs that have a matching recovered log (same side) are no longer suspicious
+  const recoveredSideIds = new Set(
+    recoveredLogs.map((l) => l.activeTradeSideId),
+  );
   const unresolvedWrongRecipientLogs = wrongRecipientLogs.filter(
-    (l) => !recoveredObjektIds.has(l.objektId),
+    (l) => !recoveredSideIds.has(l.activeTradeSideId),
   );
 
   // A user has "fully returned" if every confirmed side they received has a matching returned log
-  const returnedObjektIds = new Set(returnedLogs.map((l) => l.objektId));
+  const returnedSideIds = new Set(returnedLogs.map((l) => l.activeTradeSideId));
 
   return NextResponse.json({
     status: newTradeStatus,
@@ -967,7 +1029,7 @@ export async function POST(
     wrongRecipientTransfers: wrongRecipientLogs.length,
     recoveredTransfers: recoveredLogs.length,
     returnedTransfers: returnedLogs.length,
-    returnedObjektIds: [...returnedObjektIds],
+    returnedSideIds: [...returnedSideIds],
     suspiciousTransfers:
       wrongObjektLogs.length + unresolvedWrongRecipientLogs.length,
   });

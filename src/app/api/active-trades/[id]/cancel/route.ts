@@ -119,9 +119,11 @@ export async function POST(
           eq(tradeTransferLog.event, "returned"),
         ),
       });
-      const returnedObjektIds = new Set(returnedLogs.map((l) => l.objektId));
+      const returnedSideIds = new Set(
+        returnedLogs.map((l) => l.activeTradeSideId),
+      );
       allReceivedReturned = mySentConfirmedSides.every((s) =>
-        returnedObjektIds.has(s.objektId),
+        returnedSideIds.has(s.id),
       );
     }
   }

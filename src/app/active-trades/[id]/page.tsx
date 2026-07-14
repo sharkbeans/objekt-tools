@@ -559,6 +559,7 @@ type TransferLogEvent =
 interface TransferLog {
   id: number;
   event: TransferLogEvent;
+  activeTradeSideId: number | null;
   objektId: string;
   collectionId: string;
   collectionNo?: string | null;
@@ -940,16 +941,21 @@ export default function ActiveTradePage({
   const preAcceptLogs = transferLogs.filter(
     (l) => l.event === "pre_accept_sent" || l.event === "pre_accept_confirmed",
   );
-  const recoveredObjektIds = new Set(
-    transferLogs.filter((l) => l.event === "recovered").map((l) => l.objektId),
+  const recoveredSideIds = new Set(
+    transferLogs
+      .filter((l) => l.event === "recovered")
+      .map((l) => l.activeTradeSideId),
   );
-  const returnedObjektIds = new Set(
-    transferLogs.filter((l) => l.event === "returned").map((l) => l.objektId),
+  const returnedSideIds = new Set(
+    transferLogs
+      .filter((l) => l.event === "returned")
+      .map((l) => l.activeTradeSideId),
   );
   const suspiciousTransferLogs = transferLogs.filter(
     (l) =>
       l.event === "wrong_objekt" ||
-      (l.event === "wrong_recipient" && !recoveredObjektIds.has(l.objektId)),
+      (l.event === "wrong_recipient" &&
+        !recoveredSideIds.has(l.activeTradeSideId)),
   );
 
   const terminalStatuses = ["completed", "cancelled", "countered", "disputed"];
@@ -1133,9 +1139,7 @@ export default function ActiveTradePage({
     isActive &&
     myAllConfirmed &&
     mySides.length > 0 &&
-    mySides.every(
-      (s) => s.status === "confirmed" && returnedObjektIds.has(s.objektId),
-    );
+    mySides.every((s) => s.status === "confirmed" && returnedSideIds.has(s.id));
 
   // I've sent everything but partner hasn't — waiting on them.
   // The API allows cancel after 24h (Path C), but we don't surface the button at all.
