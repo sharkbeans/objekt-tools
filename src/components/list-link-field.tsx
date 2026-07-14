@@ -11,10 +11,14 @@ export function ListLinkField({
   label,
   value,
   className,
+  hideLabel,
+  bare,
 }: {
   label: string;
   value: string;
   className?: string;
+  hideLabel?: boolean;
+  bare?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -31,14 +35,17 @@ export function ListLinkField({
 
   return (
     <div className={cn("w-full space-y-1", className)}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-      </div>
+      {!hideLabel && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
+        </div>
+      )}
       <div
         className={cn(
           "flex min-w-0 gap-1.5 rounded-md border border-border bg-card/80 p-1 shadow-xs",
+          bare && "border-0 bg-transparent p-0 shadow-none",
         )}
       >
         <Input

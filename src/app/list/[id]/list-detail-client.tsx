@@ -3,13 +3,17 @@
 import { DownloadIcon, Loader2Icon, PencilIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ListLinkField } from "@/components/list-link-field";
 import {
-  PosterCanvas,
-  type PosterData,
-  type PosterTheme,
+  type ObjektImageItem,
+  ObjektImages,
+  useObjektImages,
+} from "@/components/objekt/objekt-images";
+import type {
+  PosterData,
+  PosterTheme,
 } from "@/components/poster/poster-canvas";
 import { MatchCard } from "@/components/trades/match-card";
 import {
@@ -23,7 +27,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
+import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import type { TradePostDTO } from "@/lib/trade-types";
@@ -117,6 +123,59 @@ function totalQuantity(items: StoredItem[]) {
   return items.reduce((sum, item) => sum + Math.max(1, item.quantity ?? 1), 0);
 }
 
+function autoGridCols(count: number): number {
+  if (count <= 0) return 3;
+  return Math.min(7, Math.max(3, Math.ceil(Math.sqrt(count * 1.5))));
+}
+
+function storedItemToImage(
+  item: StoredItem,
+  quantity: number,
+): ObjektImageItem {
+  return {
+    id: item.id,
+    collectionId: item.collectionId ?? "",
+    collectionNo: item.collectionNo,
+    member: item.member,
+    season: item.season,
+    class: item.class,
+    serial: item.serial,
+    isAny: item.freeform,
+    thumbnailUrl: item.thumbnailUrl,
+    quantity: quantity > 1 ? quantity : undefined,
+    customLabel: item.freeform ? (item.rawLabel ?? undefined) : undefined,
+  };
+}
+
+function toImageItems(
+  items: StoredItem[],
+  groupByNumbers: boolean,
+): ObjektImageItem[] {
+  const resolved = items.map(storedItemToResolved);
+
+  if (!groupByNumbers) {
+    return items.map((item, i) =>
+      storedItemToImage(item, getItemQuantity(resolved[i])),
+    );
+  }
+
+  const grouped = new Map<string, { item: StoredItem; quantity: number }>();
+  items.forEach((item, i) => {
+    const key = getNumberGroupKey(resolved[i]);
+    const qty = getItemQuantity(resolved[i]);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.quantity += qty;
+    } else {
+      grouped.set(key, { item, quantity: qty });
+    }
+  });
+
+  return [...grouped.values()].map(({ item, quantity }) =>
+    storedItemToImage(item, quantity),
+  );
+}
+
 export default function ListDetailClient({
   params,
   isOwner,
@@ -139,7 +198,25 @@ export default function ListDetailClient({
   const [checkingMatchId, setCheckingMatchId] = useState<string | null>(null);
   const [removedTradeOpen, setRemovedTradeOpen] = useState(false);
 
-  const posterRef = useRef<HTMLDivElement>(null);
+  const haveItems = useMemo(
+    () =>
+      toImageItems(posterRow?.haves ?? [], posterRow?.groupByNumbers ?? false),
+    [posterRow],
+  );
+  const wantItems = useMemo(
+    () =>
+      toImageItems(posterRow?.wants ?? [], posterRow?.groupByNumbers ?? false),
+    [posterRow],
+  );
+  const haveImages = useObjektImages(haveItems);
+  const wantImages = useObjektImages(wantItems);
+  const gridCols = Math.max(
+    autoGridCols(haveItems.length),
+    autoGridCols(wantItems.length),
+  );
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+  };
 
   useEffect(() => {
     if (searchParams.get("error") === "not-owner") {
@@ -309,7 +386,6 @@ export default function ListDetailClient({
     );
   }
 
-  const posterData = storedToPosterData(posterRow);
   const canEdit = isOwner || anonOwner;
   const haveCount = totalQuantity(posterRow.haves);
   const wantCount = totalQuantity(posterRow.wants);
@@ -320,27 +396,19 @@ export default function ListDetailClient({
   const listTitle = posterRow.username
     ? `@${posterRow.username}'s list`
     : "Trade list";
-  const listTools = (
-    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
-      <div>
-        <h2 className="text-sm font-semibold">List Tools</h2>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Keep this trade list ready for sharing and quick edits.
-        </p>
-      </div>
-
+  const listToolbar = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <ListLinkField
         label="List link"
         value={sectionAbsoluteUrl(`/list/${id}`)}
+        className="sm:flex-1"
+        hideLabel
+        bare
       />
 
-      <div className="grid gap-2">
+      <div className="flex flex-wrap gap-2">
         {canEdit && (
-          <Button
-            variant="outline"
-            onClick={handleEdit}
-            className="justify-start gap-1.5"
-          >
+          <Button variant="outline" onClick={handleEdit} className="gap-1.5">
             <PencilIcon className="h-4 w-4" />
             Edit list
           </Button>
@@ -349,7 +417,7 @@ export default function ListDetailClient({
         <Button
           onClick={handleDownload}
           disabled={downloading}
-          className="justify-start gap-1.5"
+          className="gap-1.5"
         >
           {downloading ? (
             <Loader2Icon className="h-4 w-4 animate-spin" />
@@ -359,7 +427,7 @@ export default function ListDetailClient({
           Download PNG
         </Button>
 
-        <Button variant="outline" asChild className="justify-start gap-1.5">
+        <Button variant="outline" asChild className="gap-1.5">
           <Link href={sectionHref("/list", { currentSection: "list" })}>
             <PlusIcon className="h-4 w-4" />
             Create another list
@@ -368,57 +436,58 @@ export default function ListDetailClient({
       </div>
     </div>
   );
-  const posterPreview = (compact = false) => (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">List Poster</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {haveCount} have · {wantCount} want · Updated {updatedLabel}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleDownload}
-          disabled={downloading}
-          aria-label="Download poster PNG"
-          title="Download PNG"
-          className="shrink-0"
-        >
-          {downloading ? (
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-          ) : (
-            <DownloadIcon className="h-4 w-4" />
+  const haveWantCard = (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold">Trade List</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {haveCount} have · {wantCount} want · Updated {updatedLabel}
+        </p>
+      </div>
+      {haveItems.length > 0 || wantItems.length > 0 ? (
+        <div className="flex gap-6">
+          {haveItems.length > 0 && (
+            <ObjektImages
+              items={haveItems}
+              images={haveImages}
+              label={posterRow.haveTitle}
+              showSerial={!posterRow.groupByNumbers}
+              cosmoNickname={posterRow.cosmoId}
+              gridStyle={gridStyle}
+            />
           )}
-        </Button>
-      </div>
-      <div
-        className={
-          compact
-            ? "max-h-[28rem] overflow-auto bg-background p-3"
-            : "overflow-x-auto bg-background"
-        }
-      >
-        <div className={compact ? "w-fit origin-top-left [zoom:0.78]" : ""}>
-          <PosterCanvas
-            ref={posterRef}
-            data={posterData}
-            theme={(posterRow.theme as PosterTheme) ?? "dark"}
-            editable={false}
-            groupByMember={posterRow.groupByMember}
-            groupByNumbers={posterRow.groupByNumbers}
-            colsPerRow={posterRow.colsPerRow}
-          />
+          {haveItems.length > 0 && wantItems.length > 0 && (
+            <Separator orientation="vertical" className="h-auto" />
+          )}
+          {wantItems.length > 0 && (
+            <ObjektImages
+              items={wantItems}
+              images={wantImages}
+              label={posterRow.wantTitle}
+              isWant
+              gridStyle={gridStyle}
+            />
+          )}
         </div>
-      </div>
+      ) : (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          This list is empty.
+        </p>
+      )}
+      {posterRow.notes && (
+        <>
+          <Separator className="my-4" />
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+            {posterRow.notes}
+          </p>
+        </>
+      )}
     </div>
   );
 
   if (!isOwner) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-bold sm:text-3xl">
@@ -430,11 +499,9 @@ export default function ListDetailClient({
           </div>
         </header>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          {posterPreview()}
-          <aside className="xl:sticky xl:top-20 xl:self-start">
-            {listTools}
-          </aside>
+        <div className="space-y-4">
+          {listToolbar}
+          {haveWantCard}
         </div>
 
         {anonOwner && (
@@ -448,7 +515,7 @@ export default function ListDetailClient({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <header className="space-y-2">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -473,8 +540,11 @@ export default function ListDetailClient({
         </div>
       </header>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <section className="space-y-3">
+      <div className="space-y-6">
+        {listToolbar}
+        {haveWantCard}
+
+        <div className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-xl font-bold">
               Matches
@@ -514,12 +584,7 @@ export default function ListDetailClient({
               </CardContent>
             </Card>
           )}
-        </section>
-
-        <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
-          {listTools}
-          {posterPreview(true)}
-        </aside>
+        </div>
       </div>
 
       {anonOwner && (

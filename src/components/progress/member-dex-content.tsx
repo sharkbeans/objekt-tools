@@ -781,17 +781,17 @@ export function MemberDexContent({ nickname, member }: Props) {
         >
           <TabsList
             variant="line"
-            className="-mx-1 h-auto w-full justify-start overflow-x-auto border-b border-border px-1 pb-0"
+            className="-mx-1 h-auto w-full justify-start border-b border-border px-1 pb-0"
           >
             <TabsTrigger
               value="dex"
-              className="rounded-none px-3 pb-3 text-sm font-medium data-[state=active]:after:opacity-100"
+              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
             >
               Collection
             </TabsTrigger>
             <TabsTrigger
               value="grid"
-              className="rounded-none px-3 pb-3 text-sm font-medium data-[state=active]:after:opacity-100"
+              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
             >
               Grid
             </TabsTrigger>

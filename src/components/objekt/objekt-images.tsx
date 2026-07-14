@@ -1,0 +1,187 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  anyWantLabel,
+  formatSeasonNumberLabel,
+  formatShortLabel,
+} from "@/lib/objekt-label";
+
+export interface ObjektImageItem {
+  id: number;
+  collectionId: string;
+  collectionNo?: string | null;
+  member?: string | null;
+  season?: string | null;
+  class?: string | null;
+  serial?: number | null;
+  isAny?: boolean;
+  artist?: string | null;
+  thumbnailUrl?: string | null;
+  quantity?: number;
+  customLabel?: string;
+}
+
+export function formatSerial(serial: number) {
+  return `#${String(serial).padStart(5, "0")}`;
+}
+
+export function objektTopUrl(
+  item: ObjektImageItem,
+  cosmoNickname?: string | null,
+): string | null {
+  if (!cosmoNickname || item.isAny) return null;
+  const parts = [
+    item.artist,
+    item.season,
+    item.member,
+    item.collectionNo,
+  ].filter(Boolean);
+  if (item.serial != null) parts.push(`#${item.serial}`);
+  if (!parts.length) return null;
+  return `https://objekt.top/@${cosmoNickname}?search=${encodeURIComponent(parts.join(" "))}`;
+}
+
+export function objektTopUrlWant(item: ObjektImageItem): string | null {
+  if (item.isAny) return null;
+  const parts = [
+    item.artist,
+    item.season,
+    item.member,
+    item.collectionNo,
+  ].filter(Boolean);
+  if (!parts.length) return null;
+  return `https://objekt.top/?search=${encodeURIComponent(parts.join(" "))}`;
+}
+
+export function useObjektImages(items: ObjektImageItem[]) {
+  const [images, setImages] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!items.length) return;
+
+    const next = new Map<string, string>();
+    const missing = new Set<string>();
+
+    for (const item of items) {
+      if (item.isAny) continue;
+      if (item.thumbnailUrl) next.set(item.collectionId, item.thumbnailUrl);
+      else if (item.collectionId) missing.add(item.collectionId);
+    }
+
+    setImages(next);
+
+    if (missing.size === 0) return;
+
+    const params = new URLSearchParams();
+    for (const collectionId of missing) {
+      params.append("collection_id", collectionId);
+    }
+
+    fetch(`/api/objekts/search?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setImages((prev) => {
+          const updated = new Map(prev);
+          for (const match of data.results ?? []) {
+            const url = match.thumbnailImage ?? match.frontImage;
+            if (url) updated.set(match.collectionId, url);
+          }
+          return updated;
+        });
+      })
+      .catch(() => {});
+  }, [items]);
+
+  return images;
+}
+
+export function ObjektImages({
+  items,
+  images,
+  label,
+  showSerial,
+  cosmoNickname,
+  isWant,
+  gridStyle,
+}: {
+  items: ObjektImageItem[];
+  images: Map<string, string>;
+  label: string;
+  showSerial?: boolean;
+  cosmoNickname?: string | null;
+  isWant?: boolean;
+  gridStyle: { gridTemplateColumns: string };
+}) {
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
+      <div className="grid gap-2 items-start" style={gridStyle}>
+        {items.map((item) => {
+          if (item.isAny) {
+            return (
+              <div key={item.id} className="flex flex-col items-center gap-1">
+                <div className="w-full aspect-80/123 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
+                  {item.customLabel ?? anyWantLabel(item)}
+                </div>
+              </div>
+            );
+          }
+          const url = images.get(item.collectionId);
+          const link = isWant
+            ? objektTopUrlWant(item)
+            : objektTopUrl(item, cosmoNickname);
+          const imgEl = (
+            <div className="relative">
+              {url ? (
+                <img
+                  src={url}
+                  alt={item.collectionId}
+                  className="w-full h-auto rounded-md border"
+                />
+              ) : (
+                <div className="w-full aspect-80/123 rounded-md border bg-muted animate-pulse" />
+              )}
+              {showSerial && item.serial != null && (
+                <div className="absolute top-1 left-1 rounded bg-black/60 px-1 font-mono text-[9px] text-white">
+                  {formatSerial(item.serial)}
+                </div>
+              )}
+              {item.quantity != null && item.quantity > 1 && (
+                <div className="absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/30 bg-black text-[11px] font-bold text-white">
+                  {item.quantity}
+                </div>
+              )}
+            </div>
+          );
+          return (
+            <div key={item.id} className="flex flex-col items-center gap-1">
+              {link ? (
+                <a
+                  href={link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  {imgEl}
+                </a>
+              ) : (
+                imgEl
+              )}
+              <span className="text-center text-xs leading-tight">
+                <span className="block text-muted-foreground">
+                  {item.member ?? formatShortLabel(item)}
+                </span>
+                {item.member && (
+                  <span className="block text-muted-foreground">
+                    {formatSeasonNumberLabel(item)}
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

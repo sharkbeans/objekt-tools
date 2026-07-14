@@ -7,6 +7,12 @@ import type * as React from "react";
 import { use, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DiscordNudge } from "@/components/discord-nudge";
+import {
+  formatSerial,
+  type ObjektImageItem,
+  ObjektImages,
+  useObjektImages,
+} from "@/components/objekt/objekt-images";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { SignInDialog } from "@/components/sign-in-dialog";
 import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
@@ -41,185 +47,11 @@ import {
 import { useCosmoLink } from "@/hooks/use-cosmo-link";
 import { usePerRow } from "@/hooks/use-per-row";
 import { useSession } from "@/lib/auth-client";
-import {
-  anyWantLabel,
-  formatSeasonNumberLabel,
-  formatShortLabel,
-} from "@/lib/objekt-label";
+import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
 import { sectionHref } from "@/lib/sections";
 import type { TradePostDTO } from "@/lib/trade-types";
 
-interface TradeItem {
-  id: number;
-  collectionId: string;
-  collectionNo?: string | null;
-  member?: string | null;
-  season?: string | null;
-  class?: string | null;
-  serial?: number | null;
-  isAny?: boolean;
-  artist?: string | null;
-  thumbnailUrl?: string | null;
-}
-
-function formatSerial(serial: number) {
-  return `#${String(serial).padStart(5, "0")}`;
-}
-
-function objektTopUrl(
-  item: TradeItem,
-  cosmoNickname?: string | null,
-): string | null {
-  if (!cosmoNickname || item.isAny) return null;
-  const parts = [
-    item.artist,
-    item.season,
-    item.member,
-    item.collectionNo,
-  ].filter(Boolean);
-  if (item.serial != null) parts.push(`#${item.serial}`);
-  if (!parts.length) return null;
-  return `https://objekt.top/@${cosmoNickname}?search=${encodeURIComponent(parts.join(" "))}`;
-}
-
-function objektTopUrlWant(item: TradeItem): string | null {
-  if (item.isAny) return null;
-  const parts = [
-    item.artist,
-    item.season,
-    item.member,
-    item.collectionNo,
-  ].filter(Boolean);
-  if (!parts.length) return null;
-  return `https://objekt.top/?search=${encodeURIComponent(parts.join(" "))}`;
-}
-
-function useObjektImages(items: TradeItem[]) {
-  const [images, setImages] = useState<Map<string, string>>(new Map());
-
-  useEffect(() => {
-    if (!items.length) return;
-
-    const next = new Map<string, string>();
-    const missing = new Set<string>();
-
-    for (const item of items) {
-      if (item.isAny) continue;
-      if (item.thumbnailUrl) next.set(item.collectionId, item.thumbnailUrl);
-      else if (item.collectionId) missing.add(item.collectionId);
-    }
-
-    setImages(next);
-
-    if (missing.size === 0) return;
-
-    const params = new URLSearchParams();
-    for (const collectionId of missing) {
-      params.append("collection_id", collectionId);
-    }
-
-    fetch(`/api/objekts/search?${params.toString()}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setImages((prev) => {
-          const updated = new Map(prev);
-          for (const match of data.results ?? []) {
-            const url = match.thumbnailImage ?? match.frontImage;
-            if (url) updated.set(match.collectionId, url);
-          }
-          return updated;
-        });
-      })
-      .catch(() => {});
-  }, [items]);
-
-  return images;
-}
-
-function ObjektImages({
-  items,
-  images,
-  label,
-  showSerial,
-  cosmoNickname,
-  isWant,
-  gridStyle,
-}: {
-  items: TradeItem[];
-  images: Map<string, string>;
-  label: string;
-  showSerial?: boolean;
-  cosmoNickname?: string | null;
-  isWant?: boolean;
-  gridStyle: { gridTemplateColumns: string };
-}) {
-  return (
-    <div className="flex-1 min-w-0">
-      <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
-      <div className="grid gap-2 items-start" style={gridStyle}>
-        {items.map((item) => {
-          if (item.isAny) {
-            return (
-              <div key={item.id} className="flex flex-col items-center gap-1">
-                <div className="w-full aspect-80/123 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
-                  {anyWantLabel(item)}
-                </div>
-              </div>
-            );
-          }
-          const url = images.get(item.collectionId);
-          const link = isWant
-            ? objektTopUrlWant(item)
-            : objektTopUrl(item, cosmoNickname);
-          const imgEl = (
-            <div className="relative">
-              {url ? (
-                <img
-                  src={url}
-                  alt={item.collectionId}
-                  className="w-full h-auto rounded-md border"
-                />
-              ) : (
-                <div className="w-full aspect-80/123 rounded-md border bg-muted animate-pulse" />
-              )}
-              {showSerial && item.serial != null && (
-                <div className="absolute top-1 left-1 rounded bg-black/60 px-1 font-mono text-[9px] text-white">
-                  {formatSerial(item.serial)}
-                </div>
-              )}
-            </div>
-          );
-          return (
-            <div key={item.id} className="flex flex-col items-center gap-1">
-              {link ? (
-                <a
-                  href={link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:opacity-80 transition-opacity"
-                >
-                  {imgEl}
-                </a>
-              ) : (
-                imgEl
-              )}
-              <span className="text-center text-xs leading-tight">
-                <span className="block text-muted-foreground">
-                  {item.member ?? formatShortLabel(item)}
-                </span>
-                {item.member && (
-                  <span className="block text-muted-foreground">
-                    {formatSeasonNumberLabel(item)}
-                  </span>
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+type TradeItem = ObjektImageItem;
 
 function ObjektList({
   items,
