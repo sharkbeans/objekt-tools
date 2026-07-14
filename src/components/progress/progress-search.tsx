@@ -3,6 +3,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { ProgressOverviewResponse } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 
@@ -58,22 +60,26 @@ export function ProgressSearch({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
-      <div className="flex gap-2">
-        <input
+      <Label htmlFor="progress-search-nickname" className="text-sm font-medium">
+        Cosmo Username
+      </Label>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          id="progress-search-nickname"
           type="text"
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
             if (error) setError(null);
           }}
-          placeholder="Cosmo nickname"
+          placeholder="e.g. sharkbeans"
           maxLength={30}
-          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-12 flex-1 bg-background text-base md:text-base"
         />
         <button
           type="submit"
           disabled={checking}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+          className="h-12 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
         >
           {checking ? "Searching..." : "Search"}
         </button>
