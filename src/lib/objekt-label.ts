@@ -28,3 +28,13 @@ export function formatShortLabel(item: ObjektLabelItem): string {
   }
   return item.collectionId;
 }
+
+/** Tight label: "A108" without the member name. */
+export function formatSeasonNumberLabel(item: ObjektLabelItem): string {
+  if (item.collectionNo) {
+    const prefix = getSeasonPrefix(item.season);
+    const num = item.collectionNo.replace(/[A-Za-z]$/, "");
+    return `${prefix}${num}`;
+  }
+  return item.collectionId;
+}

@@ -81,13 +81,24 @@ export interface TradePostDTO {
   description?: string | null;
   status: string;
   wantsOnly: boolean;
+  source?: "manual" | "list";
   createdAt: string;
   updatedAt: string;
-  user: { id: string; name: string; image?: string | null };
+  user: {
+    id: string;
+    name: string;
+    image?: string | null;
+    discordId?: string | null;
+    discordUsername?: string | null;
+  };
   cosmoNickname?: string | null;
   cosmoAddress?: string | null;
   haves: TradePostItem[];
   wants: TradePostItem[];
+  // Present only on results from findTradePostMatches (the actual overlapping
+  // items — their haves I want, and their wants I can fill from my haves).
+  theyHaveIWant?: TradePostItem[];
+  iHaveTheyWant?: TradePostItem[];
 }
 
 /** Minimal shape returned by /api/objekts/search results array. */

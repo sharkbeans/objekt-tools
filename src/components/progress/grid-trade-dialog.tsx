@@ -1,8 +1,9 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { PosterData } from "@/components/poster/poster-canvas";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,11 +15,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { EDITION_LABELS, type Edition } from "@/lib/edition";
 import { computeGriddable, getGridSlots } from "@/lib/grid-progress";
 import { GRID_TRADE_STASH_KEY } from "@/lib/grid-trade-stash";
-import { makePosterItem } from "@/lib/poster-item";
+import { makePosterItem, resolvedItemToApiInput } from "@/lib/poster-item";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
@@ -55,7 +57,32 @@ export function GridTradeDialog({
   seasonCollections,
 }: Props) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [offerDupes, setOfferDupes] = useState(true);
+  const [creating, setCreating] = useState(false);
+  // Only the profile's own owner can auto-create a matchable trade list from
+  // it — a visitor viewing someone else's grid shouldn't be able to spin up
+  // a list claiming that person's dupes under the visitor's own account.
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
+
+  useEffect(() => {
+    if (!session) {
+      setIsOwnProfile(false);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/cosmo/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { nickname?: string | null } | null) => {
+        if (!cancelled) setIsOwnProfile(data?.nickname === nickname);
+      })
+      .catch(() => {
+        if (!cancelled) setIsOwnProfile(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, nickname]);
 
   // Target the *next* grid past however many are already griddable now, so
   // this works whether nothing has been gridded yet (feature 2) or the user
@@ -98,7 +125,7 @@ export function GridTradeDialog({
     });
   };
 
-  const handleConfirm = () => {
+  function buildPosterData(): PosterData {
     const wants = rows
       .filter((r) => selected.has(r.collection.collectionId))
       .map((r) => makePosterItem(toEntry(r.collection)));
@@ -114,7 +141,7 @@ export function GridTradeDialog({
         )
       : [];
 
-    const posterData: PosterData = {
+    return {
       username: nickname,
       cosmoId: nickname,
       haves,
@@ -127,15 +154,56 @@ export function GridTradeDialog({
       haveTitle: "Have",
       wantTitle: "Want",
     };
+  }
 
+  // Secondary path: stash the draft and open the full poster editor so the
+  // user can customize before saving.
+  const handleCustomize = () => {
     sessionStorage.setItem(
       GRID_TRADE_STASH_KEY,
-      JSON.stringify({ posterData }),
+      JSON.stringify({ posterData: buildPosterData() }),
     );
     onOpenChange(false);
     router.push(
       sectionHref("/list?prefill=grid", { currentSection: "collect" }),
     );
+  };
+
+  // Primary path: create the trade list immediately and land on its Matches
+  // view — skips the editor detour for the common case of "just find me a
+  // trade for this".
+  const handleFindTrades = async () => {
+    const posterData = buildPosterData();
+    setCreating(true);
+    try {
+      const res = await fetch("/api/posters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: posterData.username,
+          cosmoId: posterData.cosmoId,
+          haves: posterData.haves.map((item, i) =>
+            resolvedItemToApiInput(item, i),
+          ),
+          wants: posterData.wants.map((item, i) =>
+            resolvedItemToApiInput(item, i),
+          ),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Failed");
+      }
+      const { id } = (await res.json()) as { id: string };
+      onOpenChange(false);
+      router.push(sectionHref(`/list/${id}`, { currentSection: "list" }));
+    } catch {
+      toast.error(
+        "Couldn't create your trade list automatically — try customizing it instead.",
+      );
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -217,13 +285,36 @@ export function GridTradeDialog({
           />
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col-reverse sm:flex-row sm:items-center">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm} disabled={selected.size === 0}>
-            Create trade list
-          </Button>
+          {isOwnProfile ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={handleCustomize}
+                disabled={selected.size === 0 || creating}
+              >
+                Customize list first
+              </Button>
+              <Button
+                onClick={handleFindTrades}
+                disabled={selected.size === 0 || creating}
+                className="gap-1.5"
+              >
+                {creating && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                Find trades
+              </Button>
+            </>
+          ) : (
+            <Button
+              onClick={handleCustomize}
+              disabled={selected.size === 0 || creating}
+            >
+              Create trade list
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

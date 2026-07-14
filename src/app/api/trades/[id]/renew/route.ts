@@ -69,7 +69,12 @@ export async function POST(
   const now = new Date();
   const [updated] = await db
     .update(tradePost)
-    .set({ status: "open", createdAt: now, updatedAt: now })
+    .set({
+      status: "open",
+      createdAt: now,
+      updatedAt: now,
+      availabilityCheckedAt: null,
+    })
     .where(
       and(eq(tradePost.id, tradeId), eq(tradePost.userId, session.user.id)),
     )

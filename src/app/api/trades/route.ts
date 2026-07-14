@@ -1,4 +1,4 @@
-import { and, eq, ilike, inArray, isNull, ne } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -9,14 +9,13 @@ import {
   tradePostWant,
 } from "@/lib/db/schema";
 import { parseFiltersFromParams } from "@/lib/filter-utils";
-import { notify } from "@/lib/notify";
 import { parsePaginationParams } from "@/lib/pagination";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
-import { sectionAbsoluteUrl } from "@/lib/sections";
 import { getCached } from "@/lib/server-cache";
 import { getActiveBan, getBlockingTradeId } from "@/lib/trade-guards";
 import { listTradesPage } from "@/lib/trade-listing";
+import { notifyNewMatches } from "@/lib/trade-match-notify";
 
 interface TradeItemInput {
   collectionId: string;
@@ -247,74 +246,9 @@ export async function POST(request: NextRequest) {
   );
 
   // Notify users whose open trades match the new post (fire-and-forget)
-  void (async () => {
-    try {
-      const myHaveCollections = haves
-        .filter((h) => !h.isAny)
-        .map((h) => h.collectionId);
-      const myWantCollections = wants
-        .filter((w) => !w.isAny)
-        .map((w) => w.collectionId);
-
-      if (myHaveCollections.length === 0 || myWantCollections.length === 0)
-        return;
-
-      // Trades where someone has what we want
-      const theyHaveWhatIWant = await db
-        .selectDistinct({ tradePostId: tradePostHave.tradePostId })
-        .from(tradePostHave)
-        .where(
-          and(
-            inArray(tradePostHave.collectionId, myWantCollections),
-            isNull(tradePostHave.deletedAt),
-          ),
-        );
-
-      // Trades where someone wants what we have
-      const theyWantWhatIHave = await db
-        .selectDistinct({ tradePostId: tradePostWant.tradePostId })
-        .from(tradePostWant)
-        .where(
-          and(
-            inArray(tradePostWant.collectionId, myHaveCollections),
-            isNull(tradePostWant.deletedAt),
-          ),
-        );
-
-      const haveSet = new Set(theyHaveWhatIWant.map((r) => r.tradePostId));
-      const matchingIds = theyWantWhatIHave
-        .map((r) => r.tradePostId)
-        .filter((id) => haveSet.has(id) && id !== post.id);
-
-      if (matchingIds.length === 0) return;
-
-      // Get the matching open trade posts (excluding the new poster's own trades)
-      const matchingTrades = await db.query.tradePost.findMany({
-        where: and(
-          inArray(tradePost.id, matchingIds),
-          eq(tradePost.status, "open"),
-          ne(tradePost.userId, session.user.id),
-        ),
-        columns: { id: true, userId: true },
-      });
-
-      if (matchingTrades.length === 0) return;
-
-      // One notification per unique user (they may have multiple matching posts)
-      const uniqueUserIds = [...new Set(matchingTrades.map((t) => t.userId))];
-      const newPostUrl = sectionAbsoluteUrl(`/trades/${post.id}`);
-
-      await notify(
-        uniqueUserIds.map((userId) => ({
-          userId,
-          message: `A new trade post matches yours! Check it out: ${newPostUrl}`,
-          tradePostId: post.id,
-        })),
-      );
-    } catch (err) {
-      console.error("[trades/create] match notification failed:", err);
-    }
-  })();
+  void notifyNewMatches(post.id).catch((err) => {
+    console.error("[trades/create] match notification failed:", err);
+  });
 
   return NextResponse.json({ id: post.id }, { status: 201 });
 }

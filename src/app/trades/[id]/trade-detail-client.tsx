@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
+import type * as React from "react";
 import { use, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DiscordNudge } from "@/components/discord-nudge";
@@ -10,7 +11,7 @@ import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { SignInDialog } from "@/components/sign-in-dialog";
 import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
 import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
-import { TradeCard } from "@/components/trades/trade-card";
+import { MatchCard } from "@/components/trades/match-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,9 +32,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useCosmoLink } from "@/hooks/use-cosmo-link";
 import { usePerRow } from "@/hooks/use-per-row";
 import { useSession } from "@/lib/auth-client";
-import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
+import {
+  anyWantLabel,
+  formatSeasonNumberLabel,
+  formatShortLabel,
+} from "@/lib/objekt-label";
 import { sectionHref } from "@/lib/sections";
 import type { TradePostDTO } from "@/lib/trade-types";
 
@@ -159,14 +171,23 @@ function ObjektImages({
           const link = isWant
             ? objektTopUrlWant(item)
             : objektTopUrl(item, cosmoNickname);
-          const imgEl = url ? (
-            <img
-              src={url}
-              alt={item.collectionId}
-              className="w-full h-auto rounded-md border"
-            />
-          ) : (
-            <div className="w-full aspect-80/123 rounded-md border bg-muted animate-pulse" />
+          const imgEl = (
+            <div className="relative">
+              {url ? (
+                <img
+                  src={url}
+                  alt={item.collectionId}
+                  className="w-full h-auto rounded-md border"
+                />
+              ) : (
+                <div className="w-full aspect-80/123 rounded-md border bg-muted animate-pulse" />
+              )}
+              {showSerial && item.serial != null && (
+                <div className="absolute top-1 left-1 rounded bg-black/60 px-1 font-mono text-[9px] text-white">
+                  {formatSerial(item.serial)}
+                </div>
+              )}
+            </div>
           );
           return (
             <div key={item.id} className="flex flex-col items-center gap-1">
@@ -182,14 +203,16 @@ function ObjektImages({
               ) : (
                 imgEl
               )}
-              <span className="text-xs text-muted-foreground text-center max-w-full truncate">
-                {formatShortLabel(item)}
-              </span>
-              {showSerial && item.serial != null && (
-                <span className="text-xs text-muted-foreground">
-                  {formatSerial(item.serial)}
+              <span className="text-center text-xs leading-tight">
+                <span className="block text-muted-foreground">
+                  {item.member ?? formatShortLabel(item)}
                 </span>
-              )}
+                {item.member && (
+                  <span className="block text-muted-foreground">
+                    {formatSeasonNumberLabel(item)}
+                  </span>
+                )}
+              </span>
             </div>
           );
         })}
@@ -281,6 +304,7 @@ export default function TradeDetailClient({
 }) {
   const { id } = use(params);
   const { data: session } = useSession();
+  const { isLinked } = useCosmoLink();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [initiateTarget, setInitiateTarget] = useState<{
@@ -317,6 +341,64 @@ export default function TradeDetailClient({
   const { perRow, setPerRow, gridStyle } = usePerRow();
 
   const isOwnerEarly = session?.user?.id === trade?.user?.id;
+  const tradeLinkHref = sectionHref("/link", { currentSection: "trade" });
+
+  function handleBlockedTradeOffer() {
+    toast.error("Link your Cosmo account to send trades", {
+      action: {
+        label: "Link now",
+        onClick: () => router.push(tradeLinkHref),
+      },
+    });
+  }
+
+  function renderTradeOfferButton({
+    onSend,
+    variant,
+    className,
+  }: {
+    onSend: () => void;
+    variant?: React.ComponentProps<typeof Button>["variant"];
+    className?: string;
+  }) {
+    const requiresLink = !!session && !isLinked;
+    const button = (
+      <Button
+        size="sm"
+        variant={variant}
+        aria-disabled={requiresLink}
+        className={
+          requiresLink
+            ? `${className ?? ""} cursor-not-allowed opacity-50`.trim()
+            : className
+        }
+        onClick={() => {
+          if (!session) {
+            setSignInOpen(true);
+            return;
+          }
+          if (requiresLink) {
+            handleBlockedTradeOffer();
+            return;
+          }
+          onSend();
+        }}
+      >
+        Send a Trade Offer
+      </Button>
+    );
+
+    if (!requiresLink) return button;
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">{button}</span>
+        </TooltipTrigger>
+        <TooltipContent>Link your Cosmo account to send trades.</TooltipContent>
+      </Tooltip>
+    );
+  }
 
   async function handleClose() {
     try {
@@ -362,7 +444,7 @@ export default function TradeDetailClient({
     if (!availabilityData) return;
     if (availabilityData.deleted) {
       toast.error(
-        "Trade removed — all offered objekts are no longer available.",
+        "This trade was removed because the offered objekts are no longer in the trader's inventory.",
       );
       queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["my-trades"] });
@@ -512,31 +594,28 @@ export default function TradeDetailClient({
 
       {/* Non-owner: Send a Trade Offer directly against this post (no own trade post required) */}
       {!isOwner && trade.status === "open" && (
-        <Card>
-          <CardContent className="py-4 space-y-3">
-            {trade.wantsOnly && session && (
-              <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-sm text-yellow-200">
-                This trader only accepts offers that include at least one objekt
-                from their want list. Your offer will be rejected if none of
-                your objekts match.
+        <TooltipProvider>
+          <Card>
+            <CardContent className="py-4 space-y-3">
+              {trade.wantsOnly && session && (
+                <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-sm text-yellow-200">
+                  This trader only accepts offers that include at least one
+                  objekt from their want list. Your offer will be rejected if
+                  none of your objekts match.
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground">
+                  Interested? Initiate a trade with this poster.
+                </p>
+                {renderTradeOfferButton({
+                  onSend: () => setDirectInitiateOpen(true),
+                })}
               </div>
-            )}
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">
-                Interested? Initiate a trade with this poster.
-              </p>
-              <Button
-                size="sm"
-                onClick={() =>
-                  session ? setDirectInitiateOpen(true) : setSignInOpen(true)
-                }
-              >
-                Send a Trade Offer
-              </Button>
-            </div>
-            {session && <DiscordNudge />}
-          </CardContent>
-        </Card>
+              {session && <DiscordNudge />}
+            </CardContent>
+          </Card>
+        </TooltipProvider>
       )}
 
       {/* Matches */}
@@ -554,25 +633,23 @@ export default function TradeDetailClient({
           {matchesLoading ? (
             <p className="text-muted-foreground">Finding matches...</p>
           ) : matchData?.matches?.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {matchData.matches.map((match: TradePostDTO) => (
-                <div key={match.id} className="flex flex-col gap-2">
-                  <TradeCard trade={match} />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setInitiateTarget({
-                        matchedTradePostId: match.id,
-                        theirHaves: match.haves,
-                      })
-                    }
-                  >
-                    Send a Trade Offer
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <TooltipProvider>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {matchData.matches.map((match: TradePostDTO) => (
+                  <MatchCard key={match.id} match={match}>
+                    {renderTradeOfferButton({
+                      variant: "outline",
+                      className: "w-full mt-1",
+                      onSend: () =>
+                        setInitiateTarget({
+                          matchedTradePostId: match.id,
+                          theirHaves: match.haves,
+                        }),
+                    })}
+                  </MatchCard>
+                ))}
+              </div>
+            </TooltipProvider>
           ) : (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">

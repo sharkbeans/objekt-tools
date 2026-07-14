@@ -13,11 +13,14 @@ function getPool(): Pool {
   if (!_g._indexerPool) {
     const url = process.env.INDEXER_DATABASE_URL;
     if (!url) throw new Error("INDEXER_DATABASE_URL is not configured");
+    const connectionTimeoutMillis = Number(
+      process.env.INDEXER_CONNECTION_TIMEOUT_MS ?? 3000,
+    );
     _g._indexerPool = new Pool({
       connectionString: url,
       max: 8,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 15000,
+      connectionTimeoutMillis,
       ssl: url.includes("sslmode=require")
         ? { rejectUnauthorized: false }
         : undefined,

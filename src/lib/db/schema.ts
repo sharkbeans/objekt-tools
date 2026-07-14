@@ -102,12 +102,28 @@ export const tradePost = pgTable(
     description: text("description"),
     status: text("status").notNull().default("open"),
     wantsOnly: boolean("wants_only").notNull().default(false),
+    // "list" trade posts are auto-synced mirrors of a poster's haves/wants
+    // (see src/lib/poster-trade-sync.ts), created so posters can reuse the
+    // existing matching engine without a parallel implementation.
+    source: text("source")
+      .notNull()
+      .default("manual")
+      .$type<"manual" | "list">(),
+    availabilityCheckedAt: timestamp("availability_checked_at"),
+    linkedPosterId: text("linked_poster_id").references(() => poster.id, {
+      onDelete: "cascade",
+    }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
     index("trade_post_user_id_idx").on(t.userId),
     index("trade_post_status_created_idx").on(t.status, t.createdAt),
+    index("trade_post_status_availability_checked_idx").on(
+      t.status,
+      t.availabilityCheckedAt,
+    ),
+    uniqueIndex("trade_post_linked_poster_id_unique").on(t.linkedPosterId),
   ],
 );
 
@@ -398,6 +414,29 @@ export const posterWant = pgTable(
   (t) => [index("poster_want_poster_id_idx").on(t.posterId)],
 );
 
+// Dedup log for the proactive "you have a new match" notification: one row
+// means the owner of notifiedTradePostId has already been told that
+// matchedTradePostId matches them, so edits don't re-notify on every save.
+export const tradeMatchSeen = pgTable(
+  "trade_match_seen",
+  {
+    id: serial("id").primaryKey(),
+    notifiedTradePostId: text("notified_trade_post_id")
+      .notNull()
+      .references(() => tradePost.id, { onDelete: "cascade" }),
+    matchedTradePostId: text("matched_trade_post_id")
+      .notNull()
+      .references(() => tradePost.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("trade_match_seen_pair_unique").on(
+      t.notifiedTradePostId,
+      t.matchedTradePostId,
+    ),
+  ],
+);
+
 export const tradeBan = pgTable(
   "trade_ban",
   {
@@ -448,6 +487,10 @@ export const tradePostRelations = relations(tradePost, ({ one, many }) => ({
   }),
   haves: many(tradePostHave),
   wants: many(tradePostWant),
+  linkedPoster: one(poster, {
+    fields: [tradePost.linkedPosterId],
+    references: [poster.id],
+  }),
 }));
 
 export const tradePostHaveRelations = relations(tradePostHave, ({ one }) => ({
