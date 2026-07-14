@@ -17,3 +17,8 @@ export function getNumberGroupKey(item: ResolvedPosterItem): string {
     item.parsed.raw,
   ].join("|");
 }
+
+export function autoGridCols(count: number): number {
+  if (count <= 0) return 3;
+  return Math.min(7, Math.max(3, Math.ceil(Math.sqrt(count * 1.5))));
+}

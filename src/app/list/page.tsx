@@ -15,9 +15,21 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ListLinkField } from "@/components/list-link-field";
+import {
+  type ObjektImageItem,
+  ObjektImages,
+  useObjektImages,
+} from "@/components/objekt/objekt-images";
 import {
   AddCustomWantDialog,
   AddObjektDialog,
@@ -26,7 +38,6 @@ import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
 import {
   getDisplayCount,
   getGridCols,
-  PosterCanvas,
   type PosterData,
   type PosterTheme,
 } from "@/components/poster/poster-canvas";
@@ -53,6 +64,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { signIn, useSession } from "@/lib/auth-client";
@@ -63,6 +75,11 @@ import { GRID_TRADE_STASH_KEY } from "@/lib/grid-trade-stash";
 import { parsePastedTrade } from "@/lib/paste-parser";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import { makePosterItem, resolvedItemToApiInput } from "@/lib/poster-item";
+import {
+  autoGridCols,
+  getItemQuantity,
+  getNumberGroupKey,
+} from "@/lib/poster-item-grouping";
 import {
   type ResolvedPosterItem,
   resolveForPoster,
@@ -172,6 +189,57 @@ function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
   return [...withEntry, ...withoutEntry];
 }
 
+function resolvedItemToImage(
+  item: ResolvedPosterItem,
+  index: number,
+  quantity: number,
+): ObjektImageItem {
+  return {
+    id: index,
+    collectionId: item.entry?.collectionId ?? "",
+    collectionNo: item.entry?.collectionNo ?? item.parsed.collectionNo,
+    member: item.entry?.member ?? item.parsed.member,
+    season: item.entry?.season ?? item.parsed.season,
+    class: item.entry?.class,
+    serial:
+      item.parsed.serial != null ? parseInt(item.parsed.serial, 10) : null,
+    isAny: item.parsed.freeform === true,
+    artist: item.entry?.artist,
+    thumbnailUrl: item.imageUrl,
+    quantity: quantity > 1 ? quantity : undefined,
+    customLabel: item.parsed.freeform ? item.parsed.raw : undefined,
+  };
+}
+
+// Groups duplicate items when combining, keeping the first occurrence's
+// index so remove/add stay aligned with the underlying have/want arrays.
+function toBuildImageItems(
+  items: ResolvedPosterItem[],
+  groupByNumbers: boolean,
+): ObjektImageItem[] {
+  if (!groupByNumbers) {
+    return items.map((item, i) =>
+      resolvedItemToImage(item, i, getItemQuantity(item)),
+    );
+  }
+
+  const out: ObjektImageItem[] = [];
+  const seen = new Map<string, ObjektImageItem>();
+  items.forEach((item, i) => {
+    const key = getNumberGroupKey(item);
+    const qty = getItemQuantity(item);
+    const existing = seen.get(key);
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 1) + qty;
+    } else {
+      const converted = resolvedItemToImage(item, i, qty);
+      out.push(converted);
+      seen.set(key, converted);
+    }
+  });
+  return out;
+}
+
 function rememberCosmoUsername(value: string) {
   if (typeof window === "undefined") return;
   const trimmed = value.trim();
@@ -222,7 +290,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [colsPerRow, setColsPerRow] = useState(5);
   const userSetCols = useRef(false);
-  const posterRef = useRef<HTMLDivElement>(null);
   const [addDialogSection, setAddDialogSection] = useState<
     "have" | "want" | null
   >(null);
@@ -456,11 +523,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   }, [text, cosmoId]);
 
   const handleDownload = useCallback(async () => {
-    if (!posterRef.current || !posterData) return;
+    if (!posterData) return;
     setDownloading(true);
-
-    // Wait a tick for editable=false to apply (removes inputs/buttons from DOM)
-    await new Promise((r) => setTimeout(r, 50));
 
     try {
       const canvas = await renderPosterToCanvas(
@@ -797,39 +861,33 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     [],
   );
 
-  const handleTextChange = useCallback((field: string, value: string) => {
-    setPosterData((prev) => {
-      if (!prev) return prev;
-      // Direct PosterData fields
-      if (
-        field === "username" ||
-        field === "date" ||
-        field === "notes" ||
-        field === "haveTitle" ||
-        field === "wantTitle"
-      ) {
-        return { ...prev, [field]: value };
-      }
-      // Card label changes — we store these on the parsed.raw for display override
-      // Format: "haveLabel:0", "wantLabel:3"
-      const labelMatch = field.match(/^(have|want)Label:(\d+)$/);
-      if (labelMatch) {
-        const key = labelMatch[1] === "have" ? "haves" : "wants";
-        const idx = parseInt(labelMatch[2], 10);
-        const items = [...prev[key]];
-        if (items[idx]) {
-          items[idx] = {
-            ...items[idx],
-            parsed: { ...items[idx].parsed, raw: value },
-            // Clear entry so the label override sticks (canvas uses raw when entry is null)
-            entry: null,
-          };
-        }
-        return { ...prev, [key]: items };
-      }
-      return prev;
-    });
-  }, []);
+  const handleTextChange = useCallback(
+    (
+      field: "username" | "haveTitle" | "wantTitle" | "notes",
+      value: string,
+    ) => {
+      setPosterData((prev) => (prev ? { ...prev, [field]: value } : prev));
+    },
+    [],
+  );
+
+  const haveImageItems = useMemo(
+    () => toBuildImageItems(posterData?.haves ?? [], groupByNumbers),
+    [posterData, groupByNumbers],
+  );
+  const wantImageItems = useMemo(
+    () => toBuildImageItems(posterData?.wants ?? [], groupByNumbers),
+    [posterData, groupByNumbers],
+  );
+  const haveImages = useObjektImages(haveImageItems);
+  const wantImages = useObjektImages(wantImageItems);
+  const previewGridCols = Math.max(
+    autoGridCols(haveImageItems.length),
+    autoGridCols(wantImageItems.length),
+  );
+  const previewGridStyle = {
+    gridTemplateColumns: `repeat(${previewGridCols}, minmax(0, 1fr))`,
+  };
 
   const unresolvedHaves = posterData?.haves.filter((h) => h.error) ?? [];
   const unresolvedWants = posterData?.wants.filter((w) => w.error) ?? [];
@@ -1172,20 +1230,103 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 </div>
               )}
 
-              <div className="overflow-x-auto rounded-lg border border-border bg-background">
-                <PosterCanvas
-                  ref={posterRef}
-                  data={posterData}
-                  theme={posterTheme}
-                  editable={!downloading}
-                  groupByMember={groupByMember}
-                  groupByNumbers={groupByNumbers}
-                  colsPerRow={colsPerRow}
-                  onTextChange={handleTextChange}
-                  onRemoveItem={handleRemoveItem}
-                  onAddItem={setAddDialogSection}
-                  onAddCustomWant={() => setCustomWantOpen(true)}
-                />
+              <div className="space-y-4 rounded-lg border border-border bg-background p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="poster-display-name"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Display Name
+                    </Label>
+                    <Input
+                      id="poster-display-name"
+                      value={posterData.username}
+                      onChange={(e) =>
+                        handleTextChange("username", e.target.value)
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="poster-have-title"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Have Title
+                    </Label>
+                    <Input
+                      id="poster-have-title"
+                      value={posterData.haveTitle}
+                      onChange={(e) =>
+                        handleTextChange("haveTitle", e.target.value)
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="poster-want-title"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Want Title
+                    </Label>
+                    <Input
+                      id="poster-want-title"
+                      value={posterData.wantTitle}
+                      onChange={(e) =>
+                        handleTextChange("wantTitle", e.target.value)
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-6 sm:flex-row">
+                  <ObjektImages
+                    items={haveImageItems}
+                    images={haveImages}
+                    label={posterData.haveTitle}
+                    showSerial={!groupByNumbers}
+                    cosmoNickname={posterData.cosmoId}
+                    gridStyle={previewGridStyle}
+                    editable
+                    onRemove={(id) => handleRemoveItem("have", id)}
+                    onAdd={() => setAddDialogSection("have")}
+                  />
+                  <Separator
+                    orientation="vertical"
+                    className="hidden h-auto sm:block"
+                  />
+                  <ObjektImages
+                    items={wantImageItems}
+                    images={wantImages}
+                    label={posterData.wantTitle}
+                    isWant
+                    gridStyle={previewGridStyle}
+                    editable
+                    onRemove={(id) => handleRemoveItem("want", id)}
+                    onAdd={() => setAddDialogSection("want")}
+                    onAddCustomWant={() => setCustomWantOpen(true)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="poster-notes"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Notes
+                  </Label>
+                  <Textarea
+                    id="poster-notes"
+                    value={posterData.notes ?? ""}
+                    onChange={(e) => handleTextChange("notes", e.target.value)}
+                    rows={3}
+                    className="text-sm"
+                    placeholder="Add any notes for traders (payment terms, shipping, etc.)"
+                  />
+                </div>
               </div>
               <div className="flex justify-end">
                 <Button
