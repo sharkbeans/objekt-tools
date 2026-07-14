@@ -183,6 +183,13 @@
       "when": 1784035200000,
       "tag": "0025_trade_availability_checked_at",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784006004586,
+      "tag": "0026_rich_inertia",
+      "breakpoints": true
     }
   ]
 }

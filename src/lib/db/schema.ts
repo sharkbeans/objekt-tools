@@ -90,6 +90,9 @@ export const cosmoAccount = pgTable("cosmo_account", {
   nickname: text("nickname"),
   cosmoId: integer("cosmo_id"),
   linkedAt: timestamp("linked_at").notNull().defaultNow(),
+  // Last time the nickname was revalidated against the live Cosmo API. Null
+  // for accounts linked before this column existed — treated as stale.
+  lastCosmoCheck: timestamp("last_cosmo_check"),
 });
 
 export const tradePost = pgTable(

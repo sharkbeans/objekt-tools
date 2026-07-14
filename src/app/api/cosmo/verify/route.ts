@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         address: address.toLowerCase(),
         nickname,
         cosmoId,
+        lastCosmoCheck: new Date(),
       })
       .onConflictDoUpdate({
         target: cosmoAccount.userId,
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
           address: address.toLowerCase(),
           nickname,
           cosmoId,
+          lastCosmoCheck: new Date(),
         },
       });
 
