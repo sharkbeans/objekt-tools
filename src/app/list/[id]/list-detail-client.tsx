@@ -51,6 +51,8 @@ interface StoredItem {
   objektId: string | null;
   quantity: number;
   freeform: boolean;
+  isAny?: boolean;
+  artist?: string | null;
   rawLabel: string | null;
   onOffline: string | null;
   position: number;
@@ -69,6 +71,7 @@ interface StoredPoster {
   groupByMember: boolean;
   groupByNumbers: boolean;
   colsPerRow: number;
+  wantsOnly?: boolean;
   createdAt: string;
   updatedAt: string;
   haves: StoredItem[];
@@ -87,6 +90,8 @@ function storedItemToResolved(item: StoredItem): ResolvedPosterItem {
       ...(item.serial != null ? { serial: String(item.serial) } : {}),
       ...(item.quantity > 1 ? { quantity: item.quantity } : {}),
       ...(item.freeform ? { freeform: true as const } : {}),
+      ...(item.isAny ? { isAny: true as const, class: item.class } : {}),
+      ...(item.artist ? { artist: item.artist } : {}),
       ...(item.onOffline
         ? { onOffline: item.onOffline as "online" | "offline" }
         : {}),
@@ -139,7 +144,8 @@ function storedItemToImage(
     season: item.season,
     class: item.class,
     serial: item.serial,
-    isAny: item.freeform,
+    isAny: item.freeform || item.isAny,
+    artist: item.artist,
     thumbnailUrl: item.thumbnailUrl,
     quantity: quantity > 1 ? quantity : undefined,
     customLabel: item.freeform ? (item.rawLabel ?? undefined) : undefined,

@@ -190,6 +190,13 @@
       "when": 1784006004586,
       "tag": "0026_rich_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1784034141926,
+      "tag": "0027_thankful_mauler",
+      "breakpoints": true
     }
   ]
 }

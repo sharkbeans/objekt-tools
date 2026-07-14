@@ -20,6 +20,8 @@ interface PosterItemInput {
   objektId?: string;
   quantity?: number;
   freeform?: boolean;
+  isAny?: boolean;
+  artist?: string;
   rawLabel?: string;
   onOffline?: string;
   position?: number;
@@ -149,6 +151,7 @@ export async function PATCH(
     groupByMember?: boolean;
     groupByNumbers?: boolean;
     colsPerRow?: number;
+    wantsOnly?: boolean;
     haveTitle?: string;
     wantTitle?: string;
     haves?: PosterItemInput[];
@@ -181,6 +184,7 @@ export async function PATCH(
     groupByMember?: boolean;
     groupByNumbers?: boolean;
     colsPerRow?: number;
+    wantsOnly?: boolean;
     haveTitle?: string;
     wantTitle?: string;
     notes?: string | null;
@@ -194,6 +198,7 @@ export async function PATCH(
   if (body.groupByNumbers !== undefined)
     updateValues.groupByNumbers = body.groupByNumbers;
   if (body.colsPerRow !== undefined) updateValues.colsPerRow = body.colsPerRow;
+  if (body.wantsOnly !== undefined) updateValues.wantsOnly = body.wantsOnly;
   if (body.haveTitle !== undefined) updateValues.haveTitle = body.haveTitle;
   if (body.wantTitle !== undefined) updateValues.wantTitle = body.wantTitle;
   if (sanitizedNotes !== undefined) updateValues.notes = sanitizedNotes;
@@ -246,6 +251,8 @@ export async function PATCH(
             objektId: w.objektId ?? null,
             quantity: w.quantity ?? 1,
             freeform: w.freeform ?? false,
+            isAny: w.isAny ?? false,
+            artist: w.artist ?? null,
             rawLabel: w.rawLabel ?? null,
             onOffline: w.onOffline ?? null,
             position: w.position ?? i,

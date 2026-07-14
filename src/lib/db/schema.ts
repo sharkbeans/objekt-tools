@@ -363,6 +363,7 @@ export const poster = pgTable(
     groupByMember: boolean("group_by_member").notNull().default(false),
     groupByNumbers: boolean("group_by_numbers").notNull().default(true),
     colsPerRow: integer("cols_per_row").notNull().default(5),
+    wantsOnly: boolean("wants_only").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -410,6 +411,9 @@ export const posterWant = pgTable(
     objektId: text("objekt_id"),
     quantity: integer("quantity").notNull().default(1),
     freeform: boolean("freeform").notNull().default(false),
+    // ANY-filter wants: no specific objekt, just filter criteria
+    isAny: boolean("is_any").notNull().default(false),
+    artist: text("artist"),
     rawLabel: text("raw_label"),
     onOffline: text("on_offline"),
     position: integer("position").notNull().default(0),

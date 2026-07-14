@@ -14,6 +14,15 @@ import { notifyNewMatches } from "@/lib/trade-match-notify";
 const MAX_MIRRORED_HAVES = 300;
 const MAX_QUANTITY_PER_ITEM = 20;
 
+function anyWantKey(w: {
+  artist: string | null;
+  member: string | null;
+  season: string | null;
+  class: string | null;
+}): string {
+  return [w.artist, w.member, w.season, w.class].join("|");
+}
+
 /**
  * Keeps a "list" trade post in sync with a poster's resolvable (non-freeform)
  * haves/wants, so posters get matched by the existing trade-matching engine
@@ -29,7 +38,7 @@ const MAX_QUANTITY_PER_ITEM = 20;
 export async function syncPosterTradePost(posterId: string): Promise<void> {
   const row = await db.query.poster.findFirst({
     where: eq(poster.id, posterId),
-    columns: { id: true, userId: true, notes: true },
+    columns: { id: true, userId: true, notes: true, wantsOnly: true },
     with: {
       haves: {
         columns: {
@@ -52,6 +61,8 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
           season: true,
           class: true,
           thumbnailUrl: true,
+          isAny: true,
+          artist: true,
         },
       },
     },
@@ -81,8 +92,10 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
     (h): h is typeof h & { collectionId: string } => h.collectionId !== null,
   );
   const resolvedWants = row.wants.filter(
-    (w): w is typeof w & { collectionId: string } => w.collectionId !== null,
+    (w): w is typeof w & { collectionId: string } =>
+      w.collectionId !== null && !w.isAny,
   );
+  const anyWants = row.wants.filter((w) => w.isAny === true);
 
   const haveRows = resolvedHaves
     .flatMap((h) =>
@@ -103,7 +116,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
     .slice(0, MAX_MIRRORED_HAVES);
 
   const seenWantCollections = new Set<string>();
-  const wantRows = resolvedWants
+  const resolvableWantRows = resolvedWants
     .filter((w) => {
       if (seenWantCollections.has(w.collectionId)) return false;
       seenWantCollections.add(w.collectionId);
@@ -118,6 +131,27 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
       thumbnailUrl: w.thumbnailUrl,
     }));
 
+  // ANY wants all share collectionId="" — dedup by filter criteria instead,
+  // otherwise the collectionId Set above would collapse them into one.
+  const seenAnyWantKeys = new Set<string>();
+  const anyWantRows = anyWants
+    .filter((w) => {
+      const key = anyWantKey(w);
+      if (seenAnyWantKeys.has(key)) return false;
+      seenAnyWantKeys.add(key);
+      return true;
+    })
+    .map((w) => ({
+      collectionId: "",
+      isAny: true,
+      artist: w.artist,
+      member: w.member,
+      season: w.season,
+      class: w.class,
+    }));
+
+  const wantRows = [...resolvableWantRows, ...anyWantRows];
+
   const mirroredTradePostId = await db.transaction(async (tx) => {
     let tradePostId: string;
     if (existing) {
@@ -126,6 +160,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
         .update(tradePost)
         .set({
           description: row.notes,
+          wantsOnly: row.wantsOnly,
           updatedAt: new Date(),
           availabilityCheckedAt: null,
         })
@@ -143,7 +178,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
           userId,
           description: row.notes,
           status: "open",
-          wantsOnly: false,
+          wantsOnly: row.wantsOnly,
           source: "list",
           linkedPosterId: posterId,
         })

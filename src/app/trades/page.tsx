@@ -60,8 +60,8 @@ export default function TradesPage() {
           </p>
         </div>
         <Button asChild size="sm">
-          <Link href={sectionHref("/trades/new", { currentSection: "trade" })}>
-            New Trade
+          <Link href={sectionHref("/list", { currentSection: "trade" })}>
+            Create a list →
           </Link>
         </Button>
       </div>
