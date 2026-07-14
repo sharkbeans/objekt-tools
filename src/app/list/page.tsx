@@ -3,13 +3,14 @@
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
+  CheckCircle2Icon,
   CopyIcon,
   DownloadIcon,
   ImageIcon,
   ListIcon,
   Loader2Icon,
   MoonIcon,
-  ShareIcon,
+  PlusIcon,
   SunIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +30,10 @@ import {
   type PosterData,
   type PosterTheme,
 } from "@/components/poster/poster-canvas";
+import {
+  PosterCard,
+  type PosterSummary,
+} from "@/components/poster/poster-summary-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,7 +62,7 @@ import { compareMembers, compareSeasons } from "@/lib/filter-options";
 import { GRID_TRADE_STASH_KEY } from "@/lib/grid-trade-stash";
 import { parsePastedTrade } from "@/lib/paste-parser";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
-import { makePosterItem } from "@/lib/poster-item";
+import { makePosterItem, resolvedItemToApiInput } from "@/lib/poster-item";
 import {
   type ResolvedPosterItem,
   resolveForPoster,
@@ -130,25 +135,6 @@ function storedItemToResolved(item: StoredItem): ResolvedPosterItem {
   };
 }
 
-function resolvedToApiItem(item: ResolvedPosterItem, position: number) {
-  return {
-    collectionId: item.entry?.collectionId ?? null,
-    collectionNo: item.entry?.collectionNo ?? item.parsed.collectionNo ?? null,
-    member: item.entry?.member ?? item.parsed.member ?? null,
-    season: item.entry?.season ?? item.parsed.season ?? null,
-    class: item.entry?.class ?? null,
-    thumbnailUrl: item.imageUrl ?? null,
-    serial: item.parsed.serial ? parseInt(item.parsed.serial, 10) : null,
-    objektId:
-      (item.entry as ObjektEntry & { objektId?: string })?.objektId ?? null,
-    quantity: item.parsed.quantity ?? 1,
-    freeform: item.parsed.freeform ?? false,
-    rawLabel: item.parsed.raw ?? null,
-    onOffline: item.parsed.onOffline ?? null,
-    position,
-  };
-}
-
 function parseCollectionNo(value: string): number {
   const n = parseInt(value.replace(/[^0-9]/g, ""), 10);
   return Number.isFinite(n) ? n : 0;
@@ -186,9 +172,21 @@ function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
   return [...withEntry, ...withoutEntry];
 }
 
+function rememberCosmoUsername(value: string) {
+  if (typeof window === "undefined") return;
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  localStorage.setItem("cosmousername", trimmed);
+}
+
 type Stage = "input" | "resolving" | "preview";
 
 const STASH_KEY = "poster-draft-stash";
+const COSMO_USERNAME_STORAGE_KEYS = [
+  "cosmousername",
+  "cosmoUsername",
+  "progress-last-nickname",
+];
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
@@ -236,6 +234,40 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [inventoryWarningOpen, setInventoryWarningOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
+  const [latestPosters, setLatestPosters] = useState<PosterSummary[] | null>(
+    null,
+  );
+  const [latestMatchCounts, setLatestMatchCounts] = useState<
+    Record<string, number>
+  >({});
+
+  // Dashboard preview: only on the plain "new list" landing (not while
+  // editing an existing poster, which reuses this same component).
+  useEffect(() => {
+    if (editId || !session) {
+      setLatestPosters(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/posters/mine?page=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled) {
+          setLatestPosters(data?.posters ?? []);
+          setLatestMatchCounts(data?.matchCounts ?? {});
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLatestPosters([]);
+          setLatestMatchCounts({});
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, session]);
+
   const openPicker = useCallback(() => {
     setPickerOpen(true);
   }, []);
@@ -247,6 +279,18 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   useEffect(() => {
     setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setCosmoId((prev) => {
+      if (prev.trim()) return prev;
+      for (const key of COSMO_USERNAME_STORAGE_KEYS) {
+        const saved = localStorage.getItem(key)?.trim();
+        if (saved) return saved;
+      }
+      return prev;
+    });
   }, []);
 
   // Restore stashed draft after Discord login redirect
@@ -352,7 +396,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.nickname) {
-          setCosmoId((prev) => prev || data.nickname);
+          setCosmoId((prev) => {
+            if (prev.trim()) return prev;
+            rememberCosmoUsername(data.nickname);
+            return data.nickname;
+          });
           setLinkedNickname(data.nickname);
           setIsLinked(true);
         }
@@ -362,6 +410,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   const handleGenerate = useCallback(async () => {
     if (!text.trim()) return;
+    rememberCosmoUsername(cosmoId);
 
     const parsed = parsePastedTrade(text);
     if (
@@ -505,8 +554,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           colsPerRow,
           haveTitle: data.haveTitle,
           wantTitle: data.wantTitle,
-          haves: data.haves.map((item, i) => resolvedToApiItem(item, i)),
-          wants: data.wants.map((item, i) => resolvedToApiItem(item, i)),
+          haves: data.haves.map((item, i) => resolvedItemToApiInput(item, i)),
+          wants: data.wants.map((item, i) => resolvedItemToApiInput(item, i)),
         };
 
         if (editId) {
@@ -711,6 +760,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       searchedNickname: string,
     ) => {
       setCosmoId(searchedNickname);
+      rememberCosmoUsername(searchedNickname);
       setStage("resolving");
       try {
         const resolvedHaves = sortObjektEntries(haves).map((entry) =>
@@ -785,21 +835,24 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const unresolvedWants = posterData?.wants.filter((w) => w.error) ?? [];
   const hasUnresolved =
     unresolvedHaves.length > 0 || unresolvedWants.length > 0;
+  const saveActionLabel = linkCopied
+    ? "Link Copied!"
+    : editId
+      ? "Save Changes"
+      : "Create List";
 
   return (
-    <div className="mx-auto w-full max-w-6xl pb-20">
-      <section className="overflow-hidden rounded-[1.25rem] border border-background bg-background">
-        <div className="border-b border-border px-4 py-4 sm:px-6 sm:py-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Trade List</h1>
-            </div>
+    <div className="mx-auto w-full max-w-6xl pb-20 space-y-4">
+      {stage === "input" && latestPosters && latestPosters.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">Active Lists</h1>
             {session && (
               <Button
                 asChild
                 variant="outline"
                 size="sm"
-                className="h-10 gap-2 self-start border-border bg-transparent px-4"
+                className="h-10 gap-2 border-border bg-transparent px-4"
               >
                 <Link
                   href={sectionHref("/list/mine", { currentSection: "list" })}
@@ -810,9 +863,46 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
               </Button>
             )}
           </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {latestPosters
+              .slice()
+              .sort((a, b) => {
+                const matchDelta =
+                  (latestMatchCounts[b.id] ?? 0) -
+                  (latestMatchCounts[a.id] ?? 0);
+                if (matchDelta !== 0) return matchDelta;
+                return (
+                  new Date(b.updatedAt).getTime() -
+                  new Date(a.updatedAt).getTime()
+                );
+              })
+              .slice(0, 3)
+              .map((p) => (
+                <PosterCard
+                  key={p.id}
+                  poster={p}
+                  matchCount={latestMatchCounts[p.id]}
+                />
+              ))}
+          </div>
+        </section>
+      )}
+
+      <section className="space-y-4 border-t border-border pt-8">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Build List</h1>
+          <Button
+            type="button"
+            size="sm"
+            onClick={openPicker}
+            className="h-9 gap-1.5 bg-white px-4 text-black hover:bg-white/90"
+          >
+            <PlusIcon className="h-4 w-4" />
+            New List
+          </Button>
         </div>
 
-        <div className="px-4 py-4 sm:px-6 sm:py-6">
+        <div>
           {stage === "input" && (
             <section className="space-y-5">
               <div className="space-y-1.5">
@@ -828,7 +918,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     placeholder="e.g. sharkbeans"
                     value={cosmoId}
                     onChange={(e) => setCosmoId(e.target.value)}
-                    onBlur={handleCosmoBlur}
+                    onBlur={() => {
+                      rememberCosmoUsername(cosmoId);
+                      handleCosmoBlur();
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && cosmoId.trim()) {
                         e.preventDefault();
@@ -855,11 +948,12 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     htmlFor="poster-text"
                     className="text-lg font-bold text-foreground"
                   >
-                    Trade List
+                    HAVE / WANT List
                   </Label>
                   <p className="text-sm leading-5 text-muted-foreground">
-                    Use HAVE and WANT as section headers. Shortforms and
-                    quantities like (x3) are supported.
+                    Put what you can trade under HAVE and what you are looking
+                    for under WANT. Shortforms and quantities like (x3) are
+                    supported.
                   </p>
                 </div>
                 <Textarea
@@ -970,13 +1064,9 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       {saving ? (
                         <Loader2Icon className="h-4 w-4 animate-spin" />
                       ) : (
-                        <ShareIcon className="h-4 w-4" />
+                        <CheckCircle2Icon className="h-4 w-4" />
                       )}
-                      {linkCopied
-                        ? "Link Copied!"
-                        : editId
-                          ? "Save Changes"
-                          : "Create List"}
+                      {saveActionLabel}
                     </Button>
                   </div>
                 </div>
@@ -1096,6 +1186,20 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   onAddItem={setAddDialogSection}
                   onAddCustomWant={() => setCustomWantOpen(true)}
                 />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSaveAndShare}
+                  disabled={saving}
+                  className="h-11 w-full gap-2 sm:w-auto sm:px-6"
+                >
+                  {saving ? (
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2Icon className="h-4 w-4" />
+                  )}
+                  {saveActionLabel}
+                </Button>
               </div>
             </section>
           )}

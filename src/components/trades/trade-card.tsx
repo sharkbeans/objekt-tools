@@ -77,6 +77,7 @@ interface TradeCardProps {
     status: string;
     createdAt: string;
     wantsOnly?: boolean;
+    source?: "manual" | "list";
     user: { id: string; name: string; image?: string | null };
     cosmoNickname?: string | null;
     cosmoAddress?: string | null;
@@ -373,6 +374,14 @@ export function TradeCard({ trade, matchCount }: TradeCardProps) {
                 className="text-[10px] px-1.5 py-0 h-4 shrink-0"
               >
                 Wants Only
+              </Badge>
+            )}
+            {trade.source === "list" && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-4 shrink-0"
+              >
+                List
               </Badge>
             )}
           </div>

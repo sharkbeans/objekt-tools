@@ -162,6 +162,27 @@
       "when": 1783988328718,
       "tag": "0022_numerous_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783990241321,
+      "tag": "0023_bumpy_silvermane",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783991213950,
+      "tag": "0024_youthful_gideon",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784035200000,
+      "tag": "0025_trade_availability_checked_at",
+      "breakpoints": true
     }
   ]
 }

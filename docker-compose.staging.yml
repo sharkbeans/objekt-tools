@@ -83,6 +83,7 @@ services:
       - |
         cat <<'EOF' | crontab -
         0 2 * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/expire-trades
+        */15 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/prune-stale-haves
         */2 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/refresh-cosmo-token
         EOF
         exec crond -f -l 2

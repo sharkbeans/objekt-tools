@@ -8,6 +8,7 @@ import {
 } from "@/lib/cosmo/resolve-nickname";
 import { indexer } from "@/lib/db/indexer";
 import { collections, objekts } from "@/lib/db/indexer-schema";
+import { withTimeout } from "@/lib/promise-timeout";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
 
@@ -63,30 +64,31 @@ export async function GET(
   }
   const address = resolved.address;
 
-  const rows = await getCached(`objekts:nickname:v1:${address}`, 90_000, () =>
-    indexer
-      .select({
-        collectionId: collections.collectionId,
-        artist: collections.artist,
-        member: collections.member,
-        collectionNo: collections.collectionNo,
-        season: collections.season,
-        class: collections.class,
-        thumbnailImage: collections.thumbnailImage,
-        serial: objekts.serial,
-        objektId: objekts.id,
-      })
-      .from(objekts)
-      .innerJoin(collections, eq(objekts.collectionId, collections.id))
-      .where(
-        and(
-          eq(objekts.owner, resolved.address),
-          eq(objekts.transferable, true),
-        ),
-      )
-      .orderBy(asc(collections.member), asc(collections.collectionNo))
-      .limit(500),
-  );
+  let rows: Awaited<ReturnType<typeof loadInventoryRows>>;
+  try {
+    rows = await getCached(`objekts:nickname:v1:${address}`, 90_000, () =>
+      withTimeout(
+        loadInventoryRows(address),
+        3500,
+        "Timed out loading objekt inventory by nickname",
+      ),
+    );
+  } catch (error) {
+    console.warn("Failed to load objekt inventory by nickname", {
+      nickname,
+      address,
+      error,
+    });
+    return NextResponse.json(
+      { results: [], address, unavailable: true },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Objekt-Inventory": "unavailable",
+        },
+      },
+    );
+  }
 
   const results = rows.map((r) => ({
     collectionId: r.collectionId,
@@ -101,4 +103,24 @@ export async function GET(
   }));
 
   return NextResponse.json({ results, address });
+}
+
+function loadInventoryRows(address: string) {
+  return indexer
+    .select({
+      collectionId: collections.collectionId,
+      artist: collections.artist,
+      member: collections.member,
+      collectionNo: collections.collectionNo,
+      season: collections.season,
+      class: collections.class,
+      thumbnailImage: collections.thumbnailImage,
+      serial: objekts.serial,
+      objektId: objekts.id,
+    })
+    .from(objekts)
+    .innerJoin(collections, eq(objekts.collectionId, collections.id))
+    .where(and(eq(objekts.owner, address), eq(objekts.transferable, true)))
+    .orderBy(asc(collections.member), asc(collections.collectionNo))
+    .limit(500);
 }

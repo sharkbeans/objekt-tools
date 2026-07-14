@@ -5,6 +5,7 @@ import { getSession, requireSession } from "@/lib/auth-server";
 import { getClientIp } from "@/lib/client-ip";
 import { db } from "@/lib/db";
 import { poster, posterHave, posterWant } from "@/lib/db/schema";
+import { syncPosterTradePost } from "@/lib/poster-trade-sync";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
 
@@ -257,6 +258,7 @@ export async function PATCH(
   });
 
   await redis.del(posterCacheKey(id));
+  await syncPosterTradePost(id);
 
   return NextResponse.json({ id, version });
 }

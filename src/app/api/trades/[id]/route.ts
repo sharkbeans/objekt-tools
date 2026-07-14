@@ -277,12 +277,16 @@ export async function PATCH(
       }
       await db
         .update(tradePost)
-        .set({ description: description?.trim() || null, updatedAt: now })
+        .set({
+          description: description?.trim() || null,
+          updatedAt: now,
+          availabilityCheckedAt: null,
+        })
         .where(eq(tradePost.id, tradeId));
     } else {
       await db
         .update(tradePost)
-        .set({ updatedAt: now })
+        .set({ updatedAt: now, availabilityCheckedAt: null })
         .where(eq(tradePost.id, tradeId));
     }
 

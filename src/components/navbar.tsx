@@ -40,15 +40,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
+import { useCosmoLink } from "@/hooks/use-cosmo-link";
 import { useUserRealtime } from "@/hooks/use-realtime";
 import { useSession } from "@/lib/auth-client";
 import { type SectionId, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
-
-interface CosmoLinkStatus {
-  address: string;
-  nickname: string | null;
-}
 
 function useMatchCount() {
   const { data: session } = useSession();
@@ -76,28 +72,6 @@ function useUnreadNotificationCount() {
     refetchInterval: 30000,
   });
   return data?.count ?? 0;
-}
-
-function useCosmoLink() {
-  const { data: session } = useSession();
-  const { data, refetch } = useQuery<CosmoLinkStatus | null>({
-    queryKey: ["cosmo-link-status"],
-    queryFn: async () => {
-      const res = await fetch("/api/cosmo/status");
-      if (res.status === 404 || res.status === 401) return null;
-      if (!res.ok) return null;
-      return res.json();
-    },
-    enabled: !!session,
-  });
-
-  const profileHref = !session
-    ? "/sign-in"
-    : !data
-      ? "/link"
-      : `/@${data.nickname ?? data.address}`;
-
-  return { profileHref, isLinked: !!data, refetch };
 }
 
 export function Navbar({
@@ -136,8 +110,9 @@ export function Navbar({
             </Link>
             <nav className="flex items-center gap-4 text-sm">
               <Link
-                href={href("/trades")}
+                href={href(matchCount > 0 ? "/trades/mine" : "/trades")}
                 className="relative text-muted-foreground hover:text-foreground transition-colors"
+                title={matchCount > 0 ? "View your matches" : undefined}
               >
                 Trades
                 {matchCount > 0 && (
@@ -453,7 +428,10 @@ function MobileNav({
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-          <MobileNavLink href={href("/trades")} onClick={() => setOpen(false)}>
+          <MobileNavLink
+            href={href(matchCount > 0 ? "/trades/mine" : "/trades")}
+            onClick={() => setOpen(false)}
+          >
             <span className="flex items-center gap-2">
               <ArrowLeftRightIcon className="size-4 shrink-0" />
               Trades

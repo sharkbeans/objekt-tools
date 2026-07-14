@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { poster, posterHave, posterWant } from "@/lib/db/schema";
+import { syncPosterTradePost } from "@/lib/poster-trade-sync";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
 
@@ -147,6 +148,8 @@ export async function POST(request: NextRequest) {
       })),
     );
   }
+
+  await syncPosterTradePost(row.id);
 
   return NextResponse.json({ id: row.id }, { status: 201 });
 }

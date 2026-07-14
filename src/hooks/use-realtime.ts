@@ -92,6 +92,7 @@ export function useUserRealtime(userId: string | undefined) {
       queryClient.invalidateQueries({
         queryKey: ["notification-unread-count"],
       });
+      queryClient.invalidateQueries({ queryKey: ["matches-count"] });
       if (data.message) {
         toast.info(data.message, { duration: 5000 });
       }
