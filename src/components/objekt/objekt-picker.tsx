@@ -7,7 +7,7 @@ import type { ObjektEntry } from "@/lib/cosmo/types";
 import {
   type ObjektStructuralFilters,
   objektMatchesStructuralFilters,
-} from "@/lib/filter-utils";
+} from "@/lib/objekt-filters";
 import { resolveObjektSearchTerm } from "@/lib/objekt-search";
 import { seasonPrefixMap } from "@/lib/season-prefix";
 import { ObjektGridPicker } from "./objekt-grid-picker";

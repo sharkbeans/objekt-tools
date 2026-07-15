@@ -12,8 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
-import { decodeGroupedValue } from "@/lib/filter-utils";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
+import { structuralFieldsMatch } from "@/lib/objekt-filters";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
   ProgressOverviewResponse,
@@ -62,41 +62,15 @@ export function ProgressOverviewContent({ nickname }: Props) {
 
   const filteredRollups = useMemo(() => {
     if (!data) return [];
-    return data.rollups.filter((r) => {
-      if (
-        filters.artist.length &&
-        !filters.artist.some((a) => normalizeArtistId(a) === r.artist)
-      )
-        return false;
-      if (filters.member.length && !filters.member.includes(r.member))
-        return false;
-      if (
-        filters.season.length &&
-        !filters.season.some((s) => {
-          const d = decodeGroupedValue(s);
-          return d
-            ? d.item === r.season && normalizeArtistId(d.artistId) === r.artist
-            : s === r.season;
-        })
-      )
-        return false;
-      if (
-        filters.class.length &&
-        !filters.class.some((c) => {
-          const d = decodeGroupedValue(c);
-          return d
-            ? d.item === r.class && normalizeArtistId(d.artistId) === r.artist
-            : c === r.class;
-        })
-      )
-        return false;
-      if (
-        filters.on_offline.length &&
-        !filters.on_offline.includes(r.onOffline)
-      )
-        return false;
-      return true;
-    });
+    return data.rollups.filter((r) =>
+      structuralFieldsMatch(filters, {
+        artist: r.artist,
+        member: r.member,
+        season: r.season,
+        class: r.class,
+        onOffline: r.onOffline as "online" | "offline",
+      }),
+    );
   }, [data, filters]);
 
   const activeArtists = useMemo(() => {

@@ -12,6 +12,7 @@ import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
+import { parseFilterParams, serializeFilterParams } from "@/lib/objekt-filters";
 import type { TradePostDTO } from "@/lib/trade-types";
 
 function formatUserFilterLabel(user: string): string {
@@ -61,34 +62,6 @@ function TradeCardSkeleton() {
   );
 }
 
-function filtersFromSearchParams(params: URLSearchParams): ObjektFilterState {
-  return {
-    search: params.get("search") ?? "",
-    artist: params.getAll("artist").filter(Boolean),
-    member: params.getAll("member").filter(Boolean),
-    season: params.getAll("season").filter(Boolean),
-    class: params.getAll("class").filter(Boolean),
-    on_offline: params.getAll("on_offline").filter(Boolean),
-    sort: params.get("sort") ?? "newest",
-    filterMode: (params.get("filter_mode") as "haves" | "wants") ?? "haves",
-  };
-}
-
-function buildParams(filters: ObjektFilterState, page: number, user?: string) {
-  const p = new URLSearchParams();
-  p.set("page", String(page));
-  for (const a of filters.artist) p.append("artist", a);
-  for (const m of filters.member) p.append("member", m);
-  for (const s of filters.season) p.append("season", s);
-  for (const c of filters.class) p.append("class", c);
-  for (const o of filters.on_offline) p.append("on_offline", o);
-  if (filters.search) p.set("search", filters.search);
-  if (filters.sort) p.set("sort", filters.sort);
-  p.set("filter_mode", filters.filterMode);
-  if (user) p.set("user", user);
-  return p;
-}
-
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -105,7 +78,7 @@ export function TradesContent() {
   const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [filters, setFilters] = useState<ObjektFilterState>(() =>
-    filtersFromSearchParams(searchParams),
+    parseFilterParams(searchParams),
   );
   const [page, setPage] = useState(() =>
     Number(searchParams.get("page") ?? "1"),
@@ -167,7 +140,7 @@ function PaginatedTradesList({
     queryKey: ["trades", filters, user, page],
     queryFn: async () => {
       const res = await fetch(
-        `/api/trades?${buildParams(filters, page, user)}`,
+        `/api/trades?${serializeFilterParams(filters, { page, user })}`,
       );
       return res.json();
     },
@@ -230,7 +203,7 @@ function InfiniteTradesList({
       queryKey: ["trades-infinite", filters, user],
       queryFn: async ({ pageParam = 1 }) => {
         const res = await fetch(
-          `/api/trades?${buildParams(filters, pageParam as number, user)}`,
+          `/api/trades?${serializeFilterParams(filters, { page: pageParam as number, user })}`,
         );
         return res.json();
       },

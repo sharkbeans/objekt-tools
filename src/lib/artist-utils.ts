@@ -22,3 +22,8 @@ export function artistMatches(
 ): boolean {
   return normalizeArtistId(selected) === normalizeArtistId(actual);
 }
+
+/** Converts an app-side artist id ("tripleS") to the indexer's spelling ("triples"). */
+export function toIndexerArtist(artist: string): string {
+  return normalizeArtistId(artist) === "tripleS" ? "triples" : artist;
+}

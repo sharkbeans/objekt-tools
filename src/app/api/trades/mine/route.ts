@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { tradePost } from "@/lib/db/schema";
-import { parseFiltersFromParams } from "@/lib/filter-utils";
+import { parseFilterParams } from "@/lib/objekt-filters";
 import { parsePaginationParams } from "@/lib/pagination";
 import { listTradesPage } from "@/lib/trade-listing";
 
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const { page, limit } = parsePaginationParams(params);
   const sort = (params.get("sort") ?? "newest") as "newest" | "oldest";
 
-  const filters = parseFiltersFromParams(params);
+  const filters = parseFilterParams(params);
   const filterMode = (params.get("filter_mode") ?? "haves") as
     | "haves"
     | "wants"

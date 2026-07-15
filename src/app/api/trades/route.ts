@@ -8,7 +8,7 @@ import {
   tradePostHave,
   tradePostWant,
 } from "@/lib/db/schema";
-import { parseFiltersFromParams } from "@/lib/filter-utils";
+import { normalizeCacheKey, parseFilterParams } from "@/lib/objekt-filters";
 import { parsePaginationParams } from "@/lib/pagination";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
@@ -31,16 +31,6 @@ interface TradeItemInput {
   artist?: string;
 }
 
-function normalizeCacheKey(params: URLSearchParams) {
-  const normalized = new URLSearchParams();
-  for (const key of [...new Set(params.keys())].sort()) {
-    for (const value of params.getAll(key).sort()) {
-      normalized.append(key, value);
-    }
-  }
-  return normalized.toString();
-}
-
 function isWalletAddress(value: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(value);
 }
@@ -55,7 +45,7 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const { page, limit } = parsePaginationParams(params);
 
-  const filters = parseFiltersFromParams(params);
+  const filters = parseFilterParams(params);
 
   const sort = (params.get("sort") ?? "newest") as "newest" | "oldest";
   const status = params.get("status") ?? "open";
@@ -84,7 +74,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { trades: enriched, total } = await getCached(
-    `trades:list:v1:${normalizeCacheKey(params)}`,
+    `trades:list:v2:${normalizeCacheKey(params, ["page", "status", "user"])}`,
     30_000,
     async () => {
       const { trades, total } = await listTradesPage({

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
+import { serializeFilterParams } from "@/lib/objekt-filters";
 import { sectionHref } from "@/lib/sections";
 import type {
   ActiveTradeDTO,
@@ -46,20 +47,6 @@ const statusLabel: Record<TradeStatus, string> = {
   countered: "Countered",
   disputed: "Disputed",
 };
-
-function buildParams(filters: ObjektFilterState, page: number) {
-  const p = new URLSearchParams();
-  p.set("page", String(page));
-  for (const a of filters.artist) p.append("artist", a);
-  for (const m of filters.member) p.append("member", m);
-  for (const s of filters.season) p.append("season", s);
-  for (const c of filters.class) p.append("class", c);
-  for (const o of filters.on_offline) p.append("on_offline", o);
-  if (filters.search) p.set("search", filters.search);
-  if (filters.sort) p.set("sort", filters.sort);
-  p.set("filter_mode", filters.filterMode);
-  return p;
-}
 
 function TradeNotifications() {
   const queryClient = useQueryClient();
@@ -191,7 +178,9 @@ export default function MyTradesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["my-trades", filters, page],
     queryFn: async () => {
-      const res = await fetch(`/api/trades/mine?${buildParams(filters, page)}`);
+      const res = await fetch(
+        `/api/trades/mine?${serializeFilterParams(filters, { page })}`,
+      );
       return res.json();
     },
     enabled: !!session,

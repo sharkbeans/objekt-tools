@@ -28,11 +28,9 @@
  *    Bare 3-digit numbers inherit the season prefix from the same line
  */
 
-import { membersByArtist, shortformMembers } from "@/lib/filters";
+import { resolveObjektMemberAlias } from "@/lib/objekt-search";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
 import { seasonPrefixMap } from "@/lib/season-prefix";
-
-const allMembers = Object.values(membersByArtist).flat();
 
 const defaultOnOfflineByPrefix: Record<string, "online" | "offline"> = {
   CC: "offline",
@@ -60,13 +58,7 @@ export interface ParseResult {
 }
 
 /** Case-insensitive member resolve: shortform → full name, or exact match */
-function resolveMember(text: string): string | null {
-  const lower = text.toLowerCase();
-  const shortform = shortformMembers[lower];
-  if (shortform) return shortform;
-  const exact = allMembers.find((m) => m.toLowerCase() === lower);
-  return exact ?? null;
-}
+const resolveMember = resolveObjektMemberAlias;
 
 // Matches a season-prefix + 3-digit collection number, optional trailing a/z.
 // Also supports future generation shorthand like D2101Z -> Divine02 101Z.

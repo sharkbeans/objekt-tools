@@ -9,13 +9,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { decodeGroupedValue, encodeGroupedValue } from "@/lib/filter-utils";
 import {
   classArtistMap,
   seasonArtistMap,
   validClasses,
   validSeasons,
 } from "@/lib/filters";
+import {
+  decodeGroupedValue,
+  encodeGroupedValue,
+} from "@/lib/objekt-filters/grouped";
 import { cn } from "@/lib/utils";
 
 // Values are stored as "artistId::item" to scope selections per-artist.

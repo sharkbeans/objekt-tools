@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  type ObjektStructuralFilters,
   objektMatchesStructuralFilters,
-} from "@/lib/filter-utils";
+  tradeMatchesFilters,
+} from "./predicate";
+import type { ObjektStructuralFilters } from "./types";
 
 const emptyFilters: ObjektStructuralFilters = {
   artist: [],
@@ -113,6 +114,61 @@ describe("objektMatchesStructuralFilters", () => {
         ...emptyFilters,
         member: ["HaYeon"],
       }),
+      false,
+    );
+  });
+});
+
+describe("tradeMatchesFilters (grouped season/class regression)", () => {
+  const trade = {
+    haves: [seoYeon],
+    wants: [],
+  };
+
+  it("matches a grouped season value scoped to the item's resolved artist", () => {
+    assert.equal(
+      tradeMatchesFilters(
+        trade,
+        { ...emptyFilters, season: ["tripleS::Cream02"] },
+        "haves",
+      ),
+      true,
+    );
+  });
+
+  it("rejects the same season value scoped to a different artist", () => {
+    assert.equal(
+      tradeMatchesFilters(
+        trade,
+        { ...emptyFilters, season: ["artms::Cream02"] },
+        "haves",
+      ),
+      false,
+    );
+  });
+
+  it("matches a grouped class value scoped to the item's resolved artist", () => {
+    assert.equal(
+      tradeMatchesFilters(
+        trade,
+        { ...emptyFilters, class: ["tripleS::Double"] },
+        "haves",
+      ),
+      true,
+    );
+  });
+
+  it("still supports the quick-search grammar alongside structural filters", () => {
+    assert.equal(
+      tradeMatchesFilters(
+        trade,
+        { ...emptyFilters, search: "sy 066z" },
+        "haves",
+      ),
+      true,
+    );
+    assert.equal(
+      tradeMatchesFilters(trade, { ...emptyFilters, search: "!sy" }, "haves"),
       false,
     );
   });

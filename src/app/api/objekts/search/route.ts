@@ -1,16 +1,13 @@
 import type { SQL } from "drizzle-orm";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
+import { toIndexerArtist } from "@/lib/artist-utils";
 import { indexer } from "@/lib/db/indexer";
 import { collections } from "@/lib/db/indexer-schema";
 import { resolveObjektMemberAlias } from "@/lib/objekt-search";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
-
-function toIndexerArtist(artist: string) {
-  return artist === "tripleS" ? "triples" : artist;
-}
 
 function normalizeCacheKey(params: URLSearchParams) {
   const normalized = new URLSearchParams();

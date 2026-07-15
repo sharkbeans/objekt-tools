@@ -12,30 +12,15 @@ import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
 import { artistLabel } from "@/lib/artist-utils";
-import { decodeGroupedValue } from "@/lib/filter-utils";
 import { validOnlineTypes } from "@/lib/filters";
+import { decodeGroupedValue } from "@/lib/objekt-filters/grouped";
+import {
+  defaultFilters,
+  type ObjektFilterState,
+} from "@/lib/objekt-filters/types";
 
-export type ObjektFilterState = {
-  search: string;
-  artist: string[];
-  member: string[];
-  season: string[];
-  class: string[];
-  on_offline: string[];
-  sort: string;
-  filterMode: "haves" | "wants";
-};
-
-export const defaultFilters: ObjektFilterState = {
-  search: "",
-  artist: [],
-  member: [],
-  season: [],
-  class: [],
-  on_offline: [],
-  sort: "newest",
-  filterMode: "haves",
-};
+export type { ObjektFilterState };
+export { defaultFilters };
 
 interface ObjektFilterBarProps {
   filters: ObjektFilterState;

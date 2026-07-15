@@ -3,9 +3,9 @@ import { db } from "@/lib/db";
 import { tradePost } from "@/lib/db/schema";
 import {
   hasAnyFilter,
-  type TradeFilters,
+  type ObjektFilterState,
   tradeMatchesFilters,
-} from "@/lib/filter-utils";
+} from "@/lib/objekt-filters";
 
 type FilterMode = "haves" | "wants" | "both";
 type SortOrder = "newest" | "oldest";
@@ -88,7 +88,7 @@ export async function listTradesPage({
   limit,
 }: {
   where?: SQL<unknown>;
-  filters: TradeFilters;
+  filters: ObjektFilterState;
   filterMode: FilterMode;
   sort: SortOrder;
   page: number;

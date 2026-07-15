@@ -10,7 +10,7 @@ import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import {
   type ObjektStructuralFilters,
   objektMatchesStructuralFilters,
-} from "@/lib/filter-utils";
+} from "@/lib/objekt-filters";
 import { objektMatchesSearch } from "@/lib/objekt-search";
 import {
   defaultFilters,
