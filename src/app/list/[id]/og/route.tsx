@@ -127,7 +127,10 @@ export async function GET(
 
   // Group duplicate objekts into a single slot, accumulating quantity — mirrors the
   // canvas getNumberGroupKey/getDisplayItems logic so the embed matches the poster.
-  type Row = (typeof allHaves)[number];
+  type Row = (typeof allHaves)[number] & {
+    isAny?: boolean;
+    artist?: string | null;
+  };
   function groupRows(rows: Row[]): Row[] {
     if (!meta?.groupByNumbers) {
       return rows.map((r) => ({ ...r, quantity: r.quantity ?? 1 }));
@@ -239,14 +242,17 @@ export async function GET(
               }
               // split rawlabel to get the season-prefixed collectionNo
               const rawParts = item.rawLabel?.split(" ") ?? [];
-              const labelLine1 = item.member ?? rawParts[0] ?? "";
-              const labelLine2 = item.member
-                ? stripVariantSuffix(
-                    rawParts.length >= 2
-                      ? rawParts.slice(1).join(" ")
-                      : (item.collectionNo ?? ""),
-                  )
-                : "";
+              const labelLine1 = item.isAny
+                ? (item.rawLabel ?? "")
+                : (item.member ?? rawParts[0] ?? "");
+              const labelLine2 =
+                item.member && !item.isAny
+                  ? stripVariantSuffix(
+                      rawParts.length >= 2
+                        ? rawParts.slice(1).join(" ")
+                        : (item.collectionNo ?? ""),
+                    )
+                  : "";
               return (
                 <div
                   // biome-ignore lint/suspicious/noArrayIndexKey: static layout for OG image

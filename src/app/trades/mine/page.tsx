@@ -248,8 +248,8 @@ export default function MyTradesPage() {
           </p>
         </div>
         <Button asChild size="sm">
-          <Link href={sectionHref("/trades/new", { currentSection: "trade" })}>
-            New Trade
+          <Link href={sectionHref("/list", { currentSection: "trade" })}>
+            Create a list →
           </Link>
         </Button>
       </div>
@@ -373,10 +373,10 @@ export default function MyTradesPage() {
           <CardContent className="py-8 text-center text-muted-foreground">
             You haven&apos;t posted any trades yet.{" "}
             <Link
-              href={sectionHref("/trades/new", { currentSection: "trade" })}
+              href={sectionHref("/list", { currentSection: "trade" })}
               className="text-primary hover:underline"
             >
-              Create your first trade
+              Create your first list
             </Link>
           </CardContent>
         </Card>

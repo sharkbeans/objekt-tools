@@ -42,7 +42,6 @@ function rulesForSection(section: SectionId) {
         allow: ["/"],
         disallow: [
           "/api/",
-          "/new",
           "/mine",
           "/history",
           "/active",
@@ -64,7 +63,6 @@ const LEGACY_RULES = {
     "/notifications",
     "/active-trades",
     "/trades/mine",
-    "/trades/new",
     "/trades/history",
     ...TRADE_QUERY_PARAMS.map((param) => `/trades?*${param}=*`),
   ],

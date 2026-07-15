@@ -112,7 +112,11 @@ export function Navbar({
               <Link
                 href={href(matchCount > 0 ? "/trades/mine" : "/trades")}
                 className="relative text-muted-foreground hover:text-foreground transition-colors"
-                title={matchCount > 0 ? "View your matches" : undefined}
+                title={
+                  matchCount > 0
+                    ? "View your matches"
+                    : "Browse the marketplace and manage your offers"
+                }
               >
                 Trades
                 {matchCount > 0 && (
@@ -124,6 +128,7 @@ export function Navbar({
               <Link
                 href={href("/list")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Create and share a have/want list"
               >
                 Lists
               </Link>

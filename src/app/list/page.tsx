@@ -1,32 +1,48 @@
 "use client";
 
 import {
-  AlertCircleIcon,
-  ArrowLeftIcon,
   CheckCircle2Icon,
   CopyIcon,
   DownloadIcon,
-  ImageIcon,
   ListIcon,
   Loader2Icon,
   MoonIcon,
-  PlusIcon,
+  SearchIcon,
   SunIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { ListLinkField } from "@/components/list-link-field";
 import {
-  AddCustomWantDialog,
-  AddObjektDialog,
-} from "@/components/poster/add-objekt-dialog";
-import { CosmoPickerDialog } from "@/components/poster/cosmo-picker-dialog";
+  type AnyWant,
+  AnyWantPicker,
+} from "@/components/objekt/any-want-picker";
+import {
+  defaultFilters,
+  ObjektFilterBar,
+  type ObjektFilterState,
+} from "@/components/objekt/objekt-filter-bar";
+import {
+  type ObjektImageItem,
+  ObjektImages,
+  useObjektImages,
+} from "@/components/objekt/objekt-images";
+import { ObjektInventoryPicker } from "@/components/objekt/objekt-inventory-picker";
+import { ObjektPicker } from "@/components/objekt/objekt-picker";
+import { AddCustomWantDialog } from "@/components/poster/add-objekt-dialog";
+import { PasteListDialog } from "@/components/poster/paste-list-dialog";
 import {
   getDisplayCount,
   getGridCols,
-  PosterCanvas,
   type PosterData,
   type PosterTheme,
 } from "@/components/poster/poster-canvas";
@@ -45,6 +61,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -53,20 +76,27 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { signIn, useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
 import { compareMembers, compareSeasons } from "@/lib/filter-options";
 import { GRID_TRADE_STASH_KEY } from "@/lib/grid-trade-stash";
-import { parsePastedTrade } from "@/lib/paste-parser";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
-import { makePosterItem, resolvedItemToApiInput } from "@/lib/poster-item";
 import {
-  type ResolvedPosterItem,
-  resolveForPoster,
-} from "@/lib/poster-resolver";
+  makeAnyWantItem,
+  makePosterItem,
+  resolvedItemToApiInput,
+} from "@/lib/poster-item";
+import {
+  autoGridCols,
+  getItemQuantity,
+  getNumberGroupKey,
+} from "@/lib/poster-item-grouping";
+import type { ResolvedPosterItem } from "@/lib/poster-resolver";
 import { formatPosterAsText } from "@/lib/poster-text-format";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 
@@ -82,6 +112,8 @@ interface StoredItem {
   objektId: string | null;
   quantity: number;
   freeform: boolean;
+  isAny?: boolean;
+  artist?: string | null;
   rawLabel: string | null;
   onOffline: string | null;
   position: number;
@@ -100,6 +132,7 @@ interface StoredPoster {
   groupByMember: boolean;
   groupByNumbers: boolean;
   colsPerRow: number;
+  wantsOnly?: boolean;
   haves: StoredItem[];
   wants: StoredItem[];
 }
@@ -116,6 +149,8 @@ function storedItemToResolved(item: StoredItem): ResolvedPosterItem {
       ...(item.serial != null ? { serial: String(item.serial) } : {}),
       ...(item.quantity > 1 ? { quantity: item.quantity } : {}),
       ...(item.freeform ? { freeform: true as const } : {}),
+      ...(item.isAny ? { isAny: true as const, class: item.class } : {}),
+      ...(item.artist ? { artist: item.artist } : {}),
       ...(item.onOffline
         ? { onOffline: item.onOffline as "online" | "offline" }
         : {}),
@@ -140,17 +175,6 @@ function parseCollectionNo(value: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function sortObjektEntries(entries: ObjektEntry[]): ObjektEntry[] {
-  return [...entries].sort((a, b) => {
-    const seasonCmp = compareSeasons(a.season, b.season);
-    if (seasonCmp !== 0) return seasonCmp;
-    const colCmp =
-      parseCollectionNo(a.collectionNo) - parseCollectionNo(b.collectionNo);
-    if (colCmp !== 0) return colCmp;
-    return compareMembers(a.member, b.member);
-  });
-}
-
 function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
   const withEntry = items.filter(
     (
@@ -172,6 +196,88 @@ function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
   return [...withEntry, ...withoutEntry];
 }
 
+function resolvedItemToImage(
+  item: ResolvedPosterItem,
+  index: number,
+  quantity: number,
+): ObjektImageItem {
+  return {
+    id: index,
+    collectionId: item.entry?.collectionId ?? "",
+    collectionNo: item.entry?.collectionNo ?? item.parsed.collectionNo,
+    member: item.entry?.member ?? item.parsed.member,
+    season: item.entry?.season ?? item.parsed.season,
+    class: item.entry?.class ?? item.parsed.class,
+    serial:
+      item.parsed.serial != null ? parseInt(item.parsed.serial, 10) : null,
+    isAny: item.parsed.freeform === true || item.parsed.isAny === true,
+    artist: item.entry?.artist ?? item.parsed.artist,
+    thumbnailUrl: item.imageUrl,
+    quantity: quantity > 1 ? quantity : undefined,
+    customLabel: item.parsed.freeform ? item.parsed.raw : undefined,
+  };
+}
+
+// Groups duplicate items when combining, keeping the first occurrence's
+// index so remove/add stay aligned with the underlying have/want arrays.
+function toBuildImageItems(
+  items: ResolvedPosterItem[],
+  groupByNumbers: boolean,
+): ObjektImageItem[] {
+  if (!groupByNumbers) {
+    return items.map((item, i) =>
+      resolvedItemToImage(item, i, getItemQuantity(item)),
+    );
+  }
+
+  const out: ObjektImageItem[] = [];
+  const seen = new Map<string, ObjektImageItem>();
+  items.forEach((item, i) => {
+    const key = getNumberGroupKey(item);
+    const qty = getItemQuantity(item);
+    const existing = seen.get(key);
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 1) + qty;
+    } else {
+      const converted = resolvedItemToImage(item, i, qty);
+      out.push(converted);
+      seen.set(key, converted);
+    }
+  });
+  return out;
+}
+
+// Appends imported items, skipping ones already present (by serial for
+// haves, by collection for wants) so re-pasting the same list is a no-op.
+function mergeImportedItems(
+  existing: ResolvedPosterItem[],
+  imported: ResolvedPosterItem[],
+  compareBySerial: boolean,
+): ResolvedPosterItem[] {
+  const result = [...existing];
+  for (const item of imported) {
+    if (item.entry) {
+      const dup = result.some((r) => {
+        if (!r.entry || r.entry.collectionId !== item.entry?.collectionId)
+          return false;
+        if (!compareBySerial) return true;
+        const rSerial =
+          r.parsed.serial != null
+            ? parseInt(r.parsed.serial, 10)
+            : (r.entry.serial ?? null);
+        const iSerial =
+          item.parsed.serial != null
+            ? parseInt(item.parsed.serial, 10)
+            : (item.entry.serial ?? null);
+        return rSerial === iSerial;
+      });
+      if (dup) continue;
+    }
+    result.push(item);
+  }
+  return result;
+}
+
 function rememberCosmoUsername(value: string) {
   if (typeof window === "undefined") return;
   const trimmed = value.trim();
@@ -179,7 +285,22 @@ function rememberCosmoUsername(value: string) {
   localStorage.setItem("cosmousername", trimmed);
 }
 
-type Stage = "input" | "resolving" | "preview";
+function emptyPosterData(): PosterData {
+  return {
+    username: "",
+    cosmoId: "",
+    haves: [],
+    wants: [],
+    notes: undefined,
+    date: new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }),
+    haveTitle: "Have",
+    wantTitle: "Want",
+  };
+}
 
 const STASH_KEY = "poster-draft-stash";
 const COSMO_USERNAME_STORAGE_KEYS = [
@@ -187,6 +308,7 @@ const COSMO_USERNAME_STORAGE_KEYS = [
   "cosmoUsername",
   "progress-last-nickname",
 ];
+const PICKER_GRID_CLASS = "md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8";
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
@@ -207,13 +329,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     }
   }, [editIdProp, legacyEditId, router]);
 
-  const [text, setText] = useState("");
   const [cosmoId, setCosmoId] = useState("");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [stage, setStage] = useState<Stage>("input");
-  const [posterData, setPosterData] = useState<PosterData | null>(null);
-  const [parseErrors, setParseErrors] = useState<string[]>([]);
-  const [isHydrated, setIsHydrated] = useState(false);
+  const [haveNickname, setHaveNickname] = useState<string | null>(null);
+  const lastSearchAt = useRef(0);
+  const [posterData, setPosterData] = useState<PosterData>(emptyPosterData);
+  const [editLoading, setEditLoading] = useState(!!editId);
   const [posterTheme, setPosterTheme] = useState<PosterTheme>("dark");
   const [groupByMember, setGroupByMember] = useState(false);
   const [groupByNumbers, setGroupByNumbers] = useState(true);
@@ -222,13 +342,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [colsPerRow, setColsPerRow] = useState(5);
   const userSetCols = useRef(false);
-  const posterRef = useRef<HTMLDivElement>(null);
-  const [addDialogSection, setAddDialogSection] = useState<
-    "have" | "want" | null
-  >(null);
+  const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
+  const [activeTab, setActiveTab] = useState<"have" | "want">("have");
   const [customWantOpen, setCustomWantOpen] = useState(false);
+  const [anyWantOpen, setAnyWantOpen] = useState(false);
+  const [wantsOnly, setWantsOnly] = useState(false);
+  const tabsRef = useRef<HTMLDivElement>(null);
 
-  const [isLinked, setIsLinked] = useState(false);
   const [linkedNickname, setLinkedNickname] = useState<string | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
   const [inventoryWarningOpen, setInventoryWarningOpen] = useState(false);
@@ -241,8 +361,15 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     Record<string, number>
   >({});
 
+  const totalItems = posterData.haves.length + posterData.wants.length;
+
+  // Auto-disable wantsOnly if all wants are removed
+  useEffect(() => {
+    if (posterData.wants.length === 0 && wantsOnly) setWantsOnly(false);
+  }, [posterData.wants.length, wantsOnly]);
+
   // Dashboard preview: only on the plain "new list" landing (not while
-  // editing an existing poster, which reuses this same component).
+  // editing an existing poster, or once the user starts building one).
   useEffect(() => {
     if (editId || !session) {
       setLatestPosters(null);
@@ -267,19 +394,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       cancelled = true;
     };
   }, [editId, session]);
-
-  const openPicker = useCallback(() => {
-    setPickerOpen(true);
-  }, []);
-
-  const handleCosmoBlur = useCallback(() => {
-    if (!cosmoId.trim() || pickerOpen) return;
-    openPicker();
-  }, [cosmoId, openPicker, pickerOpen]);
-
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -306,14 +420,15 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         groupByMember: boolean;
         groupByNumbers: boolean;
         colsPerRow: number;
+        wantsOnly: boolean;
       };
       userSetCols.current = true;
       setPosterTheme(stash.posterTheme);
       setGroupByMember(stash.groupByMember);
       setGroupByNumbers(stash.groupByNumbers);
       setColsPerRow(stash.colsPerRow);
+      setWantsOnly(stash.wantsOnly ?? false);
       setPosterData(stash.posterData);
-      setStage("preview");
       setAutoSaving(true);
     } catch {
       toast.error("Could not restore your draft");
@@ -332,7 +447,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     try {
       const stash = JSON.parse(raw) as { posterData: PosterData };
       setPosterData(stash.posterData);
-      setStage("preview");
     } catch {
       toast.error("Could not load your trade list");
     }
@@ -341,13 +455,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   // Pre-load a stored poster when ?edit=id is in the URL
   useEffect(() => {
     if (!editId) return;
-    setStage("resolving");
+    setEditLoading(true);
     fetch(`/api/posters/${editId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: StoredPoster | null) => {
         if (!data) {
           toast.error("Could not load poster for editing");
-          setStage("input");
+          setEditLoading(false);
           return;
         }
         userSetCols.current = true;
@@ -355,7 +469,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         setGroupByMember(data.groupByMember);
         setGroupByNumbers(data.groupByNumbers);
         setColsPerRow(data.colsPerRow);
-        if (data.cosmoId) setCosmoId(data.cosmoId);
+        setWantsOnly(data.wantsOnly ?? false);
+        if (data.cosmoId) {
+          setCosmoId(data.cosmoId);
+          setHaveNickname(data.cosmoId);
+        }
         setPosterData({
           username: data.username ?? "",
           cosmoId: data.cosmoId ?? "",
@@ -370,18 +488,18 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           haveTitle: data.haveTitle,
           wantTitle: data.wantTitle,
         });
-        setStage("preview");
+        setEditLoading(false);
       })
       .catch(() => {
         toast.error("Failed to load poster");
-        setStage("input");
+        setEditLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId]);
 
   // Auto-assign colsPerRow when items change, unless user has manually set it
   useEffect(() => {
-    if (!posterData || userSetCols.current) return;
+    if (userSetCols.current) return;
     const haveCount = getDisplayCount(posterData.haves, groupByNumbers);
     const wantCount = getDisplayCount(posterData.wants, groupByNumbers);
     const count = Math.max(haveCount, wantCount);
@@ -402,65 +520,64 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
             return data.nickname;
           });
           setLinkedNickname(data.nickname);
-          setIsLinked(true);
         }
       })
       .catch(() => {});
   }, [session]);
 
-  const handleGenerate = useCallback(async () => {
-    if (!text.trim()) return;
-    rememberCosmoUsername(cosmoId);
-
-    const parsed = parsePastedTrade(text);
-    if (
-      parsed.errors.length > 0 &&
-      parsed.haves.length === 0 &&
-      parsed.wants.length === 0
-    ) {
-      setParseErrors(parsed.errors);
-      return;
+  // Auto-load the Have inventory the first time a username becomes available
+  useEffect(() => {
+    if (cosmoId.trim() && haveNickname === null) {
+      lastSearchAt.current = Date.now();
+      setHaveNickname(cosmoId.trim());
     }
-    setParseErrors(parsed.errors);
-    setStage("resolving");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cosmoId]);
 
-    try {
-      const [resolvedHaves, resolvedWants] = await Promise.all([
-        resolveForPoster(parsed.haves),
-        resolveForPoster(parsed.wants),
-      ]);
+  // Fill the display name / cosmoId once we know whose inventory this is
+  useEffect(() => {
+    if (!haveNickname) return;
+    setPosterData((prev) =>
+      prev.cosmoId
+        ? prev
+        : { ...prev, cosmoId: haveNickname, username: haveNickname },
+    );
+  }, [haveNickname]);
 
-      const now = new Date();
-      const date = now.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
+  const searchInventory = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const now = Date.now();
+      const elapsed = now - lastSearchAt.current;
+      if (
+        lastSearchAt.current !== 0 &&
+        elapsed < 3000 &&
+        trimmed !== haveNickname
+      ) {
+        toast.error(
+          `Please wait ${Math.ceil((3000 - elapsed) / 1000)}s before searching again.`,
+        );
+        return;
+      }
+      lastSearchAt.current = now;
+      setHaveNickname(trimmed);
+    },
+    [haveNickname],
+  );
 
-      userSetCols.current = false;
-      setPosterData({
-        username: cosmoId,
-        cosmoId,
-        haves: sortResolvedItems(resolvedHaves),
-        wants: sortResolvedItems(resolvedWants),
-        notes: parsed.notes,
-        date,
-        haveTitle: "Have",
-        wantTitle: "Want",
-      });
-      setStage("preview");
-    } catch {
-      toast.error("Failed to resolve objekts");
-      setStage("input");
-    }
-  }, [text, cosmoId]);
+  const fetchHaveInventory = useCallback(
+    () => fetchInventoryByNickname(haveNickname ?? ""),
+    [haveNickname],
+  );
+
+  const focusTab = useCallback((tab: "have" | "want") => {
+    setActiveTab(tab);
+    tabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const handleDownload = useCallback(async () => {
-    if (!posterRef.current || !posterData) return;
     setDownloading(true);
-
-    // Wait a tick for editable=false to apply (removes inputs/buttons from DOM)
-    await new Promise((r) => setTimeout(r, 50));
 
     try {
       const canvas = await renderPosterToCanvas(
@@ -524,7 +641,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
 
   const handleCopyText = useCallback(async () => {
-    if (!posterData) return;
     const text = formatPosterAsText(posterData);
     try {
       await navigator.clipboard.writeText(text);
@@ -533,12 +649,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       toast.error("Failed to copy");
     }
   }, [posterData]);
-
-  const handleBack = useCallback(() => {
-    setStage("input");
-    setPosterData(null);
-    userSetCols.current = false;
-  }, []);
 
   const doSaveAndShare = useCallback(
     async (data: PosterData) => {
@@ -552,6 +662,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           groupByMember,
           groupByNumbers,
           colsPerRow,
+          wantsOnly,
           haveTitle: data.haveTitle,
           wantTitle: data.wantTitle,
           haves: data.haves.map((item, i) => resolvedItemToApiInput(item, i)),
@@ -613,19 +724,26 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         setSaving(false);
       }
     },
-    [posterTheme, groupByMember, groupByNumbers, colsPerRow, editId, router],
+    [
+      posterTheme,
+      groupByMember,
+      groupByNumbers,
+      colsPerRow,
+      wantsOnly,
+      editId,
+      router,
+    ],
   );
 
   // Auto-save after restoring a stashed draft post-login
   useEffect(() => {
-    if (!autoSaving || !posterData) return;
+    if (!autoSaving) return;
     setAutoSaving(false);
     doSaveAndShare(posterData);
-  }, [autoSaving, posterData, doSaveAndShare]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSaving]);
 
   const handleSaveAndShare = useCallback(async () => {
-    if (!posterData) return;
-
     // For new posters, require Discord login — show dialog instead of redirecting
     if (!editId && !session) {
       setSignInOpen(true);
@@ -680,7 +798,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   }, [posterData, editId, session, doSaveAndShare, linkedNickname]);
 
   const handleSignInForSave = useCallback(() => {
-    if (!posterData) return;
     sessionStorage.setItem(
       STASH_KEY,
       JSON.stringify({
@@ -689,41 +806,85 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         groupByMember,
         groupByNumbers,
         colsPerRow,
+        wantsOnly,
       }),
     );
     signIn.social({
       provider: "discord",
       callbackURL: sectionAbsoluteUrl("/list?restore=1"),
     });
-  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
+  }, [
+    posterData,
+    posterTheme,
+    groupByMember,
+    groupByNumbers,
+    colsPerRow,
+    wantsOnly,
+  ]);
 
-  const handleAddItems = useCallback(
-    (section: "have" | "want", entries: ObjektEntry[]) => {
-      setPosterData((prev) => {
-        if (!prev) return prev;
-        const key = section === "have" ? "haves" : "wants";
-        const existing = prev[key];
-        // Keep freeform items (custom wants) that have no backing entry
-        const freeformItems = existing.filter(
-          (h) => !h.entry && h.parsed.freeform,
-        );
-        const sortedEntries = sortObjektEntries(entries);
-        const newItems = sortedEntries.map((e) => {
-          const existingMatch = existing.find(
-            (h) => h.entry?.collectionId === e.collectionId,
-          );
-          return existingMatch ?? makePosterItem(e);
-        });
-        return { ...prev, [key]: [...newItems, ...freeformItems] };
-      });
-      setAddDialogSection(null);
+  const handleSelectHave = useCallback((entry: ObjektEntry) => {
+    setPosterData((prev) => ({
+      ...prev,
+      haves: [...prev.haves, makePosterItem(entry)],
+    }));
+  }, []);
+
+  const handleDeselectHave = useCallback((entry: ObjektEntry) => {
+    setPosterData((prev) => ({
+      ...prev,
+      haves: prev.haves.filter((h) => {
+        if (!h.entry) return true;
+        if (entry.serial != null) {
+          const hSerial =
+            h.parsed.serial != null
+              ? parseInt(h.parsed.serial, 10)
+              : (h.entry.serial ?? null);
+          return hSerial !== entry.serial;
+        }
+        return h.entry.collectionId !== entry.collectionId;
+      }),
+    }));
+  }, []);
+
+  const handleSelectWant = useCallback((entry: ObjektEntry) => {
+    setPosterData((prev) => ({
+      ...prev,
+      wants: [...prev.wants, makePosterItem(entry)],
+    }));
+  }, []);
+
+  const handleDeselectWant = useCallback((entry: ObjektEntry) => {
+    setPosterData((prev) => ({
+      ...prev,
+      wants: prev.wants.filter(
+        (w) => !w.entry || w.entry.collectionId !== entry.collectionId,
+      ),
+    }));
+  }, []);
+
+  const handlePasteImport = useCallback(
+    (
+      importedHaves: ResolvedPosterItem[],
+      importedWants: ResolvedPosterItem[],
+      notes?: string,
+    ) => {
+      userSetCols.current = false;
+      setPosterData((prev) => ({
+        ...prev,
+        haves: sortResolvedItems(
+          mergeImportedItems(prev.haves, importedHaves, true),
+        ),
+        wants: sortResolvedItems(
+          mergeImportedItems(prev.wants, importedWants, false),
+        ),
+        notes: prev.notes ?? notes,
+      }));
     },
     [],
   );
 
   const handleAddCustomWant = useCallback((label: string) => {
     setPosterData((prev) => {
-      if (!prev) return prev;
       const item: ResolvedPosterItem = {
         parsed: {
           member: null,
@@ -739,10 +900,37 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     });
   }, []);
 
+  const anyWants = useMemo<AnyWant[]>(
+    () =>
+      posterData.wants.flatMap((item) =>
+        item.parsed.isAny
+          ? [
+              {
+                isAny: true as const,
+                ...(item.parsed.artist ? { artist: item.parsed.artist } : {}),
+                ...(item.parsed.member ? { member: item.parsed.member } : {}),
+                ...(item.parsed.season ? { season: item.parsed.season } : {}),
+                ...(item.parsed.class ? { class: item.parsed.class } : {}),
+              },
+            ]
+          : [],
+      ),
+    [posterData.wants],
+  );
+
+  const handleAnyWantsChange = useCallback((next: AnyWant[]) => {
+    setPosterData((prev) => ({
+      ...prev,
+      wants: [
+        ...prev.wants.filter((w) => !w.parsed.isAny),
+        ...next.map((w) => makeAnyWantItem(w)),
+      ],
+    }));
+  }, []);
+
   const handleRemoveItem = useCallback(
     (section: "have" | "want", index: number) => {
       setPosterData((prev) => {
-        if (!prev) return prev;
         const key = section === "have" ? "haves" : "wants";
         return {
           ...prev,
@@ -753,88 +941,52 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     [],
   );
 
-  const handlePickerConfirm = useCallback(
-    async (
-      haves: ObjektEntry[],
-      wants: ObjektEntry[],
-      searchedNickname: string,
+  const handleTextChange = useCallback(
+    (
+      field: "username" | "haveTitle" | "wantTitle" | "notes",
+      value: string,
     ) => {
-      setCosmoId(searchedNickname);
-      rememberCosmoUsername(searchedNickname);
-      setStage("resolving");
-      try {
-        const resolvedHaves = sortObjektEntries(haves).map((entry) =>
-          makePosterItem(entry),
-        );
-        const resolvedWants = sortObjektEntries(wants).map((entry) =>
-          makePosterItem(entry),
-        );
-
-        const now = new Date();
-        const date = now.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-
-        userSetCols.current = false;
-        setPosterData({
-          username: searchedNickname,
-          cosmoId: searchedNickname,
-          haves: resolvedHaves,
-          wants: resolvedWants,
-          notes: undefined,
-          date,
-          haveTitle: "Have",
-          wantTitle: "Want",
-        });
-        setStage("preview");
-      } catch {
-        toast.error("Failed to build poster");
-        setStage("input");
-      }
+      setPosterData((prev) => ({ ...prev, [field]: value }));
     },
     [],
   );
 
-  const handleTextChange = useCallback((field: string, value: string) => {
-    setPosterData((prev) => {
-      if (!prev) return prev;
-      // Direct PosterData fields
-      if (
-        field === "username" ||
-        field === "date" ||
-        field === "notes" ||
-        field === "haveTitle" ||
-        field === "wantTitle"
-      ) {
-        return { ...prev, [field]: value };
-      }
-      // Card label changes — we store these on the parsed.raw for display override
-      // Format: "haveLabel:0", "wantLabel:3"
-      const labelMatch = field.match(/^(have|want)Label:(\d+)$/);
-      if (labelMatch) {
-        const key = labelMatch[1] === "have" ? "haves" : "wants";
-        const idx = parseInt(labelMatch[2], 10);
-        const items = [...prev[key]];
-        if (items[idx]) {
-          items[idx] = {
-            ...items[idx],
-            parsed: { ...items[idx].parsed, raw: value },
-            // Clear entry so the label override sticks (canvas uses raw when entry is null)
-            entry: null,
-          };
-        }
-        return { ...prev, [key]: items };
-      }
-      return prev;
-    });
-  }, []);
+  const selectedHaveEntries = useMemo<ObjektEntry[]>(
+    () =>
+      posterData.haves.flatMap((item) => {
+        if (!item.entry) return [];
+        const serial =
+          item.parsed.serial != null
+            ? parseInt(item.parsed.serial, 10)
+            : item.entry.serial;
+        return [{ ...item.entry, serial }];
+      }),
+    [posterData.haves],
+  );
 
-  const unresolvedHaves = posterData?.haves.filter((h) => h.error) ?? [];
-  const unresolvedWants = posterData?.wants.filter((w) => w.error) ?? [];
-  const hasUnresolved =
-    unresolvedHaves.length > 0 || unresolvedWants.length > 0;
+  const selectedWantEntries = useMemo<ObjektEntry[]>(
+    () => posterData.wants.flatMap((item) => (item.entry ? [item.entry] : [])),
+    [posterData.wants],
+  );
+
+  const haveImageItems = useMemo(
+    () => toBuildImageItems(posterData.haves, groupByNumbers),
+    [posterData, groupByNumbers],
+  );
+  const wantImageItems = useMemo(
+    () => toBuildImageItems(posterData.wants, groupByNumbers),
+    [posterData, groupByNumbers],
+  );
+  const haveImages = useObjektImages(haveImageItems);
+  const wantImages = useObjektImages(wantImageItems);
+  const previewGridCols = Math.max(
+    autoGridCols(haveImageItems.length),
+    autoGridCols(wantImageItems.length),
+  );
+  const previewGridStyle = {
+    gridTemplateColumns: `repeat(${previewGridCols}, minmax(0, 1fr))`,
+  };
+
   const saveActionLabel = linkCopied
     ? "Link Copied!"
     : editId
@@ -843,384 +995,521 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   return (
     <div className="mx-auto w-full max-w-6xl pb-20 space-y-4">
-      {stage === "input" && latestPosters && latestPosters.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">Active Lists</h1>
-            {session && (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-10 gap-2 border-border bg-transparent px-4"
-              >
-                <Link
-                  href={sectionHref("/list/mine", { currentSection: "list" })}
+      {!editId &&
+        latestPosters &&
+        latestPosters.length > 0 &&
+        totalItems === 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-bold">Active Lists</h1>
+              {session && (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-2 border-border bg-transparent px-4"
                 >
-                  <ListIcon className="h-4 w-4" />
-                  My Lists
-                </Link>
-              </Button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {latestPosters
-              .slice()
-              .sort((a, b) => {
-                const matchDelta =
-                  (latestMatchCounts[b.id] ?? 0) -
-                  (latestMatchCounts[a.id] ?? 0);
-                if (matchDelta !== 0) return matchDelta;
-                return (
-                  new Date(b.updatedAt).getTime() -
-                  new Date(a.updatedAt).getTime()
-                );
-              })
-              .slice(0, 3)
-              .map((p) => (
-                <PosterCard
-                  key={p.id}
-                  poster={p}
-                  matchCount={latestMatchCounts[p.id]}
-                />
-              ))}
-          </div>
-        </section>
-      )}
+                  <Link
+                    href={sectionHref("/list/mine", { currentSection: "list" })}
+                  >
+                    <ListIcon className="h-4 w-4" />
+                    My Lists
+                  </Link>
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {latestPosters
+                .slice()
+                .sort((a, b) => {
+                  const matchDelta =
+                    (latestMatchCounts[b.id] ?? 0) -
+                    (latestMatchCounts[a.id] ?? 0);
+                  if (matchDelta !== 0) return matchDelta;
+                  return (
+                    new Date(b.updatedAt).getTime() -
+                    new Date(a.updatedAt).getTime()
+                  );
+                })
+                .slice(0, 3)
+                .map((p) => (
+                  <PosterCard
+                    key={p.id}
+                    poster={p}
+                    matchCount={latestMatchCounts[p.id]}
+                  />
+                ))}
+            </div>
+          </section>
+        )}
 
       <section className="space-y-4 border-t border-border pt-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Build List</h1>
-          <Button
-            type="button"
-            size="sm"
-            onClick={openPicker}
-            className="h-9 gap-1.5 bg-white px-4 text-black hover:bg-white/90"
-          >
-            <PlusIcon className="h-4 w-4" />
-            New List
-          </Button>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Build List</h1>
+            <p className="text-muted-foreground">
+              Select what you have and what you want
+            </p>
+          </div>
+          <PasteListDialog onImport={handlePasteImport} />
         </div>
 
-        <div>
-          {stage === "input" && (
-            <section className="space-y-5">
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="poster-cosmoid"
-                  className="text-sm font-medium text-foreground"
-                >
-                  Cosmo Username
-                </Label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    id="poster-cosmoid"
-                    placeholder="e.g. sharkbeans"
-                    value={cosmoId}
-                    onChange={(e) => setCosmoId(e.target.value)}
-                    onBlur={() => {
-                      rememberCosmoUsername(cosmoId);
-                      handleCosmoBlur();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && cosmoId.trim()) {
-                        e.preventDefault();
-                        openPicker();
-                      }
-                    }}
-                    className="h-12 bg-background text-base md:text-base sm:max-w-80"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-12 gap-2 border-border bg-transparent px-4 sm:flex-1"
-                    onClick={openPicker}
-                  >
-                    <ImageIcon className="h-4 w-4" />
-                    Add Objekts
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <Label
-                    htmlFor="poster-text"
-                    className="text-lg font-bold text-foreground"
-                  >
-                    HAVE / WANT List
-                  </Label>
-                  <p className="text-sm leading-5 text-muted-foreground">
-                    Put what you can trade under HAVE and what you are looking
-                    for under WANT. Shortforms and quantities like (x3) are
-                    supported.
-                  </p>
-                </div>
-                <Textarea
-                  id="poster-text"
-                  placeholder={`**HAVE**\nsy AA201 #10\nHyeRin B205 x3\nKaede bb104, bb105\n\nWANT\nDaHyun BB345\nnaky bb343 bb344`}
-                  value={text}
-                  onChange={(e) => {
-                    setText(e.target.value);
-                    setParseErrors([]);
+        {editLoading ? (
+          <div className="rounded-xl border border-border bg-background/40 px-4 py-12">
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+              Loading list...
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="poster-cosmoid"
+                className="text-sm font-medium text-foreground"
+              >
+                Cosmo Username
+              </Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="poster-cosmoid"
+                  placeholder="e.g. sharkbeans"
+                  value={cosmoId}
+                  onChange={(e) => setCosmoId(e.target.value)}
+                  onBlur={() => {
+                    rememberCosmoUsername(cosmoId);
+                    searchInventory(cosmoId);
                   }}
-                  rows={14}
-                  className="min-h-[22rem] resize-y border-border bg-background font-mono text-sm leading-6"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && cosmoId.trim()) {
+                      e.preventDefault();
+                      rememberCosmoUsername(cosmoId);
+                      searchInventory(cosmoId);
+                    }
+                  }}
+                  className="h-12 bg-background text-base md:text-base sm:max-w-80"
                 />
-                {parseErrors.length > 0 && (
-                  <div className="space-y-1">
-                    {parseErrors.map((err) => (
-                      <p
-                        key={err}
-                        className="flex items-start gap-1.5 text-xs leading-5 text-destructive"
-                      >
-                        <AlertCircleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        {err}
-                      </p>
-                    ))}
-                  </div>
-                )}
                 <Button
-                  onClick={handleGenerate}
-                  disabled={isHydrated ? !text.trim() : undefined}
-                  className="h-11 w-full gap-2 sm:w-auto sm:px-6"
+                  type="button"
+                  variant="outline"
+                  className="h-12 gap-2 border-border bg-transparent px-4 sm:flex-1"
+                  disabled={!cosmoId.trim()}
+                  onClick={() => {
+                    rememberCosmoUsername(cosmoId);
+                    searchInventory(cosmoId);
+                  }}
                 >
-                  <ImageIcon className="h-4 w-4" />
-                  Preview List
+                  <SearchIcon className="h-4 w-4" />
+                  Load Inventory
                 </Button>
-              </div>
-            </section>
-          )}
-
-          <CosmoPickerDialog
-            open={pickerOpen}
-            onOpenChange={setPickerOpen}
-            initialNickname={cosmoId}
-            isLinked={isLinked}
-            onConfirm={handlePickerConfirm}
-          />
-
-          {stage === "resolving" && (
-            <div className="rounded-xl border border-border bg-background/40 px-4 py-12">
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2Icon className="h-4 w-4 animate-spin" />
-                Resolving objekts...
               </div>
             </div>
-          )}
 
-          {stage === "preview" && posterData && (
-            <section className="space-y-4">
-              <div className="flex flex-col gap-3 border-b border-border pb-4">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Preview
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {getDisplayCount(posterData.haves, groupByNumbers)} have /{" "}
-                      {getDisplayCount(posterData.wants, groupByNumbers)} want
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBack}
-                      className="h-10 gap-2 border-border bg-transparent"
-                    >
-                      <ArrowLeftIcon className="h-4 w-4" />
-                      Back
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleCopyText}
-                      className="h-10 gap-2 border-border bg-transparent"
-                    >
-                      <CopyIcon className="h-4 w-4" />
-                      Copy Text
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleDownload}
-                      disabled={downloading}
-                      className="h-10 gap-2 border-border bg-transparent"
-                    >
-                      {downloading ? (
-                        <Loader2Icon className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <DownloadIcon className="h-4 w-4" />
-                      )}
-                      Download PNG
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleSaveAndShare}
-                      disabled={saving}
-                      className="h-10 gap-2"
-                    >
-                      {saving ? (
-                        <Loader2Icon className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle2Icon className="h-4 w-4" />
-                      )}
-                      {saveActionLabel}
-                    </Button>
-                  </div>
-                </div>
+            <ObjektFilterBar
+              filters={filters}
+              onChange={setFilters}
+              showSort={false}
+              showFilterMode={false}
+            />
 
-                <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-                  <div className="flex items-center gap-2">
+            <div ref={tabsRef}>
+              <Tabs
+                value={activeTab}
+                onValueChange={(v) => setActiveTab(v as "have" | "want")}
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="have">
+                    Have ({posterData.haves.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="want">
+                    Want ({posterData.wants.length})
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="have">
+                  <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
+                    <CardHeader className="px-0 sm:px-6">
+                      <CardTitle className="text-lg">
+                        What do you have?
+                      </CardTitle>
+                      <CardDescription>
+                        {haveNickname
+                          ? `Showing inventory for @${haveNickname}`
+                          : "Enter a Cosmo username above and load their inventory"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-0 sm:px-6">
+                      {haveNickname ? (
+                        <ObjektInventoryPicker
+                          fetchItems={fetchHaveInventory}
+                          selected={selectedHaveEntries}
+                          onSelect={handleSelectHave}
+                          onDeselect={handleDeselectHave}
+                          maxSelections={50}
+                          gridClassName={PICKER_GRID_CLASS}
+                          filters={filters}
+                          emptyState={
+                            <div className="text-sm text-muted-foreground text-center py-4">
+                              No transferable objekts found for this user.
+                            </div>
+                          }
+                        />
+                      ) : (
+                        <div className="text-sm text-muted-foreground text-center py-8">
+                          Load a Cosmo inventory to select haves
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Button
+                    className="w-full mt-3"
+                    onClick={() => setActiveTab("want")}
+                  >
+                    Wants →
+                  </Button>
+                </TabsContent>
+
+                <TabsContent value="want" className="space-y-3">
+                  <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
+                    <CardHeader className="px-0 sm:px-6 pb-3">
+                      <CardTitle className="text-lg">
+                        What do you want?
+                      </CardTitle>
+                      <CardDescription>
+                        Select specific objekts you&apos;re looking for
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-0 sm:px-6 space-y-3">
+                      <ObjektPicker
+                        selected={selectedWantEntries}
+                        onSelect={handleSelectWant}
+                        onDeselect={handleDeselectWant}
+                        maxSelections={50}
+                        filters={filters}
+                        gridClassName={PICKER_GRID_CLASS}
+                      />
+                      <Separator />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => setCustomWantOpen(true)}
+                      >
+                        Add Custom Want
+                      </Button>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label htmlFor="any-want-toggle">Add ANY want</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Accept any objekt matching a filter — e.g. &quot;Any
+                            HeeJin&quot; or &quot;Any Atom01&quot;. Won&apos;t
+                            trigger match notifications, but gates offers when
+                            Wants Only is on.
+                          </p>
+                        </div>
+                        <Switch
+                          id="any-want-toggle"
+                          checked={anyWantOpen}
+                          onCheckedChange={setAnyWantOpen}
+                        />
+                      </div>
+                      {anyWantOpen && (
+                        <AnyWantPicker
+                          value={anyWants}
+                          onChange={handleAnyWantsChange}
+                        />
+                      )}
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label htmlFor="wants-only">Wants only</Label>
+                          <p className="text-xs text-muted-foreground">
+                            {posterData.wants.length === 0
+                              ? "Add at least one want item to enable this option"
+                              : wantsOnly
+                                ? "You will only accept offers containing at least one item from your want list"
+                                : "You will receive trade offers from anyone, regardless of your want list"}
+                          </p>
+                        </div>
+                        <Switch
+                          id="wants-only"
+                          checked={wantsOnly}
+                          onCheckedChange={setWantsOnly}
+                          disabled={posterData.wants.length === 0}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Button
+                    className="w-full"
+                    onClick={() => setActiveTab("have")}
+                  >
+                    ← Haves
+                  </Button>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {totalItems > 0 && (
+              <Card>
+                <CardHeader className="flex flex-col gap-3 pb-4 border-b border-border">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <CardTitle className="text-lg">Preview</CardTitle>
+                      <CardDescription>
+                        {getDisplayCount(posterData.haves, groupByNumbers)} have
+                        / {getDisplayCount(posterData.wants, groupByNumbers)}{" "}
+                        want
+                      </CardDescription>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCopyText}
+                        className="h-10 gap-2 border-border bg-transparent"
+                      >
+                        <CopyIcon className="h-4 w-4" />
+                        Copy Text
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleDownload}
+                        disabled={downloading}
+                        className="h-10 gap-2 border-border bg-transparent"
+                      >
+                        {downloading ? (
+                          <Loader2Icon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <DownloadIcon className="h-4 w-4" />
+                        )}
+                        Download PNG
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSaveAndShare}
+                        disabled={saving}
+                        className="h-10 gap-2"
+                      >
+                        {saving ? (
+                          <Loader2Icon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2Icon className="h-4 w-4" />
+                        )}
+                        {saveActionLabel}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="cols-per-row"
+                        className="text-xs text-muted-foreground"
+                      >
+                        Columns
+                      </Label>
+                      <select
+                        id="cols-per-row"
+                        value={colsPerRow}
+                        onChange={(e) => {
+                          userSetCols.current = true;
+                          setColsPerRow(Number(e.target.value));
+                        }}
+                        className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                      >
+                        {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
+                          <option key={n} value={n}>
+                            {n} per row
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 sm:justify-start">
+                      <span className="text-xs text-muted-foreground">
+                        Group by Members
+                      </span>
+                      <Switch
+                        checked={groupByMember}
+                        onCheckedChange={setGroupByMember}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 sm:justify-start">
+                      <span className="text-xs text-muted-foreground">
+                        Combine Duplicates
+                      </span>
+                      <Switch
+                        checked={groupByNumbers}
+                        onCheckedChange={setGroupByNumbers}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 sm:justify-start">
+                      <span className="text-xs text-muted-foreground">
+                        Theme
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Switch
+                          checked={posterTheme === "dark"}
+                          onCheckedChange={(checked) =>
+                            setPosterTheme(checked ? "dark" : "light")
+                          }
+                        />
+                        <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                    </div>
+
+                    {(linkedNickname || posterData.cosmoId) && (
+                      <span className="inline-flex rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">
+                        {linkedNickname
+                          ? `Linked Cosmo: @${linkedNickname}`
+                          : `Cosmo ID: @${posterData.cosmoId}`}
+                      </span>
+                    )}
+
+                    {autoSaving && (
+                      <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <Loader2Icon className="h-3 w-3 animate-spin" />
+                        Saving draft...
+                      </div>
+                    )}
+                  </div>
+
+                  {editId && (
+                    <div className="max-w-md">
+                      <ListLinkField
+                        label="Edit link"
+                        value={sectionAbsoluteUrl(`/list/${editId}/edit`)}
+                      />
+                    </div>
+                  )}
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="poster-display-name"
+                        className="text-xs text-muted-foreground"
+                      >
+                        Display Name
+                      </Label>
+                      <Input
+                        id="poster-display-name"
+                        value={posterData.username}
+                        onChange={(e) =>
+                          handleTextChange("username", e.target.value)
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="poster-have-title"
+                        className="text-xs text-muted-foreground"
+                      >
+                        Have Title
+                      </Label>
+                      <Input
+                        id="poster-have-title"
+                        value={posterData.haveTitle}
+                        onChange={(e) =>
+                          handleTextChange("haveTitle", e.target.value)
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="poster-want-title"
+                        className="text-xs text-muted-foreground"
+                      >
+                        Want Title
+                      </Label>
+                      <Input
+                        id="poster-want-title"
+                        value={posterData.wantTitle}
+                        onChange={(e) =>
+                          handleTextChange("wantTitle", e.target.value)
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-6 sm:flex-row">
+                    <ObjektImages
+                      items={haveImageItems}
+                      images={haveImages}
+                      label={posterData.haveTitle}
+                      showSerial={!groupByNumbers}
+                      cosmoNickname={posterData.cosmoId}
+                      gridStyle={previewGridStyle}
+                      editable
+                      onRemove={(id) => handleRemoveItem("have", id)}
+                      onAdd={() => focusTab("have")}
+                    />
+                    <Separator
+                      orientation="vertical"
+                      className="hidden h-auto sm:block"
+                    />
+                    <ObjektImages
+                      items={wantImageItems}
+                      images={wantImages}
+                      label={posterData.wantTitle}
+                      isWant
+                      gridStyle={previewGridStyle}
+                      editable
+                      onRemove={(id) => handleRemoveItem("want", id)}
+                      onAdd={() => focusTab("want")}
+                      onAddCustomWant={() => setCustomWantOpen(true)}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
                     <Label
-                      htmlFor="cols-per-row"
+                      htmlFor="poster-notes"
                       className="text-xs text-muted-foreground"
                     >
-                      Columns
+                      Notes
                     </Label>
-                    <select
-                      id="cols-per-row"
-                      value={colsPerRow}
-                      onChange={(e) => {
-                        userSetCols.current = true;
-                        setColsPerRow(Number(e.target.value));
-                      }}
-                      className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
-                    >
-                      {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
-                        <option key={n} value={n}>
-                          {n} per row
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 sm:justify-start">
-                    <span className="text-xs text-muted-foreground">
-                      Group by Members
-                    </span>
-                    <Switch
-                      checked={groupByMember}
-                      onCheckedChange={setGroupByMember}
+                    <Textarea
+                      id="poster-notes"
+                      value={posterData.notes ?? ""}
+                      onChange={(e) =>
+                        handleTextChange("notes", e.target.value)
+                      }
+                      rows={3}
+                      className="text-sm"
+                      placeholder="Add any notes for traders (payment terms, shipping, etc.)"
                     />
                   </div>
+                </CardContent>
 
-                  <div className="flex items-center justify-between gap-3 sm:justify-start">
-                    <span className="text-xs text-muted-foreground">
-                      Combine Duplicates
-                    </span>
-                    <Switch
-                      checked={groupByNumbers}
-                      onCheckedChange={setGroupByNumbers}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 sm:justify-start">
-                    <span className="text-xs text-muted-foreground">Theme</span>
-                    <div className="flex items-center gap-2">
-                      <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      <Switch
-                        checked={posterTheme === "dark"}
-                        onCheckedChange={(checked) =>
-                          setPosterTheme(checked ? "dark" : "light")
-                        }
-                      />
-                      <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                  </div>
-
-                  {(linkedNickname || posterData.cosmoId) && (
-                    <span className="inline-flex rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">
-                      {linkedNickname
-                        ? `Linked Cosmo: @${linkedNickname}`
-                        : `Cosmo ID: @${posterData.cosmoId}`}
-                    </span>
-                  )}
-
-                  {autoSaving && (
-                    <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <Loader2Icon className="h-3 w-3 animate-spin" />
-                      Saving draft...
-                    </div>
-                  )}
+                <div className="flex justify-end px-6">
+                  <Button
+                    onClick={handleSaveAndShare}
+                    disabled={saving}
+                    className="h-11 w-full gap-2 sm:w-auto sm:px-6"
+                  >
+                    {saving ? (
+                      <Loader2Icon className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2Icon className="h-4 w-4" />
+                    )}
+                    {saveActionLabel}
+                  </Button>
                 </div>
-
-                {editId && (
-                  <div className="max-w-md">
-                    <ListLinkField
-                      label="Edit link"
-                      value={sectionAbsoluteUrl(`/list/${editId}/edit`)}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {hasUnresolved && (
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
-                    Some items could not be resolved
-                  </p>
-                  {[...unresolvedHaves, ...unresolvedWants].map((item) => (
-                    <p
-                      key={item.error}
-                      className="text-xs leading-5 text-yellow-600 dark:text-yellow-400"
-                    >
-                      {item.error}
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              <div className="overflow-x-auto rounded-lg border border-border bg-background">
-                <PosterCanvas
-                  ref={posterRef}
-                  data={posterData}
-                  theme={posterTheme}
-                  editable={!downloading}
-                  groupByMember={groupByMember}
-                  groupByNumbers={groupByNumbers}
-                  colsPerRow={colsPerRow}
-                  onTextChange={handleTextChange}
-                  onRemoveItem={handleRemoveItem}
-                  onAddItem={setAddDialogSection}
-                  onAddCustomWant={() => setCustomWantOpen(true)}
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleSaveAndShare}
-                  disabled={saving}
-                  className="h-11 w-full gap-2 sm:w-auto sm:px-6"
-                >
-                  {saving ? (
-                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2Icon className="h-4 w-4" />
-                  )}
-                  {saveActionLabel}
-                </Button>
-              </div>
-            </section>
-          )}
-        </div>
+              </Card>
+            )}
+          </>
+        )}
       </section>
-
-      {stage === "preview" && posterData && addDialogSection && (
-        <AddObjektDialog
-          open={!!addDialogSection}
-          section={addDialogSection}
-          cosmoId={posterData.cosmoId || undefined}
-          initialSelected={(addDialogSection === "have"
-            ? posterData.haves
-            : posterData.wants
-          ).flatMap((item) => (item.entry ? [item.entry] : []))}
-          onOpenChange={(open) => {
-            if (!open) setAddDialogSection(null);
-          }}
-          onConfirm={handleAddItems}
-        />
-      )}
 
       <AddCustomWantDialog
         open={customWantOpen}
@@ -1260,7 +1549,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Inventory mismatch</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>@{posterData?.cosmoId}</strong> doesn&apos;t own any of
+              <strong>@{posterData.cosmoId}</strong> doesn&apos;t own any of
               these objekts in their inventory. Either enter a different Cosmo
               username, or use Download PNG only.
             </AlertDialogDescription>

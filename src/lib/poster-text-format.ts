@@ -7,7 +7,7 @@ function itemCode(item: ResolvedPosterItem): string | null {
     return `${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`;
   }
   const { parsed } = item;
-  if (parsed.freeform) return null;
+  if (parsed.freeform || parsed.isAny) return null;
   if (parsed.season && parsed.collectionNo) {
     return `${getSeasonPrefix(parsed.season)}${parsed.collectionNo}`;
   }
@@ -29,7 +29,7 @@ function formatSection(items: ResolvedPosterItem[]): string {
   const freeformLines: string[] = [];
 
   for (const item of items) {
-    if (item.parsed.freeform) {
+    if (item.parsed.freeform || item.parsed.isAny) {
       const text = item.parsed.raw.trim();
       if (text) freeformLines.push(text);
       continue;

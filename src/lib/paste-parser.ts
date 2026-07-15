@@ -47,6 +47,9 @@ export interface ParsedItem {
   serial?: string; // user-specified serial/copy, e.g. "1", "20x"
   onOffline?: "online" | "offline"; // when explicitly specified via a/z suffix
   freeform?: boolean; // text-only poster item, e.g. "Any E/AA/BB Spin Fuel"
+  isAny?: boolean; // ANY-filter want: no specific objekt, just filter criteria
+  artist?: string | null;
+  class?: string | null;
 }
 
 export interface ParseResult {

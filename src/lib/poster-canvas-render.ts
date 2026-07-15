@@ -108,7 +108,7 @@ function itemLabel(item: ResolvedPosterItem) {
 }
 
 function itemUnits(item: DisplayItem): number {
-  return item.item.parsed.freeform ? 2 : 1;
+  return item.item.parsed.freeform || item.item.parsed.isAny ? 2 : 1;
 }
 
 function rowCountByUnits(items: DisplayItem[], cols: number): number {
@@ -345,7 +345,8 @@ export async function renderPosterToCanvas(
       for (let i = 0; i < row.length; i++) {
         const displayItem = row[i];
         const item = displayItem.item;
-        const isFreeform = item.parsed.freeform === true;
+        const isFreeform =
+          item.parsed.freeform === true || item.parsed.isAny === true;
         const itemW = isFreeform ? CARD_W * 2 + GAP : CARD_W;
         const x = PAD + usedUnits * (CARD_W + GAP);
         const img = item.imageUrl ? images.get(item.imageUrl) : undefined;

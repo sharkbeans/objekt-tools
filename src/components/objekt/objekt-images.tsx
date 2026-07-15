@@ -104,6 +104,10 @@ export function ObjektImages({
   cosmoNickname,
   isWant,
   gridStyle,
+  editable,
+  onRemove,
+  onAdd,
+  onAddCustomWant,
 }: {
   items: ObjektImageItem[];
   images: Map<string, string>;
@@ -112,18 +116,37 @@ export function ObjektImages({
   cosmoNickname?: string | null;
   isWant?: boolean;
   gridStyle: { gridTemplateColumns: string };
+  editable?: boolean;
+  onRemove?: (id: number) => void;
+  onAdd?: () => void;
+  onAddCustomWant?: () => void;
 }) {
   return (
     <div className="flex-1 min-w-0">
       <p className="text-sm font-medium text-muted-foreground mb-2">{label}</p>
       <div className="grid gap-2 items-start" style={gridStyle}>
         {items.map((item) => {
+          const removeButton = editable && onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive/90 text-xs font-bold leading-none text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 max-md:opacity-100"
+              aria-label="Remove item"
+            >
+              &times;
+            </button>
+          );
+
           if (item.isAny) {
             return (
-              <div key={item.id} className="flex flex-col items-center gap-1">
+              <div
+                key={item.id}
+                className="group relative flex flex-col items-center gap-1"
+              >
                 <div className="w-full aspect-80/123 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground text-center p-1">
                   {item.customLabel ?? anyWantLabel(item)}
                 </div>
+                {removeButton}
               </div>
             );
           }
@@ -155,7 +178,10 @@ export function ObjektImages({
             </div>
           );
           return (
-            <div key={item.id} className="flex flex-col items-center gap-1">
+            <div
+              key={item.id}
+              className="group relative flex flex-col items-center gap-1"
+            >
               {link ? (
                 <a
                   href={link}
@@ -168,6 +194,7 @@ export function ObjektImages({
               ) : (
                 imgEl
               )}
+              {removeButton}
               <span className="text-center text-xs leading-tight">
                 <span className="block text-muted-foreground">
                   {item.member ?? formatShortLabel(item)}
@@ -181,6 +208,29 @@ export function ObjektImages({
             </div>
           );
         })}
+        {editable && onAdd && (
+          <button
+            type="button"
+            onClick={onAdd}
+            aria-label="Add objekt"
+            className="flex aspect-80/123 w-full items-center justify-center rounded-md border-2 border-dashed border-muted-foreground/40 text-2xl font-normal text-muted-foreground/70 opacity-70 transition-opacity hover:opacity-100"
+          >
+            +
+          </button>
+        )}
+        {editable && isWant && onAddCustomWant && (
+          <button
+            type="button"
+            onClick={onAddCustomWant}
+            aria-label="Add custom want"
+            className="col-span-2 flex aspect-160/123 w-full flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-muted-foreground/40 text-muted-foreground/70 opacity-70 transition-opacity hover:opacity-100"
+          >
+            <span className="text-xl leading-none">+</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">
+              Custom Want
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );
