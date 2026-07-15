@@ -142,25 +142,25 @@ function DiscordChip({
   label: string;
   onClick?: () => void;
 }) {
-  const icon = <DiscordIcon className="h-4 w-4" />;
+  const icon = <DiscordIcon className="h-4 w-4 shrink-0" />;
 
   if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex w-fit items-center gap-2 rounded-full bg-[#5865F2] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4752C4]"
+        className="inline-flex w-fit max-w-[11rem] items-center gap-2 rounded-full bg-[#5865F2] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4752C4]"
       >
         {icon}
-        {label}
+        <span className="truncate">{label}</span>
       </button>
     );
   }
 
   return (
-    <span className="inline-flex w-fit items-center gap-2 rounded-full bg-[#5865F2] px-3 py-1.5 text-xs font-medium text-white">
+    <span className="inline-flex w-fit max-w-[11rem] items-center gap-2 rounded-full bg-[#5865F2] px-3 py-1.5 text-xs font-medium text-white">
       {icon}
-      {label}
+      <span className="truncate">{label}</span>
     </span>
   );
 }
@@ -1159,12 +1159,23 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
             <aside className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain">
               <Card>
                 <CardHeader className="gap-3 border-b border-border">
-                  <div>
-                    <CardTitle className="text-lg">Your list</CardTitle>
-                    <CardDescription>
-                      {posterData.haves.length} haves ·{" "}
-                      {posterData.wants.length} wants
-                    </CardDescription>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <CardTitle className="text-lg">Your list</CardTitle>
+                      <CardDescription>
+                        {posterData.haves.length} haves ·{" "}
+                        {posterData.wants.length} wants
+                      </CardDescription>
+                    </div>
+
+                    {session ? (
+                      <DiscordChip label={session.user.name ?? "Discord"} />
+                    ) : (
+                      <DiscordChip
+                        label="Sign in"
+                        onClick={() => setSignInOpen(true)}
+                      />
+                    )}
                   </div>
 
                   {editId && (
@@ -1311,15 +1322,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       placeholder="Add any notes for traders (payment terms, shipping, etc.)"
                     />
                   </div>
-
-                  {session ? (
-                    <DiscordChip label={session.user.name ?? "Discord"} />
-                  ) : (
-                    <DiscordChip
-                      label="Sign in"
-                      onClick={() => setSignInOpen(true)}
-                    />
-                  )}
 
                   {step === "have" ? (
                     <Button
