@@ -1,11 +1,9 @@
 import { and, asc, count, desc, inArray, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tradePost } from "@/lib/db/schema";
-import {
-  hasAnyFilter,
-  type ObjektFilterState,
-  tradeMatchesFilters,
-} from "@/lib/objekt-filters";
+import type { ObjektFilterState } from "@/lib/objekt-filters";
+import { tradeMatchesFilters } from "@/lib/objekt-filters";
+import { buildTradeStructuralWhere } from "@/lib/trade-filter-sql";
 
 type FilterMode = "haves" | "wants" | "both";
 type SortOrder = "newest" | "oldest";
@@ -18,26 +16,53 @@ function getTradeOrder(sort: SortOrder) {
     : [desc(tradePost.createdAt)];
 }
 
-async function fetchTradesWithRelations({
+// The structural EXISTS(...) conditions in `where` reference the trade_post
+// table by its real name. Drizzle's relational query builder (db.query.*)
+// aliases the root table (e.g. "trade_post" AS "tradePost"), which breaks
+// any nested subquery that still points at the real name — so structural
+// filtering always happens via a plain `db.select` id lookup first, and
+// relations are hydrated afterwards by a safe `inArray(tradePost.id, ids)`.
+async function fetchTradeIdsPage({
   where,
   orderBy,
   limit,
   offset,
+}: {
+  where?: SQL<unknown>;
+  orderBy: ReturnType<typeof getTradeOrder>;
+  limit: number;
+  offset: number;
+}): Promise<string[]> {
+  const base = db.select({ id: tradePost.id }).from(tradePost);
+  const filtered = where ? base.where(where) : base;
+  const rows = await filtered
+    .orderBy(...orderBy)
+    .limit(limit)
+    .offset(offset);
+  return rows.map((r) => r.id);
+}
+
+function reorderByIds<T extends { id: string }>(rows: T[], ids: string[]): T[] {
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return [...rows].sort(
+    (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+  );
+}
+
+async function fetchTradesWithRelations({
+  where,
   ids,
 }: {
   where?: SQL<unknown>;
-  orderBy?: ReturnType<typeof getTradeOrder>;
-  limit?: number;
-  offset?: number;
-  ids?: string[];
+  ids: string[];
 }) {
-  const queryWhere = ids
-    ? where
-      ? and(where, inArray(tradePost.id, ids))
-      : inArray(tradePost.id, ids)
-    : where;
+  if (ids.length === 0) return [];
 
-  return db.query.tradePost.findMany({
+  const queryWhere = where
+    ? and(where, inArray(tradePost.id, ids))
+    : inArray(tradePost.id, ids);
+
+  const trades = await db.query.tradePost.findMany({
     where: queryWhere,
     with: {
       haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
@@ -51,32 +76,24 @@ async function fetchTradesWithRelations({
         },
       },
     },
-    ...(orderBy ? { orderBy } : {}),
-    ...(limit !== undefined ? { limit } : {}),
-    ...(offset !== undefined ? { offset } : {}),
   });
+
+  return reorderByIds(trades, ids);
 }
 
-async function fetchTradeFilterBatch({
-  where,
-  orderBy,
-  offset,
-}: {
-  where?: SQL<unknown>;
-  orderBy: ReturnType<typeof getTradeOrder>;
-  offset: number;
-}) {
-  return db.query.tradePost.findMany({
-    where,
+async function fetchTradeItemsByIds(ids: string[]) {
+  if (ids.length === 0) return [];
+
+  const rows = await db.query.tradePost.findMany({
+    where: inArray(tradePost.id, ids),
     columns: { id: true },
     with: {
       haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
       wants: { where: (w, { isNull }) => isNull(w.deletedAt) },
     },
-    orderBy,
-    limit: FILTER_BATCH_SIZE,
-    offset,
   });
+
+  return reorderByIds(rows, ids);
 }
 
 export async function listTradesPage({
@@ -97,37 +114,64 @@ export async function listTradesPage({
   const offset = (page - 1) * limit;
   const orderBy = getTradeOrder(sort);
 
-  if (!hasAnyFilter(filters)) {
-    const trades = await fetchTradesWithRelations({
-      where,
+  // Structural filters (artist/member/season/class/on_offline) are pushed
+  // into SQL as EXISTS subqueries against trade_post_have/trade_post_want.
+  const structuralWhere = buildTradeStructuralWhere(filters, filterMode);
+  const combinedWhere = structuralWhere
+    ? where
+      ? (and(where, structuralWhere) as SQL)
+      : structuralWhere
+    : where;
+
+  if (!filters.search) {
+    // No text search: exact SQL pagination + count.
+    const ids = await fetchTradeIdsPage({
+      where: combinedWhere,
       orderBy,
       limit,
       offset,
     });
 
     const countQuery = db.select({ value: count() }).from(tradePost);
-    const [{ value }] = where
-      ? await countQuery.where(where)
+    const [{ value }] = combinedWhere
+      ? await countQuery.where(combinedWhere)
       : await countQuery;
 
+    const trades = await fetchTradesWithRelations({ where, ids });
     return { trades, total: value };
   }
+
+  // Text search: the quick-search grammar (OR/AND/NOT, ranges) isn't
+  // expressible in SQL, so batch-scan the SQL-prefiltered set in JS. The
+  // structural EXISTS conditions above already shrink this to just the
+  // structurally-matching posts.
+  const searchOnlyFilters: ObjektFilterState = {
+    ...filters,
+    artist: [],
+    member: [],
+    season: [],
+    class: [],
+    on_offline: [],
+  };
 
   const matchedIds: string[] = [];
   let matchedTotal = 0;
   let batchOffset = 0;
 
   while (true) {
-    const batch = await fetchTradeFilterBatch({
-      where,
+    const idBatch = await fetchTradeIdsPage({
+      where: combinedWhere,
       orderBy,
+      limit: FILTER_BATCH_SIZE,
       offset: batchOffset,
     });
 
-    if (batch.length === 0) break;
+    if (idBatch.length === 0) break;
+
+    const batch = await fetchTradeItemsByIds(idBatch);
 
     for (const trade of batch) {
-      if (!tradeMatchesFilters(trade, filters, filterMode)) continue;
+      if (!tradeMatchesFilters(trade, searchOnlyFilters, filterMode)) continue;
 
       if (matchedTotal >= offset && matchedIds.length < limit) {
         matchedIds.push(trade.id);
@@ -136,20 +180,14 @@ export async function listTradesPage({
       matchedTotal += 1;
     }
 
-    batchOffset += batch.length;
+    batchOffset += idBatch.length;
   }
 
   if (matchedIds.length === 0) {
     return { trades: [], total: matchedTotal };
   }
 
-  const trades = await fetchTradesWithRelations({
-    where,
-    ids: matchedIds,
-  });
-
-  const order = new Map(matchedIds.map((id, index) => [id, index]));
-  trades.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  const trades = await fetchTradesWithRelations({ where, ids: matchedIds });
 
   return { trades, total: matchedTotal };
 }

@@ -150,6 +150,9 @@ export const tradePostHave = pgTable(
   (t) => [
     index("trade_post_have_trade_post_id_idx").on(t.tradePostId),
     index("trade_post_have_collection_id_idx").on(t.collectionId),
+    index("trade_post_have_member_idx").on(t.member),
+    index("trade_post_have_season_idx").on(t.season),
+    index("trade_post_have_class_idx").on(t.class),
   ],
 );
 
@@ -174,6 +177,10 @@ export const tradePostWant = pgTable(
   (t) => [
     index("trade_post_want_trade_post_id_idx").on(t.tradePostId),
     index("trade_post_want_collection_id_idx").on(t.collectionId),
+    index("trade_post_want_member_idx").on(t.member),
+    index("trade_post_want_season_idx").on(t.season),
+    index("trade_post_want_class_idx").on(t.class),
+    index("trade_post_want_artist_idx").on(t.artist),
   ],
 );
 
