@@ -117,6 +117,10 @@ interface ObjektPickerProps {
   maxSelections?: number;
   filters?: ObjektStructuralFilters;
   gridClassName?: string;
+  /** Shows selected items in a pinned row above the results grid. */
+  showSelectedRow?: boolean;
+  /** Label for the pinned selected row. */
+  selectedRowLabel?: string;
 }
 
 export function ObjektPicker({
@@ -126,6 +130,8 @@ export function ObjektPicker({
   maxSelections = 10,
   filters,
   gridClassName,
+  showSelectedRow = false,
+  selectedRowLabel = "Selected",
 }: ObjektPickerProps) {
   const [query, setQuery] = useState("");
   const [filterResults, setFilterResults] = useState<ObjektEntry[]>([]);
@@ -197,9 +203,17 @@ export function ObjektPicker({
       />
 
       {!showList ? (
-        <div className="text-sm text-muted-foreground text-center py-8">
-          Use the filters above to browse objekts
-        </div>
+        <ObjektGridPicker
+          items={[]}
+          selected={selected}
+          onSelect={() => {}}
+          onDeselect={onDeselect}
+          maxSelections={maxSelections}
+          emptyMessage="Use the filters above to browse objekts"
+          gridClassName={gridClassName}
+          showSelectedRow={showSelectedRow}
+          selectedRowLabel={selectedRowLabel}
+        />
       ) : (
         <ObjektGridPicker
           items={displayResults}
@@ -210,6 +224,8 @@ export function ObjektPicker({
           maxSelections={maxSelections}
           emptyMessage="No results found"
           gridClassName={gridClassName}
+          showSelectedRow={showSelectedRow}
+          selectedRowLabel={selectedRowLabel}
         />
       )}
 

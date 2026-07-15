@@ -6,9 +6,7 @@ import {
   DownloadIcon,
   ListIcon,
   Loader2Icon,
-  MoonIcon,
   SearchIcon,
-  SunIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -31,11 +29,6 @@ import {
   ObjektFilterBar,
   type ObjektFilterState,
 } from "@/components/objekt/objekt-filter-bar";
-import {
-  type ObjektImageItem,
-  ObjektImages,
-  useObjektImages,
-} from "@/components/objekt/objekt-images";
 import { ObjektInventoryPicker } from "@/components/objekt/objekt-inventory-picker";
 import { ObjektPicker } from "@/components/objekt/objekt-picker";
 import { AddCustomWantDialog } from "@/components/poster/add-objekt-dialog";
@@ -44,7 +37,6 @@ import {
   getDisplayCount,
   getGridCols,
   type PosterData,
-  type PosterTheme,
 } from "@/components/poster/poster-canvas";
 import {
   PosterCard,
@@ -76,7 +68,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,11 +82,6 @@ import {
   makePosterItem,
   resolvedItemToApiInput,
 } from "@/lib/poster-item";
-import {
-  autoGridCols,
-  getItemQuantity,
-  getNumberGroupKey,
-} from "@/lib/poster-item-grouping";
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
 import { formatPosterAsText } from "@/lib/poster-text-format";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
@@ -135,6 +121,48 @@ interface StoredPoster {
   wantsOnly?: boolean;
   haves: StoredItem[];
   wants: StoredItem[];
+}
+
+function DiscordIcon({ className }: { className: string }) {
+  return (
+    <svg
+      className={`${className} fill-current`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+    </svg>
+  );
+}
+
+function DiscordChip({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick?: () => void;
+}) {
+  const icon = <DiscordIcon className="h-4 w-4" />;
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex w-fit items-center gap-2 rounded-full bg-[#5865F2] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4752C4]"
+      >
+        {icon}
+        {label}
+      </button>
+    );
+  }
+
+  return (
+    <span className="inline-flex w-fit items-center gap-2 rounded-full bg-[#5865F2] px-3 py-1.5 text-xs font-medium text-white">
+      {icon}
+      {label}
+    </span>
+  );
 }
 
 function storedItemToResolved(item: StoredItem): ResolvedPosterItem {
@@ -194,57 +222,6 @@ function sortResolvedItems(items: ResolvedPosterItem[]): ResolvedPosterItem[] {
     return compareMembers(a.entry.member, b.entry.member);
   });
   return [...withEntry, ...withoutEntry];
-}
-
-function resolvedItemToImage(
-  item: ResolvedPosterItem,
-  index: number,
-  quantity: number,
-): ObjektImageItem {
-  return {
-    id: index,
-    collectionId: item.entry?.collectionId ?? "",
-    collectionNo: item.entry?.collectionNo ?? item.parsed.collectionNo,
-    member: item.entry?.member ?? item.parsed.member,
-    season: item.entry?.season ?? item.parsed.season,
-    class: item.entry?.class ?? item.parsed.class,
-    serial:
-      item.parsed.serial != null ? parseInt(item.parsed.serial, 10) : null,
-    isAny: item.parsed.freeform === true || item.parsed.isAny === true,
-    artist: item.entry?.artist ?? item.parsed.artist,
-    thumbnailUrl: item.imageUrl,
-    quantity: quantity > 1 ? quantity : undefined,
-    customLabel: item.parsed.freeform ? item.parsed.raw : undefined,
-  };
-}
-
-// Groups duplicate items when combining, keeping the first occurrence's
-// index so remove/add stay aligned with the underlying have/want arrays.
-function toBuildImageItems(
-  items: ResolvedPosterItem[],
-  groupByNumbers: boolean,
-): ObjektImageItem[] {
-  if (!groupByNumbers) {
-    return items.map((item, i) =>
-      resolvedItemToImage(item, i, getItemQuantity(item)),
-    );
-  }
-
-  const out: ObjektImageItem[] = [];
-  const seen = new Map<string, ObjektImageItem>();
-  items.forEach((item, i) => {
-    const key = getNumberGroupKey(item);
-    const qty = getItemQuantity(item);
-    const existing = seen.get(key);
-    if (existing) {
-      existing.quantity = (existing.quantity ?? 1) + qty;
-    } else {
-      const converted = resolvedItemToImage(item, i, qty);
-      out.push(converted);
-      seen.set(key, converted);
-    }
-  });
-  return out;
 }
 
 // Appends imported items, skipping ones already present (by serial for
@@ -308,7 +285,7 @@ const COSMO_USERNAME_STORAGE_KEYS = [
   "cosmoUsername",
   "progress-last-nickname",
 ];
-const PICKER_GRID_CLASS = "md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8";
+const PICKER_GRID_CLASS = "md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7";
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
@@ -334,7 +311,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const lastSearchAt = useRef(0);
   const [posterData, setPosterData] = useState<PosterData>(emptyPosterData);
   const [editLoading, setEditLoading] = useState(!!editId);
-  const [posterTheme, setPosterTheme] = useState<PosterTheme>("dark");
   const [groupByMember, setGroupByMember] = useState(false);
   const [groupByNumbers, setGroupByNumbers] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -343,10 +319,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [colsPerRow, setColsPerRow] = useState(5);
   const userSetCols = useRef(false);
   const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
-  const [activeTab, setActiveTab] = useState<"have" | "want">("have");
+  const [step, setStep] = useState<"have" | "want">("have");
   const [customWantOpen, setCustomWantOpen] = useState(false);
   const [anyWantOpen, setAnyWantOpen] = useState(false);
   const [wantsOnly, setWantsOnly] = useState(false);
+  const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const [linkedNickname, setLinkedNickname] = useState<string | null>(null);
@@ -416,14 +393,12 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     try {
       const stash = JSON.parse(raw) as {
         posterData: PosterData;
-        posterTheme: PosterTheme;
         groupByMember: boolean;
         groupByNumbers: boolean;
         colsPerRow: number;
         wantsOnly: boolean;
       };
       userSetCols.current = true;
-      setPosterTheme(stash.posterTheme);
       setGroupByMember(stash.groupByMember);
       setGroupByNumbers(stash.groupByNumbers);
       setColsPerRow(stash.colsPerRow);
@@ -465,7 +440,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           return;
         }
         userSetCols.current = true;
-        setPosterTheme((data.theme as PosterTheme) ?? "dark");
         setGroupByMember(data.groupByMember);
         setGroupByNumbers(data.groupByNumbers);
         setColsPerRow(data.colsPerRow);
@@ -534,6 +508,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cosmoId]);
 
+  // Reset the loaded-inventory count whenever a new fetch is about to start
+  useEffect(() => {
+    setInventoryCount(null);
+  }, [haveNickname]);
+
   // Fill the display name / cosmoId once we know whose inventory this is
   useEffect(() => {
     if (!haveNickname) return;
@@ -571,8 +550,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     [haveNickname],
   );
 
-  const focusTab = useCallback((tab: "have" | "want") => {
-    setActiveTab(tab);
+  const goToStep = useCallback((next: "have" | "want") => {
+    setStep(next);
     tabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
@@ -582,7 +561,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     try {
       const canvas = await renderPosterToCanvas(
         posterData,
-        posterTheme,
+        "dark",
         groupByMember,
         groupByNumbers,
         colsPerRow,
@@ -638,7 +617,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     } finally {
       setDownloading(false);
     }
-  }, [posterData, posterTheme, groupByMember, groupByNumbers, colsPerRow]);
+  }, [posterData, groupByMember, groupByNumbers, colsPerRow]);
 
   const handleCopyText = useCallback(async () => {
     const text = formatPosterAsText(posterData);
@@ -658,7 +637,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           username: data.username,
           cosmoId: data.cosmoId,
           notes: data.notes,
-          theme: posterTheme,
           groupByMember,
           groupByNumbers,
           colsPerRow,
@@ -724,15 +702,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         setSaving(false);
       }
     },
-    [
-      posterTheme,
-      groupByMember,
-      groupByNumbers,
-      colsPerRow,
-      wantsOnly,
-      editId,
-      router,
-    ],
+    [groupByMember, groupByNumbers, colsPerRow, wantsOnly, editId, router],
   );
 
   // Auto-save after restoring a stashed draft post-login
@@ -802,7 +772,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       STASH_KEY,
       JSON.stringify({
         posterData,
-        posterTheme,
         groupByMember,
         groupByNumbers,
         colsPerRow,
@@ -813,14 +782,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       provider: "discord",
       callbackURL: sectionAbsoluteUrl("/list?restore=1"),
     });
-  }, [
-    posterData,
-    posterTheme,
-    groupByMember,
-    groupByNumbers,
-    colsPerRow,
-    wantsOnly,
-  ]);
+  }, [posterData, groupByMember, groupByNumbers, colsPerRow, wantsOnly]);
 
   const handleSelectHave = useCallback((entry: ObjektEntry) => {
     setPosterData((prev) => ({
@@ -928,19 +890,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     }));
   }, []);
 
-  const handleRemoveItem = useCallback(
-    (section: "have" | "want", index: number) => {
-      setPosterData((prev) => {
-        const key = section === "have" ? "haves" : "wants";
-        return {
-          ...prev,
-          [key]: prev[key].filter((_, i) => i !== index),
-        };
-      });
-    },
-    [],
-  );
-
   const handleTextChange = useCallback(
     (
       field: "username" | "haveTitle" | "wantTitle" | "notes",
@@ -969,24 +918,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     [posterData.wants],
   );
 
-  const haveImageItems = useMemo(
-    () => toBuildImageItems(posterData.haves, groupByNumbers),
-    [posterData, groupByNumbers],
-  );
-  const wantImageItems = useMemo(
-    () => toBuildImageItems(posterData.wants, groupByNumbers),
-    [posterData, groupByNumbers],
-  );
-  const haveImages = useObjektImages(haveImageItems);
-  const wantImages = useObjektImages(wantImageItems);
-  const previewGridCols = Math.max(
-    autoGridCols(haveImageItems.length),
-    autoGridCols(wantImageItems.length),
-  );
-  const previewGridStyle = {
-    gridTemplateColumns: `repeat(${previewGridCols}, minmax(0, 1fr))`,
-  };
-
   const saveActionLabel = linkCopied
     ? "Link Copied!"
     : editId
@@ -994,7 +925,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       : "Create List";
 
   return (
-    <div className="mx-auto w-full max-w-6xl pb-20 space-y-4">
+    <div className="mx-auto w-full max-w-7xl pb-20 space-y-4">
       {!editId &&
         latestPosters &&
         latestPosters.length > 0 &&
@@ -1046,7 +977,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       <section className="space-y-4 border-t border-border pt-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Build List</h1>
+            <h1 className="text-2xl font-bold">Create List</h1>
             <p className="text-muted-foreground">
               Select what you have and what you want
             </p>
@@ -1062,255 +993,272 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
             </div>
           </div>
         ) : (
-          <>
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="poster-cosmoid"
-                className="text-sm font-medium text-foreground"
-              >
-                Cosmo Username
-              </Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id="poster-cosmoid"
-                  placeholder="e.g. sharkbeans"
-                  value={cosmoId}
-                  onChange={(e) => setCosmoId(e.target.value)}
-                  onBlur={() => {
-                    rememberCosmoUsername(cosmoId);
-                    searchInventory(cosmoId);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && cosmoId.trim()) {
-                      e.preventDefault();
+          <div className="grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
+            <div className="space-y-4 min-w-0">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="poster-cosmoid"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Cosmo Username
+                </Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="poster-cosmoid"
+                    placeholder="e.g. sharkbeans"
+                    value={cosmoId}
+                    onChange={(e) => setCosmoId(e.target.value)}
+                    onBlur={() => {
                       rememberCosmoUsername(cosmoId);
                       searchInventory(cosmoId);
-                    }
-                  }}
-                  className="h-12 bg-background text-base md:text-base sm:max-w-80"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 gap-2 border-border bg-transparent px-4 sm:flex-1"
-                  disabled={!cosmoId.trim()}
-                  onClick={() => {
-                    rememberCosmoUsername(cosmoId);
-                    searchInventory(cosmoId);
-                  }}
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && cosmoId.trim()) {
+                        e.preventDefault();
+                        rememberCosmoUsername(cosmoId);
+                        searchInventory(cosmoId);
+                      }
+                    }}
+                    className="h-12 bg-background text-base md:text-base sm:max-w-80"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 gap-2 border-border bg-transparent px-4 sm:flex-1"
+                    disabled={!cosmoId.trim()}
+                    onClick={() => {
+                      rememberCosmoUsername(cosmoId);
+                      searchInventory(cosmoId);
+                    }}
+                  >
+                    <SearchIcon className="h-4 w-4" />
+                    Load Inventory
+                  </Button>
+                </div>
+                {haveNickname &&
+                  (inventoryCount !== null ? (
+                    <p className="text-xs text-muted-foreground">
+                      Inventory loaded · {inventoryCount} objekts
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Showing inventory for @{haveNickname}
+                    </p>
+                  ))}
+              </div>
+
+              <div ref={tabsRef}>
+                <Tabs
+                  value={step}
+                  onValueChange={(v) => setStep(v as "have" | "want")}
                 >
-                  <SearchIcon className="h-4 w-4" />
-                  Load Inventory
-                </Button>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="have">
+                      Have ({posterData.haves.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="want">
+                      Want ({posterData.wants.length})
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="have">
+                    <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
+                      <CardHeader className="px-0 sm:px-6 gap-3">
+                        <div>
+                          <CardTitle className="text-lg">
+                            What do you have?
+                          </CardTitle>
+                          <CardDescription>
+                            {haveNickname
+                              ? `Showing inventory for @${haveNickname}`
+                              : "Enter a Cosmo username above and load their inventory"}
+                          </CardDescription>
+                        </div>
+                        <ObjektFilterBar
+                          filters={filters}
+                          onChange={setFilters}
+                          showSearch={false}
+                          showSort={false}
+                          showFilterMode={false}
+                        />
+                      </CardHeader>
+                      <CardContent className="px-0 sm:px-6">
+                        {haveNickname ? (
+                          <ObjektInventoryPicker
+                            fetchItems={fetchHaveInventory}
+                            selected={selectedHaveEntries}
+                            onSelect={handleSelectHave}
+                            onDeselect={handleDeselectHave}
+                            onLoaded={setInventoryCount}
+                            maxSelections={50}
+                            gridClassName={PICKER_GRID_CLASS}
+                            pageSize={35}
+                            filters={filters}
+                            searchPlaceholder="Search your inventory... e.g. JiWoo, Atom02, 108Z"
+                            showSelectedRow
+                            selectedRowLabel="Offered"
+                            emptyState={
+                              <div className="text-sm text-muted-foreground text-center py-4">
+                                No transferable objekts found for this user.
+                              </div>
+                            }
+                          />
+                        ) : (
+                          <div className="text-sm text-muted-foreground text-center py-8">
+                            Load a Cosmo inventory to select haves
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="want" className="space-y-3">
+                    <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
+                      <CardHeader className="px-0 sm:px-6 pb-3 gap-3">
+                        <div>
+                          <CardTitle className="text-lg">
+                            What do you want?
+                          </CardTitle>
+                          <CardDescription>
+                            Select specific objekts you&apos;re looking for
+                          </CardDescription>
+                        </div>
+                        <ObjektFilterBar
+                          filters={filters}
+                          onChange={setFilters}
+                          showSearch={false}
+                          showSort={false}
+                          showFilterMode={false}
+                        />
+                      </CardHeader>
+                      <CardContent className="px-0 sm:px-6 space-y-3">
+                        <ObjektPicker
+                          selected={selectedWantEntries}
+                          onSelect={handleSelectWant}
+                          onDeselect={handleDeselectWant}
+                          maxSelections={50}
+                          filters={filters}
+                          gridClassName={PICKER_GRID_CLASS}
+                          showSelectedRow
+                          selectedRowLabel="Wanted"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCustomWantOpen(true)}
+                          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2"
+                        >
+                          Can&apos;t find an objekt? Add a custom want
+                        </button>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
 
-            <ObjektFilterBar
-              filters={filters}
-              onChange={setFilters}
-              showSort={false}
-              showFilterMode={false}
-            />
-
-            <div ref={tabsRef}>
-              <Tabs
-                value={activeTab}
-                onValueChange={(v) => setActiveTab(v as "have" | "want")}
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="have">
-                    Have ({posterData.haves.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="want">
-                    Want ({posterData.wants.length})
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="have">
-                  <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
-                    <CardHeader className="px-0 sm:px-6">
-                      <CardTitle className="text-lg">
-                        What do you have?
-                      </CardTitle>
-                      <CardDescription>
-                        {haveNickname
-                          ? `Showing inventory for @${haveNickname}`
-                          : "Enter a Cosmo username above and load their inventory"}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="px-0 sm:px-6">
-                      {haveNickname ? (
-                        <ObjektInventoryPicker
-                          fetchItems={fetchHaveInventory}
-                          selected={selectedHaveEntries}
-                          onSelect={handleSelectHave}
-                          onDeselect={handleDeselectHave}
-                          maxSelections={50}
-                          gridClassName={PICKER_GRID_CLASS}
-                          filters={filters}
-                          emptyState={
-                            <div className="text-sm text-muted-foreground text-center py-4">
-                              No transferable objekts found for this user.
-                            </div>
-                          }
-                        />
-                      ) : (
-                        <div className="text-sm text-muted-foreground text-center py-8">
-                          Load a Cosmo inventory to select haves
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                  <Button
-                    className="w-full mt-3"
-                    onClick={() => setActiveTab("want")}
-                  >
-                    Wants →
-                  </Button>
-                </TabsContent>
-
-                <TabsContent value="want" className="space-y-3">
-                  <Card className="border-0 sm:border py-2 sm:py-6 gap-3 sm:gap-6 shadow-none sm:shadow-sm">
-                    <CardHeader className="px-0 sm:px-6 pb-3">
-                      <CardTitle className="text-lg">
-                        What do you want?
-                      </CardTitle>
-                      <CardDescription>
-                        Select specific objekts you&apos;re looking for
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="px-0 sm:px-6 space-y-3">
-                      <ObjektPicker
-                        selected={selectedWantEntries}
-                        onSelect={handleSelectWant}
-                        onDeselect={handleDeselectWant}
-                        maxSelections={50}
-                        filters={filters}
-                        gridClassName={PICKER_GRID_CLASS}
-                      />
-                      <Separator />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full gap-2"
-                        onClick={() => setCustomWantOpen(true)}
-                      >
-                        Add Custom Want
-                      </Button>
-                      <Separator />
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="any-want-toggle">Add ANY want</Label>
-                          <p className="text-xs text-muted-foreground">
-                            Accept any objekt matching a filter — e.g. &quot;Any
-                            HeeJin&quot; or &quot;Any Atom01&quot;. Won&apos;t
-                            trigger match notifications, but gates offers when
-                            Wants Only is on.
-                          </p>
-                        </div>
-                        <Switch
-                          id="any-want-toggle"
-                          checked={anyWantOpen}
-                          onCheckedChange={setAnyWantOpen}
-                        />
-                      </div>
-                      {anyWantOpen && (
-                        <AnyWantPicker
-                          value={anyWants}
-                          onChange={handleAnyWantsChange}
-                        />
-                      )}
-                      <Separator />
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label htmlFor="wants-only">Wants only</Label>
-                          <p className="text-xs text-muted-foreground">
-                            {posterData.wants.length === 0
-                              ? "Add at least one want item to enable this option"
-                              : wantsOnly
-                                ? "You will only accept offers containing at least one item from your want list"
-                                : "You will receive trade offers from anyone, regardless of your want list"}
-                          </p>
-                        </div>
-                        <Switch
-                          id="wants-only"
-                          checked={wantsOnly}
-                          onCheckedChange={setWantsOnly}
-                          disabled={posterData.wants.length === 0}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Button
-                    className="w-full"
-                    onClick={() => setActiveTab("have")}
-                  >
-                    ← Haves
-                  </Button>
-                </TabsContent>
-              </Tabs>
-            </div>
-
-            {totalItems > 0 && (
+            <aside className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:overscroll-contain">
               <Card>
-                <CardHeader className="flex flex-col gap-3 pb-4 border-b border-border">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <CardTitle className="text-lg">Preview</CardTitle>
-                      <CardDescription>
-                        {getDisplayCount(posterData.haves, groupByNumbers)} have
-                        / {getDisplayCount(posterData.wants, groupByNumbers)}{" "}
-                        want
-                      </CardDescription>
+                <CardHeader className="gap-3 border-b border-border">
+                  <div>
+                    <CardTitle className="text-lg">Your list</CardTitle>
+                    <CardDescription>
+                      {posterData.haves.length} haves ·{" "}
+                      {posterData.wants.length} wants
+                    </CardDescription>
+                  </div>
+
+                  {editId && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCopyText}
+                          className="h-9 gap-2 border-border bg-transparent"
+                        >
+                          <CopyIcon className="h-4 w-4" />
+                          Copy Text
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleDownload}
+                          disabled={downloading}
+                          className="h-9 gap-2 border-border bg-transparent"
+                        >
+                          {downloading ? (
+                            <Loader2Icon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <DownloadIcon className="h-4 w-4" />
+                          )}
+                          Download PNG
+                        </Button>
+                      </div>
+                      <ListLinkField
+                        label="Edit link"
+                        value={sectionAbsoluteUrl(`/list/${editId}/edit`)}
+                      />
+                    </>
+                  )}
+
+                  {autoSaving && (
+                    <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2Icon className="h-3 w-3 animate-spin" />
+                      Saving draft...
                     </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleCopyText}
-                        className="h-10 gap-2 border-border bg-transparent"
+                  )}
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label
+                        htmlFor="any-want-toggle"
+                        className="text-sm font-medium"
                       >
-                        <CopyIcon className="h-4 w-4" />
-                        Copy Text
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleDownload}
-                        disabled={downloading}
-                        className="h-10 gap-2 border-border bg-transparent"
+                        Accept any objekt matching my filters
+                      </Label>
+                      <Switch
+                        id="any-want-toggle"
+                        checked={anyWantOpen}
+                        onCheckedChange={setAnyWantOpen}
+                      />
+                    </div>
+                    {anyWantOpen && (
+                      <AnyWantPicker
+                        value={anyWants}
+                        onChange={handleAnyWantsChange}
+                      />
+                    )}
+
+                    <div className="flex items-center justify-between gap-3">
+                      <Label
+                        htmlFor="wants-only"
+                        className="text-sm font-medium"
+                        title={
+                          posterData.wants.length === 0
+                            ? "Add at least one want item to enable this"
+                            : undefined
+                        }
                       >
-                        {downloading ? (
-                          <Loader2Icon className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <DownloadIcon className="h-4 w-4" />
-                        )}
-                        Download PNG
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleSaveAndShare}
-                        disabled={saving}
-                        className="h-10 gap-2"
-                      >
-                        {saving ? (
-                          <Loader2Icon className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2Icon className="h-4 w-4" />
-                        )}
-                        {saveActionLabel}
-                      </Button>
+                        Only accept offers from my want list
+                      </Label>
+                      <Switch
+                        id="wants-only"
+                        checked={wantsOnly}
+                        onCheckedChange={setWantsOnly}
+                        disabled={posterData.wants.length === 0}
+                      />
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-                    <div className="flex items-center gap-2">
-                      <Label
-                        htmlFor="cols-per-row"
-                        className="text-xs text-muted-foreground"
-                      >
-                        Columns
-                      </Label>
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Appearance
+                    </p>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm">Columns</span>
                       <select
                         id="cols-per-row"
                         value={colsPerRow}
@@ -1318,7 +1266,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                           userSetCols.current = true;
                           setColsPerRow(Number(e.target.value));
                         }}
-                        className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                        className="h-7 rounded-md border-0 bg-transparent text-right text-sm outline-none"
                       >
                         {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
                           <option key={n} value={n}>
@@ -1328,147 +1276,21 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       </select>
                     </div>
 
-                    <div className="flex items-center justify-between gap-3 sm:justify-start">
-                      <span className="text-xs text-muted-foreground">
-                        Group by Members
-                      </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm">Group by Members</span>
                       <Switch
                         checked={groupByMember}
                         onCheckedChange={setGroupByMember}
                       />
                     </div>
 
-                    <div className="flex items-center justify-between gap-3 sm:justify-start">
-                      <span className="text-xs text-muted-foreground">
-                        Combine Duplicates
-                      </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm">Combine Duplicates</span>
                       <Switch
                         checked={groupByNumbers}
                         onCheckedChange={setGroupByNumbers}
                       />
                     </div>
-
-                    <div className="flex items-center justify-between gap-3 sm:justify-start">
-                      <span className="text-xs text-muted-foreground">
-                        Theme
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <SunIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                        <Switch
-                          checked={posterTheme === "dark"}
-                          onCheckedChange={(checked) =>
-                            setPosterTheme(checked ? "dark" : "light")
-                          }
-                        />
-                        <MoonIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                    </div>
-
-                    {(linkedNickname || posterData.cosmoId) && (
-                      <span className="inline-flex rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">
-                        {linkedNickname
-                          ? `Linked Cosmo: @${linkedNickname}`
-                          : `Cosmo ID: @${posterData.cosmoId}`}
-                      </span>
-                    )}
-
-                    {autoSaving && (
-                      <div className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <Loader2Icon className="h-3 w-3 animate-spin" />
-                        Saving draft...
-                      </div>
-                    )}
-                  </div>
-
-                  {editId && (
-                    <div className="max-w-md">
-                      <ListLinkField
-                        label="Edit link"
-                        value={sectionAbsoluteUrl(`/list/${editId}/edit`)}
-                      />
-                    </div>
-                  )}
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor="poster-display-name"
-                        className="text-xs text-muted-foreground"
-                      >
-                        Display Name
-                      </Label>
-                      <Input
-                        id="poster-display-name"
-                        value={posterData.username}
-                        onChange={(e) =>
-                          handleTextChange("username", e.target.value)
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor="poster-have-title"
-                        className="text-xs text-muted-foreground"
-                      >
-                        Have Title
-                      </Label>
-                      <Input
-                        id="poster-have-title"
-                        value={posterData.haveTitle}
-                        onChange={(e) =>
-                          handleTextChange("haveTitle", e.target.value)
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label
-                        htmlFor="poster-want-title"
-                        className="text-xs text-muted-foreground"
-                      >
-                        Want Title
-                      </Label>
-                      <Input
-                        id="poster-want-title"
-                        value={posterData.wantTitle}
-                        onChange={(e) =>
-                          handleTextChange("wantTitle", e.target.value)
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-6 sm:flex-row">
-                    <ObjektImages
-                      items={haveImageItems}
-                      images={haveImages}
-                      label={posterData.haveTitle}
-                      showSerial={!groupByNumbers}
-                      cosmoNickname={posterData.cosmoId}
-                      gridStyle={previewGridStyle}
-                      editable
-                      onRemove={(id) => handleRemoveItem("have", id)}
-                      onAdd={() => focusTab("have")}
-                    />
-                    <Separator
-                      orientation="vertical"
-                      className="hidden h-auto sm:block"
-                    />
-                    <ObjektImages
-                      items={wantImageItems}
-                      images={wantImages}
-                      label={posterData.wantTitle}
-                      isWant
-                      gridStyle={previewGridStyle}
-                      editable
-                      onRemove={(id) => handleRemoveItem("want", id)}
-                      onAdd={() => focusTab("want")}
-                      onAddCustomWant={() => setCustomWantOpen(true)}
-                    />
                   </div>
 
                   <div className="space-y-1">
@@ -1489,25 +1311,50 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       placeholder="Add any notes for traders (payment terms, shipping, etc.)"
                     />
                   </div>
-                </CardContent>
 
-                <div className="flex justify-end px-6">
-                  <Button
-                    onClick={handleSaveAndShare}
-                    disabled={saving}
-                    className="h-11 w-full gap-2 sm:w-auto sm:px-6"
-                  >
-                    {saving ? (
-                      <Loader2Icon className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2Icon className="h-4 w-4" />
-                    )}
-                    {saveActionLabel}
-                  </Button>
-                </div>
+                  {session ? (
+                    <DiscordChip label={session.user.name ?? "Discord"} />
+                  ) : (
+                    <DiscordChip
+                      label="Sign in"
+                      onClick={() => setSignInOpen(true)}
+                    />
+                  )}
+
+                  {step === "have" ? (
+                    <Button
+                      onClick={() => goToStep("want")}
+                      className="h-10 w-full gap-2"
+                    >
+                      Continue to Want
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => goToStep("have")}
+                        className="h-10 gap-2 border-border bg-transparent"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        onClick={handleSaveAndShare}
+                        disabled={saving}
+                        className="h-10 flex-1 gap-2"
+                      >
+                        {saving ? (
+                          <Loader2Icon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2Icon className="h-4 w-4" />
+                        )}
+                        {saveActionLabel}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
               </Card>
-            )}
-          </>
+            </aside>
+          </div>
         )}
       </section>
 
@@ -1521,23 +1368,37 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           <DialogHeader>
             <DialogTitle>Sign in to save</DialogTitle>
             <DialogDescription>
-              A Discord account is required to save and share your list.
+              A Discord account is required to save and share your list. You can
+              still save the image without signing in.
             </DialogDescription>
           </DialogHeader>
-          <Button
-            variant="outline"
-            className="w-full gap-2 border-border bg-background text-foreground hover:bg-muted"
-            onClick={handleSignInForSave}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4 fill-current"
-              aria-hidden="true"
+          <div className="space-y-2">
+            <Button
+              variant="outline"
+              className="w-full gap-2 border-border bg-background text-foreground hover:bg-muted"
+              onClick={handleSignInForSave}
             >
-              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.003.02.014.04.03.052a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
-            </svg>
-            Continue with Discord
-          </Button>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4 fill-current"
+                aria-hidden="true"
+              >
+                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.003.02.014.04.03.052a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
+              </svg>
+              Continue with Discord
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              disabled={downloading}
+              onClick={() => {
+                setSignInOpen(false);
+                void handleDownload();
+              }}
+            >
+              {downloading ? "Saving image..." : "Save image only"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

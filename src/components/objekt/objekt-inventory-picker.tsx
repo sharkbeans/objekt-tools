@@ -56,6 +56,14 @@ interface ObjektInventoryPickerProps {
   onPerRowChange?: (n: number) => void;
   /** Entries matching this predicate are sorted before non-matching entries. */
   prioritize?: (entry: OwnedEntry) => boolean;
+  /** Called once with the total item count after a successful fetch. */
+  onLoaded?: (count: number) => void;
+  /** Items shown per page. Defaults to 40. */
+  pageSize?: number;
+  /** Shows selected items in a pinned row above the inventory grid. */
+  showSelectedRow?: boolean;
+  /** Label for the pinned selected row. */
+  selectedRowLabel?: string;
 }
 
 export function ObjektInventoryPicker({
@@ -72,7 +80,11 @@ export function ObjektInventoryPicker({
   filterBarActions,
   perRow,
   onPerRowChange,
+  pageSize,
   prioritize,
+  onLoaded,
+  showSelectedRow,
+  selectedRowLabel,
 }: ObjektInventoryPickerProps) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<OwnedEntry[]>([]);
@@ -89,6 +101,7 @@ export function ObjektInventoryPicker({
         if (cancelled) return;
         setItems(results);
         setError(null);
+        onLoaded?.(results.length);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -103,7 +116,7 @@ export function ObjektInventoryPicker({
     return () => {
       cancelled = true;
     };
-  }, [fetchItems]);
+  }, [fetchItems, onLoaded]);
 
   const filtered = useMemo(() => {
     let result = items;
@@ -188,6 +201,9 @@ export function ObjektInventoryPicker({
           gridClassName={gridClassName}
           perRow={perRow}
           onPerRowChange={onPerRowChange}
+          pageSize={pageSize}
+          showSelectedRow={showSelectedRow}
+          selectedRowLabel={selectedRowLabel}
         />
       ) : error ? (
         <div className="text-sm text-destructive text-center py-4">{error}</div>
@@ -209,6 +225,9 @@ export function ObjektInventoryPicker({
           gridClassName={gridClassName}
           perRow={perRow}
           onPerRowChange={onPerRowChange}
+          pageSize={pageSize}
+          showSelectedRow={showSelectedRow}
+          selectedRowLabel={selectedRowLabel}
         />
       )}
 
