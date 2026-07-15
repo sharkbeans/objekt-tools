@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { normalizeRepeatedFilterParams } from "@/lib/filter-param-redirect";
 import {
   isRootOnlyPath,
   rootDomain,
@@ -113,6 +114,17 @@ function upgradeSessionCookie(request: NextRequest, response: NextResponse) {
 export function middleware(request: NextRequest) {
   const gate = previewGate(request);
   if (gate) return gate;
+
+  // Canonicalize old shared/bookmarked links using repeated filter params
+  // (?member=a&member=b) to the comma-joined form the client-side URL
+  // filter state (nuqs) expects, before it ever mounts and reads only the
+  // first value per key.
+  if (!request.nextUrl.pathname.startsWith("/api/")) {
+    const normalized = normalizeRepeatedFilterParams(request.nextUrl);
+    if (normalized) {
+      return NextResponse.redirect(normalized, 308);
+    }
+  }
 
   // Host-based section routing — only when NEXT_PUBLIC_ROOT_DOMAIN is set.
   if (!subdomainsEnabled()) {

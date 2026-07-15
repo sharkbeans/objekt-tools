@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ClaimBanner } from "@/components/progress/claim-banner";
 import { ProgressOverviewContent } from "@/components/progress/progress-overview-content";
 import { getSession } from "@/lib/auth-server";
@@ -44,7 +45,9 @@ export default async function ProgressNicknamePage({
   return (
     <div className="mx-auto w-full max-w-[96rem] px-4 py-6 space-y-6">
       {showClaimBanner && <ClaimBanner isSignedIn={!!session} />}
-      <ProgressOverviewContent key={nickname} nickname={nickname} />
+      <Suspense>
+        <ProgressOverviewContent key={nickname} nickname={nickname} />
+      </Suspense>
     </div>
   );
 }

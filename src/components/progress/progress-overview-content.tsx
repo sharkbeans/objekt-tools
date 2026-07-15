@@ -4,12 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2Icon, ShareIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  defaultFilters,
-  ObjektFilterBar,
-  type ObjektFilterState,
-} from "@/components/objekt/objekt-filter-bar";
+import { ObjektFilterBar } from "@/components/objekt/objekt-filter-bar";
 import { Button } from "@/components/ui/button";
+import { useObjektFilterParams } from "@/hooks/use-objekt-filter-params";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
@@ -57,7 +54,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
   });
   const memberImages = imagesData?.images ?? {};
 
-  const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
+  const [filters, setFilters] = useObjektFilterParams();
   const [showOthers, setShowOthers] = useState(false);
 
   const filteredRollups = useMemo(() => {

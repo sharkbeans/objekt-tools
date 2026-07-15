@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { parseAsInteger, useQueryState } from "nuqs";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
-  defaultFilters,
   ObjektFilterBar,
   type ObjektFilterState,
 } from "@/components/objekt/objekt-filter-bar";
@@ -15,6 +15,7 @@ import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useObjektFilterParams } from "@/hooks/use-objekt-filter-params";
 import { useSession } from "@/lib/auth-client";
 import { serializeFilterParams } from "@/lib/objekt-filters";
 import { sectionHref } from "@/lib/sections";
@@ -139,18 +140,21 @@ function TradeNotifications() {
   );
 }
 
-export default function MyTradesPage() {
+function MyTradesPageContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useObjektFilterParams();
+  const [page, setPage] = useQueryState("page", parseAsInteger.withDefault(1));
   const [activePage, setActivePage] = useState(1);
 
-  const handleFiltersChange = useCallback((next: ObjektFilterState) => {
-    setFilters(next);
-    setPage(1);
-  }, []);
+  const handleFiltersChange = useCallback(
+    (next: ObjektFilterState) => {
+      setFilters(next);
+      setPage(1);
+    },
+    [setFilters, setPage],
+  );
 
   useEffect(() => {
     if (!isPending && session === null) router.push("/sign-in");
@@ -175,12 +179,11 @@ export default function MyTradesPage() {
     refetchOnWindowFocus: false,
   });
 
+  const myTradesParams = serializeFilterParams(filters, { page }).toString();
   const { data, isLoading } = useQuery({
-    queryKey: ["my-trades", filters, page],
+    queryKey: ["my-trades", myTradesParams],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/trades/mine?${serializeFilterParams(filters, { page })}`,
-      );
+      const res = await fetch(`/api/trades/mine?${myTradesParams}`);
       return res.json();
     },
     enabled: !!session,
@@ -371,5 +374,13 @@ export default function MyTradesPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function MyTradesPage() {
+  return (
+    <Suspense>
+      <MyTradesPageContent />
+    </Suspense>
   );
 }

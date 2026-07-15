@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { parseAsInteger, parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ObjektFilterBar,
@@ -12,7 +12,8 @@ import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
-import { parseFilterParams, serializeFilterParams } from "@/lib/objekt-filters";
+import { useObjektFilterParams } from "@/hooks/use-objekt-filter-params";
+import { serializeFilterParams } from "@/lib/objekt-filters";
 import type { TradePostDTO } from "@/lib/trade-types";
 
 function formatUserFilterLabel(user: string): string {
@@ -75,27 +76,26 @@ function useIsMobile() {
 }
 
 export function TradesContent() {
-  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
-  const [filters, setFilters] = useState<ObjektFilterState>(() =>
-    parseFilterParams(searchParams),
-  );
-  const [page, setPage] = useState(() =>
-    Number(searchParams.get("page") ?? "1"),
-  );
-  const [userFilter, setUserFilter] = useState(
-    () => searchParams.get("user") ?? "",
+  const [filters, setFilters] = useObjektFilterParams();
+  const [page, setPage] = useQueryState("page", parseAsInteger.withDefault(1));
+  const [userFilter, setUserFilter] = useQueryState(
+    "user",
+    parseAsString.withDefault(""),
   );
 
-  const handleFiltersChange = useCallback((next: ObjektFilterState) => {
-    setFilters(next);
-    setPage(1);
-  }, []);
+  const handleFiltersChange = useCallback(
+    (next: ObjektFilterState) => {
+      setFilters(next);
+      setPage(1);
+    },
+    [setFilters, setPage],
+  );
 
   const clearUserFilter = useCallback(() => {
     setUserFilter("");
     setPage(1);
-  }, []);
+  }, [setUserFilter, setPage]);
 
   return (
     <>
@@ -136,12 +136,11 @@ function PaginatedTradesList({
   onPageChange: (p: number) => void;
   user: string;
 }) {
+  const params = serializeFilterParams(filters, { page, user }).toString();
   const { data, isLoading } = useQuery({
-    queryKey: ["trades", filters, user, page],
+    queryKey: ["trades", params],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/trades?${serializeFilterParams(filters, { page, user })}`,
-      );
+      const res = await fetch(`/api/trades?${params}`);
       return res.json();
     },
   });
@@ -197,13 +196,14 @@ function InfiniteTradesList({
   user: string;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const baseParams = serializeFilterParams(filters, { user }).toString();
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =
     useInfiniteQuery({
-      queryKey: ["trades-infinite", filters, user],
+      queryKey: ["trades-infinite", baseParams],
       queryFn: async ({ pageParam = 1 }) => {
         const res = await fetch(
-          `/api/trades?${serializeFilterParams(filters, { page: pageParam as number, user })}`,
+          `/api/trades?${baseParams}&page=${pageParam as number}`,
         );
         return res.json();
       },
