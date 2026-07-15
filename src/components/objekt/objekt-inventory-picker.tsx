@@ -64,6 +64,8 @@ interface ObjektInventoryPickerProps {
   showSelectedRow?: boolean;
   /** Label for the pinned selected row. */
   selectedRowLabel?: string;
+  /** When true, merges duplicate selected entries into one card with a quantity badge. */
+  combineSelectedDuplicates?: boolean;
 }
 
 export function ObjektInventoryPicker({
@@ -85,6 +87,7 @@ export function ObjektInventoryPicker({
   onLoaded,
   showSelectedRow,
   selectedRowLabel,
+  combineSelectedDuplicates,
 }: ObjektInventoryPickerProps) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<OwnedEntry[]>([]);
@@ -204,6 +207,7 @@ export function ObjektInventoryPicker({
           pageSize={pageSize}
           showSelectedRow={showSelectedRow}
           selectedRowLabel={selectedRowLabel}
+          combineSelectedDuplicates={combineSelectedDuplicates}
         />
       ) : error ? (
         <div className="text-sm text-destructive text-center py-4">{error}</div>
@@ -228,6 +232,7 @@ export function ObjektInventoryPicker({
           pageSize={pageSize}
           showSelectedRow={showSelectedRow}
           selectedRowLabel={selectedRowLabel}
+          combineSelectedDuplicates={combineSelectedDuplicates}
         />
       )}
 

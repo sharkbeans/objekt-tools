@@ -121,6 +121,8 @@ interface ObjektPickerProps {
   showSelectedRow?: boolean;
   /** Label for the pinned selected row. */
   selectedRowLabel?: string;
+  /** When true, merges duplicate selected entries into one card with a quantity badge. */
+  combineSelectedDuplicates?: boolean;
 }
 
 export function ObjektPicker({
@@ -132,6 +134,7 @@ export function ObjektPicker({
   gridClassName,
   showSelectedRow = false,
   selectedRowLabel = "Selected",
+  combineSelectedDuplicates = false,
 }: ObjektPickerProps) {
   const [query, setQuery] = useState("");
   const [filterResults, setFilterResults] = useState<ObjektEntry[]>([]);
@@ -213,6 +216,7 @@ export function ObjektPicker({
           gridClassName={gridClassName}
           showSelectedRow={showSelectedRow}
           selectedRowLabel={selectedRowLabel}
+          combineSelectedDuplicates={combineSelectedDuplicates}
         />
       ) : (
         <ObjektGridPicker
@@ -226,6 +230,7 @@ export function ObjektPicker({
           gridClassName={gridClassName}
           showSelectedRow={showSelectedRow}
           selectedRowLabel={selectedRowLabel}
+          combineSelectedDuplicates={combineSelectedDuplicates}
         />
       )}
 

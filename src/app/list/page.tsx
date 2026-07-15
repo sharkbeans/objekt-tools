@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowRightIcon,
   CheckCircle2Icon,
   CopyIcon,
   DownloadIcon,
@@ -996,20 +997,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           <div className="grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
             <div className="space-y-4 min-w-0">
               <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-4 sm:p-5">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
-                    Step 1
-                  </p>
+                <div>
                   <Label
                     htmlFor="poster-cosmoid"
-                    className="text-sm font-medium text-foreground"
+                    className="text-lg font-semibold leading-none tracking-tight text-foreground"
                   >
                     Cosmo Username
                   </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Start by loading the inventory you want to build this list
-                    from.
-                  </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
@@ -1111,6 +1105,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                             searchPlaceholder="Search your inventory... e.g. JiWoo, Atom02, 108Z"
                             showSelectedRow
                             selectedRowLabel="Offered"
+                            combineSelectedDuplicates={groupByNumbers}
                             emptyState={
                               <div className="text-sm text-muted-foreground text-center py-4">
                                 No transferable objekts found for this user.
@@ -1155,6 +1150,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                           gridClassName={PICKER_GRID_CLASS}
                           showSelectedRow
                           selectedRowLabel="Wanted"
+                          combineSelectedDuplicates={groupByNumbers}
                         />
                         <button
                           type="button"
@@ -1283,25 +1279,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     </p>
 
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm">Columns</span>
-                      <select
-                        id="cols-per-row"
-                        value={colsPerRow}
-                        onChange={(e) => {
-                          userSetCols.current = true;
-                          setColsPerRow(Number(e.target.value));
-                        }}
-                        className="h-7 rounded-md border-0 bg-transparent text-right text-sm outline-none"
-                      >
-                        {Array.from({ length: 8 }, (_, i) => i + 3).map((n) => (
-                          <option key={n} value={n}>
-                            {n} per row
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
                       <span className="text-sm">Group by Members</span>
                       <Switch
                         checked={groupByMember}
@@ -1333,7 +1310,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       }
                       rows={3}
                       className="text-sm"
-                      placeholder="Add any notes for traders (payment terms, shipping, etc.)"
+                      placeholder="Add any notes (any SCO offer (3:1) might reject, etc.)"
                     />
                   </div>
 
@@ -1343,6 +1320,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       className="h-10 w-full gap-2"
                     >
                       Continue to Want
+                      <ArrowRightIcon className="h-4 w-4" />
                     </Button>
                   ) : (
                     <div className="flex gap-2">

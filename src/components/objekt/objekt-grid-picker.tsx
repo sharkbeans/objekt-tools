@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { getNumberGroupKey } from "@/lib/poster-item-grouping";
+import { makePosterItem } from "@/lib/poster-item";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +33,11 @@ interface ObjektGridPickerProps {
   showSelectedRow?: boolean;
   /** Label for the pinned selected row. */
   selectedRowLabel?: string;
+  /** When true, merges duplicate selected entries into one card with a quantity badge. */
+  combineSelectedDuplicates?: boolean;
 }
+
+type PickerEntry = ObjektEntry & { quantity?: number };
 
 export function ObjektGridPicker({
   items,
@@ -48,6 +54,7 @@ export function ObjektGridPicker({
   pageSize = DEFAULT_PAGE_SIZE,
   showSelectedRow = false,
   selectedRowLabel = "Selected",
+  combineSelectedDuplicates = false,
 }: ObjektGridPickerProps) {
   const [page, setPage] = useState(1);
   const gridStyle = useMemo(
@@ -58,6 +65,24 @@ export function ObjektGridPicker({
     [perRow],
   );
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const displayedSelected = useMemo<PickerEntry[]>(() => {
+    if (!combineSelectedDuplicates) return selected;
+
+    const grouped = new Map<string, PickerEntry>();
+    for (const entry of selected) {
+      const key = getNumberGroupKey(makePosterItem(entry));
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.quantity = (existing.quantity ?? 1) + 1;
+      } else {
+        grouped.set(key, { ...entry, quantity: 1 });
+      }
+    }
+
+    return [...grouped.values()].map((entry) =>
+      (entry.quantity ?? 1) > 1 ? entry : { ...entry, quantity: undefined },
+    );
+  }, [combineSelectedDuplicates, selected]);
 
   // Reset to page 1 when items change (e.g. filter/search)
   useEffect(() => {
@@ -71,8 +96,8 @@ export function ObjektGridPicker({
   const isSelected = (entry: ObjektEntry) =>
     compareBySerial
       ? selected.some((s) =>
-          s.serial != null
-            ? s.serial === entry.serial
+          entry.serial != null
+            ? (s.serial ?? null) === entry.serial
             : s.collectionId === entry.collectionId,
         )
       : selected.some((s) => s.collectionId === entry.collectionId);
@@ -106,7 +131,7 @@ export function ObjektGridPicker({
   }
 
   function renderGrid(
-    entries: ObjektEntry[],
+    entries: PickerEntry[],
     keyPrefix: string,
     variant: "picker" | "selected" = "picker",
   ) {
@@ -169,6 +194,13 @@ export function ObjektGridPicker({
                   <XIcon className="h-3.5 w-3.5" strokeWidth={3} />
                 </div>
               )}
+              {variant === "selected" &&
+                entry.quantity != null &&
+                entry.quantity > 1 && (
+                  <div className="absolute bottom-1 left-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-white/30 bg-black text-[11px] font-bold text-white">
+                    {entry.quantity}
+                  </div>
+                )}
               {/* Selection tint + checkmark badge */}
               {showPickerState && (
                 <>
@@ -247,7 +279,7 @@ export function ObjektGridPicker({
           <p className="px-0.5 text-xs font-medium text-muted-foreground">
             {selectedRowLabel} ({selected.length})
           </p>
-          {renderGrid(selected, "selected", "selected")}
+          {renderGrid(displayedSelected, "selected", "selected")}
         </div>
       )}
       {items.length > 0 ? (
