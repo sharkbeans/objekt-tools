@@ -995,17 +995,26 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
             <div className="space-y-4 min-w-0">
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="poster-cosmoid"
-                  className="text-sm font-medium text-foreground"
-                >
-                  Cosmo Username
-                </Label>
+              <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-4 sm:p-5">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+                    Step 1
+                  </p>
+                  <Label
+                    htmlFor="poster-cosmoid"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Cosmo Username
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Start by loading the inventory you want to build this list
+                    from.
+                  </p>
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     id="poster-cosmoid"
-                    placeholder="e.g. sharkbeans"
+                    placeholder="Enter your Cosmo username"
                     value={cosmoId}
                     onChange={(e) => setCosmoId(e.target.value)}
                     onBlur={() => {
@@ -1023,8 +1032,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   />
                   <Button
                     type="button"
-                    variant="outline"
-                    className="h-12 gap-2 border-border bg-transparent px-4 sm:flex-1"
+                    className="h-12 gap-2 px-4 sm:flex-1"
                     disabled={!cosmoId.trim()}
                     onClick={() => {
                       rememberCosmoUsername(cosmoId);
@@ -1052,11 +1060,17 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   value={step}
                   onValueChange={(v) => setStep(v as "have" | "want")}
                 >
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="have">
+                  <TabsList className="grid h-12 w-full grid-cols-2">
+                    <TabsTrigger
+                      value="have"
+                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black"
+                    >
                       Have ({posterData.haves.length})
                     </TabsTrigger>
-                    <TabsTrigger value="want">
+                    <TabsTrigger
+                      value="want"
+                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black"
+                    >
                       Want ({posterData.wants.length})
                     </TabsTrigger>
                   </TabsList>
@@ -1066,7 +1080,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       <CardHeader className="px-0 sm:px-6 gap-3">
                         <div>
                           <CardTitle className="text-lg">
-                            What do you have?
+                            Select Haves
                           </CardTitle>
                           <CardDescription>
                             {haveNickname
@@ -1117,7 +1131,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       <CardHeader className="px-0 sm:px-6 pb-3 gap-3">
                         <div>
                           <CardTitle className="text-lg">
-                            What do you want?
+                            Select Wants
                           </CardTitle>
                           <CardDescription>
                             Select specific objekts you&apos;re looking for
