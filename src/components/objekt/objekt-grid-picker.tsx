@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
@@ -8,7 +8,7 @@ import type { ObjektEntry } from "@/lib/cosmo/types";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 40;
+const DEFAULT_PAGE_SIZE = 40;
 
 interface ObjektGridPickerProps {
   items: ObjektEntry[];
@@ -25,6 +25,12 @@ interface ObjektGridPickerProps {
   perRow?: number;
   /** When set together with `perRow`, renders a per-row dropdown in the header. */
   onPerRowChange?: (n: number) => void;
+  /** Items shown per page. Defaults to 40. */
+  pageSize?: number;
+  /** Shows selected items in a pinned row above the main grid. */
+  showSelectedRow?: boolean;
+  /** Label for the pinned selected row. */
+  selectedRowLabel?: string;
 }
 
 export function ObjektGridPicker({
@@ -39,6 +45,9 @@ export function ObjektGridPicker({
   gridClassName,
   perRow,
   onPerRowChange,
+  pageSize = DEFAULT_PAGE_SIZE,
+  showSelectedRow = false,
+  selectedRowLabel = "Selected",
 }: ObjektGridPickerProps) {
   const [page, setPage] = useState(1);
   const gridStyle = useMemo(
@@ -48,7 +57,7 @@ export function ObjektGridPicker({
         : undefined,
     [perRow],
   );
-  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
 
   // Reset to page 1 when items change (e.g. filter/search)
   useEffect(() => {
@@ -57,14 +66,15 @@ export function ObjektGridPicker({
 
   // Clamp page if it exceeds total after filtering
   const safePage = Math.min(page, totalPages);
-  const pageItems = items.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
-  );
+  const pageItems = items.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const isSelected = (entry: ObjektEntry) =>
     compareBySerial
-      ? selected.some((s) => s.serial != null && s.serial === entry.serial)
+      ? selected.some((s) =>
+          s.serial != null
+            ? s.serial === entry.serial
+            : s.collectionId === entry.collectionId,
+        )
       : selected.some((s) => s.collectionId === entry.collectionId);
 
   function handleTap(entry: ObjektEntry) {
@@ -95,7 +105,11 @@ export function ObjektGridPicker({
     }
   }
 
-  if (loading) {
+  function renderGrid(
+    entries: ObjektEntry[],
+    keyPrefix: string,
+    variant: "picker" | "selected" = "picker",
+  ) {
     return (
       <div
         className={cn(
@@ -106,70 +120,20 @@ export function ObjektGridPicker({
         )}
         style={gridStyle}
       >
-        {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-          <div
-            key={i}
-            className="aspect-photocard rounded-sm bg-muted animate-pulse"
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="text-sm text-muted-foreground text-center py-8">
-        {emptyMessage}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        {onPerRowChange && perRow !== undefined ? (
-          <PerRowDropdown value={perRow} onChange={onPerRowChange} />
-        ) : (
-          <span />
-        )}
-        <label className="inline-flex items-center justify-between gap-2 text-xs text-muted-foreground cursor-pointer select-none has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50">
-          All
-          {allPageSelected ? (
-            <span>({pageItems.length})</span>
-          ) : (
-            selectAllCount > 0 && <span>({selectAllCount})</span>
-          )}
-          <input
-            type="checkbox"
-            checked={allPageSelected}
-            onChange={handleSelectAllPage}
-            disabled={!allPageSelected && remainingCapacity === 0}
-            className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed"
-          />
-        </label>
-      </div>
-      <div
-        className={cn(
-          perRow === undefined
-            ? "grid grid-cols-3 sm:grid-cols-5 gap-1"
-            : "grid gap-1",
-          gridClassName,
-        )}
-        style={gridStyle}
-      >
-        {pageItems.map((entry, i) => {
+        {entries.map((entry, i) => {
           const sel = isSelected(entry);
+          const showPickerState = variant === "picker" && sel;
           const url = entry.thumbnailImage;
           const key = compareBySerial
             ? `${entry.collectionId}-${entry.serial}`
             : entry.collectionId;
           return (
             <button
-              key={`${key}-${i}`}
+              key={`${keyPrefix}-${key}-${i}`}
               type="button"
               className={cn(
                 "relative rounded-sm overflow-hidden focus:outline-none ring-2 ring-inset ring-transparent transition-colors",
-                sel && "ring-green-500",
+                showPickerState && "ring-green-500",
               )}
               onClick={() => handleTap(entry)}
             >
@@ -200,8 +164,13 @@ export function ObjektGridPicker({
                   #{String(entry.serial).padStart(5, "0")}
                 </div>
               )}
+              {variant === "selected" && (
+                <div className="absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-destructive/90 text-destructive-foreground shadow transition-colors hover:bg-destructive">
+                  <XIcon className="h-3.5 w-3.5" strokeWidth={3} />
+                </div>
+              )}
               {/* Selection tint + checkmark badge */}
-              {sel && (
+              {showPickerState && (
                 <>
                   <div className="absolute inset-0 bg-black/25" />
                   <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow">
@@ -213,14 +182,91 @@ export function ObjektGridPicker({
           );
         })}
       </div>
-      <TradePagination
-        page={safePage}
-        totalPages={totalPages}
-        total={items.length}
-        limit={PAGE_SIZE}
-        onPageChange={setPage}
-        itemLabel="objekts"
-      />
+    );
+  }
+
+  if (loading) {
+    return (
+      <div
+        className={cn(
+          perRow === undefined
+            ? "grid grid-cols-3 sm:grid-cols-5 gap-1"
+            : "grid gap-1",
+          gridClassName,
+        )}
+        style={gridStyle}
+      >
+        {Array.from({ length: pageSize }).map((_, i) => (
+          <div
+            key={i}
+            className="aspect-photocard rounded-sm bg-muted animate-pulse"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const shouldShowSelectedRow = showSelectedRow && selected.length > 0;
+
+  if (items.length === 0 && !shouldShowSelectedRow) {
+    return (
+      <div className="text-sm text-muted-foreground text-center py-8">
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.length > 0 && (
+        <div className="flex items-center justify-between gap-2">
+          {onPerRowChange && perRow !== undefined ? (
+            <PerRowDropdown value={perRow} onChange={onPerRowChange} />
+          ) : (
+            <span />
+          )}
+          <label className="inline-flex items-center justify-between gap-2 text-xs text-muted-foreground cursor-pointer select-none has-[input:disabled]:cursor-not-allowed has-[input:disabled]:opacity-50">
+            All
+            {allPageSelected ? (
+              <span>({pageItems.length})</span>
+            ) : (
+              selectAllCount > 0 && <span>({selectAllCount})</span>
+            )}
+            <input
+              type="checkbox"
+              checked={allPageSelected}
+              onChange={handleSelectAllPage}
+              disabled={!allPageSelected && remainingCapacity === 0}
+              className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed"
+            />
+          </label>
+        </div>
+      )}
+      {shouldShowSelectedRow && (
+        <div className="space-y-1.5 border-b-2 border-border pb-3">
+          <p className="px-0.5 text-xs font-medium text-muted-foreground">
+            {selectedRowLabel} ({selected.length})
+          </p>
+          {renderGrid(selected, "selected", "selected")}
+        </div>
+      )}
+      {items.length > 0 ? (
+        <>
+          {renderGrid(pageItems, "page")}
+          <TradePagination
+            page={safePage}
+            totalPages={totalPages}
+            total={items.length}
+            limit={pageSize}
+            onPageChange={setPage}
+            itemLabel="objekts"
+          />
+        </>
+      ) : (
+        <div className="text-sm text-muted-foreground text-center py-6">
+          {emptyMessage}
+        </div>
+      )}
     </div>
   );
 }

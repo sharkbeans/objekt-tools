@@ -32,6 +32,7 @@ const CARD_W = 100;
 const GAP = 10;
 const PAD = 32;
 const LABEL_H = 20; // space below card for label text
+const FETCH_TIMEOUT_MS = 20_000;
 
 interface DisplayItem {
   item: ResolvedPosterItem;
@@ -83,10 +84,21 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
   // Fetch to a blob URL so the image is same-origin — avoids canvas taint
   // (toBlob SecurityError) while also bypassing the mobile Safari CORS cache
   // poisoning that occurs with crossOrigin="anonymous" on cached CDN images.
-  const res = await fetch(url, { mode: "cors", cache: "no-store" });
-  if (!res.ok) throw new Error(`fetch ${res.status}: ${url}`);
-  const blob = await res.blob();
-  const blobUrl = URL.createObjectURL(blob);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let blobUrl: string;
+  try {
+    const res = await fetch(url, {
+      mode: "cors",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`fetch ${res.status}: ${url}`);
+    const blob = await res.blob();
+    blobUrl = URL.createObjectURL(blob);
+  } finally {
+    clearTimeout(timer);
+  }
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -99,6 +111,28 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
     };
     img.src = blobUrl;
   });
+}
+
+function loadImageViaElement(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`img element load failed: ${url}`));
+    img.src = url;
+  });
+}
+
+async function loadPosterImage(url: string): Promise<HTMLImageElement> {
+  try {
+    return await loadImage(url);
+  } catch {
+    try {
+      return await loadImageViaElement(url);
+    } catch {
+      return await loadImage(`/api/image-proxy?url=${encodeURIComponent(url)}`);
+    }
+  }
 }
 
 function itemLabel(item: ResolvedPosterItem) {
@@ -476,7 +510,7 @@ export async function renderPosterToCanvas(
   await Promise.allSettled(
     uniqueUrls.map(async (url) => {
       try {
-        images.set(url, await loadImage(url));
+        images.set(url, await loadPosterImage(url));
       } catch {
         // image stays missing — placeholder drawn instead
       }
