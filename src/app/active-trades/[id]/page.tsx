@@ -11,6 +11,7 @@ import {
   ExternalLinkIcon,
   MessageCircleIcon,
 } from "lucide-react";
+import Image from "next/image";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { Fragment, use, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -60,6 +61,8 @@ interface CounterOfferChainEntry {
 interface ActiveTrade extends ActiveTradeDTO {
   counterOfferChain?: CounterOfferChainEntry[];
 }
+
+const TERMINAL_STATUSES = ["completed", "cancelled", "countered", "disputed"];
 
 const thumbnailLookupCache = new Map<string, string | null>();
 
@@ -290,10 +293,12 @@ function ObjektThumbnail({
 
   const thumbnail = (
     <div className="w-12 aspect-[2/3] relative rounded-sm overflow-hidden">
-      <img
-        key={resolvedSrc}
+      <Image
         src={resolvedSrc}
         alt={alt}
+        fill
+        unoptimized
+        sizes="48px"
         onLoad={(e) =>
           setStatus(e.currentTarget.naturalWidth === 0 ? "error" : "loaded")
         }
@@ -344,7 +349,14 @@ function ObjektThumbnail({
               sideOffset={8}
               className="z-50 rounded-md shadow-xl overflow-hidden border border-border"
             >
-              <img src={resolvedSrc} alt={alt} className="w-36 block" />
+              <Image
+                src={resolvedSrc}
+                alt={alt}
+                width={144}
+                height={216}
+                unoptimized
+                className="w-36 h-auto block"
+              />
             </TooltipPrimitive.Content>
           </TooltipPrimitive.Portal>
         )}
@@ -958,12 +970,11 @@ export default function ActiveTradePage({
         !recoveredSideIds.has(l.activeTradeSideId)),
   );
 
-  const terminalStatuses = ["completed", "cancelled", "countered", "disputed"];
   useEffect(() => {
-    if (trade && terminalStatuses.includes(trade.status)) {
+    if (trade && TERMINAL_STATUSES.includes(trade.status)) {
       queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
     }
-  }, [trade?.status]);
+  }, [queryClient, trade]);
 
   // On page focus/visibility restore, trigger a check-transfers if trade is active
   useEffect(() => {
@@ -979,7 +990,7 @@ export default function ActiveTradePage({
     }
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [id]);
+  }, [id, queryClient, runCheckTransfers]);
 
   function startCooldownDisplay() {
     if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
@@ -988,7 +999,9 @@ export default function ActiveTradePage({
     cooldownTimerRef.current = setInterval(() => {
       const remaining = Math.ceil((end - Date.now()) / 1000);
       if (remaining <= 0) {
-        clearInterval(cooldownTimerRef.current!);
+        if (cooldownTimerRef.current) {
+          clearInterval(cooldownTimerRef.current);
+        }
         cooldownTimerRef.current = null;
         setCheckCooldown(0);
       } else {

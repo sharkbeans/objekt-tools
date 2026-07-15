@@ -47,7 +47,7 @@ describe("trade-guards (integration)", {
 
     assert.ok(ban1, "first call returns a ban");
     assert.ok(ban2, "second call returns a ban");
-    assert.equal(ban1!.id, ban2!.id, "both calls return the same ban");
+    assert.equal(ban1.id, ban2.id, "both calls return the same ban");
 
     const db = await getDb();
     const bans = await db.query.tradeBan.findMany({
@@ -197,16 +197,20 @@ describe("trade-guards (integration)", {
     const trades: Array<{ id: string }> = [];
     for (let i = 0; i < 14; i++) {
       const isTerminal = i === 13;
+      const previousTradeId = i === 0 ? null : trades[i - 1]?.id;
+      assert.ok(previousTradeId !== undefined, "previous trade should exist");
       const t = await createActiveTrade({
         initiatorUserId: u1.id,
         recipientUserId: u2.id,
-        counterOfferToId: i === 0 ? null : trades[i - 1]!.id,
+        counterOfferToId: previousTradeId,
         status: isTerminal ? "pending" : "countered",
       });
       trades.push(t);
     }
 
-    await guards.propagateResolution(trades[13]!.id);
+    const terminalTradeId = trades[13]?.id;
+    assert.ok(terminalTradeId, "terminal trade should exist");
+    await guards.propagateResolution(terminalTradeId);
 
     const db = await getDb();
 
@@ -216,15 +220,19 @@ describe("trade-guards (integration)", {
       });
 
     for (let i = 1; i <= 12; i++) {
-      const row = await sel(trades[i]!.id);
+      const tradeId = trades[i]?.id;
+      assert.ok(tradeId, `trade ${i} should exist`);
+      const row = await sel(tradeId);
       assert.equal(
         row?.resolvedByTradeId,
-        trades[13]!.id,
+        terminalTradeId,
         `trades[${i}] should be resolved`,
       );
     }
 
-    const root = await sel(trades[0]!.id);
+    const rootTradeId = trades[0]?.id;
+    assert.ok(rootTradeId, "root trade should exist");
+    const root = await sel(rootTradeId);
     assert.ok(root, "root exists");
     assert.equal(
       root.resolvedByTradeId,

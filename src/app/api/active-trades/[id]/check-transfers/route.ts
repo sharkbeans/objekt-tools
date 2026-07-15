@@ -770,6 +770,7 @@ export async function POST(
   const uniqueToAddresses = [
     ...new Set([...recipientRecvAddrs, ...initiatorRecvAddrs]),
   ];
+  const tradeStartAt = trade.acceptedAt ?? trade.createdAt;
 
   // Query actual transfers between the parties from the indexer transfer table
   const recentTransfers = await indexer
@@ -787,9 +788,7 @@ export async function POST(
         inArray(transfers.from, uniqueFromAddresses),
         inArray(transfers.to, uniqueToAddresses),
         // Only check transfers after the trade was accepted (or created as fallback)
-        (trade.acceptedAt ?? trade.createdAt)
-          ? gte(transfers.timestamp, trade.acceptedAt ?? trade.createdAt!)
-          : undefined,
+        tradeStartAt ? gte(transfers.timestamp, tradeStartAt) : undefined,
       ),
     );
 

@@ -90,11 +90,12 @@ export async function POST(
     const myConfirmedSides = mySides.filter(
       (s) => s.status === "confirmed" && s.detectedAt,
     );
+    const detectedTimes = myConfirmedSides.flatMap((side) =>
+      side.detectedAt ? [side.detectedAt.getTime()] : [],
+    );
     const earliestSend =
-      myConfirmedSides.length > 0
-        ? new Date(
-            Math.min(...myConfirmedSides.map((s) => s.detectedAt!.getTime())),
-          )
+      detectedTimes.length > 0
+        ? new Date(Math.min(...detectedTimes))
         : trade.acceptedAt;
     if (earliestSend) {
       const hoursSinceSend =

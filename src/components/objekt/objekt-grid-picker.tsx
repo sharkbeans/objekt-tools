@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { getNumberGroupKey } from "@/lib/poster-item-grouping";
 import { makePosterItem } from "@/lib/poster-item";
+import { getNumberGroupKey } from "@/lib/poster-item-grouping";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { cn } from "@/lib/utils";
 

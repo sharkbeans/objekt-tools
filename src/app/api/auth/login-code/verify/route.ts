@@ -60,7 +60,13 @@ export async function POST(request: NextRequest) {
 
   // Better Auth stores cookies as "{token}.{base64(HMAC-SHA256(token, secret))}"
   // Replicating makeSignature from better-auth/dist/crypto/index.mjs
-  const secret = process.env.BETTER_AUTH_SECRET!;
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret) {
+    return NextResponse.json(
+      { error: "Server misconfiguration." },
+      { status: 500 },
+    );
+  }
   const keyData = new TextEncoder().encode(secret);
   const cryptoKey = await crypto.subtle.importKey(
     "raw",

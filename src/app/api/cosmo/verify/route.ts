@@ -49,10 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if code appears in status message
-    if (
-      !profile.statusMessage ||
-      !profile.statusMessage.toLowerCase().includes(code.toLowerCase())
-    ) {
+    if (!profile.statusMessage?.toLowerCase().includes(code.toLowerCase())) {
       return NextResponse.json(
         { error: "Verification code not found in your Cosmo bio message" },
         { status: 400 },
