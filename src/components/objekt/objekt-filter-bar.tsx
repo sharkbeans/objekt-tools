@@ -2,7 +2,6 @@
 
 import { SearchIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ClassMultiSelect,
@@ -11,13 +10,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
-import { artistLabel } from "@/lib/artist-utils";
 import { validOnlineTypes } from "@/lib/filters";
-import { decodeGroupedValue } from "@/lib/objekt-filters/grouped";
+import { applyArtistSelection } from "@/lib/objekt-filters/mutations";
 import {
   defaultFilters,
   type ObjektFilterState,
 } from "@/lib/objekt-filters/types";
+import { ObjektFilterChips } from "./objekt-filter-chips";
 
 export type { ObjektFilterState };
 export { defaultFilters };
@@ -32,17 +31,6 @@ interface ObjektFilterBarProps {
   searchPlaceholder?: string;
   /** Extra controls (e.g. Cancel/Confirm) rendered at the end of the dropdown row. */
   actions?: ReactNode;
-}
-
-function hasActiveFilters(filters: ObjektFilterState): boolean {
-  return (
-    !!filters.search ||
-    filters.artist.length > 0 ||
-    filters.member.length > 0 ||
-    filters.season.length > 0 ||
-    filters.class.length > 0 ||
-    filters.on_offline.length > 0
-  );
 }
 
 export function ObjektFilterBar({
@@ -79,35 +67,8 @@ export function ObjektFilterBar({
 
   // When artist changes, drop any member/season/class values that are no longer valid
   function handleArtistChange(artists: string[]) {
-    const newSeasons = artists.length
-      ? artists.flatMap((artist) => filterOptions.seasonsByArtist[artist] ?? [])
-      : filterOptions.allSeasons;
-    const newClasses = artists.length
-      ? artists.flatMap((artist) => filterOptions.classesByArtist[artist] ?? [])
-      : filterOptions.allClasses;
-    const newMembers = artists.length
-      ? artists.flatMap((artist) => filterOptions.membersByArtist[artist] ?? [])
-      : filterOptions.allMembers;
-    update({
-      artist: artists,
-      // season/class are scoped "artistId::value" — keep only those whose item is still valid
-      season: filters.season.filter((s) => {
-        const decoded = decodeGroupedValue(s);
-        return decoded
-          ? newSeasons.includes(decoded.item)
-          : newSeasons.includes(s);
-      }),
-      class: filters.class.filter((c) => {
-        const decoded = decodeGroupedValue(c);
-        return decoded
-          ? newClasses.includes(decoded.item)
-          : newClasses.includes(c);
-      }),
-      member: filters.member.filter((m) => newMembers.includes(m)),
-    });
+    onChange(applyArtistSelection(filters, artists, filterOptions));
   }
-
-  const active = hasActiveFilters(filters);
 
   return (
     <div className="space-y-3">
@@ -230,117 +191,19 @@ export function ObjektFilterBar({
             className="w-full sm:w-auto sm:min-w-24"
           />
 
-          {(active || actions) && (
+          {actions && (
             <div className="flex items-center gap-2 ml-auto shrink-0">
-              {active && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onChange(defaultFilters)}
-                  className="h-9 text-xs text-muted-foreground"
-                >
-                  <XIcon className="h-3.5 w-3.5 mr-1" />
-                  Reset
-                </Button>
-              )}
               {actions}
             </div>
           )}
         </div>
       </div>
 
-      {/* Active filter badges */}
-      {active && (
-        <div className="flex flex-wrap gap-1.5">
-          {filters.search && (
-            <Badge variant="secondary" className="gap-1 text-xs">
-              &quot;{filters.search}&quot;
-              <button type="button" onClick={() => update({ search: "" })}>
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {filters.artist.map((a) => (
-            <Badge key={a} variant="secondary" className="gap-1 text-xs">
-              {a}
-              <button
-                type="button"
-                onClick={() =>
-                  handleArtistChange(filters.artist.filter((x) => x !== a))
-                }
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-          {filters.member.map((m) => (
-            <Badge key={m} variant="secondary" className="gap-1 text-xs">
-              {m}
-              <button
-                type="button"
-                onClick={() =>
-                  update({ member: filters.member.filter((x) => x !== m) })
-                }
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-          {filters.season.map((s) => {
-            const decoded = decodeGroupedValue(s);
-            const label = decoded
-              ? `${artistLabel(decoded.artistId)} ${decoded.item}`
-              : s;
-            return (
-              <Badge key={s} variant="secondary" className="gap-1 text-xs">
-                {label}
-                <button
-                  type="button"
-                  onClick={() =>
-                    update({ season: filters.season.filter((x) => x !== s) })
-                  }
-                >
-                  <XIcon className="h-3 w-3" />
-                </button>
-              </Badge>
-            );
-          })}
-          {filters.class.map((c) => {
-            const decoded = decodeGroupedValue(c);
-            const label = decoded
-              ? `${artistLabel(decoded.artistId)} ${decoded.item}`
-              : c;
-            return (
-              <Badge key={c} variant="secondary" className="gap-1 text-xs">
-                {label}
-                <button
-                  type="button"
-                  onClick={() =>
-                    update({ class: filters.class.filter((x) => x !== c) })
-                  }
-                >
-                  <XIcon className="h-3 w-3" />
-                </button>
-              </Badge>
-            );
-          })}
-          {filters.on_offline.map((t) => (
-            <Badge key={t} variant="secondary" className="gap-1 text-xs">
-              {t === "online" ? "Digital" : "Physical"}
-              <button
-                type="button"
-                onClick={() =>
-                  update({
-                    on_offline: filters.on_offline.filter((x) => x !== t),
-                  })
-                }
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
+      <ObjektFilterChips
+        filters={filters}
+        onChange={onChange}
+        filterOptions={filterOptions}
+      />
     </div>
   );
 }
