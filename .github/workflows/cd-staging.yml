@@ -5,6 +5,10 @@ on:
     branches:
       - testing
 
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,5 +23,9 @@ jobs:
             cd ~/objekt-trade-staging
             git fetch origin
             git reset --hard origin/testing
-            docker compose -p objekt-staging -f docker-compose.staging.yml build
-            docker compose -p objekt-staging -f docker-compose.staging.yml up -d --remove-orphans --force-recreate
+            docker ps -a \
+              --filter "label=com.docker.compose.project=objekt-staging" \
+              --format '{{.ID}} {{.Names}}' \
+              | awk '$2 ~ /^[0-9a-f]{12}_objekt-staging-/ { print $1 }' \
+              | xargs -r docker rm -f
+            docker compose -p objekt-staging -f docker-compose.staging.yml up -d --build --remove-orphans
