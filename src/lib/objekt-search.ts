@@ -180,14 +180,19 @@ export function parseObjektSearchGroups(searchText: string): string[][] {
     .filter((group) => group.length > 0);
 }
 
-export function objektMatchesSearch(
+/**
+ * Same matching as objektMatchesSearch, but takes pre-parsed OR/AND/NOT
+ * groups and optionally pre-computed tags — lets callers filtering large
+ * in-memory catalogs (thousands of items) parse the query grammar once
+ * per search rather than once per item.
+ */
+export function objektMatchesSearchGroups(
   item: ObjektSearchItem,
-  searchText: string,
+  groups: string[][],
+  tags = makeObjektSearchTags(item),
 ): boolean {
-  const groups = parseObjektSearchGroups(searchText);
   if (groups.length === 0) return true;
 
-  const tags = makeObjektSearchTags(item);
   return groups.some((group) =>
     group.every((term) =>
       term.startsWith("!")
@@ -195,4 +200,11 @@ export function objektMatchesSearch(
         : objektSearchTermMatches(term, item, tags, { fuzzy: true }),
     ),
   );
+}
+
+export function objektMatchesSearch(
+  item: ObjektSearchItem,
+  searchText: string,
+): boolean {
+  return objektMatchesSearchGroups(item, parseObjektSearchGroups(searchText));
 }

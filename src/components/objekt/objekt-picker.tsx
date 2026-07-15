@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { decodeGroupedValue } from "@/components/ui/class-multi-select";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { useObjektCatalog } from "@/hooks/use-objekt-catalog";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import {
   type ObjektStructuralFilters,
   objektMatchesStructuralFilters,
 } from "@/lib/objekt-filters";
-import { resolveObjektSearchTerm } from "@/lib/objekt-search";
-import { seasonPrefixMap } from "@/lib/season-prefix";
+import {
+  objektMatchesSearchGroups,
+  parseObjektSearchGroups,
+} from "@/lib/objekt-search";
 import { ObjektGridPicker } from "./objekt-grid-picker";
+
+const MAX_RESULTS = 500;
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
   if (!filters) return false;
@@ -21,93 +25,6 @@ function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
     filters.class.length > 0 ||
     filters.on_offline.length > 0
   );
-}
-
-async function fetchByFilters(
-  filters: ObjektStructuralFilters,
-): Promise<ObjektEntry[]> {
-  const params = new URLSearchParams();
-  for (const a of filters.artist) params.append("artist", a);
-  for (const m of filters.member) params.append("member", m);
-  for (const s of filters.season) {
-    const d = decodeGroupedValue(s);
-    if (d) {
-      params.append("season", d.item);
-      params.append("artist", d.artistId);
-    } else params.append("season", s);
-  }
-  for (const c of filters.class) {
-    const d = decodeGroupedValue(c);
-    if (d) {
-      params.append("class", d.item);
-      params.append("artist", d.artistId);
-    } else params.append("class", c);
-  }
-  for (const o of filters.on_offline) params.append("on_offline", o);
-  const res = await fetch(`/api/objekts/search?${params.toString()}`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.results ?? [];
-}
-
-function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
-  const terms = query.trim().split(/\s+/);
-  const collectionNoRe = /^([A-Za-z]*)(\d{3})[azAZ]?$/i;
-
-  let seasonPrefix: string | null = null;
-  let collectionNoDigits: string | null = null;
-  const memberTerms: string[] = [];
-
-  for (const term of terms) {
-    const m = term.match(collectionNoRe);
-    if (m) {
-      const prefix = m[1].toUpperCase();
-      const digits = m[2];
-      if (prefix && seasonPrefixMap[prefix]) {
-        seasonPrefix = prefix;
-        collectionNoDigits = digits;
-      } else {
-        collectionNoDigits = term;
-      }
-    } else {
-      memberTerms.push(term);
-    }
-  }
-
-  if (!collectionNoDigits) return null;
-
-  const params = new URLSearchParams();
-  if (seasonPrefix && seasonPrefixMap[seasonPrefix]) {
-    params.append("season", seasonPrefixMap[seasonPrefix]);
-  }
-  params.append("q", collectionNoDigits);
-
-  for (const t of memberTerms) {
-    const resolved = resolveObjektSearchTerm(t);
-    params.append("member", resolved);
-  }
-
-  return params;
-}
-
-async function searchByQuery(query: string): Promise<ObjektEntry[]> {
-  const trimmed = query.trim();
-
-  const structured = parseSeasonPrefixQuery(trimmed);
-  if (structured) {
-    const res = await fetch(`/api/objekts/search?${structured.toString()}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.results ?? [];
-  }
-
-  const resolved = resolveObjektSearchTerm(trimmed);
-  const res = await fetch(
-    `/api/objekts/search?q=${encodeURIComponent(resolved)}`,
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.results ?? [];
 }
 
 interface ObjektPickerProps {
@@ -136,56 +53,33 @@ export function ObjektPicker({
   selectedRowLabel = "Selected",
   combineSelectedDuplicates = false,
 }: ObjektPickerProps) {
+  const { data: catalog = [], isLoading } = useObjektCatalog();
   const [query, setQuery] = useState("");
-  const [filterResults, setFilterResults] = useState<ObjektEntry[]>([]);
-  const [queryResults, setQueryResults] = useState<ObjektEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(timeout);
+  }, [query]);
 
   const filtersActive = hasActiveFilters(filters);
-
-  useEffect(() => {
-    if (!filtersActive || !filters) {
-      setFilterResults([]);
-      return;
-    }
-    setLoading(true);
-    fetchByFilters(filters)
-      .then(setFilterResults)
-      .finally(() => setLoading(false));
-  }, [
-    filters?.artist.join(","),
-    filters?.member.join(","),
-    filters?.season.join(","),
-    filters?.class.join(","),
-    filters?.on_offline.join(","),
-    filtersActive,
-  ]);
-
-  const effectiveQuery = query.trim() || (filters?.search?.trim() ?? "");
-
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!effectiveQuery) {
-      setQueryResults([]);
-      return;
-    }
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      const hits = await searchByQuery(effectiveQuery);
-      setQueryResults(hits);
-      setLoading(false);
-    }, 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [effectiveQuery]);
+  const effectiveQuery =
+    debouncedQuery.trim() || (filters?.search?.trim() ?? "");
+  const showList = filtersActive || effectiveQuery.length > 0;
 
   const displayResults = useMemo(() => {
-    const base = effectiveQuery ? queryResults : filterResults;
-    if (!filters || !effectiveQuery) return base;
-    return base.filter((o) => objektMatchesStructuralFilters(o, filters));
-  }, [effectiveQuery, queryResults, filterResults, filters]);
+    if (!showList) return [];
+
+    let items = catalog;
+    if (filters) {
+      items = items.filter((o) => objektMatchesStructuralFilters(o, filters));
+    }
+    if (effectiveQuery) {
+      const groups = parseObjektSearchGroups(effectiveQuery);
+      items = items.filter((o) => objektMatchesSearchGroups(o, groups, o.tags));
+    }
+    return items.slice(0, MAX_RESULTS);
+  }, [catalog, filters, effectiveQuery, showList]);
 
   function handleSelect(entry: ObjektEntry) {
     const isSelected = selected.some(
@@ -194,8 +88,6 @@ export function ObjektPicker({
     if (isSelected || selected.length >= maxSelections) return;
     onSelect(entry);
   }
-
-  const showList = filtersActive || effectiveQuery.length > 0;
 
   return (
     <div className="space-y-3">
@@ -224,7 +116,7 @@ export function ObjektPicker({
           selected={selected}
           onSelect={handleSelect}
           onDeselect={onDeselect}
-          loading={loading}
+          loading={isLoading}
           maxSelections={maxSelections}
           emptyMessage="No results found"
           gridClassName={gridClassName}

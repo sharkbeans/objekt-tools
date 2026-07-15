@@ -1,4 +1,5 @@
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { fetchObjektCatalog } from "@/lib/objekt-catalog-client";
 import type { ParsedItem } from "@/lib/paste-parser";
 
 export interface ResolvedPosterItem {
@@ -8,17 +9,8 @@ export interface ResolvedPosterItem {
   error?: string;
 }
 
-async function searchObjekts(
-  params: URLSearchParams,
-): Promise<(ObjektEntry & { frontImage?: string })[]> {
-  const res = await fetch(`/api/objekts/search?${params.toString()}`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.results ?? [];
-}
-
 /**
- * Resolve parsed items against the search API to get thumbnail images.
+ * Resolve parsed items against the objekt catalog to get thumbnail images.
  * Works for both haves and wants — no ownership validation needed for poster.
  */
 export async function resolveForPoster(
@@ -26,60 +18,26 @@ export async function resolveForPoster(
 ): Promise<ResolvedPosterItem[]> {
   if (items.length === 0) return [];
 
-  const resolvedFreeform = new Map<ParsedItem, ResolvedPosterItem>();
-  for (const item of items) {
-    if (item.freeform) {
-      resolvedFreeform.set(item, { parsed: item, entry: null, imageUrl: null });
-    }
-  }
+  const catalog = await fetchObjektCatalog();
 
-  // Deduplicate by season|collectionNo|member|onOffline
-  const keyMap = new Map<string, ParsedItem[]>();
-  for (const item of items) {
-    if (item.freeform) continue;
-    const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}|${item.onOffline ?? ""}`;
-    const group = keyMap.get(key) ?? [];
-    group.push(item);
-    keyMap.set(key, group);
-  }
-
-  // Search in parallel
-  const searchResults = new Map<
-    string,
-    (ObjektEntry & { frontImage?: string })[]
-  >();
-  await Promise.all(
-    [...keyMap.entries()].map(async ([key, group]) => {
-      const first = group[0];
-      const params = new URLSearchParams();
-      params.append("season", first.season);
-      params.append("q", first.collectionNo);
-      if (first.member) params.append("member", first.member);
-      // Don't filter by on_offline in the search — get all variants and pick the right one below
-      const results = await searchObjekts(params);
-      searchResults.set(key, results);
-    }),
-  );
-
-  // Map each original item to its resolved entry
   return items.map((item) => {
-    const freeform = resolvedFreeform.get(item);
-    if (freeform) return freeform;
+    if (item.freeform) {
+      return { parsed: item, entry: null, imageUrl: null };
+    }
 
-    const key = `${item.season}|${item.collectionNo}|${item.member ?? ""}|${item.onOffline ?? ""}`;
-    const results = searchResults.get(key) ?? [];
-
-    // Filter to exact collectionNo match; if onOffline was specified, require that variant
-    const matches = results.filter((r) => {
-      const suffix = r.collectionNo.slice(-1).toLowerCase();
+    // Filter to exact collectionNo match (season + digits, ignoring the a/z
+    // online/offline suffix); if onOffline was specified, require that variant.
+    const matches = catalog.filter((row) => {
+      if (row.season !== item.season) return false;
+      const suffix = row.collectionNo.slice(-1).toLowerCase();
       const digits = /[az]/.test(suffix)
-        ? r.collectionNo.slice(0, -1)
-        : r.collectionNo;
+        ? row.collectionNo.slice(0, -1)
+        : row.collectionNo;
       if (digits !== item.collectionNo) return false;
       if (item.onOffline) {
-        const rOnOffline =
+        const rowOnOffline =
           suffix === "a" ? "online" : suffix === "z" ? "offline" : null;
-        return rOnOffline === item.onOffline;
+        return rowOnOffline === item.onOffline;
       }
       return true;
     });
@@ -94,12 +52,9 @@ export async function resolveForPoster(
     }
 
     // If member specified, find exact match
-    let match: (ObjektEntry & { frontImage?: string }) | undefined;
-    if (item.member) {
-      match = matches.find((m) => m.member === item.member);
-    } else {
-      match = matches[0];
-    }
+    const match = item.member
+      ? matches.find((m) => m.member === item.member)
+      : matches[0];
 
     if (!match) {
       return {
