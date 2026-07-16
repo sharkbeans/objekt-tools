@@ -9,6 +9,7 @@ import {
   Search,
   Settings,
 } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -285,9 +286,11 @@ export default function LinkCosmoPage() {
                   {/* profile row */}
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <img
+                      <Image
                         src="/user.png"
                         alt=""
+                        width={48}
+                        height={48}
                         className="w-12 h-12 rounded-full shrink-0 object-cover"
                       />
                       <span className="text-base font-semibold text-foreground ring-2 ring-amber-400 animate-pulse shadow-[0_0_8px_3px_rgba(251,191,36,0.5)] rounded px-1">
@@ -393,9 +396,11 @@ export default function LinkCosmoPage() {
                 {/* profile row */}
                 <div className="flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <img
+                    <Image
                       src="/user.png"
                       alt=""
+                      width={48}
+                      height={48}
                       className="w-12 h-12 rounded-full shrink-0 object-cover"
                     />
                     <span className="text-base font-semibold text-foreground">
@@ -504,9 +509,11 @@ export default function LinkCosmoPage() {
                   </div>
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <img
+                      <Image
                         src="/user.png"
                         alt=""
+                        width={48}
+                        height={48}
                         className="w-12 h-12 rounded-full shrink-0 object-cover"
                       />
                       <span className="text-base font-semibold text-foreground">
@@ -549,9 +556,11 @@ export default function LinkCosmoPage() {
                   </div>
                   {/* avatar */}
                   <div className="flex flex-col items-center gap-1.5 pt-5 pb-3">
-                    <img
+                    <Image
                       src="/user.png"
                       alt=""
+                      width={64}
+                      height={64}
                       className="w-16 h-16 rounded-full object-cover"
                     />
                     <span className="text-xs text-muted-foreground">
@@ -669,9 +678,11 @@ export default function LinkCosmoPage() {
                   </div>
                   {/* avatar */}
                   <div className="flex flex-col items-center gap-1.5 pt-5 pb-3">
-                    <img
+                    <Image
                       src="/user.png"
                       alt=""
+                      width={64}
+                      height={64}
                       className="w-16 h-16 rounded-full object-cover"
                     />
                     <span className="text-xs text-muted-foreground">

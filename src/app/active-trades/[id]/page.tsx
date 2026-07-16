@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
-import { Fragment, use, useEffect, useRef, useState } from "react";
+import { Fragment, use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DiscordNudge } from "@/components/discord-nudge";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
@@ -976,23 +976,7 @@ export default function ActiveTradePage({
     }
   }, [queryClient, trade]);
 
-  // On page focus/visibility restore, trigger a check-transfers if trade is active
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState !== "visible") return;
-      const status = queryClient.getQueryData<ActiveTrade>([
-        "active-trade",
-        id,
-      ])?.status;
-      if (!status || !["pending", "accepted", "partial"].includes(status))
-        return;
-      runCheckTransfers(true);
-    }
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [id, queryClient, runCheckTransfers]);
-
-  function startCooldownDisplay() {
+  const startCooldownDisplay = useCallback(() => {
     if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
     const end = Date.now() + CHECK_TRANSFERS_COOLDOWN_MS;
     setCheckCooldown(Math.ceil((end - Date.now()) / 1000));
@@ -1008,34 +992,53 @@ export default function ActiveTradePage({
         setCheckCooldown(remaining);
       }
     }, 500);
-  }
+  }, []);
 
-  async function runCheckTransfers(silent = false) {
-    const now = Date.now();
-    if (now - lastCheckRef.current < CHECK_TRANSFERS_COOLDOWN_MS) return;
-    lastCheckRef.current = now;
-    startCooldownDisplay();
+  const runCheckTransfers = useCallback(
+    async (silent = false) => {
+      const now = Date.now();
+      if (now - lastCheckRef.current < CHECK_TRANSFERS_COOLDOWN_MS) return;
+      lastCheckRef.current = now;
+      startCooldownDisplay();
 
-    const res = await fetch(`/api/active-trades/${id}/check-transfers`, {
-      method: "POST",
-    });
-    if (!res.ok) {
-      if (!silent) toast.error("Failed to check transfers");
-      return;
-    }
-    const data = await res.json();
-    if (!silent) {
-      if (data.skipped) {
-        toast.info("Checked just now — try again in a few seconds.");
-      } else if (data.updated > 0) {
-        toast.success(`${data.updated} transfer(s) detected.`);
-      } else {
-        toast.info("No new transfers detected yet.");
+      const res = await fetch(`/api/active-trades/${id}/check-transfers`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        if (!silent) toast.error("Failed to check transfers");
+        return;
       }
+      const data = await res.json();
+      if (!silent) {
+        if (data.skipped) {
+          toast.info("Checked just now — try again in a few seconds.");
+        } else if (data.updated > 0) {
+          toast.success(`${data.updated} transfer(s) detected.`);
+        } else {
+          toast.info("No new transfers detected yet.");
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
+      queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", id] });
+    },
+    [id, queryClient, startCooldownDisplay],
+  );
+
+  // On page focus/visibility restore, trigger a check-transfers if trade is active
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      const status = queryClient.getQueryData<ActiveTrade>([
+        "active-trade",
+        id,
+      ])?.status;
+      if (!status || !["pending", "accepted", "partial"].includes(status))
+        return;
+      runCheckTransfers(true);
     }
-    queryClient.invalidateQueries({ queryKey: ["active-trade", id] });
-    queryClient.invalidateQueries({ queryKey: ["trade-transfer-logs", id] });
-  }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [id, queryClient, runCheckTransfers]);
 
   async function handleAccept() {
     const res = await fetch(`/api/active-trades/${id}/accept`, {

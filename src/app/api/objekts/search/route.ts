@@ -1,7 +1,7 @@
 import type { SQL } from "drizzle-orm";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { resolveObjektMemberAlias } from "@/lib/objekt-search";
 import { getCached } from "@/lib/server-cache";
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     `objekts:search:v2:${normalizeCacheKey(params)}`,
     5 * 60_000,
     () =>
-      indexer
+      mirror
         .select({
           collectionId: collections.collectionId,
           artist: collections.artist,

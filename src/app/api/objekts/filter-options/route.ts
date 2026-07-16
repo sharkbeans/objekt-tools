@@ -1,6 +1,6 @@
 import { asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import {
   buildFilterOptions,
@@ -15,7 +15,7 @@ export async function GET() {
   try {
     const rows = await getCached("objekts:filter-options:v1", 10 * 60_000, () =>
       withTimeout(
-        indexer
+        mirror
           .selectDistinct({
             artist: collections.artist,
             member: collections.member,

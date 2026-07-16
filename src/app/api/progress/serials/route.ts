@@ -1,7 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import type { ProgressSerialsResponse } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     `progress:serials:v1:${address.toLowerCase()}:${collectionId}`,
     60_000,
     () =>
-      indexer
+      mirror
         .select({
           serial: objekts.serial,
           objektId: objekts.id,

@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, XIcon } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
@@ -83,11 +84,31 @@ export function ObjektGridPicker({
       (entry.quantity ?? 1) > 1 ? entry : { ...entry, quantity: undefined },
     );
   }, [combineSelectedDuplicates, selected]);
+  const itemsResetKey = useMemo(
+    () =>
+      items
+        .map(
+          (entry) =>
+            entry.objektId ?? `${entry.collectionId}:${entry.serial ?? ""}`,
+        )
+        .join("|"),
+    [items],
+  );
+  const loadingSkeletonKeys = useMemo(
+    () =>
+      Array.from(
+        { length: pageSize },
+        (_, index) => `grid-skeleton-${index + 1}`,
+      ),
+    [pageSize],
+  );
 
   // Reset to page 1 when items change (e.g. filter/search)
   useEffect(() => {
-    setPage(1);
-  }, [items.length]);
+    if (itemsResetKey || items.length === 0) {
+      setPage(1);
+    }
+  }, [items.length, itemsResetKey]);
 
   // Clamp page if it exceeds total after filtering
   const safePage = Math.min(page, totalPages);
@@ -145,16 +166,18 @@ export function ObjektGridPicker({
         )}
         style={gridStyle}
       >
-        {entries.map((entry, i) => {
+        {entries.map((entry) => {
           const sel = isSelected(entry);
           const showPickerState = variant === "picker" && sel;
           const url = entry.thumbnailImage;
-          const key = compareBySerial
-            ? `${entry.collectionId}-${entry.serial}`
-            : entry.collectionId;
+          const key =
+            entry.objektId ??
+            (entry.serial != null
+              ? `${entry.collectionId}-${entry.serial}`
+              : entry.collectionId);
           return (
             <button
-              key={`${keyPrefix}-${key}-${i}`}
+              key={`${keyPrefix}-${key}`}
               type="button"
               className={cn(
                 "relative rounded-sm overflow-hidden focus:outline-none ring-2 ring-inset ring-transparent transition-colors",
@@ -163,12 +186,19 @@ export function ObjektGridPicker({
               onClick={() => handleTap(entry)}
             >
               {url ? (
-                <img
-                  src={url}
-                  alt={entry.collectionId}
-                  className="w-full aspect-photocard object-cover"
-                  loading="lazy"
-                />
+                <div className="relative w-full aspect-photocard">
+                  <Image
+                    src={url}
+                    alt={entry.collectionId}
+                    fill
+                    className="object-cover"
+                    sizes={
+                      perRow !== undefined
+                        ? `${Math.round(100 / perRow)}vw`
+                        : "(min-width: 640px) 20vw, 33vw"
+                    }
+                  />
+                </div>
               ) : (
                 <div className="w-full aspect-photocard bg-muted flex items-center justify-center text-[10px] text-muted-foreground p-1 text-center">
                   {entry.member} {entry.collectionNo}
@@ -228,9 +258,9 @@ export function ObjektGridPicker({
         )}
         style={gridStyle}
       >
-        {Array.from({ length: pageSize }).map((_, i) => (
+        {loadingSkeletonKeys.map((key) => (
           <div
-            key={i}
+            key={key}
             className="aspect-photocard rounded-sm bg-muted animate-pulse"
           />
         ))}

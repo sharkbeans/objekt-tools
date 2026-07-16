@@ -5,8 +5,10 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: objekt_trade
+      MIRROR_POSTGRES_DB: ${MIRROR_POSTGRES_DB:-indexer_mirror}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -80,6 +82,7 @@ services:
       DISCORD_INVITE_URL: ${DISCORD_INVITE_URL:-}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       INDEXER_DATABASE_URL: ${INDEXER_DATABASE_URL:-}
+      MIRROR_DATABASE_URL: ${MIRROR_DATABASE_URL:-}
       REMBG_SERVICE_URL: ${REMBG_SERVICE_URL:-http://rembg:7000}
       REMBG_MODEL: ${REMBG_MODEL:-u2net_human_seg}
       PUSHER_APP_ID: ${PUSHER_APP_ID:-}
@@ -97,6 +100,9 @@ services:
   #                   verifies open trades in small stale-first batches)
   #   "*/2 * * * *" → /api/cron/refresh-cosmo-token   (every 2 min, keeps the
   #                   Cosmo token chain alive so it never expires)
+  #   "*/2 * * * *" → /api/cron/sync-indexer          (every 2 min, syncs the
+  #                   local indexer mirror; no-ops until MIRROR_DATABASE_URL
+  #                   is set — see Part 2 indexer-mirror plan)
   cron:
     image: alpine:3.20
     restart: unless-stopped
@@ -114,6 +120,7 @@ services:
         */15 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/prune-stale-haves
         */10 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/check-trade-availability
         */2 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/refresh-cosmo-token
+        */2 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/sync-indexer
         EOF
         exec crond -f -l 2
 

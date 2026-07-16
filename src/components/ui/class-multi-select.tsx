@@ -50,7 +50,7 @@ function GroupedMultiSelect({
     }
   }
 
-  function clear(e: React.MouseEvent) {
+  function clear(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
     onChange([]);
   }
@@ -83,9 +83,9 @@ function GroupedMultiSelect({
             {value.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : decodedLabels.length <= 2 ? (
-              decodedLabels.map((label, i) => (
+              decodedLabels.map((label) => (
                 <Badge
-                  key={i}
+                  key={label}
                   variant="secondary"
                   className="text-xs px-1.5 py-0"
                 >
@@ -100,15 +100,14 @@ function GroupedMultiSelect({
           </span>
           <span className="flex items-center gap-0.5 ml-1 shrink-0">
             {value.length > 0 && (
-              <span
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
                 onClick={clear}
-                onKeyDown={(e) => e.key === "Enter" && clear(e as any)}
                 className="text-muted-foreground hover:text-foreground rounded p-0.5"
+                aria-label="Clear selection"
               >
                 <XIcon className="h-3 w-3" />
-              </span>
+              </button>
             )}
             <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
           </span>

@@ -5,6 +5,14 @@ import { db } from "./db";
 import * as schema from "./db/schema";
 import { allOrigins, rootDomain, subdomainsEnabled } from "./sections";
 
+function getRequiredEnv(name: "DISCORD_CLIENT_ID" | "DISCORD_CLIENT_SECRET") {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -28,8 +36,8 @@ export const auth = betterAuth({
     : {}),
   socialProviders: {
     discord: {
-      clientId: process.env.DISCORD_CLIENT_ID!,
-      clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+      clientId: getRequiredEnv("DISCORD_CLIENT_ID"),
+      clientSecret: getRequiredEnv("DISCORD_CLIENT_SECRET"),
     },
   },
   databaseHooks: {
@@ -42,7 +50,7 @@ export const auth = betterAuth({
             where: eq(schema.account.userId, session.userId),
             columns: { accountId: true, providerId: true },
           });
-          if (!account || account.providerId !== "discord") return;
+          if (account?.providerId !== "discord") return;
 
           // Discord's accountId is the snowflake ID; username is stored in user.name
           // by Better Auth automatically. We just need to copy them to our columns.

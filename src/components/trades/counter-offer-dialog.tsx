@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Minus, Plus, XIcon } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -139,7 +140,14 @@ function ObjektCard({
     <div className="flex flex-col items-center gap-1">
       <div className="relative w-16 h-auto rounded-md border overflow-hidden">
         {url ? (
-          <img src={url} alt={objekt.collectionId} className="w-16 h-auto" />
+          <Image
+            src={url}
+            alt={objekt.collectionId}
+            width={64}
+            height={88}
+            className="w-16 h-auto"
+            unoptimized
+          />
         ) : (
           <div className="w-16 h-[88px] bg-muted animate-pulse" />
         )}
@@ -226,8 +234,7 @@ export function CounterOfferDialog({
       setMySelected((prev) => enrich(prev));
       setTheirSelected((prev) => enrich(prev));
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mySides, theirSides]);
 
   // Track original items to show diff
   const originalMyIds = new Set(mySides.map((s) => s.objektId));
@@ -281,14 +288,18 @@ export function CounterOfferDialog({
     }
 
     // Check if anything actually changed
-    const myIds = new Set(mySelected.map((o) => o.objektId));
-    const theirIds = new Set(theirSelected.map((o) => o.objektId));
+    const myIds = new Set(
+      mySelected.map((o) => o.objektId).filter((id): id is string => !!id),
+    );
+    const theirIds = new Set(
+      theirSelected.map((o) => o.objektId).filter((id): id is string => !!id),
+    );
     const sameMyObjekts =
       myIds.size === originalMyIds.size &&
-      [...myIds].every((id) => originalMyIds.has(id!));
+      [...myIds].every((id) => originalMyIds.has(id));
     const sameTheirObjekts =
       theirIds.size === originalTheirIds.size &&
-      [...theirIds].every((id) => originalTheirIds.has(id!));
+      [...theirIds].every((id) => originalTheirIds.has(id));
     if (sameMyObjekts && sameTheirObjekts) {
       setErrors((e) => ({
         ...e,
@@ -343,12 +354,16 @@ export function CounterOfferDialog({
   }
 
   // Compute diff for display
-  const myAdded = mySelected.filter((o) => !originalMyIds.has(o.objektId!));
+  const myAdded = mySelected.filter(
+    (o): o is ObjektEntry & { objektId: string } =>
+      !!o.objektId && !originalMyIds.has(o.objektId),
+  );
   const myRemoved = mySides.filter(
     (s) => !mySelected.some((o) => o.objektId === s.objektId),
   );
   const theirAdded = theirSelected.filter(
-    (o) => !originalTheirIds.has(o.objektId!),
+    (o): o is ObjektEntry & { objektId: string } =>
+      !!o.objektId && !originalTheirIds.has(o.objektId),
   );
   const theirRemoved = theirSides.filter(
     (s) => !theirSelected.some((o) => o.objektId === s.objektId),

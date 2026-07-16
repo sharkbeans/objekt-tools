@@ -153,14 +153,7 @@ export function ObjektPicker({
     fetchByFilters(filters)
       .then(setFilterResults)
       .finally(() => setLoading(false));
-  }, [
-    filters?.artist.join(","),
-    filters?.member.join(","),
-    filters?.season.join(","),
-    filters?.class.join(","),
-    filters?.on_offline.join(","),
-    filtersActive,
-  ]);
+  }, [filters, filtersActive]);
 
   const effectiveQuery = query.trim() || (filters?.search?.trim() ?? "");
 

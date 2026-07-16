@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type * as React from "react";
@@ -113,9 +114,11 @@ function ObjektList({
                     sideOffset={8}
                     className="z-50 rounded-md border bg-popover p-1 shadow-md"
                   >
-                    <img
+                    <Image
                       src={imgUrl}
                       alt={item.collectionId}
+                      width={96}
+                      height={134}
                       className="w-24 h-auto rounded"
                     />
                   </TooltipPrimitive.Content>
@@ -291,7 +294,7 @@ export default function TradeDetailClient({
       queryClient.invalidateQueries({ queryKey: ["my-trades"] });
       queryClient.invalidateQueries({ queryKey: ["check-availability"] });
     }
-  }, [availabilityData]);
+  }, [availabilityData, id, queryClient, router]);
 
   if (tradeLoading) {
     return (

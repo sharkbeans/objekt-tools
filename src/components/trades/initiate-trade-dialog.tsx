@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Portal } from "radix-ui";
 import { useEffect, useMemo, useState } from "react";
@@ -432,7 +433,14 @@ export function InitiateTradeDialog({
               className="objekt-hover-preview"
               style={{ top: hoverPos.top, left: hoverPos.left }}
             >
-              <img src={hoverImage} alt="" className="w-24 h-auto block" />
+              <Image
+                src={hoverImage}
+                alt=""
+                width={96}
+                height={132}
+                className="w-24 h-auto block"
+                unoptimized
+              />
             </div>
           </Portal.Root>
         )}

@@ -4,6 +4,10 @@ import { and, eq, gte, inArray, ne, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
+// Stays on the remote indexer, never the mirror — this route reads the
+// `transfer` feed for live trade verification, which the mirror doesn't
+// carry and which needs freshness the mirror can't guarantee. See Part 2
+// plan, Phase 6.
 import { indexer } from "@/lib/db/indexer";
 import { collections, transfers } from "@/lib/db/indexer-schema";
 import {

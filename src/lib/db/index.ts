@@ -11,9 +11,17 @@ const globalForDb = globalThis as unknown as {
   db: ReturnType<typeof createDb>;
 };
 
+function getDatabaseUrl() {
+  const value = process.env.DATABASE_URL;
+  if (!value) {
+    throw new Error("Missing required environment variable: DATABASE_URL");
+  }
+  return value;
+}
+
 if (!globalForDb._dbPool) {
   globalForDb._dbPool = new Pool({
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: getDatabaseUrl(),
     max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,

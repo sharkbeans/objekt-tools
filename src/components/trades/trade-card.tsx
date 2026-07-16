@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRightIcon } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -56,8 +57,9 @@ function buildObjektTopUrl(
 ): string {
   const parts: string[] = [];
   if (item.member) {
+    const member = item.member;
     const artist = Object.entries(membersByArtist).find(([, members]) =>
-      members.includes(item.member!),
+      members.includes(member),
     )?.[0];
     if (artist) parts.push(artist);
   }
@@ -96,7 +98,7 @@ function ObjektThumb({ item }: { item: TradeItem }) {
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
-  const thumbRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLButtonElement>(null);
   const fetchedRef = useRef(false);
 
   const ensureImage = useCallback(() => {
@@ -130,7 +132,8 @@ function ObjektThumb({ item }: { item: TradeItem }) {
   if (item.isAny) return null;
 
   return (
-    <div
+    <button
+      type="button"
       ref={thumbRef}
       className="w-12 h-18 rounded bg-muted/40 border border-border/50 shrink-0 overflow-hidden"
       onMouseEnter={() => {
@@ -139,14 +142,19 @@ function ObjektThumb({ item }: { item: TradeItem }) {
         setHover(true);
       }}
       onMouseLeave={() => setHover(false)}
+      tabIndex={-1}
+      aria-label={formatShortLabel(item)}
     >
       {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={item.collectionId}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
+        <div className="relative h-full w-full">
+          <Image
+            src={imageUrl}
+            alt={item.collectionId}
+            fill
+            className="object-cover"
+            unoptimized
+          />
+        </div>
       ) : (
         <div
           className="w-full h-full flex items-center justify-center"
@@ -161,15 +169,18 @@ function ObjektThumb({ item }: { item: TradeItem }) {
             className="fixed z-50 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
             style={{ top: rect.top, right: window.innerWidth - rect.left + 8 }}
           >
-            <img
+            <Image
               src={imageUrl}
               alt={item.collectionId}
+              width={128}
+              height={176}
               className="w-32 h-auto block"
+              unoptimized
             />
           </div>,
           document.body,
         )}
-    </div>
+    </button>
   );
 }
 
@@ -269,12 +280,17 @@ function ObjektLabel({
   const label = formatObjektLabel(item, showSerial);
 
   return (
-    <span
-      className="text-xs relative cursor-default flex items-center w-full"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => setShow(false)}
-    >
-      <span className="flex items-center gap-1 min-w-0">{label.name}</span>
+    <div className="text-xs relative flex items-center w-full">
+      <button
+        type="button"
+        className="flex min-w-0 items-center gap-1 text-left"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setShow(false)}
+        tabIndex={-1}
+        aria-label={label.name}
+      >
+        <span className="min-w-0">{label.name}</span>
+      </button>
       {label.right && (
         <span className="text-muted-foreground ml-auto pl-2 shrink-0">
           {label.right}
@@ -294,6 +310,7 @@ function ObjektLabel({
         title="View on Objekt.top"
       >
         <svg
+          aria-hidden="true"
           xmlns="http://www.w3.org/2000/svg"
           width="10"
           height="10"
@@ -311,14 +328,17 @@ function ObjektLabel({
       </button>
       {show && imageUrl && (
         <span className="absolute left-0 bottom-full mb-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background">
-          <img
+          <Image
             src={imageUrl}
             alt={item.collectionId}
+            width={96}
+            height={132}
             className="w-24 h-auto block"
+            unoptimized
           />
         </span>
       )}
-    </span>
+    </div>
   );
 }
 

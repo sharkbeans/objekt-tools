@@ -109,6 +109,8 @@ export function ProofshotEditor() {
   const canvasTabsPillRef = useRef<HTMLSpanElement>(null);
   const canvasTabsFirstPaint = useRef(true);
   const aspectMenuContainerRef = useRef<HTMLDivElement>(null);
+  const handleSaveRef = useRef<() => void>(() => {});
+  const handleResetRef = useRef<() => void>(() => {});
 
   const [editMode, setEditMode] = useState<EditMode>("photocard");
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -131,6 +133,9 @@ export function ProofshotEditor() {
     useState<AspectRatio>("3:4");
 
   const isAndroid = () => /Android/i.test(navigator.userAgent);
+  const triggerPhotocardUpload = useCallback(() => {
+    pcFileRef.current?.click();
+  }, []);
 
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -155,8 +160,7 @@ export function ProofshotEditor() {
     return () => {
       mgr.stopCamera();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [triggerPhotocardUpload]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -170,11 +174,11 @@ export function ProofshotEditor() {
       if (!mgr) return;
       if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        handleSave();
+        handleSaveRef.current();
       }
       if (e.key === "r" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        handleReset();
+        handleResetRef.current();
       }
       if (e.key === "h") mgr.flipHorizontal();
       if (e.key === "v") mgr.flipVertical();
@@ -183,7 +187,6 @@ export function ProofshotEditor() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -215,11 +218,13 @@ export function ProofshotEditor() {
     });
   }, []);
 
-  const moveTabsPill = useCallback((animate: boolean) => {
+  const moveTabsPill = useCallback((activeMode: EditMode, animate: boolean) => {
     const bar = tabsBarRef.current;
     const pill = tabsPillRef.current;
     if (!bar || !pill) return;
-    const activeTab = bar.querySelector<HTMLElement>('[aria-selected="true"]');
+    const activeTab = bar.querySelector<HTMLElement>(
+      `[data-mode="${activeMode}"]`,
+    );
     if (!activeTab) return;
     if (!animate) {
       pill.style.transition = "none";
@@ -233,51 +238,56 @@ export function ProofshotEditor() {
     }
   }, []);
 
-  const moveCanvasTabsPill = useCallback((animate: boolean) => {
-    const bar = canvasTabsBarRef.current;
-    const pill = canvasTabsPillRef.current;
-    if (!bar || !pill) return;
-    const activeTab = bar.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (!activeTab) return;
-    if (!animate) {
-      pill.style.transition = "none";
-      pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
-      pill.style.width = `${activeTab.offsetWidth}px`;
-      void pill.offsetWidth;
-      pill.style.transition = "";
-    } else {
-      pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
-      pill.style.width = `${activeTab.offsetWidth}px`;
-    }
-  }, []);
+  const moveCanvasTabsPill = useCallback(
+    (activeMode: EditMode, animate: boolean) => {
+      const bar = canvasTabsBarRef.current;
+      const pill = canvasTabsPillRef.current;
+      if (!bar || !pill) return;
+      const activeTab = bar.querySelector<HTMLElement>(
+        `[data-mode="${activeMode}"]`,
+      );
+      if (!activeTab) return;
+      if (!animate) {
+        pill.style.transition = "none";
+        pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+        pill.style.width = `${activeTab.offsetWidth}px`;
+        void pill.offsetWidth;
+        pill.style.transition = "";
+      } else {
+        pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+        pill.style.width = `${activeTab.offsetWidth}px`;
+      }
+    },
+    [],
+  );
 
   // Tabs pill position
   useLayoutEffect(() => {
     if (tabsFirstPaint.current) {
       tabsFirstPaint.current = false;
-      moveTabsPill(false);
+      moveTabsPill(editMode, false);
     } else {
-      moveTabsPill(true);
+      moveTabsPill(editMode, true);
     }
   }, [editMode, moveTabsPill]);
 
   useLayoutEffect(() => {
     if (canvasTabsFirstPaint.current) {
       canvasTabsFirstPaint.current = false;
-      moveCanvasTabsPill(false);
+      moveCanvasTabsPill(editMode, false);
     } else {
-      moveCanvasTabsPill(true);
+      moveCanvasTabsPill(editMode, true);
     }
   }, [editMode, moveCanvasTabsPill]);
 
   useEffect(() => {
     const handler = () => {
-      moveTabsPill(false);
-      moveCanvasTabsPill(false);
+      moveTabsPill(editMode, false);
+      moveCanvasTabsPill(editMode, false);
     };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
-  }, [moveTabsPill, moveCanvasTabsPill]);
+  }, [editMode, moveTabsPill, moveCanvasTabsPill]);
 
   // Close aspect menu on outside click
   useEffect(() => {
@@ -293,10 +303,6 @@ export function ProofshotEditor() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [aspectMenuOpen]);
-
-  const triggerPhotocardUpload = useCallback(() => {
-    pcFileRef.current?.click();
-  }, []);
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -343,7 +349,11 @@ export function ProofshotEditor() {
     }
     try {
       loading("Loading background…");
-      const mgr = managerRef.current!;
+      const mgr = managerRef.current;
+      if (!mgr) {
+        toast.error("Editor not ready");
+        return;
+      }
       if (mgr.camera.active) {
         mgr.stopCamera();
         exitCameraMode();
@@ -372,9 +382,14 @@ export function ProofshotEditor() {
     }
     try {
       loading("Loading photocard…");
-      await managerRef.current!.loadPhotocard(file);
+      const mgr = managerRef.current;
+      if (!mgr) {
+        toast.error("Editor not ready");
+        return;
+      }
+      await mgr.loadPhotocard(file);
       setIsFrameMode(false);
-      setShowToploader(managerRef.current!.photocard.showToploader);
+      setShowToploader(mgr.photocard.showToploader);
       syncPcSliders();
       toast.success("Photocard loaded");
     } catch {
@@ -395,7 +410,11 @@ export function ProofshotEditor() {
       toast.error("Please drop image or video files");
       return;
     }
-    const mgr = managerRef.current!;
+    const mgr = managerRef.current;
+    if (!mgr) {
+      toast.error("Editor not ready");
+      return;
+    }
     if (files[0]) {
       await mgr.loadBackground(files[0]);
       syncBgSliders();
@@ -431,10 +450,20 @@ export function ProofshotEditor() {
     if (!videoRef.current) return false;
     try {
       loading("Starting camera…");
-      await managerRef.current!.startCamera(videoRef.current);
+      const mgr = managerRef.current;
+      if (!mgr) {
+        toast.error("Editor not ready");
+        doneLoading();
+        return false;
+      }
+      await mgr.startCamera(videoRef.current);
       setIsCameraActive(true);
       setShowCameraControls(true);
-      const container = containerRef.current!;
+      const container = containerRef.current;
+      if (!container) {
+        doneLoading();
+        return false;
+      }
       container.classList.add("camera-active");
       applyAspectRatioClass(container, cameraAspectRatio);
       setTimeout(() => {
@@ -473,12 +502,16 @@ export function ProofshotEditor() {
   };
 
   const handleCameraCapture = () => {
-    const mgr = managerRef.current!;
+    const mgr = managerRef.current;
+    const container = containerRef.current;
+    if (!mgr || !container) {
+      toast.error("Editor not ready");
+      return;
+    }
     setCanvasAspectRatio(cameraAspectRatio);
     mgr.captureFrame();
     setShowCameraControls(false);
     setIsCameraActive(false);
-    const container = containerRef.current!;
     container.classList.remove("camera-active");
     container.classList.add("preview-mode");
     applyAspectRatioClass(container, cameraAspectRatio);
@@ -533,7 +566,8 @@ export function ProofshotEditor() {
     const next =
       ratios[(ratios.indexOf(cameraAspectRatio) + 1) % ratios.length];
     setCameraAspectRatio(next);
-    const container = containerRef.current!;
+    const container = containerRef.current;
+    if (!container) return;
     applyAspectRatioClass(container, next);
     setTimeout(() => managerRef.current?.resizeCanvas(), 100);
   };
@@ -553,10 +587,12 @@ export function ProofshotEditor() {
   const handleCameraDiscard = async () => {
     setShowActionButtons(false);
     setHasBg(false);
-    managerRef.current!.backgroundImage = null;
+    const mgr = managerRef.current;
+    if (!mgr) return;
+    mgr.backgroundImage = null;
     if (isMobileRef.current) {
       setShowMobileHome(true);
-      managerRef.current!.render();
+      mgr.render();
     } else {
       const started = await initCamera();
       if (!started) toast.info("Ready for new proofshot");
@@ -576,10 +612,15 @@ export function ProofshotEditor() {
     syncPcSliders();
     toast.success("Canvas reset");
   };
+  handleResetRef.current = handleReset;
 
   // ── Save/export ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    const mgr = managerRef.current!;
+    const mgr = managerRef.current;
+    if (!mgr) {
+      toast.error("Editor not ready");
+      return;
+    }
     if (!mgr.backgroundImage) {
       toast.error("Please add a background image before saving");
       return;
@@ -650,9 +691,14 @@ export function ProofshotEditor() {
       doneLoading();
     }
   };
+  handleSaveRef.current = handleSave;
 
   const handleSaveAsVideo = async () => {
-    const mgr = managerRef.current!;
+    const mgr = managerRef.current;
+    if (!mgr) {
+      toast.error("Editor not ready");
+      return;
+    }
     if (!mgr.backgroundImage) {
       toast.error("Please add a background image before saving");
       return;
@@ -676,14 +722,16 @@ export function ProofshotEditor() {
     setShowSaveModal(false);
     setShowActionButtons(false);
     setHasBg(false);
-    managerRef.current!.backgroundImage = null;
+    const mgr = managerRef.current;
+    if (!mgr) return;
+    mgr.backgroundImage = null;
     if (isMobileRef.current) {
       setShowMobileHome(true);
-      managerRef.current!.render();
+      mgr.render();
     } else {
       const started = await initCamera();
       if (!started) {
-        managerRef.current!.render();
+        mgr.render();
         toast.info("Ready for new proofshot");
       }
     }
@@ -776,6 +824,7 @@ export function ProofshotEditor() {
         onChange={handlePcUpload}
       />
       {/* Hidden camera video */}
+      {/* biome-ignore lint/a11y/useMediaCaption: Hidden camera preview has no audio and is never presented as media content. */}
       <video ref={videoRef} autoPlay playsInline className="hidden" />
 
       <div className="flex flex-col md:flex-row h-full overflow-hidden gap-4">
@@ -795,6 +844,7 @@ export function ProofshotEditor() {
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={handleLaunchCamera}
                   className="flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-lg text-lg font-bold hover:bg-primary/90 transition-colors min-w-[200px] justify-center shadow-lg"
                 >
@@ -806,8 +856,9 @@ export function ProofshotEditor() {
           )}
 
           {/* Canvas container */}
-          <div
+          <section
             ref={containerRef}
+            aria-label="Proofshot canvas"
             className={containerClasses}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
@@ -832,6 +883,8 @@ export function ProofshotEditor() {
                 {(["photocard", "background"] as EditMode[]).map((mode) => (
                   <button
                     key={mode}
+                    type="button"
+                    data-mode={mode}
                     role="tab"
                     onClick={() => handleEditModeChange(mode)}
                     aria-selected={editMode === mode}
@@ -861,6 +914,7 @@ export function ProofshotEditor() {
                   {/* Top row */}
                   <div className="flex items-center justify-between w-full mb-3 pointer-events-auto">
                     <button
+                      type="button"
                       onClick={() => {
                         managerRef.current?.resetPhotocard();
                         syncPcSliders();
@@ -871,6 +925,7 @@ export function ProofshotEditor() {
                       <RefreshCw className="w-4 h-4" /> Reset
                     </button>
                     <button
+                      type="button"
                       onClick={handleCameraCapture}
                       className="w-[70px] h-[70px] rounded-full border-[3px] border-white/95 bg-transparent flex items-center justify-center active:scale-[0.88] transition-transform shrink-0"
                       style={{
@@ -882,6 +937,7 @@ export function ProofshotEditor() {
                       <div className="w-[54px] h-[54px] rounded-full bg-white" />
                     </button>
                     <button
+                      type="button"
                       onClick={handleCameraAspectToggle}
                       className="bg-[rgba(100,100,100,0.7)] text-white px-3 h-11 min-w-[50px] rounded-md text-sm font-semibold font-mono backdrop-blur-sm active:scale-95 transition-transform"
                     >
@@ -892,6 +948,7 @@ export function ProofshotEditor() {
                   {/* Zoom controls */}
                   <div className="flex items-center justify-center gap-2 mt-1 mb-1 pointer-events-auto">
                     <button
+                      type="button"
                       onClick={handleCameraZoomOut}
                       className="w-8 h-8 flex items-center justify-center text-white active:scale-90 transition-transform"
                     >
@@ -911,6 +968,7 @@ export function ProofshotEditor() {
                       className="w-[100px] accent-white"
                     />
                     <button
+                      type="button"
                       onClick={handleCameraZoomIn}
                       className="w-8 h-8 flex items-center justify-center text-white active:scale-90 transition-transform"
                     >
@@ -921,6 +979,7 @@ export function ProofshotEditor() {
 
                 {/* Bottom-left: upload background */}
                 <button
+                  type="button"
                   onClick={() => bgFileRef.current?.click()}
                   className="fixed bottom-6 left-6 w-[50px] h-[50px] rounded-full bg-black/60 border border-white/30 text-white flex items-center justify-center backdrop-blur-sm active:scale-90 active:bg-black/80 transition-transform z-[1002]"
                   aria-label="Upload background"
@@ -929,6 +988,7 @@ export function ProofshotEditor() {
                 </button>
                 {/* Bottom-right: change objekt photocard */}
                 <button
+                  type="button"
                   onClick={triggerPhotocardUpload}
                   className="fixed bottom-6 right-6 w-[50px] h-[50px] rounded-full bg-black/60 border border-white/30 text-white flex items-center justify-center backdrop-blur-sm active:scale-90 active:bg-black/80 transition-transform z-[1002]"
                   aria-label="Change objekt image"
@@ -937,18 +997,20 @@ export function ProofshotEditor() {
                 </button>
               </>
             )}
-          </div>
+          </section>
 
           {/* Camera action buttons (after capture) */}
           {showActionButtons && (
             <div className="flex gap-3 justify-center">
               <button
+                type="button"
                 onClick={handleCameraDiscard}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium"
               >
                 <RotateCcw className="w-4 h-4" /> Retake
               </button>
               <button
+                type="button"
                 onClick={handleCameraSave}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
               >
@@ -961,6 +1023,7 @@ export function ProofshotEditor() {
           {FRAME_FEATURE_ENABLED && hasBg && !isCameraActive && (
             <div className="flex md:hidden gap-2 justify-center">
               <button
+                type="button"
                 onClick={handleCreateFrame}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium"
               >
@@ -968,6 +1031,7 @@ export function ProofshotEditor() {
               </button>
               {isFrameMode && (
                 <button
+                  type="button"
                   onClick={handleRestoreFrameSource}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium"
                 >
@@ -992,6 +1056,7 @@ export function ProofshotEditor() {
               {/* Aspect ratio selector */}
               <div ref={aspectMenuContainerRef} className="relative">
                 <button
+                  type="button"
                   onClick={() => setAspectMenuOpen((o) => !o)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm hover:bg-secondary/80"
                 >
@@ -1003,6 +1068,7 @@ export function ProofshotEditor() {
                     {(["3:4", "9:16", "1:1"] as AspectRatio[]).map((r) => (
                       <button
                         key={r}
+                        type="button"
                         onClick={() => {
                           applyCanvasAspectRatio(r);
                           setAspectMenuOpen(false);
@@ -1027,6 +1093,7 @@ export function ProofshotEditor() {
             <div
               ref={tabsBarRef}
               className="t-tabs proofshot-tabs flex gap-1 bg-secondary/50 p-1 rounded-lg"
+              role="tablist"
             >
               <span
                 ref={tabsPillRef}
@@ -1036,6 +1103,9 @@ export function ProofshotEditor() {
               {(["photocard", "background"] as EditMode[]).map((mode) => (
                 <button
                   key={mode}
+                  type="button"
+                  role="tab"
+                  data-mode={mode}
                   onClick={() => handleEditModeChange(mode)}
                   aria-selected={editMode === mode}
                   className="t-tab flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium"
@@ -1057,6 +1127,7 @@ export function ProofshotEditor() {
               </p>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => bgFileRef.current?.click()}
                   className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80"
                 >
@@ -1064,6 +1135,7 @@ export function ProofshotEditor() {
                   <span className="text-sm">Background</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => initCamera()}
                   className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80 md:hidden"
                 >
@@ -1071,6 +1143,7 @@ export function ProofshotEditor() {
                   <span className="text-sm">Camera</span>
                 </button>
                 <button
+                  type="button"
                   onClick={triggerPhotocardUpload}
                   className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg bg-secondary hover:bg-secondary/80"
                 >
@@ -1128,7 +1201,7 @@ export function ProofshotEditor() {
                   min={-180}
                   max={180}
                   step={1}
-                  display={Math.round(bgSliders.rotation) + "°"}
+                  display={`${Math.round(bgSliders.rotation)}°`}
                   onChange={(v) => {
                     setBgSliders((s) => ({ ...s, rotation: v }));
                     managerRef.current?.updateBackground("rotation", v);
@@ -1136,6 +1209,7 @@ export function ProofshotEditor() {
                 />
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() =>
                       managerRef.current?.flipBackgroundHorizontal()
                     }
@@ -1144,12 +1218,14 @@ export function ProofshotEditor() {
                     <FlipHorizontal className="w-4 h-4" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => managerRef.current?.flipBackgroundVertical()}
                     className="flex-1 flex items-center justify-center gap-1 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
                   >
                     <FlipVertical className="w-4 h-4" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       managerRef.current?.resetBackground();
                       syncBgSliders();
@@ -1210,7 +1286,7 @@ export function ProofshotEditor() {
                   min={-180}
                   max={180}
                   step={1}
-                  display={Math.round(pcSliders.rotation) + "°"}
+                  display={`${Math.round(pcSliders.rotation)}°`}
                   onChange={(v) => {
                     setPcSliders((s) => ({ ...s, rotation: v }));
                     managerRef.current?.updatePhotocard(
@@ -1222,6 +1298,7 @@ export function ProofshotEditor() {
                 {FRAME_FEATURE_ENABLED && (
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={handleCreateFrame}
                       className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
                     >
@@ -1229,6 +1306,7 @@ export function ProofshotEditor() {
                     </button>
                     {isFrameMode && (
                       <button
+                        type="button"
                         onClick={handleRestoreFrameSource}
                         className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
                       >
@@ -1250,12 +1328,14 @@ export function ProofshotEditor() {
                 </div>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={handlePcReset}
                     className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
                   >
                     <RefreshCw className="w-4 h-4" /> Reset
                   </button>
                   <button
+                    type="button"
                     onClick={handlePcReset}
                     className="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-md bg-secondary hover:bg-secondary/80 text-sm"
                   >
@@ -1268,18 +1348,21 @@ export function ProofshotEditor() {
             {/* Actions */}
             <div className="flex flex-col gap-2 pt-2 border-t border-border">
               <button
+                type="button"
                 onClick={handleReset}
                 className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm font-medium"
               >
                 <RefreshCw className="w-4 h-4" /> Reset Canvas
               </button>
               <button
+                type="button"
                 onClick={handleSave}
                 className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold"
               >
                 Save
               </button>
               <button
+                type="button"
                 onClick={handleSaveAsVideo}
                 className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-sm font-medium"
               >
@@ -1319,12 +1402,14 @@ export function ProofshotEditor() {
           </DialogHeader>
           <div className="flex flex-col gap-3 mt-2">
             <button
+              type="button"
               onClick={handleKeepEditing}
               className="flex items-center justify-center gap-2 p-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
             >
               <Edit className="w-4 h-4" /> Keep Editing
             </button>
             <button
+              type="button"
               onClick={handleDiscardImage}
               className="flex items-center justify-center gap-2 p-3 rounded-lg bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium"
             >

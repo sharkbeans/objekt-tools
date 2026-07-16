@@ -447,6 +447,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         setWantsOnly(data.wantsOnly ?? false);
         if (data.cosmoId) {
           setCosmoId(data.cosmoId);
+          setInventoryCount(null);
           setHaveNickname(data.cosmoId);
         }
         setPosterData({
@@ -504,15 +505,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   useEffect(() => {
     if (cosmoId.trim() && haveNickname === null) {
       lastSearchAt.current = Date.now();
+      setInventoryCount(null);
       setHaveNickname(cosmoId.trim());
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cosmoId]);
-
-  // Reset the loaded-inventory count whenever a new fetch is about to start
-  useEffect(() => {
-    setInventoryCount(null);
-  }, [haveNickname]);
+  }, [cosmoId, haveNickname]);
 
   // Fill the display name / cosmoId once we know whose inventory this is
   useEffect(() => {
@@ -541,6 +537,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         return;
       }
       lastSearchAt.current = now;
+      setInventoryCount(null);
       setHaveNickname(trimmed);
     },
     [haveNickname],
@@ -711,8 +708,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     if (!autoSaving) return;
     setAutoSaving(false);
     doSaveAndShare(posterData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSaving]);
+  }, [autoSaving, doSaveAndShare, posterData]);
 
   const handleSaveAndShare = useCallback(async () => {
     // For new posters, require Discord login — show dialog instead of redirecting

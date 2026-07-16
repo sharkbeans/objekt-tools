@@ -6,7 +6,7 @@ import {
   resolveNickname,
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { mergeProgressRollups } from "@/lib/progress/merge";
 import { redis } from "@/lib/redis";
@@ -64,7 +64,7 @@ export async function GET(
 
   const [totals, owned] = await Promise.all([
     getCached("progress:totals:v2", 10 * 60_000, () =>
-      indexer
+      mirror
         .select({
           artist: collections.artist,
           member: collections.member,
@@ -83,7 +83,7 @@ export async function GET(
         ),
     ),
     getCached(`progress:owned:v2:${resolved.address}`, 90_000, () =>
-      indexer
+      mirror
         .select({
           artist: collections.artist,
           member: collections.member,

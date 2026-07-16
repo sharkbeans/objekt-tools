@@ -53,17 +53,18 @@ function formatSection(items: ResolvedPosterItem[]): string {
   }
 
   const memberLines = memberOrder.map((member) => {
-    const group = byMember.get(member)!;
+    const group = byMember.get(member);
+    if (!group) return null;
     const codes = group.order
       .map((code) => {
-        const n = group.counts.get(code)!;
+        const n = group.counts.get(code) ?? 0;
         return n > 1 ? `${code}(x${n})` : code;
       })
       .join(" ");
     return member ? `${member} ${codes}` : codes;
   });
 
-  return [...memberLines, ...freeformLines].join("\n");
+  return [...memberLines.filter(Boolean), ...freeformLines].join("\n");
 }
 
 export function formatPosterAsText(data: PosterData): string {

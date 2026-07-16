@@ -4,6 +4,10 @@
 // the right two addresses — not specifically the serial the parties picked
 // when creating the trade.
 import { and, gte, inArray } from "drizzle-orm";
+// Stays on the remote indexer, never the mirror — matches sides against the
+// live `transfer` feed, which the mirror doesn't carry. `fetchSerials` also
+// stays remote here since fresh mints may not be in the mirror yet. See
+// Part 2 plan, Phase 6.
 import { indexer } from "@/lib/db/indexer";
 import { collections, objekts, transfers } from "@/lib/db/indexer-schema";
 
