@@ -1025,7 +1025,9 @@ export default function ActiveTradePage({
     }
     const data = await res.json();
     if (!silent) {
-      if (data.updated > 0) {
+      if (data.skipped) {
+        toast.info("Checked just now — try again in a few seconds.");
+      } else if (data.updated > 0) {
         toast.success(`${data.updated} transfer(s) detected.`);
       } else {
         toast.info("No new transfers detected yet.");
