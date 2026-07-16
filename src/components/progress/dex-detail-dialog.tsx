@@ -43,7 +43,7 @@ function FlipCard({ collection }: { collection: ProgressCollection }) {
 
   return (
     <TiltCard
-      className="aspect-11/17 w-full select-none rounded perspective-distant"
+      className="aspect-11/17 w-full max-w-56 select-none rounded perspective-distant sm:max-w-none"
       onClick={() => setFlipped((prev) => !prev)}
     >
       <div
@@ -132,10 +132,10 @@ function SerialsTable({
   if (serials.length === 0) return null;
 
   return (
-    <div className="overflow-hidden rounded-md border border-border">
+    <div className="max-h-60 overflow-y-auto rounded-md border border-border">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">
+          <tr className="sticky top-0 border-b border-border bg-muted text-left text-xs text-muted-foreground">
             <th className="px-3 py-2 font-medium">Serial</th>
             <th className="px-3 py-2 font-medium">Token ID</th>
             <th className="px-3 py-2 font-medium">Transferable</th>
@@ -177,7 +177,7 @@ export function DexDetailDialog({ collection, address, onOpenChange }: Props) {
 
   return (
     <Dialog open={c !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl! gap-0 overflow-hidden p-0">
+      <DialogContent className="max-h-[90vh] gap-0 overflow-y-auto p-0 sm:max-w-3xl!">
         {c && (
           <div className="flex flex-col sm:flex-row">
             {/* Card — left */}

@@ -774,7 +774,7 @@ export function MemberDexContent({ nickname, member }: Props) {
       />
 
       <div>
-        <h1 className="text-2xl font-bold">{data.member}</h1>
+        <h1 className="text-xl font-bold sm:text-2xl">{data.member}</h1>
         <p className="text-muted-foreground">
           {totals.owned}/{totals.total} collected
         </p>
