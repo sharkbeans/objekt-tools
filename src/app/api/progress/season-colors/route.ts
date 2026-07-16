@@ -1,7 +1,7 @@
 import { and, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { normalizeArtistId } from "@/lib/artist-utils";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { getCached } from "@/lib/server-cache";
 
@@ -11,7 +11,7 @@ export async function GET() {
       "progress:season-colors",
       24 * 60 * 60_000,
       async () => {
-        const rows = await indexer
+        const rows = await mirror
           .selectDistinctOn([collections.artist, collections.season], {
             artist: collections.artist,
             season: collections.season,

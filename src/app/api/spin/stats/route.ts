@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// Stays on the remote indexer, never the mirror — transfer-only raw SQL,
+// which the mirror doesn't carry. See Part 2 plan, Phase 6.
 import { indexerPool } from "@/lib/db/indexer";
 import { COSMO_SPIN_ADDRESS, ZERO_ADDRESS } from "@/lib/indexer-constants";
 import { getCached } from "@/lib/server-cache";

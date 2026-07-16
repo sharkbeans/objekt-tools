@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { and, eq, inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { cosmoAccount, poster, posterHave } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
@@ -67,7 +67,7 @@ export async function POST(
 
   const allCollectionIds = [...new Set(checkable.map((h) => h.collectionId!))];
 
-  const ownedRows = await indexer
+  const ownedRows = await mirror
     .select({ collectionId: collections.collectionId, serial: objekts.serial })
     .from(objekts)
     .innerJoin(collections, eq(objekts.collectionId, collections.id))

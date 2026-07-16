@@ -21,6 +21,10 @@ export const collections = pgTable("collection", {
   backImage: text("back_image").notNull(),
   accentColor: text("accent_color").notNull(),
   onOffline: text("on_offline").notNull().$type<"online" | "offline">(),
+  // Indexed on the remote — objekt-tcg's catalog-sync already relies on this
+  // column for its own incremental sync against the same indexer DB. Used as
+  // the cursor for indexer-mirror-sync.ts's syncCollections().
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 });
 
 export const objekts = pgTable("objekt", {

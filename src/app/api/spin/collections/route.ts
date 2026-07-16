@@ -1,6 +1,6 @@
 import { and, asc, ilike, inArray, not } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { getCached } from "@/lib/server-cache";
 
@@ -22,7 +22,7 @@ const spinClasses = [
 export async function GET() {
   try {
     const rows = await getCached("spin:collections:v2", 10 * 60_000, () =>
-      indexer
+      mirror
         .select({
           collectionId: collections.collectionId,
           artist: collections.artist,

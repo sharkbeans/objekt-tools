@@ -7,7 +7,8 @@ import {
   resolveNickname,
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
-import { indexer, indexerPool } from "@/lib/db/indexer";
+import { indexerPool } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { compareSeasons } from "@/lib/filter-options";
 import { membersByArtist } from "@/lib/filters";
@@ -89,7 +90,7 @@ export async function GET(
       `progress:collections:v3:${member.toLowerCase()}`,
       10 * 60_000,
       () =>
-        indexer
+        mirror
           .select({
             id: collections.id,
             collectionId: collections.collectionId,
@@ -109,7 +110,7 @@ export async function GET(
       `progress:owned-detail:v2:${resolved.address}:${member.toLowerCase()}`,
       90_000,
       () =>
-        indexer
+        mirror
           .select({
             collectionId: objekts.collectionId,
             ownedCount: count(),
@@ -133,6 +134,9 @@ export async function GET(
       `progress:grid-mints:v1:${resolved.address}:${member.toLowerCase()}`,
       10 * 60_000,
       async () => {
+        // Grid-mints raw SQL over `transfer` — stays on the remote indexer
+        // pool (never the mirror, which doesn't carry transfer data). See
+        // Part 2 plan, Phase 6.
         const res = await indexerPool.query<GridMintCountRow>(
           `
             select

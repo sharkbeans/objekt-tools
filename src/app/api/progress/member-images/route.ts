@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { fetchArtistDetail } from "@/lib/cosmo/client";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { realMembersByArtist, validSeasons } from "@/lib/filters";
 import { getCached } from "@/lib/server-cache";
@@ -68,7 +68,7 @@ async function fetchCosmoProfileImages(): Promise<Record<string, string>> {
 }
 
 async function fetchWelcomeFallbackImages(): Promise<Record<string, string>> {
-  const rows = await indexer
+  const rows = await mirror
     .select({
       artist: collections.artist,
       member: collections.member,

@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { tradePost, tradePostHave } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
@@ -176,7 +176,7 @@ async function verifyLoadedTrades(
       continue;
     }
 
-    const ownedRows = await indexer
+    const ownedRows = await mirror
       .select({
         collectionId: collections.collectionId,
         serial: objekts.serial,

@@ -4,7 +4,7 @@ import { eq, inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { activeTrade, cosmoAccount, user } from "@/lib/db/schema";
 
@@ -77,7 +77,9 @@ export async function GET(
   const canonicalByCollectionId = new Map<string, string>();
 
   if (uniqueCollectionIds.length > 0) {
-    const rows = await indexer
+    // Collection thumbnails only — safe to read from the mirror even though
+    // the rest of this route is trade-critical (see Part 2 plan, Phase 6).
+    const rows = await mirror
       .select({
         collectionId: collections.collectionId,
         thumbnailImage: collections.thumbnailImage,

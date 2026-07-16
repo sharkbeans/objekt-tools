@@ -16,7 +16,8 @@
     "test:watch": "tsx --test --watch --test-concurrency=1 'src/**/*.test.ts'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "sync-indexer": "tsx scripts/sync-indexer.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.5.3",

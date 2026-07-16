@@ -36,7 +36,8 @@ const INDEXER_DDL = `
     thumbnail_image text NOT NULL,
     front_image text NOT NULL,
     back_image text NOT NULL,
-    on_offline text NOT NULL
+    on_offline text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
   );
   CREATE TABLE IF NOT EXISTS "objekt" (
     id varchar PRIMARY KEY,
@@ -71,6 +72,8 @@ export async function resetDb() {
   const g = globalThis as unknown as {
     _dbPool?: PoolLike;
     _indexerPool?: PoolLike;
+    _mirrorLocalPool?: PoolLike;
+    _mirrorReadSourcePool?: PoolLike;
   };
   if (g._dbPool) {
     await g._dbPool.query(`
@@ -97,9 +100,13 @@ export async function teardown() {
   const g = globalThis as unknown as {
     _dbPool?: PoolLike;
     _indexerPool?: PoolLike;
+    _mirrorLocalPool?: PoolLike;
+    _mirrorReadSourcePool?: PoolLike;
   };
   await g._dbPool?.end();
   await g._indexerPool?.end();
+  await g._mirrorLocalPool?.end();
+  await g._mirrorReadSourcePool?.end();
   try {
     const { redis } = await import("@/lib/redis");
     await redis.quit();

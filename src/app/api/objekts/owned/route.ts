@@ -2,7 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { cosmoAccount } from "@/lib/db/schema";
 import { getCached } from "@/lib/server-cache";
@@ -30,7 +30,7 @@ export async function GET() {
     `objekts:owned:v1:${linked.address.toLowerCase()}`,
     30_000,
     () =>
-      indexer
+      mirror
         .select({
           collectionId: collections.collectionId,
           artist: collections.artist,

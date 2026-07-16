@@ -4,6 +4,8 @@ import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
+// Stays on the remote indexer, never the mirror — this is a live
+// pre-delivery ownership check and trade-critical. See Part 2 plan, Phase 6.
 import { indexer } from "@/lib/db/indexer";
 import { objekts } from "@/lib/db/indexer-schema";
 import {

@@ -6,7 +6,7 @@ import {
   resolveNickname,
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
-import { indexer } from "@/lib/db/indexer";
+import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { withTimeout } from "@/lib/promise-timeout";
 import { redis } from "@/lib/redis";
@@ -106,7 +106,7 @@ export async function GET(
 }
 
 function loadInventoryRows(address: string) {
-  return indexer
+  return mirror
     .select({
       collectionId: collections.collectionId,
       artist: collections.artist,
