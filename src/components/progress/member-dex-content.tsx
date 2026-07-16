@@ -42,6 +42,7 @@ import type {
   ProgressMemberResponse,
 } from "@/lib/progress/types";
 import { GridSection } from "./grid-section";
+import { MemberAvatarCarousel } from "./member-avatar-carousel";
 import { SeasonSection } from "./season-section";
 
 interface SeasonColorsResponse {
@@ -766,6 +767,12 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   return (
     <div className="space-y-6">
+      <MemberAvatarCarousel
+        nickname={data.nickname}
+        artist={data.artist}
+        activeMember={data.member}
+      />
+
       <div>
         <h1 className="text-2xl font-bold">{data.member}</h1>
         <p className="text-muted-foreground">
