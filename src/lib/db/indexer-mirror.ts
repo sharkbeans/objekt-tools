@@ -13,9 +13,9 @@ type MirrorFallbackRuntime = {
 };
 
 type PoolLike = {
-  connect: (...args: unknown[]) => Promise<unknown> | void;
-  query: (...args: unknown[]) => Promise<unknown> | void;
-  end?: (...args: unknown[]) => Promise<unknown> | void;
+  connect: (...args: unknown[]) => Promise<unknown> | undefined;
+  query: (...args: unknown[]) => Promise<unknown> | undefined;
+  end?: (...args: unknown[]) => Promise<unknown> | undefined;
   idleCount?: number;
   totalCount?: number;
   waitingCount?: number;
@@ -243,19 +243,21 @@ export class MirrorFallbackPool {
     return this.getPreferredPool().waitingCount ?? 0;
   }
 
-  connect(...args: unknown[]): Promise<unknown> | void {
-    return (this.getPreferredPool().connect as (...params: unknown[]) => unknown)(
-      ...args,
-    );
+  connect(...args: unknown[]): Promise<unknown> | undefined {
+    return (
+      this.getPreferredPool().connect as (...params: unknown[]) => unknown
+    )(...args);
   }
 
-  end(...args: unknown[]): Promise<unknown> | void {
-    return (this.getPreferredPool().end as
-      | ((...params: unknown[]) => unknown)
-      | undefined)?.(...args);
+  end(...args: unknown[]): Promise<unknown> | undefined {
+    return (
+      this.getPreferredPool().end as
+        | ((...params: unknown[]) => unknown)
+        | undefined
+    )?.(...args);
   }
 
-  query(...args: unknown[]): Promise<unknown> | void {
+  query(...args: unknown[]): Promise<unknown> | undefined {
     const callback =
       typeof args.at(-1) === "function"
         ? (args.pop() as (error: Error | null, result?: unknown) => void)

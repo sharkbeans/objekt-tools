@@ -25,9 +25,12 @@ export async function pruneStaleHaves() {
   });
 
   const posters: PosterRow[] = rows
+    .filter(
+      (row): row is typeof row & { cosmoId: string } => row.cosmoId !== null,
+    )
     .map((row) => ({
       id: row.id,
-      cosmoId: row.cosmoId!,
+      cosmoId: row.cosmoId,
       haves: row.haves
         .filter(
           (have): have is typeof have & { collectionId: string } =>

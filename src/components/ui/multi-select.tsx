@@ -46,7 +46,7 @@ export function MultiSelect({
     }
   }
 
-  function clear(e: React.MouseEvent) {
+  function clear(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
     onChange([]);
   }
@@ -84,15 +84,14 @@ export function MultiSelect({
           </span>
           <span className="flex items-center gap-0.5 ml-1 shrink-0">
             {value.length > 0 && (
-              <span
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
                 onClick={clear}
-                onKeyDown={(e) => e.key === "Enter" && clear(e as any)}
                 className="text-muted-foreground hover:text-foreground rounded p-0.5"
+                aria-label="Clear selection"
               >
                 <XIcon className="h-3 w-3" />
-              </span>
+              </button>
             )}
             <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
           </span>

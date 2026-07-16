@@ -165,7 +165,11 @@ export function AnyWantPicker({
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {value.map((w, i) => (
-            <Badge key={i} variant="secondary" className="gap-1 text-xs">
+            <Badge
+              key={anyWantKey(w)}
+              variant="secondary"
+              className="gap-1 text-xs"
+            >
               {anyWantLabel(w)}
               <button
                 type="button"

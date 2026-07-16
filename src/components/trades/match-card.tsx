@@ -129,55 +129,54 @@ export function MatchCard({ match, children, onOpenTrade }: MatchCardProps) {
   };
 
   return (
-    <div
-      className="cursor-pointer space-y-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/20"
-      onClick={openTrade}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openTrade();
-        }
-      }}
-      role="link"
-      tabIndex={0}
-    >
-      <div className="flex items-start justify-between gap-3 min-w-0">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{displayName}</p>
-          {match.source === "list" && (
-            <Badge
-              variant="outline"
-              className="mt-1 h-4 px-1.5 py-0 text-[10px]"
-            >
-              List
-            </Badge>
-          )}
+    <div className="relative rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/20">
+      <button
+        type="button"
+        onClick={openTrade}
+        className="absolute inset-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`Open trade from ${displayName}`}
+      />
+      <div className="pointer-events-none relative z-10 space-y-4">
+        <div className="flex items-start justify-between gap-3 min-w-0">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{displayName}</p>
+            {match.source === "list" && (
+              <Badge
+                variant="outline"
+                className="mt-1 h-4 px-1.5 py-0 text-[10px]"
+              >
+                List
+              </Badge>
+            )}
+          </div>
+
+          {match.user.discordUsername ? (
+            <div className="pointer-events-auto shrink-0">
+              <DiscordLinkButton
+                discordId={match.user.discordId}
+                handle={match.user.discordUsername}
+              />
+            </div>
+          ) : null}
         </div>
 
-        {match.user.discordUsername ? (
-          <div className="shrink-0">
-            <DiscordLinkButton
-              discordId={match.user.discordId}
-              handle={match.user.discordUsername}
-            />
+        <div className="space-y-4">
+          <OverlapRow label="HAVE" items={theyHaveIWant} />
+          <OverlapRow label="WANT" items={iHaveTheyWant} />
+        </div>
+
+        {!match.user.discordUsername && (
+          <div className="pt-0.5">
+            <span className="text-[11px] text-muted-foreground">
+              No Discord linked
+            </span>
           </div>
+        )}
+
+        {children ? (
+          <div className="pointer-events-auto">{children}</div>
         ) : null}
       </div>
-
-      <div className="space-y-4">
-        <OverlapRow label="HAVE" items={theyHaveIWant} />
-        <OverlapRow label="WANT" items={iHaveTheyWant} />
-      </div>
-
-      {!match.user.discordUsername && (
-        <div className="pt-0.5">
-          <span className="text-[11px] text-muted-foreground">
-            No Discord linked
-          </span>
-        </div>
-      )}
-
-      {children ? <div>{children}</div> : null}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import {
   anyWantLabel,
@@ -157,10 +158,13 @@ export function ObjektImages({
           const imgEl = (
             <div className="relative">
               {url ? (
-                <img
+                <Image
                   src={url}
                   alt={item.collectionId}
+                  width={80}
+                  height={123}
                   className="w-full h-auto rounded-md border"
+                  unoptimized
                 />
               ) : (
                 <div className="w-full aspect-80/123 rounded-md border bg-muted animate-pulse" />

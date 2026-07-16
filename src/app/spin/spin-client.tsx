@@ -397,30 +397,43 @@ function TiltCard({
     setState({ rx: 0, ry: 0, gx: 50, gy: 50, active: false });
   }
 
-  function onMouseMove(e: React.MouseEvent<HTMLDivElement>) {
-    applyFromPoint(e.clientX, e.clientY);
-  }
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
 
-  function onTouchStart(e: React.TouchEvent<HTMLDivElement>) {
-    const t = e.touches[0];
-    if (t) applyFromPoint(t.clientX, t.clientY);
-  }
+    const onMouseMove = (e: MouseEvent) => {
+      applyFromPoint(e.clientX, e.clientY);
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) applyFromPoint(t.clientX, t.clientY);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) applyFromPoint(t.clientX, t.clientY);
+    };
 
-  function onTouchMove(e: React.TouchEvent<HTMLDivElement>) {
-    const t = e.touches[0];
-    if (t) applyFromPoint(t.clientX, t.clientY);
-  }
+    el.addEventListener("mousemove", onMouseMove);
+    el.addEventListener("mouseleave", release);
+    el.addEventListener("touchstart", onTouchStart);
+    el.addEventListener("touchmove", onTouchMove);
+    el.addEventListener("touchend", release);
+    el.addEventListener("touchcancel", release);
+
+    return () => {
+      el.removeEventListener("mousemove", onMouseMove);
+      el.removeEventListener("mouseleave", release);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", release);
+      el.removeEventListener("touchcancel", release);
+    };
+  });
 
   return (
     <div
       ref={ref}
       className={className}
-      onMouseMove={onMouseMove}
-      onMouseLeave={release}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={release}
-      onTouchCancel={release}
       style={{
         transform: `perspective(900px) rotateX(${state.rx}deg) rotateY(${state.ry}deg) scale(${state.active ? 1.04 : 1})`,
         transition: state.active
@@ -635,8 +648,12 @@ export function SpinClient() {
       pools.get(key)?.[normalizedClass].push(collection);
 
       if (isPrimarySpinClass(collection.artist, normalizedClass)) {
-        if (!primary.has(key)) primary.set(key, []);
-        primary.get(key)!.push(collection);
+        let collectionsForKey = primary.get(key);
+        if (!collectionsForKey) {
+          collectionsForKey = [];
+          primary.set(key, collectionsForKey);
+        }
+        collectionsForKey.push(collection);
       }
     }
 
@@ -650,8 +667,12 @@ export function SpinClient() {
     const byArtist = new Map<string, string[]>();
     for (const key of primaryByArtistSeason.keys()) {
       const [artist] = key.split("::");
-      if (!byArtist.has(artist)) byArtist.set(artist, []);
-      byArtist.get(artist)!.push(key);
+      let artistKeys = byArtist.get(artist);
+      if (!artistKeys) {
+        artistKeys = [];
+        byArtist.set(artist, artistKeys);
+      }
+      artistKeys.push(key);
     }
 
     const result: SpinCollection[] = [];

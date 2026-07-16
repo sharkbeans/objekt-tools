@@ -81,7 +81,7 @@ export function TradePagination({
           {pageNumbers.map((p, i) =>
             p === "ellipsis" ? (
               <span
-                key={`ellipsis-${i}`}
+                key={`ellipsis-${pageNumbers[i - 1] ?? "start"}-${pageNumbers[i + 1] ?? "end"}`}
                 className="px-1 text-sm text-muted-foreground"
               >
                 ...

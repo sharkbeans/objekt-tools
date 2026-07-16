@@ -1,19 +1,48 @@
-interface BorderDef {
+interface BaseBorderDef {
   id: string;
   name: string;
-  type: string;
-  color?: string;
-  colors?: string[];
-  width?: number;
-  topWidth?: number;
-  sideWidth?: number;
-  bottomWidth?: number;
-  dashPattern?: number[];
   shadow?: boolean;
 }
 
+interface NoneBorderDef extends BaseBorderDef {
+  type: "none";
+}
+
+interface SolidBorderDef extends BaseBorderDef {
+  type: "solid";
+  color: string;
+  width: number;
+}
+
+interface GradientBorderDef extends BaseBorderDef {
+  type: "gradient";
+  colors: string[];
+  width: number;
+}
+
+interface PolaroidBorderDef extends BaseBorderDef {
+  type: "polaroid";
+  color: string;
+  topWidth: number;
+  sideWidth: number;
+  bottomWidth: number;
+}
+
+interface DashedBorderDef extends BaseBorderDef {
+  type: "dashed";
+  color: string;
+  width: number;
+  dashPattern?: number[];
+}
+
+type BorderDef =
+  | NoneBorderDef
+  | SolidBorderDef
+  | GradientBorderDef
+  | PolaroidBorderDef
+  | DashedBorderDef;
+
 export class BorderManager {
-  private borders: BorderDef[] = [{ id: "none", name: "None", type: "none" }];
   currentBorder: BorderDef | null = null;
 
   drawBorder(ctx: CanvasRenderingContext2D, width: number, height: number) {
@@ -41,25 +70,25 @@ export class BorderManager {
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    b: BorderDef,
+    b: SolidBorderDef,
   ) {
     if (b.shadow) {
       ctx.shadowColor = "rgba(0,0,0,0.3)";
       ctx.shadowBlur = 15;
       ctx.shadowOffsetY = 5;
     }
-    ctx.fillStyle = b.color!;
-    ctx.fillRect(0, 0, w, b.width!);
-    ctx.fillRect(w - b.width!, 0, b.width!, h);
-    ctx.fillRect(0, h - b.width!, w, b.width!);
-    ctx.fillRect(0, 0, b.width!, h);
+    ctx.fillStyle = b.color;
+    ctx.fillRect(0, 0, w, b.width);
+    ctx.fillRect(w - b.width, 0, b.width, h);
+    ctx.fillRect(0, h - b.width, w, b.width);
+    ctx.fillRect(0, 0, b.width, h);
   }
 
   private drawGradient(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    b: BorderDef,
+    b: GradientBorderDef,
   ) {
     if (b.shadow) {
       ctx.shadowColor = "rgba(0,0,0,0.3)";
@@ -67,45 +96,46 @@ export class BorderManager {
       ctx.shadowOffsetY = 5;
     }
     const gradient = ctx.createLinearGradient(0, 0, w, h);
-    b.colors!.forEach((c, i) =>
-      gradient.addColorStop(i / (b.colors!.length - 1), c),
-    );
+    const steps = Math.max(b.colors.length - 1, 1);
+    b.colors.forEach((c, i) => {
+      gradient.addColorStop(i / steps, c);
+    });
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, w, b.width!);
-    ctx.fillRect(w - b.width!, 0, b.width!, h);
-    ctx.fillRect(0, h - b.width!, w, b.width!);
-    ctx.fillRect(0, 0, b.width!, h);
+    ctx.fillRect(0, 0, w, b.width);
+    ctx.fillRect(w - b.width, 0, b.width, h);
+    ctx.fillRect(0, h - b.width, w, b.width);
+    ctx.fillRect(0, 0, b.width, h);
   }
 
   private drawPolaroid(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    b: BorderDef,
+    b: PolaroidBorderDef,
   ) {
     if (b.shadow) {
       ctx.shadowColor = "rgba(0,0,0,0.3)";
       ctx.shadowBlur = 15;
       ctx.shadowOffsetY = 5;
     }
-    ctx.fillStyle = b.color!;
-    ctx.fillRect(0, 0, w, b.topWidth!);
-    ctx.fillRect(w - b.sideWidth!, 0, b.sideWidth!, h);
-    ctx.fillRect(0, h - b.bottomWidth!, w, b.bottomWidth!);
-    ctx.fillRect(0, 0, b.sideWidth!, h);
+    ctx.fillStyle = b.color;
+    ctx.fillRect(0, 0, w, b.topWidth);
+    ctx.fillRect(w - b.sideWidth, 0, b.sideWidth, h);
+    ctx.fillRect(0, h - b.bottomWidth, w, b.bottomWidth);
+    ctx.fillRect(0, 0, b.sideWidth, h);
   }
 
   private drawDashed(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    b: BorderDef,
+    b: DashedBorderDef,
   ) {
-    ctx.strokeStyle = b.color!;
-    ctx.lineWidth = b.width!;
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = b.width;
     ctx.setLineDash(b.dashPattern ?? [10, 5]);
-    const inset = b.width! / 2;
-    ctx.strokeRect(inset, inset, w - b.width!, h - b.width!);
+    const inset = b.width / 2;
+    ctx.strokeRect(inset, inset, w - b.width, h - b.width);
     ctx.setLineDash([]);
   }
 }

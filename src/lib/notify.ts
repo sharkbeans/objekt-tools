@@ -44,7 +44,9 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
     columns: { id: true, discordId: true },
   });
   const discordIdByUserId = new Map(
-    users.filter((u) => u.discordId).map((u) => [u.id, u.discordId!]),
+    users
+      .filter((u): u is typeof u & { discordId: string } => !!u.discordId)
+      .map((u) => [u.id, u.discordId]),
   );
 
   await Promise.all(

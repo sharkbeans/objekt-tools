@@ -46,7 +46,9 @@ describe("MirrorFallbackPool", () => {
       cooldownMs: 30_000,
     });
 
-    const result = (await pool.query("select 1")) as { rows: Array<{ via: string }> };
+    const result = (await pool.query("select 1")) as {
+      rows: Array<{ via: string }>;
+    };
 
     assert.equal(result.rows[0]?.via, "mirror");
     assert.equal(runtime.consecutiveFailures, 0);
@@ -85,19 +87,25 @@ describe("MirrorFallbackPool", () => {
       cooldownMs: 30_000,
     });
 
-    const first = (await pool.query("select 1")) as { rows: Array<{ via: string }> };
+    const first = (await pool.query("select 1")) as {
+      rows: Array<{ via: string }>;
+    };
     assert.equal(first.rows[0]?.via, "remote");
     assert.equal(runtime.consecutiveFailures, 1);
     assert.equal(runtime.bypassUntilMs, 0);
 
     now = 2000;
-    const second = (await pool.query("select 1")) as { rows: Array<{ via: string }> };
+    const second = (await pool.query("select 1")) as {
+      rows: Array<{ via: string }>;
+    };
     assert.equal(second.rows[0]?.via, "remote");
     assert.equal(runtime.consecutiveFailures, 2);
     assert.equal(runtime.bypassUntilMs, 32_000);
 
     now = 2500;
-    const third = (await pool.query("select 1")) as { rows: Array<{ via: string }> };
+    const third = (await pool.query("select 1")) as {
+      rows: Array<{ via: string }>;
+    };
     assert.equal(third.rows[0]?.via, "remote");
     assert.equal(mirrorCalls, 2);
     assert.equal(remoteCalls, 3);

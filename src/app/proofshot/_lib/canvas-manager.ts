@@ -110,7 +110,11 @@ export class CanvasManager {
 
   init(canvas: HTMLCanvasElement, onUploadRequest: () => void) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext("2d", { alpha: false })!;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) {
+      throw new Error("2D canvas context is unavailable");
+    }
+    this.ctx = ctx;
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "high";
     this.onUploadRequest = onUploadRequest;
@@ -125,7 +129,8 @@ export class CanvasManager {
   }
 
   resizeCanvas() {
-    const container = this.canvas.parentElement!;
+    const container = this.canvas.parentElement;
+    if (!container) return;
     const isCameraActive = container.classList.contains("camera-active");
     const isPreviewMode = container.classList.contains("preview-mode");
 
@@ -169,20 +174,21 @@ export class CanvasManager {
     this.ctx.imageSmoothingQuality = "high";
 
     if (!isCameraActive) {
-      this.canvas.style.width = canvasWidth + "px";
-      this.canvas.style.height = canvasHeight + "px";
+      this.canvas.style.width = `${canvasWidth}px`;
+      this.canvas.style.height = `${canvasHeight}px`;
     }
 
     this.render();
   }
 
   private updatePreviewDisplay() {
-    const container = this.canvas.parentElement!;
+    const container = this.canvas.parentElement;
+    if (!container) return;
     const dpr = window.devicePixelRatio || 1;
     const bufferWidth = this.canvas.width / dpr;
     const bufferHeight = this.canvas.height / dpr;
-    this.canvas.style.width = bufferWidth + "px";
-    this.canvas.style.height = bufferHeight + "px";
+    this.canvas.style.width = `${bufferWidth}px`;
+    this.canvas.style.height = `${bufferHeight}px`;
 
     const containerMaxWidth = 800;
     const containerWidth =
@@ -193,7 +199,7 @@ export class CanvasManager {
       const scale = maxWidth / bufferWidth;
       this.canvas.style.transform = `scale(${scale})`;
       this.canvas.style.transformOrigin = "top left";
-      container.style.height = bufferHeight * scale + "px";
+      container.style.height = `${bufferHeight * scale}px`;
     } else {
       this.canvas.style.transform = "none";
       container.style.height = "auto";
@@ -535,7 +541,9 @@ export class CanvasManager {
   }
 
   stopCamera() {
-    this.camera.stream?.getTracks().forEach((t) => t.stop());
+    this.camera.stream?.getTracks().forEach((t) => {
+      t.stop();
+    });
     this.camera.stream = null;
     if (this.camera.animationFrame)
       cancelAnimationFrame(this.camera.animationFrame);
@@ -558,7 +566,7 @@ export class CanvasManager {
     const cap = document.createElement("canvas");
     cap.width = this.camera.video.videoWidth;
     cap.height = this.camera.video.videoHeight;
-    cap.getContext("2d")!.drawImage(this.camera.video, 0, 0);
+    cap.getContext("2d")?.drawImage(this.camera.video, 0, 0);
     const img = new Image();
     img.onload = () => {
       this.backgroundImage = img;
@@ -621,7 +629,7 @@ export class CanvasManager {
         Math.min(rect.width, rect.height) / (img.width * 3);
       this.render();
     };
-    img.src = "data:image/svg+xml;base64," + btoa(svg);
+    img.src = `data:image/svg+xml;base64,${btoa(svg)}`;
   }
 
   loadBackground(file: File): Promise<void> {
@@ -639,7 +647,12 @@ export class CanvasManager {
           res();
         };
         img.onerror = rej;
-        img.src = e.target!.result as string;
+        const result = e.target?.result;
+        if (typeof result !== "string") {
+          rej(new Error("Failed to read background image"));
+          return;
+        }
+        img.src = result;
       };
       reader.onerror = rej;
       reader.readAsDataURL(file);
@@ -726,7 +739,12 @@ export class CanvasManager {
           res();
         };
         img.onerror = rej;
-        img.src = e.target!.result as string;
+        const result = e.target?.result;
+        if (typeof result !== "string") {
+          rej(new Error("Failed to read photocard image"));
+          return;
+        }
+        img.src = result;
       };
       reader.onerror = rej;
       reader.readAsDataURL(file);
@@ -843,7 +861,11 @@ export class CanvasManager {
       const tmp = document.createElement("canvas");
       tmp.width = w;
       tmp.height = h;
-      const tmpCtx = tmp.getContext("2d")!;
+      const tmpCtx = tmp.getContext("2d");
+      if (!tmpCtx) {
+        rej(new Error("Failed to create GIF frame context"));
+        return;
+      }
       const images: HTMLImageElement[] = [];
       const delays: number[] = [];
       let loaded = 0;
@@ -871,7 +893,11 @@ export class CanvasManager {
       const tmp = document.createElement("canvas");
       tmp.width = reader.width;
       tmp.height = reader.height;
-      const tmpCtx = tmp.getContext("2d")!;
+      const tmpCtx = tmp.getContext("2d");
+      if (!tmpCtx) {
+        rej(new Error("Failed to create GIF frame context"));
+        return;
+      }
       const images: HTMLImageElement[] = [];
       const delays: number[] = [];
       let loaded = 0;
@@ -989,7 +1015,8 @@ export class CanvasManager {
   }
 
   private drawCameraFeed(w: number, h: number) {
-    const video = this.camera.video!;
+    const video = this.camera.video;
+    if (!video) return;
     const vr = video.videoWidth / video.videoHeight;
     const cr = w / h;
     let bw: number, bh: number;
@@ -1012,7 +1039,8 @@ export class CanvasManager {
   }
 
   private drawBackground(w: number, h: number) {
-    const img = this.backgroundImage!;
+    const img = this.backgroundImage;
+    if (!img) return;
     const iw =
       (img as HTMLVideoElement).videoWidth ?? (img as HTMLImageElement).width;
     const ih =
@@ -1047,7 +1075,11 @@ export class CanvasManager {
       this.photocard.scale * (this.photocard.flipV ? -1 : 1),
     );
 
-    const img = this.photocardImage!;
+    const img = this.photocardImage;
+    if (!img) {
+      this.ctx.restore();
+      return;
+    }
     const w =
       (img as HTMLVideoElement).videoWidth ?? (img as HTMLImageElement).width;
     const h =
@@ -1182,7 +1214,9 @@ export class CanvasManager {
       g.addColorStop(1, `rgba(255,255,255,${cfg.borders.west.endOpacity})`);
       this.toploaderGradientCache.westGradient = g;
     }
-    this.ctx.fillStyle = this.toploaderGradientCache.westGradient!;
+    const westGradient = this.toploaderGradientCache.westGradient;
+    if (!westGradient) return;
+    this.ctx.fillStyle = westGradient;
     this.ctx.fill();
 
     // East border
@@ -1241,7 +1275,9 @@ export class CanvasManager {
       g.addColorStop(1, `rgba(255,255,255,${cfg.borders.east.endOpacity})`);
       this.toploaderGradientCache.eastGradient = g;
     }
-    this.ctx.fillStyle = this.toploaderGradientCache.eastGradient!;
+    const eastGradient = this.toploaderGradientCache.eastGradient;
+    if (!eastGradient) return;
+    this.ctx.fillStyle = eastGradient;
     this.ctx.fill();
 
     // South border
@@ -1264,7 +1300,9 @@ export class CanvasManager {
       g.addColorStop(1, `rgba(255,255,255,${cfg.borders.south.edgeOpacity})`);
       this.toploaderGradientCache.southGradient = g;
     }
-    this.ctx.fillStyle = this.toploaderGradientCache.southGradient!;
+    const southGradient = this.toploaderGradientCache.southGradient;
+    if (!southGradient) return;
+    this.ctx.fillStyle = southGradient;
     this.ctx.fill();
 
     // Base overlay
@@ -1634,7 +1672,10 @@ export class CanvasManager {
     const source = document.createElement("canvas");
     source.width = img.naturalWidth || img.width;
     source.height = img.naturalHeight || img.height;
-    const sourceCtx = source.getContext("2d", { willReadFrequently: true })!;
+    const sourceCtx = source.getContext("2d", { willReadFrequently: true });
+    if (!sourceCtx) {
+      throw new Error("Failed to create source canvas context");
+    }
     sourceCtx.drawImage(img, 0, 0, source.width, source.height);
 
     const imageData = sourceCtx.getImageData(0, 0, source.width, source.height);
@@ -1666,19 +1707,21 @@ export class CanvasManager {
     const output = document.createElement("canvas");
     output.width = maxX - minX + 1;
     output.height = maxY - minY + 1;
-    output
-      .getContext("2d")!
-      .drawImage(
-        source,
-        minX,
-        minY,
-        output.width,
-        output.height,
-        0,
-        0,
-        output.width,
-        output.height,
-      );
+    const outputCtx = output.getContext("2d");
+    if (!outputCtx) {
+      throw new Error("Failed to create output canvas context");
+    }
+    outputCtx.drawImage(
+      source,
+      minX,
+      minY,
+      output.width,
+      output.height,
+      0,
+      0,
+      output.width,
+      output.height,
+    );
 
     return this.loadImageFromUrl(output.toDataURL("image/png"));
   }
@@ -1768,7 +1811,7 @@ export class CanvasManager {
         const exp = document.createElement("canvas");
         exp.width = this.canvas.width;
         exp.height = this.canvas.height;
-        exp.getContext("2d")!.drawImage(this.canvas, 0, 0);
+        exp.getContext("2d")?.drawImage(this.canvas, 0, 0);
         exp.toBlob(
           (b) => (b ? res(b) : rej(new Error("Export failed"))),
           "image/png",
@@ -1838,11 +1881,11 @@ export class CanvasManager {
 
     return new Promise((res, rej) => {
       gif.on("finished", (blob) => {
-        if (workerUrl) URL.revokeObjectURL(workerUrl!);
+        if (workerUrl) URL.revokeObjectURL(workerUrl);
         res(blob as Blob);
       });
       gif.on("error", (e) => {
-        if (workerUrl) URL.revokeObjectURL(workerUrl!);
+        if (workerUrl) URL.revokeObjectURL(workerUrl);
         rej(e);
       });
       gif.render();
@@ -1867,7 +1910,10 @@ export class CanvasManager {
     const exp = document.createElement("canvas");
     exp.width = ew;
     exp.height = eh;
-    const expCtx = exp.getContext("2d")!;
+    const expCtx = exp.getContext("2d");
+    if (!expCtx) {
+      throw new Error("Failed to create export canvas context");
+    }
     expCtx.imageSmoothingEnabled = true;
     expCtx.imageSmoothingQuality = "high";
 
@@ -2000,7 +2046,9 @@ export class CanvasManager {
       setTimeout(
         () => {
           recorder.stop();
-          stream.getTracks().forEach((t) => t.stop());
+          stream.getTracks().forEach((t) => {
+            t.stop();
+          });
         },
         (dur as number) * 1000,
       );

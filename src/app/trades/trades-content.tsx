@@ -14,6 +14,22 @@ import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
 import type { TradePostDTO } from "@/lib/trade-types";
 
+const PAGINATED_SKELETON_KEYS = [
+  "paginated-1",
+  "paginated-2",
+  "paginated-3",
+  "paginated-4",
+  "paginated-5",
+  "paginated-6",
+];
+const INFINITE_SKELETON_KEYS = [
+  "infinite-1",
+  "infinite-2",
+  "infinite-3",
+  "infinite-4",
+];
+const FETCHING_SKELETON_KEYS = ["fetching-1", "fetching-2", "fetching-3"];
+
 function formatUserFilterLabel(user: string): string {
   if (/^0x[0-9a-fA-F]{40}$/.test(user)) {
     return `${user.slice(0, 6)}…${user.slice(-4)}`;
@@ -181,8 +197,8 @@ function PaginatedTradesList({
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <TradeCardSkeleton key={i} />
+        {PAGINATED_SKELETON_KEYS.map((key) => (
+          <TradeCardSkeleton key={key} />
         ))}
       </div>
     );
@@ -263,8 +279,8 @@ function InfiniteTradesList({
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 gap-2.5">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <TradeCardSkeleton key={i} />
+        {INFINITE_SKELETON_KEYS.map((key) => (
+          <TradeCardSkeleton key={key} />
         ))}
       </div>
     );
@@ -289,8 +305,8 @@ function InfiniteTradesList({
       <div ref={sentinelRef} className="h-1" />
       {isFetchingNextPage && (
         <div className="grid grid-cols-1 gap-2.5">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <TradeCardSkeleton key={i} />
+          {FETCHING_SKELETON_KEYS.map((key) => (
+            <TradeCardSkeleton key={key} />
           ))}
         </div>
       )}

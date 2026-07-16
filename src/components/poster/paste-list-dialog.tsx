@@ -177,8 +177,11 @@ export function PasteListDialog({ onImport }: PasteListDialogProps) {
                     {err}
                   </p>
                 ))}
-                {errorItems.map((item, i) => (
-                  <p key={i} className="text-xs text-destructive">
+                {errorItems.map((item) => (
+                  <p
+                    key={`${item.parsed.raw}-${item.error ?? "error"}`}
+                    className="text-xs text-destructive"
+                  >
                     {item.error}
                   </p>
                 ))}
@@ -191,9 +194,13 @@ export function PasteListDialog({ onImport }: PasteListDialogProps) {
                   HAVE ({validHaves.length})
                 </p>
                 <div className="flex flex-col gap-1">
-                  {validHaves.map((h, i) => (
+                  {validHaves.map((h) => (
                     <div
-                      key={i}
+                      key={
+                        h.entry?.objektId ??
+                        h.entry?.collectionId ??
+                        h.parsed.raw
+                      }
                       className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
                     >
                       <span>{itemLabel(h)}</span>
@@ -210,9 +217,13 @@ export function PasteListDialog({ onImport }: PasteListDialogProps) {
                   WANT ({validWants.length})
                 </p>
                 <div className="flex flex-col gap-1">
-                  {validWants.map((w, i) => (
+                  {validWants.map((w) => (
                     <div
-                      key={i}
+                      key={
+                        w.entry?.objektId ??
+                        w.entry?.collectionId ??
+                        w.parsed.raw
+                      }
                       className="text-sm px-2 py-1 rounded border border-border flex items-center justify-between"
                     >
                       <span>{itemLabel(w)}</span>

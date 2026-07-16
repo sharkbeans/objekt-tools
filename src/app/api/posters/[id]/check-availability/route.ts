@@ -30,7 +30,7 @@ export async function POST(
     with: { haves: true },
   });
 
-  if (!row || !row.userId) {
+  if (!row?.userId) {
     return NextResponse.json(
       { error: "Not found or anonymous poster" },
       { status: 404 },
@@ -38,7 +38,10 @@ export async function POST(
   }
 
   // Only check real objekt haves (skip freeform / no collectionId)
-  const checkable = row.haves.filter((h) => !h.freeform && h.collectionId);
+  const checkable = row.haves.filter(
+    (h): h is typeof h & { collectionId: string } =>
+      !h.freeform && h.collectionId !== null,
+  );
 
   // Set cooldown regardless of outcome so we don't hammer the indexer
   await redis.set(cooldownKey, "1", "EX", 5 * 60);
@@ -65,7 +68,7 @@ export async function POST(
     return NextResponse.json({ available: true, unverifiable: true });
   }
 
-  const allCollectionIds = [...new Set(checkable.map((h) => h.collectionId!))];
+  const allCollectionIds = [...new Set(checkable.map((h) => h.collectionId))];
 
   const ownedRows = await mirror
     .select({ collectionId: collections.collectionId, serial: objekts.serial })
@@ -90,7 +93,7 @@ export async function POST(
     const owned =
       have.serial != null
         ? ownedSet.has(`${have.collectionId}:${have.serial}`)
-        : ownedCollections.has(have.collectionId!);
+        : ownedCollections.has(have.collectionId);
     (owned ? available : unavailable).push(have);
   }
 

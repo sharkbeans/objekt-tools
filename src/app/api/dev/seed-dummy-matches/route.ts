@@ -30,10 +30,13 @@ function pickItems<T>(items: T[], start: number, count: number) {
   });
 }
 
-function asHaveRow(tradePostId: string, item: PosterItem) {
+function asHaveRow(
+  tradePostId: string,
+  item: PosterItem & { collectionId: string },
+) {
   return {
     tradePostId,
-    collectionId: item.collectionId!,
+    collectionId: item.collectionId,
     collectionNo: item.collectionNo,
     member: item.member,
     season: item.season,
@@ -44,10 +47,13 @@ function asHaveRow(tradePostId: string, item: PosterItem) {
   };
 }
 
-function asWantRow(tradePostId: string, item: PosterItem) {
+function asWantRow(
+  tradePostId: string,
+  item: PosterItem & { collectionId: string },
+) {
   return {
     tradePostId,
-    collectionId: item.collectionId!,
+    collectionId: item.collectionId,
     collectionNo: item.collectionNo,
     member: item.member,
     season: item.season,

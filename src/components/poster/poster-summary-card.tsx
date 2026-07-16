@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -151,7 +150,6 @@ interface PosterCardProps {
 }
 
 export function PosterCard({ poster, onDelete, matchCount }: PosterCardProps) {
-  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const havePreview = buildPreviewSide(poster.haves);
   const wantPreview = buildPreviewSide(poster.wants);
@@ -180,104 +178,99 @@ export function PosterCard({ poster, onDelete, matchCount }: PosterCardProps) {
   };
 
   return (
-    <div
-      className="cursor-pointer rounded-lg border border-border bg-card p-4 space-y-3 transition-colors hover:border-primary/40 hover:bg-accent/20"
-      onClick={() => router.push(viewHref)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          router.push(viewHref);
-        }
-      }}
-      role="link"
-      tabIndex={0}
-      aria-label={`View ${poster.username ? `@${poster.username}'s list` : "trade list"}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <p className="font-medium truncate text-sm">
-              {poster.username ? `@${poster.username}'s list` : "Trade list"}
+    <div className="relative rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/20">
+      <Link
+        href={viewHref}
+        aria-label={`View ${poster.username ? `@${poster.username}'s list` : "trade list"}`}
+        className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <div className="pointer-events-none relative z-10 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="font-medium truncate text-sm">
+                {poster.username ? `@${poster.username}'s list` : "Trade list"}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {haveCount} have · {wantCount} want ·{" "}
+              {new Date(poster.updatedAt).toLocaleDateString("en-GB")}
             </p>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {haveCount} have · {wantCount} want ·{" "}
-            {new Date(poster.updatedAt).toLocaleDateString("en-GB")}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7",
-              copied &&
-                "bg-emerald-600 text-white hover:bg-emerald-600 hover:text-white",
-            )}
-            onClick={(event) => {
-              event.stopPropagation();
-              void handleCopyLink();
-            }}
-            aria-label="Copy link"
-            title="Copy link"
-          >
-            {copied ? (
-              <CheckIcon className="h-3.5 w-3.5" />
-            ) : (
-              <CopyIcon className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-            <Link
-              href={sectionHref(`/list/${poster.id}/edit`, {
-                currentSection: "list",
-              })}
-              onClick={(event) => event.stopPropagation()}
-              aria-label="Edit"
-            >
-              <PencilIcon className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-          {onDelete && (
+          <div className="pointer-events-auto flex items-center gap-1.5 shrink-0">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-destructive hover:text-destructive"
+              className={cn(
+                "h-7 w-7",
+                copied &&
+                  "bg-emerald-600 text-white hover:bg-emerald-600 hover:text-white",
+              )}
               onClick={(event) => {
                 event.stopPropagation();
-                onDelete(poster.id);
+                void handleCopyLink();
               }}
-              aria-label="Delete"
+              aria-label="Copy link"
+              title="Copy link"
             >
-              <Trash2Icon className="h-3.5 w-3.5" />
+              {copied ? (
+                <CheckIcon className="h-3.5 w-3.5" />
+              ) : (
+                <CopyIcon className="h-3.5 w-3.5" />
+              )}
             </Button>
-          )}
-        </div>
-      </div>
-
-      {matchCount !== undefined && (
-        <div
-          className={cn(
-            "w-fit rounded-full border px-2.5 py-1 text-[11px] font-medium",
-            matchCount > 0
-              ? "border-red-500/60 bg-red-500/10 text-red-400"
-              : "border-border bg-muted/40 text-muted-foreground",
-          )}
-        >
-          {matchCount > 99 ? "99+" : matchCount}{" "}
-          {matchCount === 1 ? "match" : "matches"}
-        </div>
-      )}
-
-      {hasPreview && (
-        <div className="overflow-x-auto pb-1">
-          <div className="flex w-max items-center gap-2">
-            <ObjektPreviewSide preview={havePreview} />
-            <ArrowRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <ObjektPreviewSide preview={wantPreview} />
+            <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+              <Link
+                href={sectionHref(`/list/${poster.id}/edit`, {
+                  currentSection: "list",
+                })}
+                onClick={(event) => event.stopPropagation()}
+                aria-label="Edit"
+              >
+                <PencilIcon className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+            {onDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-destructive hover:text-destructive"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(poster.id);
+                }}
+                aria-label="Delete"
+              >
+                <Trash2Icon className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
         </div>
-      )}
+
+        {matchCount !== undefined && (
+          <div
+            className={cn(
+              "w-fit rounded-full border px-2.5 py-1 text-[11px] font-medium",
+              matchCount > 0
+                ? "border-red-500/60 bg-red-500/10 text-red-400"
+                : "border-border bg-muted/40 text-muted-foreground",
+            )}
+          >
+            {matchCount > 99 ? "99+" : matchCount}{" "}
+            {matchCount === 1 ? "match" : "matches"}
+          </div>
+        )}
+
+        {hasPreview && (
+          <div className="overflow-x-auto pb-1">
+            <div className="flex w-max items-center gap-2">
+              <ObjektPreviewSide preview={havePreview} />
+              <ArrowRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <ObjektPreviewSide preview={wantPreview} />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
