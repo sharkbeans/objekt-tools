@@ -57,8 +57,9 @@ function buildObjektTopUrl(
 ): string {
   const parts: string[] = [];
   if (item.member) {
+    const member = item.member;
     const artist = Object.entries(membersByArtist).find(([, members]) =>
-      members.includes(item.member),
+      members.includes(member),
     )?.[0];
     if (artist) parts.push(artist);
   }
@@ -97,7 +98,7 @@ function ObjektThumb({ item }: { item: TradeItem }) {
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
-  const thumbRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLButtonElement>(null);
   const fetchedRef = useRef(false);
 
   const ensureImage = useCallback(() => {

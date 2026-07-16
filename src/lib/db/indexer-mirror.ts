@@ -245,14 +245,16 @@ export class MirrorFallbackPool {
 
   connect(...args: unknown[]): Promise<unknown> | undefined {
     return (
-      this.getPreferredPool().connect as (...params: unknown[]) => unknown
+      this.getPreferredPool().connect as (
+        ...params: unknown[]
+      ) => Promise<unknown> | undefined
     )(...args);
   }
 
   end(...args: unknown[]): Promise<unknown> | undefined {
     return (
       this.getPreferredPool().end as
-        | ((...params: unknown[]) => unknown)
+        | ((...params: unknown[]) => Promise<unknown> | undefined)
         | undefined
     )?.(...args);
   }
