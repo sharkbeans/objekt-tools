@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2Icon, ShareIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { IconSwap } from "@/components/icon-swap";
 import {
   defaultFilters,
   ObjektFilterBar,
   type ObjektFilterState,
 } from "@/components/objekt/objekt-filter-bar";
 import { Button } from "@/components/ui/button";
+import { useMountReveal } from "@/hooks/use-mount-reveal";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import { decodeGroupedValue } from "@/lib/filter-utils";
@@ -153,6 +155,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
     [artistGroups],
   );
 
+  const contentRevealed = useMountReveal();
   const [sharing, setSharing] = useState(false);
   const handleShare = useCallback(async () => {
     if (!data) return;
@@ -279,7 +282,9 @@ export function ProgressOverviewContent({ nickname }: Props) {
   const showArtistLabel = activeArtists.length > 1;
 
   return (
-    <div className="space-y-4">
+    <div
+      className={`t-reveal space-y-4 ${contentRevealed ? "is-revealed" : ""}`}
+    >
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">
           {data.nickname}&apos;s Collection
@@ -291,11 +296,11 @@ export function ProgressOverviewContent({ nickname }: Props) {
           disabled={sharing}
           className="shrink-0 gap-2"
         >
-          {sharing ? (
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-          ) : (
-            <ShareIcon className="h-4 w-4" />
-          )}
+          <IconSwap
+            swapped={sharing}
+            iconA={<ShareIcon className="h-4 w-4" />}
+            iconB={<Loader2Icon className="h-4 w-4 animate-spin" />}
+          />
           Share card
         </Button>
       </div>

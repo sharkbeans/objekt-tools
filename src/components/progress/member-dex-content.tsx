@@ -8,8 +8,10 @@ import {
   ShareIcon,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { IconSwap } from "@/components/icon-swap";
+import { TabsSlidingIndicator } from "@/components/tabs-sliding-indicator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMountReveal } from "@/hooks/use-mount-reveal";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import {
   EDITION_LABELS,
@@ -455,6 +458,9 @@ export function MemberDexContent({ nickname, member }: Props) {
     return { owned, total: data.collections.length };
   }, [data]);
 
+  const tabsListRef = useRef<HTMLDivElement>(null);
+  const contentRevealed = useMountReveal();
+
   const [sharing, setSharing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -701,11 +707,11 @@ export function MemberDexContent({ nickname, member }: Props) {
           disabled={sharing || totals.total === 0}
           className="ml-auto gap-2"
         >
-          {sharing ? (
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-          ) : (
-            <ShareIcon className="h-4 w-4" />
-          )}
+          <IconSwap
+            swapped={sharing}
+            iconA={<ShareIcon className="h-4 w-4" />}
+            iconB={<Loader2Icon className="h-4 w-4 animate-spin" />}
+          />
           Share card
         </Button>
       </div>
@@ -766,7 +772,9 @@ export function MemberDexContent({ nickname, member }: Props) {
   );
 
   return (
-    <div className="space-y-6">
+    <div
+      className={`t-reveal space-y-6 ${contentRevealed ? "is-revealed" : ""}`}
+    >
       <MemberAvatarCarousel
         nickname={data.nickname}
         artist={data.artist}
@@ -787,18 +795,24 @@ export function MemberDexContent({ nickname, member }: Props) {
           className="gap-4"
         >
           <TabsList
+            ref={tabsListRef}
             variant="line"
-            className="-mx-1 h-auto w-full justify-start border-b border-border px-1 pb-0"
+            className="relative -mx-1 h-auto w-full justify-start border-b border-border px-1 pb-0"
           >
+            <TabsSlidingIndicator
+              value={activeTab}
+              listRef={tabsListRef}
+              className="t-tabs-pill bottom-0 left-0 h-1 rounded-full bg-foreground"
+            />
             <TabsTrigger
               value="dex"
-              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
+              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75"
             >
               Collection
             </TabsTrigger>
             <TabsTrigger
               value="grid"
-              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
+              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75"
             >
               Grid
             </TabsTrigger>

@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { DigitPopIn } from "@/components/digit-pop-in";
 import { ListLinkField } from "@/components/list-link-field";
 import {
   type AnyWant,
@@ -43,6 +44,7 @@ import {
   PosterCard,
   type PosterSummary,
 } from "@/components/poster/poster-summary-card";
+import { TabsSlidingIndicator } from "@/components/tabs-sliding-indicator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -326,6 +328,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [wantsOnly, setWantsOnly] = useState(false);
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
+  const haveWantTabsListRef = useRef<HTMLDivElement>(null);
 
   const [linkedNickname, setLinkedNickname] = useState<string | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
@@ -1050,18 +1053,26 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   value={step}
                   onValueChange={(v) => setStep(v as "have" | "want")}
                 >
-                  <TabsList className="grid h-12 w-full grid-cols-2">
+                  <TabsList
+                    ref={haveWantTabsListRef}
+                    className="relative grid h-12 w-full grid-cols-2"
+                  >
+                    <TabsSlidingIndicator
+                      value={step}
+                      listRef={haveWantTabsListRef}
+                      className="t-tabs-pill inset-y-[3px] left-0 rounded-md bg-white"
+                    />
                     <TabsTrigger
                       value="have"
-                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black"
+                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-transparent data-[state=active]:!bg-transparent data-[state=active]:!text-black dark:data-[state=active]:!bg-transparent dark:data-[state=active]:!text-black"
                     >
-                      Have ({posterData.haves.length})
+                      Have (<DigitPopIn value={posterData.haves.length} />)
                     </TabsTrigger>
                     <TabsTrigger
                       value="want"
-                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black"
+                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-transparent data-[state=active]:!bg-transparent data-[state=active]:!text-black dark:data-[state=active]:!bg-transparent dark:data-[state=active]:!text-black"
                     >
-                      Want ({posterData.wants.length})
+                      Want (<DigitPopIn value={posterData.wants.length} />)
                     </TabsTrigger>
                   </TabsList>
 
