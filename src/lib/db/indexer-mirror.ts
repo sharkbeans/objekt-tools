@@ -35,8 +35,6 @@ export type MirrorFallbackState = {
 
 export type MirrorHealthSnapshot = {
   collectionCursorAgeSec: number | null;
-  objektCursorAgeSec: number | null;
-  trueupCursor: null;
 } & MirrorFallbackState;
 
 const DEFAULT_MIRROR_QUERY_TIMEOUT_MS = 1500;
@@ -178,6 +176,17 @@ export function getMirrorFallbackState(now = Date.now()): MirrorFallbackState {
 }
 
 export async function getMirrorHealthSnapshot(): Promise<MirrorHealthSnapshot> {
+  const { rows: tableRows } = await getMirrorReadSourcePool().query<{
+    exists: string | null;
+  }>("SELECT to_regclass('public.sync_state') AS exists");
+
+  if (!tableRows[0]?.exists) {
+    return {
+      ...getMirrorFallbackState(),
+      collectionCursorAgeSec: null,
+    };
+  }
+
   const { rows } = await getMirrorReadSourcePool().query<{
     key: string;
     cursor_ts: Date | null;
@@ -193,8 +202,6 @@ export async function getMirrorHealthSnapshot(): Promise<MirrorHealthSnapshot> {
   return {
     ...getMirrorFallbackState(),
     collectionCursorAgeSec: cursorAgeSec("collection"),
-    objektCursorAgeSec: cursorAgeSec("objekt"),
-    trueupCursor: null,
   };
 }
 

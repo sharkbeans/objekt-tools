@@ -14,8 +14,6 @@ export async function GET() {
   try {
     return NextResponse.json({
       ok: true,
-      // objektCursorAgeSec / trueupCursor stay null until syncObjekts() /
-      // trueUpChunk() are implemented (Part 2 plan, Phase 0 is pending).
       mirror: await getMirrorHealthSnapshot(),
     });
   } catch (error) {

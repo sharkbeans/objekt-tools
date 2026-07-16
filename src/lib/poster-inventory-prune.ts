@@ -1,9 +1,8 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { inArray, isNotNull } from "drizzle-orm";
 import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { db } from "@/lib/db";
-import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
 import { poster, posterHave } from "@/lib/db/schema";
+import { loadOwnedObjektsForPublicCollectionIds } from "@/lib/indexer-owned-objekts";
 import { syncPosterTradePost } from "@/lib/poster-trade-sync";
 import { redis } from "@/lib/redis";
 
@@ -84,16 +83,10 @@ export async function pruneStaleHaves() {
     ];
     if (collectionIds.length === 0) continue;
 
-    const ownedRows = await mirror
-      .select({ collectionId: collections.collectionId })
-      .from(objekts)
-      .innerJoin(collections, eq(objekts.collectionId, collections.id))
-      .where(
-        and(
-          eq(objekts.owner, resolved.address),
-          inArray(collections.collectionId, collectionIds),
-        ),
-      );
+    const ownedRows = await loadOwnedObjektsForPublicCollectionIds(
+      resolved.address,
+      collectionIds,
+    );
     const ownedCollections = new Set(
       ownedRows
         .map((row) => row.collectionId)

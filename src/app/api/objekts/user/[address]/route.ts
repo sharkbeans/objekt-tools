@@ -1,8 +1,6 @@
-import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
-import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
+import { loadTransferableInventoryRows } from "@/lib/indexer-owned-objekts";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
@@ -28,24 +26,7 @@ export async function GET(
   const rows = await getCached(
     `objekts:user:v1:${address.toLowerCase()}`,
     30_000,
-    () =>
-      mirror
-        .select({
-          collectionId: collections.collectionId,
-          artist: collections.artist,
-          member: collections.member,
-          collectionNo: collections.collectionNo,
-          season: collections.season,
-          class: collections.class,
-          thumbnailImage: collections.thumbnailImage,
-          serial: objekts.serial,
-          objektId: objekts.id,
-        })
-        .from(objekts)
-        .innerJoin(collections, eq(objekts.collectionId, collections.id))
-        .where(and(eq(objekts.owner, address), eq(objekts.transferable, true)))
-        .orderBy(asc(collections.member), asc(collections.collectionNo))
-        .limit(500),
+    () => loadTransferableInventoryRows(address),
   );
 
   const results = rows.map((r) => ({

@@ -1,8 +1,6 @@
-import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
-import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
+import { loadOwnedObjektsForPublicCollectionIds } from "@/lib/indexer-owned-objekts";
 import type { ProgressSerialsResponse } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
@@ -48,22 +46,16 @@ export async function GET(request: NextRequest) {
   const rows = await getCached(
     `progress:serials:v1:${address.toLowerCase()}:${collectionId}`,
     60_000,
-    () =>
-      mirror
-        .select({
-          serial: objekts.serial,
-          objektId: objekts.id,
-          transferable: objekts.transferable,
-        })
-        .from(objekts)
-        .innerJoin(collections, eq(objekts.collectionId, collections.id))
-        .where(
-          and(
-            eq(objekts.owner, address),
-            eq(collections.collectionId, collectionId),
-          ),
-        )
-        .orderBy(asc(objekts.serial)),
+    async () => {
+      const ownedRows = await loadOwnedObjektsForPublicCollectionIds(address, [
+        collectionId,
+      ]);
+      return ownedRows.map((row) => ({
+        serial: row.serial,
+        objektId: row.objektId,
+        transferable: row.transferable,
+      }));
+    },
   );
 
   const response: ProgressSerialsResponse = { serials: rows };

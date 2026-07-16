@@ -1,4 +1,4 @@
-import { count, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { getSession } from "@/lib/auth-server";
@@ -9,10 +9,11 @@ import {
 } from "@/lib/cosmo/resolve-nickname";
 import { indexerPool } from "@/lib/db/indexer";
 import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
+import { collections } from "@/lib/db/indexer-schema";
 import { compareSeasons } from "@/lib/filter-options";
 import { membersByArtist } from "@/lib/filters";
 import { COSMO_SPIN_ADDRESS, ZERO_ADDRESS } from "@/lib/indexer-constants";
+import { loadOwnedCollectionCountsByDbId } from "@/lib/indexer-owned-objekts";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
@@ -109,20 +110,7 @@ export async function GET(
     getCached(
       `progress:owned-detail:v2:${resolved.address}:${member.toLowerCase()}`,
       90_000,
-      () =>
-        mirror
-          .select({
-            collectionId: objekts.collectionId,
-            ownedCount: count(),
-            transferableCount:
-              sql<number>`count(*) filter (where ${objekts.transferable})`.mapWith(
-                Number,
-              ),
-          })
-          .from(objekts)
-          .innerJoin(collections, eq(objekts.collectionId, collections.id))
-          .where(eq(objekts.owner, resolved.address))
-          .groupBy(objekts.collectionId),
+      () => loadOwnedCollectionCountsByDbId(resolved.address),
     ),
     // Gridding has no dedicated flag in the indexer. A completed grid mints a
     // reward Special-class objekt to the wallet from the zero address; we
@@ -169,9 +157,9 @@ export async function GET(
   const ownedMap = new Map<string, number>();
   const transferableMap = new Map<string, number>();
   for (const row of ownedCounts) {
-    if (row.collectionId) {
-      ownedMap.set(row.collectionId, row.ownedCount);
-      transferableMap.set(row.collectionId, row.transferableCount);
+    if (row.collectionDbId) {
+      ownedMap.set(row.collectionDbId, row.ownedCount);
+      transferableMap.set(row.collectionDbId, row.transferableCount);
     }
   }
 

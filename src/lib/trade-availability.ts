@@ -1,8 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
 import { tradePost, tradePostHave } from "@/lib/db/schema";
+import { loadOwnedObjektsForPublicCollectionIds } from "@/lib/indexer-owned-objekts";
 import { notify } from "@/lib/notify";
 
 const TRADE_AVAILABILITY_STALE_MINUTES = Number(
@@ -176,19 +175,10 @@ async function verifyLoadedTrades(
       continue;
     }
 
-    const ownedRows = await mirror
-      .select({
-        collectionId: collections.collectionId,
-        serial: objekts.serial,
-      })
-      .from(objekts)
-      .innerJoin(collections, eq(objekts.collectionId, collections.id))
-      .where(
-        and(
-          eq(objekts.owner, address),
-          inArray(collections.collectionId, collectionIds),
-        ),
-      );
+    const ownedRows = await loadOwnedObjektsForPublicCollectionIds(
+      address,
+      collectionIds,
+    );
 
     const ownedSet = new Set(
       ownedRows.map((row) => `${row.collectionId}:${row.serial}`),

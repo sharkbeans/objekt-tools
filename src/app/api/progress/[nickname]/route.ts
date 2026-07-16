@@ -1,4 +1,4 @@
-import { count, countDistinct, eq } from "drizzle-orm";
+import { count } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import {
@@ -7,7 +7,11 @@ import {
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
 import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
+import { collections } from "@/lib/db/indexer-schema";
+import {
+  loadCollectionMetadataByDbIds,
+  loadOwnedDistinctCollectionDbIds,
+} from "@/lib/indexer-owned-objekts";
 import { mergeProgressRollups } from "@/lib/progress/merge";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
@@ -82,27 +86,49 @@ export async function GET(
           collections.onOffline,
         ),
     ),
-    getCached(`progress:owned:v2:${resolved.address}`, 90_000, () =>
-      mirror
-        .select({
-          artist: collections.artist,
-          member: collections.member,
-          class: collections.class,
-          season: collections.season,
-          onOffline: collections.onOffline,
-          owned: countDistinct(objekts.collectionId),
-        })
-        .from(objekts)
-        .innerJoin(collections, eq(objekts.collectionId, collections.id))
-        .where(eq(objekts.owner, resolved.address))
-        .groupBy(
-          collections.artist,
-          collections.member,
-          collections.class,
-          collections.season,
-          collections.onOffline,
-        ),
-    ),
+    getCached(`progress:owned:v3:${resolved.address}`, 90_000, async () => {
+      const ownedCollectionDbIds = await loadOwnedDistinctCollectionDbIds(
+        resolved.address,
+      );
+      const ownedCollections =
+        await loadCollectionMetadataByDbIds(ownedCollectionDbIds);
+      const rollups = new Map<
+        string,
+        {
+          artist: string;
+          member: string;
+          class: string;
+          season: string;
+          onOffline: "online" | "offline";
+          owned: number;
+        }
+      >();
+
+      for (const row of ownedCollections.values()) {
+        const key = [
+          row.artist,
+          row.member,
+          row.class,
+          row.season,
+          row.onOffline,
+        ].join("|");
+        const existing = rollups.get(key);
+        if (existing) {
+          existing.owned += 1;
+          continue;
+        }
+        rollups.set(key, {
+          artist: row.artist,
+          member: row.member,
+          class: row.class,
+          season: row.season,
+          onOffline: row.onOffline,
+          owned: 1,
+        });
+      }
+
+      return [...rollups.values()];
+    }),
   ]);
 
   const rollups = mergeProgressRollups(totals, owned);

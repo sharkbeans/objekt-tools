@@ -1,4 +1,3 @@
-import { and, asc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import {
@@ -6,8 +5,7 @@ import {
   resolveNickname,
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
-import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
+import { loadTransferableInventoryRows } from "@/lib/indexer-owned-objekts";
 import { withTimeout } from "@/lib/promise-timeout";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
@@ -106,21 +104,5 @@ export async function GET(
 }
 
 function loadInventoryRows(address: string) {
-  return mirror
-    .select({
-      collectionId: collections.collectionId,
-      artist: collections.artist,
-      member: collections.member,
-      collectionNo: collections.collectionNo,
-      season: collections.season,
-      class: collections.class,
-      thumbnailImage: collections.thumbnailImage,
-      serial: objekts.serial,
-      objektId: objekts.id,
-    })
-    .from(objekts)
-    .innerJoin(collections, eq(objekts.collectionId, collections.id))
-    .where(and(eq(objekts.owner, address), eq(objekts.transferable, true)))
-    .orderBy(asc(collections.member), asc(collections.collectionNo))
-    .limit(500);
+  return loadTransferableInventoryRows(address);
 }

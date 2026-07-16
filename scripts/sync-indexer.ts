@@ -24,8 +24,8 @@ try {
 // Manual/local-dev entry point for the same sync the prod cron container
 // triggers via GET /api/cron/sync-indexer — see syncIndexerMirror's header
 // comment in indexer-mirror-sync.ts for what this actually does and why.
-// Loops until caught up (lag < overlap window) instead of a single pass, so
-// this doubles as the Phase 4 bootstrap catch-up tool once the dump lands.
+// Loops until caught up instead of doing a single pass, so this also works as
+// the bootstrap catch-up tool for the collection mirror.
 async function main() {
   const { syncIndexerMirror } = await import("@/lib/indexer-mirror-sync");
   const { isMirrorEnabled } = await import("@/lib/db/indexer-mirror");

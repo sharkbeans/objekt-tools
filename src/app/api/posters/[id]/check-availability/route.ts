@@ -1,11 +1,10 @@
 export const dynamic = "force-dynamic";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { mirror } from "@/lib/db/indexer-mirror";
-import { collections, objekts } from "@/lib/db/indexer-schema";
 import { cosmoAccount, poster, posterHave } from "@/lib/db/schema";
+import { loadOwnedObjektsForPublicCollectionIds } from "@/lib/indexer-owned-objekts";
 import { redis } from "@/lib/redis";
 
 // POST /api/posters/[id]/check-availability
@@ -70,16 +69,10 @@ export async function POST(
 
   const allCollectionIds = [...new Set(checkable.map((h) => h.collectionId))];
 
-  const ownedRows = await mirror
-    .select({ collectionId: collections.collectionId, serial: objekts.serial })
-    .from(objekts)
-    .innerJoin(collections, eq(objekts.collectionId, collections.id))
-    .where(
-      and(
-        eq(objekts.owner, linked.address),
-        inArray(collections.collectionId, allCollectionIds),
-      ),
-    );
+  const ownedRows = await loadOwnedObjektsForPublicCollectionIds(
+    linked.address,
+    allCollectionIds,
+  );
 
   const ownedSet = new Set(
     ownedRows.map((r) => `${r.collectionId}:${r.serial}`),
