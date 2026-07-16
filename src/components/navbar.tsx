@@ -335,8 +335,12 @@ function MobileNav({
     (currentSection === "trade" ||
       pathname === "/trades" ||
       pathname.startsWith("/trades/"));
+  const pathnameSegments = pathname.split("/").filter(Boolean);
+  const isCollectionMemberRoute =
+    (pathname.startsWith("/collection/") && pathnameSegments.length >= 3) ||
+    (currentSection === "collect" && pathnameSegments.length >= 2);
 
-  if (isHomeRoute) {
+  if (isHomeRoute || isCollectionMemberRoute) {
     return null;
   }
 

@@ -23,9 +23,13 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
@@ -104,6 +108,81 @@ function EditionChipRow({
         </button>
       ))}
     </div>
+  );
+}
+
+function mobileFilterSummary<T>({
+  active,
+  allLabel,
+  renderValue,
+}: {
+  active: T[];
+  allLabel: string;
+  renderValue?: (value: T) => string;
+}) {
+  if (active.length === 0) return allLabel;
+  if (active.length === 1) {
+    return renderValue ? renderValue(active[0]) : String(active[0]);
+  }
+  return `${active.length} selected`;
+}
+
+function MobileMultiSelectDropdown<T extends string | number>({
+  label,
+  allLabel,
+  active,
+  options,
+  onToggle,
+  onClear,
+  renderOption,
+  summaryAllLabel,
+}: {
+  label: string;
+  allLabel: string;
+  active: T[];
+  options: readonly T[];
+  onToggle: (value: T) => void;
+  onClear: () => void;
+  renderOption?: (value: T) => string;
+  summaryAllLabel?: string;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5 sm:hidden">
+          <span>{label}</span>
+          <span className="max-w-24 truncate text-muted-foreground">
+            {mobileFilterSummary({
+              active,
+              allLabel: summaryAllLabel ?? allLabel,
+              renderValue: renderOption,
+            })}
+          </span>
+          <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuLabel>{label}</DropdownMenuLabel>
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            onClear();
+          }}
+        >
+          {allLabel}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {options.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={String(option)}
+            checked={active.includes(option)}
+            onCheckedChange={() => onToggle(option)}
+          >
+            {renderOption ? renderOption(option) : String(option)}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -207,11 +286,11 @@ export function MemberDexContent({ nickname, member }: Props) {
   const [dexSeasonInitialized, setDexSeasonInitialized] = useState(false);
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
-  // Objekts per row: 5 on desktop, 2 on mobile (set after mount to avoid a
+  // Objekts per row: 5 on desktop, 3 on mobile (set after mount to avoid a
   // hydration mismatch). User can override via the dropdown.
   const [perRow, setPerRow] = useState(5);
   useEffect(() => {
-    if (window.matchMedia("(max-width: 639px)").matches) setPerRow(2);
+    if (window.matchMedia("(max-width: 639px)").matches) setPerRow(3);
   }, []);
 
   // Grid-scoped filters — independent from Dex's. A grid board is always
@@ -678,37 +757,66 @@ export function MemberDexContent({ nickname, member }: Props) {
       />
 
       {allClasses.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setDexActiveClasses([])}
-            className={chipClass(dexActiveClasses.length === 0)}
-          >
-            All
-          </button>
-          {allClasses.map((cls) => (
+        <>
+          <MobileMultiSelectDropdown
+            label="Type"
+            allLabel="All types"
+            summaryAllLabel="All"
+            active={dexActiveClasses}
+            options={allClasses}
+            onToggle={(cls) =>
+              setDexActiveClasses((prev) => toggleValue(prev, cls))
+            }
+            onClear={() => setDexActiveClasses([])}
+          />
+          <div className="hidden flex-wrap gap-1.5 sm:flex">
             <button
-              key={cls}
               type="button"
-              onClick={() =>
-                setDexActiveClasses((prev) => toggleValue(prev, cls))
-              }
-              className={chipClass(dexActiveClasses.includes(cls))}
+              onClick={() => setDexActiveClasses([])}
+              className={chipClass(dexActiveClasses.length === 0)}
             >
-              {cls}
+              All
             </button>
-          ))}
-        </div>
+            {allClasses.map((cls) => (
+              <button
+                key={cls}
+                type="button"
+                onClick={() =>
+                  setDexActiveClasses((prev) => toggleValue(prev, cls))
+                }
+                className={chipClass(dexActiveClasses.includes(cls))}
+              >
+                {cls}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {hasEditions && (
-        <EditionChipRow
-          active={dexActiveEditions}
-          onToggle={(ed) =>
-            setDexActiveEditions((prev) => toggleValue(prev, ed))
-          }
-          onClear={() => setDexActiveEditions([])}
-        />
+        <>
+          <MobileMultiSelectDropdown
+            label="Editions"
+            allLabel="All editions"
+            summaryAllLabel="All"
+            active={dexActiveEditions}
+            options={[1, 2, 3] as const}
+            onToggle={(ed) =>
+              setDexActiveEditions((prev) => toggleValue(prev, ed))
+            }
+            onClear={() => setDexActiveEditions([])}
+            renderOption={(ed) => EDITION_LABELS[ed as Edition]}
+          />
+          <div className="hidden sm:block">
+            <EditionChipRow
+              active={dexActiveEditions}
+              onToggle={(ed) =>
+                setDexActiveEditions((prev) => toggleValue(prev, ed))
+              }
+              onClear={() => setDexActiveEditions([])}
+            />
+          </div>
+        </>
       )}
 
       <div className="flex items-center gap-4 flex-wrap">
@@ -794,13 +902,28 @@ export function MemberDexContent({ nickname, member }: Props) {
         onClear={() => setGridActiveSeasons([])}
       />
 
-      <EditionChipRow
+      <MobileMultiSelectDropdown
+        label="Editions"
+        allLabel="All editions"
+        summaryAllLabel="All"
         active={gridActiveEditions}
+        options={[1, 2, 3] as const}
         onToggle={(ed) =>
           setGridActiveEditions((prev) => toggleValue(prev, ed))
         }
         onClear={() => setGridActiveEditions([])}
+        renderOption={(ed) => EDITION_LABELS[ed as Edition]}
       />
+
+      <div className="hidden sm:block">
+        <EditionChipRow
+          active={gridActiveEditions}
+          onToggle={(ed) =>
+            setGridActiveEditions((prev) => toggleValue(prev, ed))
+          }
+          onClear={() => setGridActiveEditions([])}
+        />
+      </div>
 
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
@@ -825,15 +948,15 @@ export function MemberDexContent({ nickname, member }: Props) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <MemberAvatarCarousel
         nickname={data.nickname}
         artist={data.artist}
         activeMember={data.member}
       />
 
-      <div>
-        <h1 className="text-xl font-bold sm:text-2xl">{data.member}</h1>
+      <div className="space-y-0.5">
+        <h1 className="text-lg font-bold sm:text-2xl">{data.member}</h1>
         <p className="text-muted-foreground">
           {totals.owned}/{totals.total} collected
         </p>
@@ -863,10 +986,10 @@ export function MemberDexContent({ nickname, member }: Props) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dex" className="pt-4">
+          <TabsContent value="dex" className="pt-3 sm:pt-4">
             {dexContent}
           </TabsContent>
-          <TabsContent value="grid" className="pt-4">
+          <TabsContent value="grid" className="pt-3 sm:pt-4">
             {gridContent}
           </TabsContent>
         </Tabs>

@@ -134,7 +134,7 @@ export function MemberAvatarCarousel({
     <div
       ref={scrollerRef}
       onMouseDown={onMouseDown}
-      className="-mx-4 flex cursor-grab gap-4 overflow-x-auto px-4 py-2 select-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="-mx-4 flex cursor-grab gap-3 overflow-x-auto px-4 py-1 select-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 sm:py-2"
     >
       {roster.map((member) => {
         const isActive = member === activeMember;
@@ -155,7 +155,7 @@ export function MemberAvatarCarousel({
           >
             <div
               className={cn(
-                "relative h-16 w-16 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-background transition-all",
+                "relative h-14 w-14 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-background transition-all sm:h-16 sm:w-16",
                 isActive
                   ? "ring-primary"
                   : "ring-transparent opacity-70 hover:opacity-100",
@@ -167,7 +167,7 @@ export function MemberAvatarCarousel({
                   alt={member}
                   fill
                   className="object-cover object-top"
-                  sizes="64px"
+                  sizes="(max-width: 639px) 56px, 64px"
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-bold text-muted-foreground select-none">
