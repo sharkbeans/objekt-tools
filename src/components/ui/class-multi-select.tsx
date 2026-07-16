@@ -43,13 +43,43 @@ function GroupedMultiSelect({
   className,
 }: GroupedMultiSelectProps) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
 
-  function toggle(artistId: string, item: string) {
-    const encoded = encodeGroupedValue(artistId, item);
-    if (value.includes(encoded)) {
-      onChange(value.filter((v) => v !== encoded));
+  // Flatten into one deduplicated list of item labels, each mapped to every
+  // artist column that offers it (season/class names repeat across artists,
+  // e.g. tripleS and ARTMS both have "Atom01") — a click toggles all of an
+  // item's encoded "artistId::item" values together, so the dropdown reads
+  // as a single flat list (objekt-explorer style) while filtering still
+  // scopes matches per-artist under the hood.
+  const itemArtists = new Map<string, string[]>();
+  for (const col of columns) {
+    for (const item of col.items) {
+      if (!options.includes(item)) continue;
+      const artists = itemArtists.get(item);
+      if (artists) artists.push(col.artistId);
+      else itemArtists.set(item, [col.artistId]);
+    }
+  }
+  const uniqueItems = [...itemArtists.keys()];
+  const filteredItems = search
+    ? uniqueItems.filter((item) =>
+        item.toLowerCase().includes(search.toLowerCase()),
+      )
+    : uniqueItems;
+
+  function encodedValuesFor(item: string) {
+    return (itemArtists.get(item) ?? []).map((artistId) =>
+      encodeGroupedValue(artistId, item),
+    );
+  }
+
+  function toggle(item: string) {
+    const encoded = encodedValuesFor(item);
+    const allSelected = encoded.every((v) => value.includes(v));
+    if (allSelected) {
+      onChange(value.filter((v) => !encoded.includes(v)));
     } else {
-      onChange([...value, encoded]);
+      onChange([...value, ...encoded.filter((v) => !value.includes(v))]);
     }
   }
 
@@ -58,17 +88,14 @@ function GroupedMultiSelect({
     onChange([]);
   }
 
-  const visibleColumns = columns
-    .map((col) => ({
-      ...col,
-      items: col.items.filter((item) => options.includes(item)),
-    }))
-    .filter((col) => col.items.length > 0);
-
-  // For the trigger label, show decoded item names
-  const decodedLabels = value
-    .map((v) => decodeGroupedValue(v)?.item)
-    .filter((v): v is string => !!v);
+  // For the trigger label, show deduplicated decoded item names
+  const decodedLabels = [
+    ...new Set(
+      value
+        .map((v) => decodeGroupedValue(v)?.item)
+        .filter((v): v is string => !!v),
+    ),
+  ];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -83,12 +110,12 @@ function GroupedMultiSelect({
           )}
         >
           <span className="flex items-center gap-1 overflow-hidden">
-            {value.length === 0 ? (
+            {decodedLabels.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : decodedLabels.length <= 2 ? (
-              decodedLabels.map((label, i) => (
+              decodedLabels.map((label) => (
                 <Badge
-                  key={i}
+                  key={label}
                   variant="secondary"
                   className="text-xs px-1.5 py-0"
                 >
@@ -97,12 +124,12 @@ function GroupedMultiSelect({
               ))
             ) : (
               <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                {value.length} selected
+                {decodedLabels.length} selected
               </Badge>
             )}
           </span>
           <span className="flex items-center gap-0.5 ml-1 shrink-0">
-            {value.length > 0 && (
+            {decodedLabels.length > 0 && (
               <span
                 role="button"
                 tabIndex={0}
@@ -117,44 +144,57 @@ function GroupedMultiSelect({
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <div className="flex divide-x">
-          {visibleColumns.map((col) => (
-            <div key={col.artistId} className="flex flex-col min-w-22.5">
-              <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b">
-                {col.label ?? col.artistId}
-              </div>
-              <div className="p-1">
-                {col.items.map((item) => {
-                  const selected = value.includes(
-                    encodeGroupedValue(col.artistId, item),
-                  );
-                  return (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => toggle(col.artistId, item)}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm hover:bg-accent"
-                    >
-                      <span
-                        className={cn(
-                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
-                          selected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-muted-foreground",
-                        )}
-                      >
-                        {selected && <CheckIcon className="h-3 w-3" />}
-                      </span>
-                      {item}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+      <PopoverContent className="w-52 p-0">
+        {uniqueItems.length > 8 && (
+          <div className="border-b px-2 py-1.5">
+            <input
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        )}
+        <div
+          className="max-h-60 overflow-y-auto p-1"
+          onWheel={(e) => {
+            e.currentTarget.scrollTop += e.deltaY;
+            e.stopPropagation();
+          }}
+        >
+          {filteredItems.length === 0 ? (
+            <p className="py-2 text-center text-xs text-muted-foreground">
+              No options
+            </p>
+          ) : (
+            filteredItems.map((item) => {
+              const selected = encodedValuesFor(item).every((v) =>
+                value.includes(v),
+              );
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => toggle(item)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                >
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-muted-foreground",
+                    )}
+                  >
+                    {selected && <CheckIcon className="h-3 w-3" />}
+                  </span>
+                  {item}
+                </button>
+              );
+            })
+          )}
         </div>
-        {value.length > 0 && (
+        {decodedLabels.length > 0 && (
           <div className="border-t p-1">
             <button
               type="button"
