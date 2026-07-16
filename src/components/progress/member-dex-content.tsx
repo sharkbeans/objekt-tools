@@ -572,21 +572,80 @@ export function MemberDexContent({ nickname, member }: Props) {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+        {/* Avatar carousel */}
+        <div className="-mx-4 flex gap-4 overflow-x-hidden px-4 py-2">
+          {Array.from({ length: 8 }, (_, i) => `sk-avatar-${i}`).map((id) => (
+            <div
+              key={id}
+              className="flex shrink-0 flex-col items-center gap-1.5"
+            >
+              <div className="h-16 w-16 rounded-full bg-muted animate-pulse" />
+              <div className="h-4.5 w-10 rounded-full bg-muted animate-pulse" />
+            </div>
+          ))}
+        </div>
+
+        {/* Title + totals */}
+        <div className="space-y-1.5">
+          <div className="h-6 w-32 bg-muted animate-pulse rounded sm:h-7" />
+          <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+        </div>
+
+        {/* Tabs */}
+        <div className="-mx-1 flex gap-4 border-b border-border px-1 pb-3">
+          <div className="h-6 w-24 bg-muted animate-pulse rounded" />
+          <div className="h-6 w-16 bg-muted animate-pulse rounded" />
+        </div>
+
+        {/* Season chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {Array.from({ length: 5 }, (_, i) => `sk-season-${i}`).map((id) => (
+            <div
+              key={id}
+              className="h-7 w-16 rounded-full bg-muted animate-pulse"
+            />
+          ))}
+        </div>
+
+        {/* Class chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {Array.from({ length: 3 }, (_, i) => `sk-class-${i}`).map((id) => (
+            <div
+              key={id}
+              className="h-7 w-14 rounded-full bg-muted animate-pulse"
+            />
+          ))}
+        </div>
+
+        {/* Controls: owned/unowned toggles, per-row dropdown, share */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="h-5 w-28 bg-muted animate-pulse rounded-full" />
+          <div className="h-5 w-24 bg-muted animate-pulse rounded-full" />
+          <div className="h-9 w-24 bg-muted animate-pulse rounded-md" />
+          <div className="ml-auto h-9 w-28 bg-muted animate-pulse rounded-md" />
+        </div>
+
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2Icon className="h-4 w-4 animate-spin" />
           <span>Loading {member}&apos;s objekts</span>
         </div>
-        <div
-          className="grid gap-2"
-          style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
-        >
-          {Array.from({ length: perRow * 4 }, (_, i) => `sk-${i}`).map((id) => (
-            <div
-              key={id}
-              className="aspect-63/88 rounded bg-muted animate-pulse"
-            />
-          ))}
+
+        {/* Objekt grid */}
+        <div className="space-y-2">
+          <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
+          >
+            {Array.from({ length: perRow * 4 }, (_, i) => `sk-${i}`).map(
+              (id) => (
+                <div
+                  key={id}
+                  className="aspect-63/88 rounded bg-muted animate-pulse"
+                />
+              ),
+            )}
+          </div>
         </div>
       </div>
     );
