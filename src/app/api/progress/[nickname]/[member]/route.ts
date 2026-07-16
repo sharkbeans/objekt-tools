@@ -131,7 +131,7 @@ export async function GET(
     // event-drop FCOs (which are ownership, not mints, of Specials).
     getCached(
       `progress:grid-mints:v1:${resolved.address}:${member.toLowerCase()}`,
-      90_000,
+      10 * 60_000,
       async () => {
         const res = await indexerPool.query<GridMintCountRow>(
           `

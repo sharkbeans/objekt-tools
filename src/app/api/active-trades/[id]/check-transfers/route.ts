@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
 import { publishTradeEvent } from "@/lib/realtime";
+import { redis } from "@/lib/redis";
 import { propagateResolution, tryLiftBan } from "@/lib/trade-guards";
 import {
   type CollectionTransferEvent,
@@ -71,6 +72,24 @@ export async function POST(
 
   if (!["pending", "accepted", "partial"].includes(trade.status)) {
     return NextResponse.json({ status: trade.status, sides: trade.sides });
+  }
+
+  // Server-side cooldown so this can't be hammered past the client's own
+  // throttle — the indexer queries below are the heaviest in the app.
+  // Fails open (proceeds with the check) if Redis is unavailable.
+  const cooldownKey = `check-transfers-cooldown:${tradeId}`;
+  try {
+    const set = await redis.set(cooldownKey, "1", "EX", 8, "NX");
+    if (set === null) {
+      return NextResponse.json({
+        status: trade.status,
+        sides: trade.sides,
+        skipped: true,
+        updated: 0,
+      });
+    }
+  } catch {
+    // Redis unavailable — proceed without the cooldown
   }
 
   const loggedEvents = new Set(

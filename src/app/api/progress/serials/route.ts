@@ -5,6 +5,7 @@ import { indexer } from "@/lib/db/indexer";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import type { ProgressSerialsResponse } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
+import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -44,21 +45,26 @@ export async function GET(request: NextRequest) {
     // Redis unavailable — skip rate limiting
   }
 
-  const rows = await indexer
-    .select({
-      serial: objekts.serial,
-      objektId: objekts.id,
-      transferable: objekts.transferable,
-    })
-    .from(objekts)
-    .innerJoin(collections, eq(objekts.collectionId, collections.id))
-    .where(
-      and(
-        eq(objekts.owner, address),
-        eq(collections.collectionId, collectionId),
-      ),
-    )
-    .orderBy(asc(objekts.serial));
+  const rows = await getCached(
+    `progress:serials:v1:${address.toLowerCase()}:${collectionId}`,
+    60_000,
+    () =>
+      indexer
+        .select({
+          serial: objekts.serial,
+          objektId: objekts.id,
+          transferable: objekts.transferable,
+        })
+        .from(objekts)
+        .innerJoin(collections, eq(objekts.collectionId, collections.id))
+        .where(
+          and(
+            eq(objekts.owner, address),
+            eq(collections.collectionId, collectionId),
+          ),
+        )
+        .orderBy(asc(objekts.serial)),
+  );
 
   const response: ProgressSerialsResponse = { serials: rows };
   return NextResponse.json(response);
