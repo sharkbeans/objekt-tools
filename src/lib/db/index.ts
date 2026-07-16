@@ -7,8 +7,8 @@ function createDb(pool: Pool) {
 }
 
 const globalForDb = globalThis as unknown as {
-  _dbPool: Pool;
-  db: ReturnType<typeof createDb>;
+  _dbPool?: Pool;
+  db?: ReturnType<typeof createDb>;
 };
 
 function getDatabaseUrl() {
@@ -19,18 +19,31 @@ function getDatabaseUrl() {
   return value;
 }
 
-if (!globalForDb._dbPool) {
-  globalForDb._dbPool = new Pool({
-    connectionString: getDatabaseUrl(),
-    max: 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-    ssl: process.env.DATABASE_URL?.includes("sslmode=require")
-      ? { rejectUnauthorized: false }
-      : undefined,
-  });
+function getDb() {
+  if (!globalForDb._dbPool) {
+    const connectionString = getDatabaseUrl();
+    globalForDb._dbPool = new Pool({
+      connectionString,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+      ssl: connectionString.includes("sslmode=require")
+        ? { rejectUnauthorized: false }
+        : undefined,
+    });
+  }
+
+  if (!globalForDb.db) {
+    globalForDb.db = createDb(globalForDb._dbPool);
+  }
+
+  return globalForDb.db;
 }
 
-export const db = globalForDb.db ?? createDb(globalForDb._dbPool);
-
-if (process.env.NODE_ENV !== "production") globalForDb.db = db;
+export const db = new Proxy({} as ReturnType<typeof createDb>, {
+  get(_target, prop, _receiver) {
+    const instance = getDb();
+    const value = Reflect.get(instance, prop, instance);
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
