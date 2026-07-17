@@ -34,6 +34,8 @@ interface ObjektGridPickerProps {
   showSelectedRow?: boolean;
   /** Label for the pinned selected row. */
   selectedRowLabel?: string;
+  /** Optional label shown above the main grid content. */
+  mainGridLabel?: string;
   /** When true, merges duplicate selected entries into one card with a quantity badge. */
   combineSelectedDuplicates?: boolean;
 }
@@ -55,6 +57,7 @@ export function ObjektGridPicker({
   pageSize = DEFAULT_PAGE_SIZE,
   showSelectedRow = false,
   selectedRowLabel = "Selected",
+  mainGridLabel,
   combineSelectedDuplicates = false,
 }: ObjektGridPickerProps) {
   const [page, setPage] = useState(1);
@@ -305,8 +308,8 @@ export function ObjektGridPicker({
         </div>
       )}
       {shouldShowSelectedRow && (
-        <div className="space-y-1.5 border-b-2 border-border pb-3">
-          <p className="px-0.5 text-xs font-medium text-muted-foreground">
+        <div className="space-y-2 border-b-2 border-border pb-4">
+          <p className="px-0.5 text-sm font-semibold tracking-wide text-foreground sm:text-base">
             {selectedRowLabel} ({selected.length})
           </p>
           {renderGrid(displayedSelected, "selected", "selected")}
@@ -314,6 +317,11 @@ export function ObjektGridPicker({
       )}
       {items.length > 0 ? (
         <>
+          {mainGridLabel && (
+            <p className="px-0.5 pt-1 text-sm font-semibold tracking-wide text-foreground sm:text-base">
+              {mainGridLabel}
+            </p>
+          )}
           {renderGrid(pageItems, "page")}
           <TradePagination
             page={safePage}

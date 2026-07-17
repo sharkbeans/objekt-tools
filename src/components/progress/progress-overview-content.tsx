@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Loader2Icon, ShareIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   defaultFilters,
@@ -12,11 +12,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { useProgressOverview } from "@/hooks/use-progress-overview";
 import { normalizeArtistId } from "@/lib/artist-utils";
+import { storeCosmoUsername } from "@/lib/cosmo-username-storage";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import { decodeGroupedValue } from "@/lib/filter-utils";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type { ProgressRollup } from "@/lib/progress/types";
+import { ProgressSearch } from "./progress-search";
 import { MemberProgressCard } from "./member-progress-card";
 
 interface Props {
@@ -29,6 +31,11 @@ interface MemberImagesResponse {
 
 export function ProgressOverviewContent({ nickname }: Props) {
   const { data, isLoading, error } = useProgressOverview(nickname);
+
+  useEffect(() => {
+    if (!data?.nickname) return;
+    storeCosmoUsername(data.nickname);
+  }, [data?.nickname]);
 
   const { data: imagesData } = useQuery<MemberImagesResponse>({
     queryKey: ["progress-member-images"],
@@ -240,6 +247,14 @@ export function ProgressOverviewContent({ nickname }: Props) {
           )}
           Share card
         </Button>
+      </div>
+
+      <div className="max-w-xl">
+        <ProgressSearch
+          defaultNickname={data?.nickname ?? nickname}
+          showLabel={false}
+          placeholder="Search another Cosmo username"
+        />
       </div>
 
       <ObjektFilterBar

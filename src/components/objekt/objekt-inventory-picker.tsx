@@ -64,6 +64,8 @@ interface ObjektInventoryPickerProps {
   showSelectedRow?: boolean;
   /** Label for the pinned selected row. */
   selectedRowLabel?: string;
+  /** Optional label shown above the remaining inventory grid. */
+  mainGridLabel?: string;
   /** When true, merges duplicate selected entries into one card with a quantity badge. */
   combineSelectedDuplicates?: boolean;
 }
@@ -87,6 +89,7 @@ export function ObjektInventoryPicker({
   onLoaded,
   showSelectedRow,
   selectedRowLabel,
+  mainGridLabel,
   combineSelectedDuplicates,
 }: ObjektInventoryPickerProps) {
   const [query, setQuery] = useState("");
@@ -207,6 +210,7 @@ export function ObjektInventoryPicker({
           pageSize={pageSize}
           showSelectedRow={showSelectedRow}
           selectedRowLabel={selectedRowLabel}
+          mainGridLabel={mainGridLabel}
           combineSelectedDuplicates={combineSelectedDuplicates}
         />
       ) : error ? (
@@ -232,6 +236,7 @@ export function ObjektInventoryPicker({
           pageSize={pageSize}
           showSelectedRow={showSelectedRow}
           selectedRowLabel={selectedRowLabel}
+          mainGridLabel={mainGridLabel}
           combineSelectedDuplicates={combineSelectedDuplicates}
         />
       )}

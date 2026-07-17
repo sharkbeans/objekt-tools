@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRightIcon,
   BellIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ImageIcon,
   LibraryIcon,
@@ -133,29 +134,33 @@ export function Navbar({
                 Lists
               </Link>
               <Link
-                href={href("/objekt-maker")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Objektify
-              </Link>
-              <Link
-                href={href("/proofshot")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Proofshot
-              </Link>
-              <Link
-                href={href("/spin")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Spin
-              </Link>
-              <Link
                 href={href("/collection")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Collection
               </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Tools
+                    <ChevronDownIcon className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem asChild>
+                    <Link href={href("/objekt-maker")}>Objektify</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={href("/proofshot")}>Proofshot</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={href("/spin")}>Spin Simulator</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
           </div>
 
@@ -455,6 +460,9 @@ function MobileNav({
             <ImageIcon className="size-4" />
             Lists
           </MobileNavLink>
+          <div className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+            Tools
+          </div>
           <MobileNavLink
             href={href("/objekt-maker")}
             onClick={() => setOpen(false)}
@@ -471,7 +479,7 @@ function MobileNav({
           </MobileNavLink>
           <MobileNavLink href={href("/spin")} onClick={() => setOpen(false)}>
             <SparklesIcon className="size-4" />
-            Spin
+            Spin Simulator
           </MobileNavLink>
           <MobileNavLink
             href={href("/collection")}
@@ -643,7 +651,7 @@ function getMobilePageTitle(
   ) {
     return "Lists";
   }
-  if (pathname.startsWith("/spin")) return "Spin";
+  if (pathname.startsWith("/spin")) return "Spin Simulator";
   if (pathname.startsWith("/collection") || currentSection === "collect") {
     return "Collection";
   }

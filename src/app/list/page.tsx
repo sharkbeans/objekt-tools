@@ -1158,6 +1158,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                             searchPlaceholder="Search your inventory... e.g. JiWoo, Atom02, 108Z"
                             showSelectedRow
                             selectedRowLabel="Offered"
+                            mainGridLabel="Inventory"
                             combineSelectedDuplicates={groupByNumbers}
                             emptyState={
                               <div className="text-sm text-muted-foreground text-center py-4">

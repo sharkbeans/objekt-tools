@@ -5,15 +5,23 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  readStoredCosmoUsername,
+  storeCosmoUsername,
+} from "@/lib/cosmo-username-storage";
 import type { ProgressOverviewResponse } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 
-const LAST_NICKNAME_KEY = "progress-last-nickname";
-
 export function ProgressSearch({
   defaultNickname,
+  showLabel = true,
+  placeholder = "e.g. sharkbeans",
+  buttonLabel = "Search",
 }: {
   defaultNickname?: string;
+  showLabel?: boolean;
+  placeholder?: string;
+  buttonLabel?: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -24,7 +32,7 @@ export function ProgressSearch({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (defaultNickname) return;
-    const saved = localStorage.getItem(LAST_NICKNAME_KEY);
+    const saved = readStoredCosmoUsername();
     if (saved) setValue(saved);
   }, [defaultNickname]);
 
@@ -47,7 +55,7 @@ export function ProgressSearch({
       }
       const data: ProgressOverviewResponse = await res.json();
       queryClient.setQueryData(["progress", trimmed], data);
-      localStorage.setItem(LAST_NICKNAME_KEY, trimmed);
+      storeCosmoUsername(data.nickname);
       router.push(
         sectionHref(`/collection/${trimmed}`, { currentSection: "collect" }),
       );
@@ -60,9 +68,14 @@ export function ProgressSearch({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
-      <Label htmlFor="progress-search-nickname" className="text-sm font-medium">
-        Cosmo Username
-      </Label>
+      {showLabel && (
+        <Label
+          htmlFor="progress-search-nickname"
+          className="text-sm font-medium"
+        >
+          Cosmo Username
+        </Label>
+      )}
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input
           id="progress-search-nickname"
@@ -72,7 +85,7 @@ export function ProgressSearch({
             setValue(e.target.value);
             if (error) setError(null);
           }}
-          placeholder="e.g. sharkbeans"
+          placeholder={placeholder}
           maxLength={30}
           className="h-12 flex-1 bg-background text-base md:text-base"
         />
@@ -81,7 +94,7 @@ export function ProgressSearch({
           disabled={checking}
           className="h-12 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
         >
-          {checking ? "Searching..." : "Search"}
+          {checking ? "Searching..." : buttonLabel}
         </button>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}

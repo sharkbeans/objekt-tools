@@ -21,6 +21,7 @@ import { notify } from "@/lib/notify";
 import { publishTradeEvent } from "@/lib/realtime";
 import { redis } from "@/lib/redis";
 import { propagateResolution, tryLiftBan } from "@/lib/trade-guards";
+import { finalizeCompletedTradePosts } from "@/lib/trade-post-completion";
 import {
   type CollectionTransferEvent,
   fetchCollectionTransferEvents,
@@ -255,15 +256,7 @@ export async function POST(
             and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")),
           );
 
-        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
-          (id): id is string => id !== null,
-        );
-        if (postIds.length > 0) {
-          await tx
-            .update(tradePost)
-            .set({ status: "closed", updatedAt: now })
-            .where(inArray(tradePost.id, postIds));
-        }
+        await finalizeCompletedTradePosts(tx, trade, now);
       });
       await notify([
         {
@@ -932,10 +925,22 @@ export async function POST(
     }
 
     if (newTradeStatus !== trade.status) {
-      await db
-        .update(activeTrade)
-        .set({ status: newTradeStatus, updatedAt: new Date() })
-        .where(eq(activeTrade.id, tradeId));
+      const statusChangedAt = new Date();
+      if (newTradeStatus === "completed") {
+        // Keep the trade transition and its partial post consumption atomic.
+        await db.transaction(async (tx) => {
+          await tx
+            .update(activeTrade)
+            .set({ status: newTradeStatus, updatedAt: statusChangedAt })
+            .where(eq(activeTrade.id, tradeId));
+          await finalizeCompletedTradePosts(tx, trade, statusChangedAt);
+        });
+      } else {
+        await db
+          .update(activeTrade)
+          .set({ status: newTradeStatus, updatedAt: statusChangedAt })
+          .where(eq(activeTrade.id, tradeId));
+      }
 
       if (newTradeStatus === "completed") {
         await notify([
@@ -949,17 +954,9 @@ export async function POST(
           },
         ]);
 
-        // Close both trade posts permanently
         const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
           (id): id is string => id !== null,
         );
-        if (postIds.length > 0) {
-          await db
-            .update(tradePost)
-            .set({ status: "closed", updatedAt: new Date() })
-            .where(inArray(tradePost.id, postIds));
-        }
-
         // Cancel all other pending/accepted active trades that involve either of these posts
         if (postIds.length > 0) {
           const siblingTrades = await db.query.activeTrade.findMany({

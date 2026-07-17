@@ -22,6 +22,7 @@ import {
   getBlockingTradeId,
   propagateResolution,
 } from "@/lib/trade-guards";
+import { finalizeCompletedTradePosts } from "@/lib/trade-post-completion";
 import { resolveCollectionUuids } from "@/lib/trade-transfer-matching";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
@@ -207,15 +208,18 @@ export async function POST(
       })
       .where(eq(activeTrade.id, tradeId));
 
-    // Temporarily hide both trade posts from the browse listing while trade is in progress
+    // Temporarily hide both trade posts while the trade is in progress. If it
+    // completed from pre-delivery, consume only the selected post entries.
     const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
       (id): id is string => id !== null,
     );
-    if (postIds.length > 0) {
+    if (newStatus === "completed") {
+      await finalizeCompletedTradePosts(tx, { ...trade, sides }, now);
+    } else if (postIds.length > 0) {
       await tx
         .update(tradePost)
         .set({
-          status: newStatus === "completed" ? "closed" : "in_trade",
+          status: "in_trade",
           updatedAt: now,
         })
         .where(inArray(tradePost.id, postIds));
