@@ -187,6 +187,10 @@ function itemMatchesFilters(
   item: TradeFilterItem,
   filters: TradeFilters,
 ): boolean {
+  const itemArtist = normalizeArtistId(
+    (item.member ? getArtistForMember(item.member) : null) ?? item.artist,
+  );
+
   // Member filter
   if (filters.member?.length) {
     if (!item.member || !filters.member.includes(item.member)) return false;
@@ -194,18 +198,30 @@ function itemMatchesFilters(
 
   // Season filter
   if (filters.season?.length) {
-    if (!item.season || !filters.season.includes(item.season)) return false;
+    const matches = filters.season.some((s) => {
+      const decoded = decodeGroupedValue(s);
+      return decoded
+        ? decoded.item === item.season &&
+            normalizeArtistId(decoded.artistId) === itemArtist
+        : s === item.season;
+    });
+    if (!matches) return false;
   }
 
   // Class filter
   if (filters.class?.length) {
-    if (!item.class || !filters.class.includes(item.class)) return false;
+    const matches = filters.class.some((c) => {
+      const decoded = decodeGroupedValue(c);
+      return decoded
+        ? decoded.item === item.class &&
+            normalizeArtistId(decoded.artistId) === itemArtist
+        : c === item.class;
+    });
+    if (!matches) return false;
   }
 
   // Artist filter (resolved via member → artist mapping)
   if (filters.artist?.length) {
-    const itemArtist =
-      item.artist ?? (item.member ? getArtistForMember(item.member) : null);
     if (
       !itemArtist ||
       !filters.artist.some((artist) => artistMatches(artist, itemArtist))

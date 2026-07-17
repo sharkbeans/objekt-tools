@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   type ObjektStructuralFilters,
   objektMatchesStructuralFilters,
+  tradeMatchesFilters,
 } from "@/lib/filter-utils";
 
 const emptyFilters: ObjektStructuralFilters = {
@@ -114,6 +115,24 @@ describe("objektMatchesStructuralFilters", () => {
         member: ["HaYeon"],
       }),
       false,
+    );
+  });
+});
+
+describe("tradeMatchesFilters", () => {
+  it("matches grouped season filters on trade listings", () => {
+    assert.equal(
+      tradeMatchesFilters(
+        {
+          haves: [seoYeon],
+          wants: [],
+        },
+        {
+          season: ["tripleS::Cream02"],
+        },
+        "haves",
+      ),
+      true,
     );
   });
 });

@@ -268,6 +268,14 @@ function rememberCosmoUsername(value: string) {
   localStorage.setItem("cosmousername", trimmed);
 }
 
+function formatPosterDate(date = new Date()): string {
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
 function emptyPosterData(): PosterData {
   return {
     username: "",
@@ -275,11 +283,7 @@ function emptyPosterData(): PosterData {
     haves: [],
     wants: [],
     notes: undefined,
-    date: new Date().toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }),
+    date: "",
     haveTitle: "Have",
     wantTitle: "Want",
   };
@@ -292,6 +296,50 @@ const COSMO_USERNAME_STORAGE_KEYS = [
   "progress-last-nickname",
 ];
 const PICKER_GRID_CLASS = "md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7";
+
+type SearchShortcutFilters = Pick<ObjektFilterState, "member" | "season">;
+
+const emptySearchShortcutFilters: SearchShortcutFilters = {
+  member: [],
+  season: [],
+};
+
+function withSearchShortcutFilters(
+  filters: ObjektFilterState,
+  shortcuts: SearchShortcutFilters,
+): ObjektFilterState {
+  return {
+    ...filters,
+    member: [...new Set([...filters.member, ...shortcuts.member])],
+    season: [...new Set([...filters.season, ...shortcuts.season])],
+  };
+}
+
+function withoutSearchShortcutFilters(
+  current: ObjektFilterState,
+  displayed: ObjektFilterState,
+  shortcuts: SearchShortcutFilters,
+): ObjektFilterState {
+  return {
+    ...displayed,
+    member: [
+      ...new Set([
+        ...current.member.filter((value) => displayed.member.includes(value)),
+        ...displayed.member.filter(
+          (value) => !shortcuts.member.includes(value),
+        ),
+      ]),
+    ],
+    season: [
+      ...new Set([
+        ...current.season.filter((value) => displayed.season.includes(value)),
+        ...displayed.season.filter(
+          (value) => !shortcuts.season.includes(value),
+        ),
+      ]),
+    ],
+  };
+}
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
@@ -325,6 +373,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [colsPerRow, setColsPerRow] = useState(5);
   const userSetCols = useRef(false);
   const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
+  const [haveSearchShortcuts, setHaveSearchShortcuts] =
+    useState<SearchShortcutFilters>(emptySearchShortcutFilters);
+  const [wantSearchShortcuts, setWantSearchShortcuts] =
+    useState<SearchShortcutFilters>(emptySearchShortcutFilters);
   const [step, setStep] = useState<"have" | "want">("have");
   const [customWantOpen, setCustomWantOpen] = useState(false);
   const [anyWantOpen, setAnyWantOpen] = useState(false);
@@ -343,8 +395,45 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [latestMatchCounts, setLatestMatchCounts] = useState<
     Record<string, number>
   >({});
+  const [hasMounted, setHasMounted] = useState(false);
 
   const totalItems = posterData.haves.length + posterData.wants.length;
+  const displayedHaveFilters = useMemo(
+    () => withSearchShortcutFilters(filters, haveSearchShortcuts),
+    [filters, haveSearchShortcuts],
+  );
+  const displayedWantFilters = useMemo(
+    () => withSearchShortcutFilters(filters, wantSearchShortcuts),
+    [filters, wantSearchShortcuts],
+  );
+
+  const handleHaveFiltersChange = useCallback(
+    (next: ObjektFilterState) => {
+      setFilters((current) =>
+        withoutSearchShortcutFilters(current, next, haveSearchShortcuts),
+      );
+    },
+    [haveSearchShortcuts],
+  );
+
+  const handleWantFiltersChange = useCallback(
+    (next: ObjektFilterState) => {
+      setFilters((current) =>
+        withoutSearchShortcutFilters(current, next, wantSearchShortcuts),
+      );
+    },
+    [wantSearchShortcuts],
+  );
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    setPosterData((prev) =>
+      prev.date ? prev : { ...prev, date: formatPosterDate() },
+    );
+  }, []);
 
   // Auto-disable wantsOnly if all wants are removed
   useEffect(() => {
@@ -480,11 +569,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           haves: data.haves.map(storedItemToResolved),
           wants: data.wants.map(storedItemToResolved),
           notes: data.notes ?? undefined,
-          date: new Date().toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          }),
+          date: formatPosterDate(),
           haveTitle: data.haveTitle,
           wantTitle: data.wantTitle,
         });
@@ -1072,7 +1157,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     <Button
                       type="button"
                       className="h-12 gap-2 px-4 sm:flex-1"
-                      disabled={!cosmoId.trim()}
+                      disabled={!hasMounted || !cosmoId.trim()}
                       onClick={() => {
                         rememberCosmoUsername(cosmoId);
                         searchInventory(cosmoId);
@@ -1136,8 +1221,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                           </CardDescription>
                         </div>
                         <ObjektFilterBar
-                          filters={filters}
-                          onChange={setFilters}
+                          filters={displayedHaveFilters}
+                          onChange={handleHaveFiltersChange}
                           showSearch={false}
                           showSort={false}
                           showFilterMode={false}
@@ -1155,7 +1240,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                             gridClassName={PICKER_GRID_CLASS}
                             pageSize={35}
                             filters={filters}
-                            searchPlaceholder="Search your inventory... e.g. JiWoo, Atom02, 108Z"
+                            onShortcutFiltersChange={setHaveSearchShortcuts}
+                            searchPlaceholder="Search your inventory... e.g. sy cc101"
                             showSelectedRow
                             selectedRowLabel="Offered"
                             mainGridLabel="Inventory"
@@ -1187,8 +1273,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                           </CardDescription>
                         </div>
                         <ObjektFilterBar
-                          filters={filters}
-                          onChange={setFilters}
+                          filters={displayedWantFilters}
+                          onChange={handleWantFiltersChange}
                           showSearch={false}
                           showSort={false}
                           showFilterMode={false}
@@ -1201,6 +1287,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                           onDeselect={handleDeselectWant}
                           maxSelections={50}
                           filters={filters}
+                          onShortcutFiltersChange={setWantSearchShortcuts}
                           gridClassName={PICKER_GRID_CLASS}
                           showSelectedRow
                           selectedRowLabel="Wanted"

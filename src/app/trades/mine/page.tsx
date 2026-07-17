@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
 import { sectionHref } from "@/lib/sections";
+import { applyTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
 import type {
   ActiveTradeDTO,
   TradePostDTO,
@@ -48,16 +49,17 @@ const statusLabel: Record<TradeStatus, string> = {
 };
 
 function buildParams(filters: ObjektFilterState, page: number) {
+  const effective = applyTradeSearchShortcuts(filters);
   const p = new URLSearchParams();
   p.set("page", String(page));
-  for (const a of filters.artist) p.append("artist", a);
-  for (const m of filters.member) p.append("member", m);
-  for (const s of filters.season) p.append("season", s);
-  for (const c of filters.class) p.append("class", c);
-  for (const o of filters.on_offline) p.append("on_offline", o);
-  if (filters.search) p.set("search", filters.search);
-  if (filters.sort) p.set("sort", filters.sort);
-  p.set("filter_mode", filters.filterMode);
+  for (const a of effective.artist) p.append("artist", a);
+  for (const m of effective.member) p.append("member", m);
+  for (const s of effective.season) p.append("season", s);
+  for (const c of effective.class) p.append("class", c);
+  for (const o of effective.on_offline) p.append("on_offline", o);
+  if (effective.search) p.set("search", effective.search);
+  if (effective.sort) p.set("sort", effective.sort);
+  p.set("filter_mode", effective.filterMode);
   return p;
 }
 
@@ -343,7 +345,12 @@ export default function MyTradesPage() {
       </div>
 
       <h2 className="text-lg font-semibold">My Trade Posts</h2>
-      <ObjektFilterBar filters={filters} onChange={handleFiltersChange} />
+      <ObjektFilterBar
+        filters={filters}
+        onChange={handleFiltersChange}
+        smartSearchMode="trade"
+        searchPlaceholder="Search your posts... e.g. h sy cc101"
+      />
 
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">

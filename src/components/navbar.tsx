@@ -111,13 +111,9 @@ export function Navbar({
             </Link>
             <nav className="flex items-center gap-4 text-sm">
               <Link
-                href={href(matchCount > 0 ? "/trades/mine" : "/trades")}
+                href={href("/trades")}
                 className="relative text-muted-foreground hover:text-foreground transition-colors"
-                title={
-                  matchCount > 0
-                    ? "View your matches"
-                    : "Browse the marketplace and manage your offers"
-                }
+                title="Browse all trades"
               >
                 Trades
                 {matchCount > 0 && (
@@ -344,6 +340,12 @@ function MobileNav({
   const isCollectionMemberRoute =
     (pathname.startsWith("/collection/") && pathnameSegments.length >= 3) ||
     (currentSection === "collect" && pathnameSegments.length >= 2);
+  const isToolsRoute =
+    pathname.startsWith("/objekt-maker") ||
+    pathname.startsWith("/proofshot") ||
+    pathname.startsWith("/spin") ||
+    currentSection === "create";
+  const [toolsOpen, setToolsOpen] = useState(isToolsRoute);
 
   if (isHomeRoute || isCollectionMemberRoute) {
     return null;
@@ -442,10 +444,7 @@ function MobileNav({
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-          <MobileNavLink
-            href={href(matchCount > 0 ? "/trades/mine" : "/trades")}
-            onClick={() => setOpen(false)}
-          >
+          <MobileNavLink href={href("/trades")} onClick={() => setOpen(false)}>
             <span className="flex items-center gap-2">
               <ArrowLeftRightIcon className="size-4 shrink-0" />
               Trades
@@ -460,33 +459,12 @@ function MobileNav({
             <ImageIcon className="size-4" />
             Lists
           </MobileNavLink>
-          <div className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
-            Tools
-          </div>
-          <MobileNavLink
-            href={href("/objekt-maker")}
-            onClick={() => setOpen(false)}
-          >
-            <SparklesIcon className="size-4" />
-            Objektify
-          </MobileNavLink>
-          <MobileNavLink
-            href={href("/proofshot")}
-            onClick={() => setOpen(false)}
-          >
-            <UserIcon className="size-4" />
-            Proofshot
-          </MobileNavLink>
-          <MobileNavLink href={href("/spin")} onClick={() => setOpen(false)}>
-            <SparklesIcon className="size-4" />
-            Spin Simulator
-          </MobileNavLink>
           <MobileNavLink
             href={href("/collection")}
             onClick={() => setOpen(false)}
           >
             <LibraryIcon className="size-4" />
-            Dex
+            Collection
           </MobileNavLink>
           {session && (
             <MobileNavLink
@@ -504,6 +482,54 @@ function MobileNav({
               </span>
             </MobileNavLink>
           )}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setToolsOpen((value) => !value)}
+              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-expanded={toolsOpen}
+              aria-controls="mobile-tools-nav"
+            >
+              <span className="inline-flex items-center gap-2">
+                <SparklesIcon className="size-4" />
+                Tools
+              </span>
+              <ChevronDownIcon
+                className={cn(
+                  "size-4 transition-transform",
+                  toolsOpen && "rotate-180",
+                )}
+              />
+            </button>
+            {toolsOpen && (
+              <div id="mobile-tools-nav" className="mt-1 space-y-1">
+                <MobileNavLink
+                  href={href("/objekt-maker")}
+                  onClick={() => setOpen(false)}
+                  className="pl-8"
+                >
+                  <SparklesIcon className="size-4" />
+                  Objektify
+                </MobileNavLink>
+                <MobileNavLink
+                  href={href("/proofshot")}
+                  onClick={() => setOpen(false)}
+                  className="pl-8"
+                >
+                  <UserIcon className="size-4" />
+                  Proofshot
+                </MobileNavLink>
+                <MobileNavLink
+                  href={href("/spin")}
+                  onClick={() => setOpen(false)}
+                  className="pl-8"
+                >
+                  <SparklesIcon className="size-4" />
+                  Spin Simulator
+                </MobileNavLink>
+              </div>
+            )}
+          </div>
           {!session && (
             <MobileNavLink
               href={href("/sign-in")}
@@ -602,17 +628,22 @@ function MobileNav({
 function MobileNavLink({
   href,
   onClick,
+  className,
   children,
 }: {
   href: string;
   onClick?: () => void;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <Link
       href={href}
       onClick={onClick}
-      className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      className={cn(
+        "flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        className,
+      )}
     >
       {children}
     </Link>

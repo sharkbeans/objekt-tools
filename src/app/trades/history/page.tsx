@@ -111,10 +111,10 @@ export default function TradeHistoryPage() {
           <p className="text-muted-foreground">Completed and past trades</p>
         </div>
         <Link
-          href={sectionHref("/trades/mine", { currentSection: "trade" })}
+          href={sectionHref("/trades", { currentSection: "trade" })}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
-          ← My Trades
+          ← Browse Trades
         </Link>
       </div>
 
