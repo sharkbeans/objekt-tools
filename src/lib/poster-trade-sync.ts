@@ -152,6 +152,24 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
 
   const wantRows = [...resolvableWantRows, ...anyWantRows];
 
+  // A poster whose resolvable items are all gone has nothing to match —
+  // close the mirror rather than leave an open post with no items.
+  if (haveRows.length === 0 && wantRows.length === 0) {
+    if (existing && existing.status === "open") {
+      await db
+        .update(tradePost)
+        .set({ status: "closed", updatedAt: new Date() })
+        .where(eq(tradePost.id, existing.id));
+    }
+    return;
+  }
+
+  // The manual trade flow requires at least one have unless the post is
+  // wants-only, so a poster with wants but no resolvable haves must mirror
+  // as wants-only — otherwise the trade card shows an empty HAVE column
+  // with no explanation.
+  const wantsOnly = row.wantsOnly || haveRows.length === 0;
+
   const mirroredTradePostId = await db.transaction(async (tx) => {
     let tradePostId: string;
     if (existing) {
@@ -160,7 +178,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
         .update(tradePost)
         .set({
           description: row.notes,
-          wantsOnly: row.wantsOnly,
+          wantsOnly,
           updatedAt: new Date(),
           availabilityCheckedAt: null,
         })
@@ -178,7 +196,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
           userId,
           description: row.notes,
           status: "open",
-          wantsOnly: row.wantsOnly,
+          wantsOnly,
           source: "list",
           linkedPosterId: posterId,
         })
