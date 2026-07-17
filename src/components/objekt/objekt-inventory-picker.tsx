@@ -12,6 +12,7 @@ import {
   objektMatchesStructuralFilters,
 } from "@/lib/filter-utils";
 import { objektMatchesSearch } from "@/lib/objekt-search";
+import { parseObjektSearchShortcuts } from "@/lib/trade-search-shortcuts";
 import {
   defaultFilters,
   ObjektFilterBar,
@@ -43,6 +44,11 @@ interface ObjektInventoryPickerProps {
   maxSelections?: number;
   /** External structural filters (e.g. a page-level filter bar). */
   filters?: ObjektStructuralFilters;
+  /** Reports live member/season shortcuts for display in an external filter bar. */
+  onShortcutFiltersChange?: (filters: {
+    member: string[];
+    season: string[];
+  }) => void;
   emptyState?: ReactNode;
   gridClassName?: string;
   searchPlaceholder?: string;
@@ -77,9 +83,10 @@ export function ObjektInventoryPicker({
   onDeselect,
   maxSelections = 10,
   filters,
+  onShortcutFiltersChange,
   emptyState,
   gridClassName,
-  searchPlaceholder = "Filter your objekts... e.g. JiWoo, Atom02, 108Z",
+  searchPlaceholder = "Filter your objekts... e.g. sy cc101",
   showFilterBar = false,
   filterBarActions,
   perRow,
@@ -98,6 +105,49 @@ export function ObjektInventoryPicker({
   const [error, setError] = useState<string | null>(null);
   const [internalFilters, setInternalFilters] =
     useState<ObjektFilterState>(defaultFilters);
+  const smartSearch = useMemo(() => parseObjektSearchShortcuts(query), [query]);
+
+  function updateQuery(search: string) {
+    setQuery(search);
+    if (onShortcutFiltersChange) {
+      const parsed = parseObjektSearchShortcuts(search);
+      onShortcutFiltersChange({
+        member: parsed.member,
+        season: parsed.season,
+      });
+    }
+  }
+
+  useEffect(
+    () => () => {
+      onShortcutFiltersChange?.({ member: [], season: [] });
+    },
+    [onShortcutFiltersChange],
+  );
+
+  const displayedInternalFilters = {
+    ...internalFilters,
+    member: [...new Set([...internalFilters.member, ...smartSearch.member])],
+    season: [...new Set([...internalFilters.season, ...smartSearch.season])],
+  };
+
+  function handleInternalFiltersChange(next: ObjektFilterState) {
+    setInternalFilters((current) => ({
+      ...next,
+      member: [
+        ...new Set([
+          ...current.member.filter((value) => next.member.includes(value)),
+          ...next.member.filter((value) => !smartSearch.member.includes(value)),
+        ]),
+      ],
+      season: [
+        ...new Set([
+          ...current.season.filter((value) => next.season.includes(value)),
+          ...next.season.filter((value) => !smartSearch.season.includes(value)),
+        ]),
+      ],
+    }));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +177,7 @@ export function ObjektInventoryPicker({
   const filtered = useMemo(() => {
     let result = items;
 
-    const searchText = [query.trim(), filters?.search?.trim()]
+    const searchText = [smartSearch.effectiveSearch, filters?.search?.trim()]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -135,18 +185,46 @@ export function ObjektInventoryPicker({
       result = result.filter((o) => objektMatchesSearch(o, searchText));
     }
 
-    if (filters) {
-      result = result.filter((o) => objektMatchesStructuralFilters(o, filters));
-    }
-
-    if (showFilterBar) {
-      result = result.filter((o) =>
-        objektMatchesStructuralFilters(o, internalFilters),
-      );
-    }
+    const structuralFilters = {
+      artist: [
+        ...new Set([
+          ...(filters?.artist ?? []),
+          ...(showFilterBar ? internalFilters.artist : []),
+        ]),
+      ],
+      member: [
+        ...new Set([
+          ...(filters?.member ?? []),
+          ...(showFilterBar ? internalFilters.member : []),
+          ...smartSearch.member,
+        ]),
+      ],
+      season: [
+        ...new Set([
+          ...(filters?.season ?? []),
+          ...(showFilterBar ? internalFilters.season : []),
+          ...smartSearch.season,
+        ]),
+      ],
+      class: [
+        ...new Set([
+          ...(filters?.class ?? []),
+          ...(showFilterBar ? internalFilters.class : []),
+        ]),
+      ],
+      on_offline: [
+        ...new Set([
+          ...(filters?.on_offline ?? []),
+          ...(showFilterBar ? internalFilters.on_offline : []),
+        ]),
+      ],
+    };
+    result = result.filter((o) =>
+      objektMatchesStructuralFilters(o, structuralFilters),
+    );
 
     return result;
-  }, [items, query, filters, showFilterBar, internalFilters]);
+  }, [items, smartSearch, filters, showFilterBar, internalFilters]);
 
   const ordered = useMemo(() => {
     if (!prioritize) return filtered;
@@ -181,13 +259,13 @@ export function ObjektInventoryPicker({
       <Input
         placeholder={searchPlaceholder}
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => updateQuery(e.target.value)}
       />
 
       {showFilterBar && (
         <ObjektFilterBar
-          filters={internalFilters}
-          onChange={setInternalFilters}
+          filters={displayedInternalFilters}
+          onChange={handleInternalFiltersChange}
           showSearch={false}
           showSort={false}
           showFilterMode={false}

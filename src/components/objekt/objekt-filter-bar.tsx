@@ -2,7 +2,6 @@
 
 import { SearchIcon, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ClassMultiSelect,
@@ -11,9 +10,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
-import { artistLabel } from "@/lib/artist-utils";
 import { decodeGroupedValue } from "@/lib/filter-utils";
 import { validOnlineTypes } from "@/lib/filters";
+import { parseTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
 
 export type ObjektFilterState = {
   search: string;
@@ -45,6 +44,7 @@ interface ObjektFilterBarProps {
   showFilterMode?: boolean;
   showMember?: boolean;
   searchPlaceholder?: string;
+  smartSearchMode?: "trade";
   /** Extra controls (e.g. Cancel/Confirm) rendered at the end of the dropdown row. */
   actions?: ReactNode;
 }
@@ -60,6 +60,23 @@ function hasActiveFilters(filters: ObjektFilterState): boolean {
   );
 }
 
+function mergeFilterValues(manual: string[], inferred: string[]) {
+  return [...new Set([...manual, ...inferred])];
+}
+
+function reconcileManualValues(
+  manual: string[],
+  inferred: string[],
+  nextDisplayed: string[],
+) {
+  return [
+    ...new Set([
+      ...manual.filter((value) => nextDisplayed.includes(value)),
+      ...nextDisplayed.filter((value) => !inferred.includes(value)),
+    ]),
+  ];
+}
+
 export function ObjektFilterBar({
   filters,
   onChange,
@@ -68,9 +85,22 @@ export function ObjektFilterBar({
   showFilterMode = true,
   showMember = true,
   searchPlaceholder = "Quick Search: jw a201z, sy divine, !dco #1-100…",
+  smartSearchMode,
   actions,
 }: ObjektFilterBarProps) {
   const filterOptions = useFilterOptions();
+  const shortcuts = smartSearchMode
+    ? parseTradeSearchShortcuts(filters.search)
+    : null;
+  const displayedMembers = mergeFilterValues(
+    filters.member,
+    shortcuts?.member ?? [],
+  );
+  const displayedSeasons = mergeFilterValues(
+    filters.season,
+    shortcuts?.season ?? [],
+  );
+  const displayedFilterMode = shortcuts?.filterMode ?? filters.filterMode;
 
   function update(partial: Partial<ObjektFilterState>) {
     onChange({ ...filters, ...partial });
@@ -159,14 +189,14 @@ export function ObjektFilterBar({
                 <button
                   type="button"
                   onClick={() => update({ filterMode: "haves" })}
-                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${displayedFilterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   Haves
                 </button>
                 <button
                   type="button"
                   onClick={() => update({ filterMode: "wants" })}
-                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${filters.filterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${displayedFilterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   Wants
                 </button>
@@ -209,8 +239,16 @@ export function ObjektFilterBar({
           {showMember && (
             <MultiSelect
               options={availableMembers.map((m) => ({ label: m, value: m }))}
-              value={filters.member}
-              onChange={(v) => update({ member: v })}
+              value={displayedMembers}
+              onChange={(v) =>
+                update({
+                  member: reconcileManualValues(
+                    filters.member,
+                    shortcuts?.member ?? [],
+                    v,
+                  ),
+                })
+              }
               placeholder="Member"
               className="w-full sm:w-auto sm:min-w-32"
             />
@@ -219,8 +257,16 @@ export function ObjektFilterBar({
           <SeasonMultiSelect
             options={availableSeasons}
             columns={filterOptions.seasonColumns}
-            value={filters.season}
-            onChange={(v) => update({ season: v })}
+            value={displayedSeasons}
+            onChange={(v) =>
+              update({
+                season: reconcileManualValues(
+                  filters.season,
+                  shortcuts?.season ?? [],
+                  v,
+                ),
+              })
+            }
             placeholder="Season"
             className="w-full sm:w-auto sm:min-w-32"
           />
@@ -263,99 +309,6 @@ export function ObjektFilterBar({
           )}
         </div>
       </div>
-
-      {/* Active filter badges */}
-      {active && (
-        <div className="flex flex-wrap gap-1.5">
-          {filters.search && (
-            <Badge variant="secondary" className="gap-1 text-xs">
-              &quot;{filters.search}&quot;
-              <button type="button" onClick={() => update({ search: "" })}>
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {filters.artist.map((a) => (
-            <Badge key={a} variant="secondary" className="gap-1 text-xs">
-              {a}
-              <button
-                type="button"
-                onClick={() =>
-                  handleArtistChange(filters.artist.filter((x) => x !== a))
-                }
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-          {filters.member.map((m) => (
-            <Badge key={m} variant="secondary" className="gap-1 text-xs">
-              {m}
-              <button
-                type="button"
-                onClick={() =>
-                  update({ member: filters.member.filter((x) => x !== m) })
-                }
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-          {filters.season.map((s) => {
-            const decoded = decodeGroupedValue(s);
-            const label = decoded
-              ? `${artistLabel(decoded.artistId)} ${decoded.item}`
-              : s;
-            return (
-              <Badge key={s} variant="secondary" className="gap-1 text-xs">
-                {label}
-                <button
-                  type="button"
-                  onClick={() =>
-                    update({ season: filters.season.filter((x) => x !== s) })
-                  }
-                >
-                  <XIcon className="h-3 w-3" />
-                </button>
-              </Badge>
-            );
-          })}
-          {filters.class.map((c) => {
-            const decoded = decodeGroupedValue(c);
-            const label = decoded
-              ? `${artistLabel(decoded.artistId)} ${decoded.item}`
-              : c;
-            return (
-              <Badge key={c} variant="secondary" className="gap-1 text-xs">
-                {label}
-                <button
-                  type="button"
-                  onClick={() =>
-                    update({ class: filters.class.filter((x) => x !== c) })
-                  }
-                >
-                  <XIcon className="h-3 w-3" />
-                </button>
-              </Badge>
-            );
-          })}
-          {filters.on_offline.map((t) => (
-            <Badge key={t} variant="secondary" className="gap-1 text-xs">
-              {t === "online" ? "Digital" : "Physical"}
-              <button
-                type="button"
-                onClick={() =>
-                  update({
-                    on_offline: filters.on_offline.filter((x) => x !== t),
-                  })
-                }
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

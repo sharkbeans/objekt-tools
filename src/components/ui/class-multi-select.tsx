@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ export { decodeGroupedValue, encodeGroupedValue };
 interface GroupedMultiSelectProps {
   columns: { artistId: string; label?: string; items: string[] }[];
   options: string[];
-  value: string[]; // encoded "artistId::item" values
+  value: string[]; // artist-scoped values or broad plain values from smart search
   onChange: (value: string[]) => void;
   placeholder?: string;
   className?: string;
@@ -43,16 +43,13 @@ function GroupedMultiSelect({
 
   function toggle(artistId: string, item: string) {
     const encoded = encodeGroupedValue(artistId, item);
-    if (value.includes(encoded)) {
+    if (value.includes(item)) {
+      onChange(value.filter((v) => v !== item));
+    } else if (value.includes(encoded)) {
       onChange(value.filter((v) => v !== encoded));
     } else {
       onChange([...value, encoded]);
     }
-  }
-
-  function clear(e: React.MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    onChange([]);
   }
 
   const visibleColumns = columns
@@ -63,9 +60,10 @@ function GroupedMultiSelect({
     .filter((col) => col.items.length > 0);
 
   // For the trigger label, show decoded item names
-  const decodedLabels = value
-    .map((v) => decodeGroupedValue(v)?.item)
-    .filter((v): v is string => !!v);
+  const decodedLabels = value.map((value) => ({
+    key: value,
+    label: decodeGroupedValue(value)?.item ?? value,
+  }));
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -76,6 +74,8 @@ function GroupedMultiSelect({
           aria-expanded={open}
           className={cn(
             "h-9 min-w-28 justify-between px-3 font-normal",
+            value.length > 0 &&
+              "border-foreground/40 bg-accent text-foreground shadow-sm",
             className,
           )}
         >
@@ -83,9 +83,9 @@ function GroupedMultiSelect({
             {value.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : decodedLabels.length <= 2 ? (
-              decodedLabels.map((label) => (
+              decodedLabels.map(({ key, label }) => (
                 <Badge
-                  key={label}
+                  key={key}
                   variant="secondary"
                   className="text-xs px-1.5 py-0"
                 >
@@ -99,16 +99,6 @@ function GroupedMultiSelect({
             )}
           </span>
           <span className="flex items-center gap-0.5 ml-1 shrink-0">
-            {value.length > 0 && (
-              <button
-                type="button"
-                onClick={clear}
-                className="text-muted-foreground hover:text-foreground rounded p-0.5"
-                aria-label="Clear selection"
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            )}
             <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
           </span>
         </Button>
@@ -122,9 +112,9 @@ function GroupedMultiSelect({
               </div>
               <div className="p-1">
                 {col.items.map((item) => {
-                  const selected = value.includes(
-                    encodeGroupedValue(col.artistId, item),
-                  );
+                  const selected =
+                    value.includes(encodeGroupedValue(col.artistId, item)) ||
+                    value.includes(item);
                   return (
                     <button
                       key={item}

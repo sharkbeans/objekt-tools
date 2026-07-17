@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,11 +46,6 @@ export function MultiSelect({
     }
   }
 
-  function clear(e: React.MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    onChange([]);
-  }
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -60,6 +55,8 @@ export function MultiSelect({
           aria-expanded={open}
           className={cn(
             "h-9 min-w-32 justify-between px-3 font-normal",
+            value.length > 0 &&
+              "border-foreground/40 bg-accent text-foreground shadow-sm",
             className,
           )}
         >
@@ -83,16 +80,6 @@ export function MultiSelect({
             )}
           </span>
           <span className="flex items-center gap-0.5 ml-1 shrink-0">
-            {value.length > 0 && (
-              <button
-                type="button"
-                onClick={clear}
-                className="text-muted-foreground hover:text-foreground rounded p-0.5"
-                aria-label="Clear selection"
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            )}
             <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
           </span>
         </Button>

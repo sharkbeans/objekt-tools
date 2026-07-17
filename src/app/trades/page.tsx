@@ -52,18 +52,25 @@ export async function generateMetadata({
 export default function TradesPage() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold">Browse Trades</h1>
           <p className="text-muted-foreground">
             Find someone to trade Objekts with
           </p>
         </div>
-        <Button asChild size="sm">
-          <Link href={sectionHref("/list", { currentSection: "trade" })}>
-            Create a list →
-          </Link>
-        </Button>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Button asChild size="sm" variant="outline">
+            <Link href={sectionHref("/list/mine", { currentSection: "trade" })}>
+              My Lists
+            </Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href={sectionHref("/list", { currentSection: "trade" })}>
+              Create a list →
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Suspense>

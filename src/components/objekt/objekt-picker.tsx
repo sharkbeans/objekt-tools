@@ -10,6 +10,7 @@ import {
 } from "@/lib/filter-utils";
 import { resolveObjektSearchTerm } from "@/lib/objekt-search";
 import { seasonPrefixMap } from "@/lib/season-prefix";
+import { parseObjektSearchShortcuts } from "@/lib/trade-search-shortcuts";
 import { ObjektGridPicker } from "./objekt-grid-picker";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {
@@ -92,6 +93,21 @@ function parseSeasonPrefixQuery(query: string): URLSearchParams | null {
 
 async function searchByQuery(query: string): Promise<ObjektEntry[]> {
   const trimmed = query.trim();
+  const smartSearch = parseObjektSearchShortcuts(trimmed);
+
+  if (smartSearch.chips.length > 0) {
+    const params = new URLSearchParams();
+    if (smartSearch.effectiveSearch) {
+      params.append("q", smartSearch.effectiveSearch);
+    }
+    for (const member of smartSearch.member) params.append("member", member);
+    for (const season of smartSearch.season) params.append("season", season);
+
+    const res = await fetch(`/api/objekts/search?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.results ?? [];
+  }
 
   const structured = parseSeasonPrefixQuery(trimmed);
   if (structured) {
@@ -116,6 +132,11 @@ interface ObjektPickerProps {
   onDeselect: (objekt: ObjektEntry) => void;
   maxSelections?: number;
   filters?: ObjektStructuralFilters;
+  /** Reports live member/season shortcuts for display in an external filter bar. */
+  onShortcutFiltersChange?: (filters: {
+    member: string[];
+    season: string[];
+  }) => void;
   gridClassName?: string;
   /** Shows selected items in a pinned row above the results grid. */
   showSelectedRow?: boolean;
@@ -131,6 +152,7 @@ export function ObjektPicker({
   onDeselect,
   maxSelections = 10,
   filters,
+  onShortcutFiltersChange,
   gridClassName,
   showSelectedRow = false,
   selectedRowLabel = "Selected",
@@ -143,6 +165,29 @@ export function ObjektPicker({
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const filtersActive = hasActiveFilters(filters);
+  const smartSearch = useMemo(
+    () =>
+      parseObjektSearchShortcuts(query.trim() || filters?.search?.trim() || ""),
+    [query, filters?.search],
+  );
+
+  function updateQuery(search: string) {
+    setQuery(search);
+    if (onShortcutFiltersChange) {
+      const parsed = parseObjektSearchShortcuts(search);
+      onShortcutFiltersChange({
+        member: parsed.member,
+        season: parsed.season,
+      });
+    }
+  }
+
+  useEffect(
+    () => () => {
+      onShortcutFiltersChange?.({ member: [], season: [] });
+    },
+    [onShortcutFiltersChange],
+  );
 
   useEffect(() => {
     if (!filtersActive || !filters) {
@@ -176,9 +221,17 @@ export function ObjektPicker({
 
   const displayResults = useMemo(() => {
     const base = effectiveQuery ? queryResults : filterResults;
-    if (!filters || !effectiveQuery) return base;
-    return base.filter((o) => objektMatchesStructuralFilters(o, filters));
-  }, [effectiveQuery, queryResults, filterResults, filters]);
+    const structuralFilters = {
+      artist: filters?.artist ?? [],
+      member: [...new Set([...(filters?.member ?? []), ...smartSearch.member])],
+      season: [...new Set([...(filters?.season ?? []), ...smartSearch.season])],
+      class: filters?.class ?? [],
+      on_offline: filters?.on_offline ?? [],
+    };
+    return base.filter((o) =>
+      objektMatchesStructuralFilters(o, structuralFilters),
+    );
+  }, [effectiveQuery, queryResults, filterResults, filters, smartSearch]);
 
   function handleSelect(entry: ObjektEntry) {
     const isSelected = selected.some(
@@ -193,9 +246,9 @@ export function ObjektPicker({
   return (
     <div className="space-y-3">
       <Input
-        placeholder="Search objekts... e.g. JiWoo, Atom02, 108Z"
+        placeholder="Search objekts... e.g. sy cc101"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => updateQuery(e.target.value)}
       />
 
       {!showList ? (

@@ -12,6 +12,7 @@ import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
+import { applyTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
 import type { TradePostDTO } from "@/lib/trade-types";
 
 const PAGINATED_SKELETON_KEYS = [
@@ -91,16 +92,17 @@ function filtersFromSearchParams(params: URLSearchParams): ObjektFilterState {
 }
 
 function buildParams(filters: ObjektFilterState, page: number, user?: string) {
+  const effective = applyTradeSearchShortcuts(filters);
   const p = new URLSearchParams();
   p.set("page", String(page));
-  for (const a of filters.artist) p.append("artist", a);
-  for (const m of filters.member) p.append("member", m);
-  for (const s of filters.season) p.append("season", s);
-  for (const c of filters.class) p.append("class", c);
-  for (const o of filters.on_offline) p.append("on_offline", o);
-  if (filters.search) p.set("search", filters.search);
-  if (filters.sort) p.set("sort", filters.sort);
-  p.set("filter_mode", filters.filterMode);
+  for (const a of effective.artist) p.append("artist", a);
+  for (const m of effective.member) p.append("member", m);
+  for (const s of effective.season) p.append("season", s);
+  for (const c of effective.class) p.append("class", c);
+  for (const o of effective.on_offline) p.append("on_offline", o);
+  if (effective.search) p.set("search", effective.search);
+  if (effective.sort) p.set("sort", effective.sort);
+  p.set("filter_mode", effective.filterMode);
   if (user) p.set("user", user);
   return p;
 }
@@ -143,7 +145,12 @@ export function TradesContent() {
   return (
     <>
       <ActiveTradesBanner />
-      <ObjektFilterBar filters={filters} onChange={handleFiltersChange} />
+      <ObjektFilterBar
+        filters={filters}
+        onChange={handleFiltersChange}
+        smartSearchMode="trade"
+        searchPlaceholder="Search trades... e.g. w sy cc101"
+      />
       {userFilter && (
         <div className="flex flex-wrap gap-1.5">
           <Badge variant="secondary" className="gap-1 text-xs">
