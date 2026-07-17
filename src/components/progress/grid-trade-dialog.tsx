@@ -19,7 +19,10 @@ import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { EDITION_LABELS, type Edition } from "@/lib/edition";
 import { computeGriddable, getGridSlots } from "@/lib/grid-progress";
-import { GRID_TRADE_STASH_KEY } from "@/lib/grid-trade-stash";
+import {
+  encodeGridTradeStash,
+  GRID_TRADE_HASH_PARAM,
+} from "@/lib/grid-trade-stash";
 import { makePosterItem, resolvedItemToApiInput } from "@/lib/poster-item";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
@@ -159,13 +162,10 @@ export function GridTradeDialog({
   // Secondary path: stash the draft and open the full poster editor so the
   // user can customize before saving.
   const handleCustomize = () => {
-    sessionStorage.setItem(
-      GRID_TRADE_STASH_KEY,
-      JSON.stringify({ posterData: buildPosterData() }),
-    );
+    const stash = encodeGridTradeStash(buildPosterData());
     onOpenChange(false);
     router.push(
-      sectionHref("/list?prefill=grid", { currentSection: "collect" }),
+      `${sectionHref("/list?prefill=grid", { currentSection: "collect" })}#${GRID_TRADE_HASH_PARAM}=${stash}`,
     );
   };
 
@@ -196,7 +196,10 @@ export function GridTradeDialog({
       }
       const { id } = (await res.json()) as { id: string };
       onOpenChange(false);
-      router.push(sectionHref(`/list/${id}`, { currentSection: "list" }));
+      // This dialog renders on the collect host — passing "collect" makes
+      // sectionHref emit an absolute URL onto the list host instead of a
+      // relative path that would 404 on collect.<root>.
+      router.push(sectionHref(`/list/${id}`, { currentSection: "collect" }));
     } catch {
       toast.error(
         "Couldn't create your trade list automatically — try customizing it instead.",

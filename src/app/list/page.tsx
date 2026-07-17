@@ -76,7 +76,10 @@ import { signIn, useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
 import { compareMembers, compareSeasons } from "@/lib/filter-options";
-import { GRID_TRADE_STASH_KEY } from "@/lib/grid-trade-stash";
+import {
+  decodeGridTradeStash,
+  GRID_TRADE_HASH_PARAM,
+} from "@/lib/grid-trade-stash";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import {
   makeAnyWantItem,
@@ -413,19 +416,25 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   // Prefill from the grid board's "Trade" dialog — no session gate (unlike
   // the Discord-login restore above) since this is a same-tab handoff, and
-  // no auto-save so the user can review/edit before saving.
+  // no auto-save so the user can review/edit before saving. The draft arrives
+  // in the URL fragment (not sessionStorage) because the grid board can live
+  // on a different section subdomain.
   const prefillParam = searchParams.get("prefill");
   useEffect(() => {
     if (prefillParam !== "grid") return;
-    const raw = sessionStorage.getItem(GRID_TRADE_STASH_KEY);
-    if (!raw) return;
-    sessionStorage.removeItem(GRID_TRADE_STASH_KEY);
-    try {
-      const stash = JSON.parse(raw) as { posterData: PosterData };
-      setPosterData(stash.posterData);
-    } catch {
-      toast.error("Could not load your trade list");
-    }
+    const match = window.location.hash.match(
+      new RegExp(`[#&]${GRID_TRADE_HASH_PARAM}=([^&]+)`),
+    );
+    if (!match) return;
+    // Strip the fragment so a refresh doesn't re-apply the prefill.
+    history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search,
+    );
+    const posterData = decodeGridTradeStash(match[1]);
+    if (posterData) setPosterData(posterData);
+    else toast.error("Could not load your trade list");
   }, [prefillParam]);
 
   // Pre-load a stored poster when ?edit=id is in the URL
