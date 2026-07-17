@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { readStoredCosmoUsername } from "@/lib/cosmo-username-storage";
 import { sectionHref } from "@/lib/sections";
+import { ProgressSearch } from "./progress-search";
 
 export function CollectionHomeRedirect() {
   const router = useRouter();
@@ -39,9 +40,11 @@ export function CollectionHomeRedirect() {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Collection</h1>
         <p className="text-sm text-muted-foreground">
-          No linked or saved Cosmo username was found for this browser yet.
+          Search any Cosmo username to view their collection, or link your own
+          account.
         </p>
       </div>
+      <ProgressSearch />
       <div className="flex flex-wrap gap-3">
         <Link
           href={sectionHref("/link", { currentSection: "collect" })}
