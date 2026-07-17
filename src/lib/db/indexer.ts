@@ -23,18 +23,19 @@ function getPool(): Pool {
     // TCP connection (NAT/firewall pruning) would otherwise hang its query
     // forever and permanently leak the checked-out client — eight of those
     // and the pool is exhausted until the process restarts. keepAlive detects
-    // dead sockets, statement_timeout caps queries server-side, query_timeout
-    // is the client-side backstop for when the server can't respond at all,
-    // and maxLifetimeSeconds recycles connections before middleboxes give up
-    // on them.
+    // dead sockets, query_timeout is the client-side backstop that destroys
+    // the connection when the server can't respond at all, and
+    // maxLifetimeSeconds recycles connections before middleboxes give up on
+    // them. Do NOT set statement_timeout here: pg sends it as a startup
+    // parameter, which the indexer's connection pooler rejects
+    // ("unsupported startup parameter"), breaking every connection.
     _g._indexerPool = new Pool({
       connectionString: url,
       max: 8,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis,
       keepAlive: true,
-      statement_timeout: queryTimeoutMillis,
-      query_timeout: queryTimeoutMillis + 5000,
+      query_timeout: queryTimeoutMillis,
       maxLifetimeSeconds: 300,
       ssl: url.includes("sslmode=require")
         ? { rejectUnauthorized: false }
