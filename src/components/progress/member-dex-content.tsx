@@ -34,19 +34,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useProgressOverview } from "@/hooks/use-progress-overview";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import {
   EDITION_LABELS,
   type Edition,
   getCollectionEdition,
 } from "@/lib/edition";
+import { compareSeasons } from "@/lib/filter-options";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
   ProgressCollection,
   ProgressMemberResponse,
 } from "@/lib/progress/types";
 import { GridSection } from "./grid-section";
-import { MemberAvatarCarousel } from "./member-avatar-carousel";
 import { SeasonSection } from "./season-section";
 
 interface SeasonColorsResponse {
@@ -252,6 +253,68 @@ function toggleValue<T>(prev: T[], value: T): T[] {
     : [...prev, value];
 }
 
+// Filters (season/class/edition chips, the switches/dropdown/share row)
+// aren't member-specific enough to warrant a loading state of their own —
+// they render immediately using data from the nickname-scoped overview
+// query, which is already cached by the time this component mounts. Only
+// the objekt cells themselves depend on the still-in-flight per-member
+// fetch, so these skeletons cover just that: a season header plus the grid
+// (dexContent) or side-by-side boards (gridContent).
+
+function SeasonGridSkeleton({ perRow }: { perRow: number }) {
+  return (
+    <div className="space-y-2">
+      <div className="h-6 w-20 rounded bg-muted animate-pulse" />
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
+      >
+        {Array.from({ length: perRow * 4 }, (_, i) => `sk-${i}`).map((id) => (
+          <div
+            key={id}
+            className="aspect-63/88 rounded bg-muted animate-pulse"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Mirrors a single GridBoard: a 3x3 board of First-copy cells around one
+// reward-slot cell, matching grid-board.tsx's layout so the skeleton doesn't
+// jump in size/shape once real boards render in.
+function GridBoardSkeleton() {
+  return (
+    <div className="w-full max-w-[min(90vw,30rem)] space-y-2 lg:w-96 lg:max-w-96 2xl:w-104 2xl:max-w-104">
+      <div className="flex items-baseline gap-2">
+        <div className="h-5 w-16 rounded bg-muted animate-pulse" />
+        <div className="h-4 w-12 rounded bg-muted animate-pulse" />
+      </div>
+      <div className="grid w-full grid-cols-3 grid-rows-3 gap-2.5 lg:gap-3">
+        {Array.from({ length: 9 }, (_, i) => `gb-sk-${i}`).map((id) => (
+          <div
+            key={id}
+            className="aspect-11/17 rounded bg-muted animate-pulse"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GridBoardsRowSkeleton() {
+  return (
+    <div className="space-y-2">
+      <div className="h-6 w-20 rounded bg-muted animate-pulse" />
+      <div className="flex flex-wrap items-stretch gap-8">
+        <GridBoardSkeleton />
+        <div className="hidden w-px shrink-0 self-stretch bg-border sm:block" />
+        <GridBoardSkeleton />
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   nickname: string;
   member: string;
@@ -261,7 +324,7 @@ export function MemberDexContent({ nickname, member }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { data, isLoading, error } = useQuery<ProgressMemberResponse>({
+  const { data, error } = useQuery<ProgressMemberResponse>({
     queryKey: ["progress", nickname, member],
     queryFn: async () => {
       const res = await fetch(
@@ -278,6 +341,82 @@ export function MemberDexContent({ nickname, member }: Props) {
     staleTime: 60_000,
     retry: false,
   });
+
+  // Overview data is fetched (and cached) by the persistent layout above
+  // this page, so it's typically already available the instant this
+  // component mounts — even though the per-member fetch above is still in
+  // flight. The rollups it carries are coarser than the per-member response
+  // (grouped by class/season, no per-collection numbers) but that's enough
+  // to render real totals and real filter chips immediately instead of
+  // waiting on the slower fetch — only the objekt cells themselves need a
+  // loading state below.
+  const { data: overviewData } = useProgressOverview(nickname);
+
+  const earlyTotals = useMemo(() => {
+    if (!overviewData) return null;
+    let owned = 0;
+    let total = 0;
+    let found = false;
+    for (const r of overviewData.rollups) {
+      if (r.member !== member) continue;
+      found = true;
+      owned += r.owned;
+      total += r.total;
+    }
+    return found ? { owned, total } : null;
+  }, [overviewData, member]);
+
+  const earlyArtist = useMemo(() => {
+    if (!overviewData) return "";
+    return overviewData.rollups.find((r) => r.member === member)?.artist ?? "";
+  }, [overviewData, member]);
+
+  const earlySeasons = useMemo(() => {
+    if (!overviewData) return [];
+    const seen = new Set<string>();
+    for (const r of overviewData.rollups) {
+      if (r.member === member) seen.add(r.season);
+    }
+    return [...seen].sort(compareSeasons);
+  }, [overviewData, member]);
+
+  const earlyClasses = useMemo(() => {
+    if (!overviewData) return [];
+    const seen = new Set<string>();
+    for (const r of overviewData.rollups) {
+      if (r.member === member) seen.add(r.class);
+    }
+    return [...seen].sort();
+  }, [overviewData, member]);
+
+  // Same class/artist rules getCollectionEdition uses, just without needing
+  // per-collection numbers — good enough to guess which seasons are
+  // grid-eligible, and whether the Collection/Grid tab strip should even
+  // show a Grid tab, before the real per-member data confirms it.
+  const guessedHasEditions = useMemo(() => {
+    if (!overviewData) return false;
+    return overviewData.rollups.some(
+      (r) =>
+        r.member === member &&
+        r.artist !== "idntt" &&
+        (r.class === "First" || r.class === "Special" || r.class === "Motion"),
+    );
+  }, [overviewData, member]);
+
+  const earlyGridSeasons = useMemo(() => {
+    if (!overviewData) return [];
+    const seen = new Set<string>();
+    for (const r of overviewData.rollups) {
+      if (
+        r.member === member &&
+        r.artist !== "idntt" &&
+        (r.class === "First" || r.class === "Special" || r.class === "Motion")
+      ) {
+        seen.add(r.season);
+      }
+    }
+    return [...seen].sort(compareSeasons);
+  }, [overviewData, member]);
 
   // Dex-scoped filters
   const [dexActiveClasses, setDexActiveClasses] = useState<string[]>([]);
@@ -395,8 +534,11 @@ export function MemberDexContent({ nickname, member }: Props) {
   });
   const seasonColors = seasonColorsData?.colors ?? {};
 
+  // Falls back to the overview-derived guess until the per-member fetch
+  // resolves — the season/class enumeration for a member doesn't actually
+  // depend on that fetch, so there's no reason to block the chips on it.
   const allSeasons = useMemo(() => {
-    if (!data) return [];
+    if (!data) return earlySeasons;
     const seen = new Set<string>();
     const out: string[] = [];
     for (const c of data.collections) {
@@ -406,12 +548,12 @@ export function MemberDexContent({ nickname, member }: Props) {
       }
     }
     return out;
-  }, [data]);
+  }, [data, earlySeasons]);
 
   const allClasses = useMemo(() => {
-    if (!data) return [];
+    if (!data) return earlyClasses;
     return [...new Set(data.collections.map((c) => c.class))].sort();
-  }, [data]);
+  }, [data, earlyClasses]);
 
   const editionByCollectionId = useMemo(() => {
     const map = new Map<string, Edition>();
@@ -435,7 +577,7 @@ export function MemberDexContent({ nickname, member }: Props) {
   // a season with only idntt-style non-editioned classes shouldn't show up
   // as a Grid season chip even if it's a valid Dex season.
   const gridAllSeasons = useMemo(() => {
-    if (!data) return [];
+    if (!data) return earlyGridSeasons;
     const seen = new Set<string>();
     const out: string[] = [];
     for (const c of data.collections) {
@@ -445,7 +587,7 @@ export function MemberDexContent({ nickname, member }: Props) {
       }
     }
     return out;
-  }, [data, editionByCollectionId]);
+  }, [data, editionByCollectionId, earlyGridSeasons]);
 
   // Default each section to the latest (current) season once data loads.
   // allSeasons/gridAllSeasons are in ascending order, so the last entry is
@@ -533,6 +675,15 @@ export function MemberDexContent({ nickname, member }: Props) {
     const owned = data.collections.filter((c) => c.ownedCount > 0).length;
     return { owned, total: data.collections.length };
   }, [data]);
+
+  // "effective"/"display" values below fall back to the overview-derived
+  // guesses while the per-member fetch is in flight, so the header, tab
+  // strip, and filter chips can render for real immediately instead of
+  // waiting — only SeasonGridSkeleton/GridBoardsRowSkeleton (the objekt
+  // cells) actually depend on `data`.
+  const effectiveArtist = data?.artist ?? earlyArtist;
+  const effectiveHasEditions = data ? hasEditions : guessedHasEditions;
+  const displayTotals = data ? totals : earlyTotals;
 
   const [sharing, setSharing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -648,88 +799,11 @@ export function MemberDexContent({ nickname, member }: Props) {
     void doShare();
   }, [filtered.length, doShare]);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        {/* Avatar carousel */}
-        <div className="-mx-4 flex gap-4 overflow-x-hidden px-4 py-2">
-          {Array.from({ length: 8 }, (_, i) => `sk-avatar-${i}`).map((id) => (
-            <div
-              key={id}
-              className="flex shrink-0 flex-col items-center gap-1.5"
-            >
-              <div className="h-16 w-16 rounded-full bg-muted animate-pulse" />
-              <div className="h-4.5 w-10 rounded-full bg-muted animate-pulse" />
-            </div>
-          ))}
-        </div>
-
-        {/* Title + totals */}
-        <div className="space-y-1.5">
-          <div className="h-6 w-32 bg-muted animate-pulse rounded sm:h-7" />
-          <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-        </div>
-
-        {/* Tabs */}
-        <div className="-mx-1 flex gap-4 border-b border-border px-1 pb-3">
-          <div className="h-6 w-24 bg-muted animate-pulse rounded" />
-          <div className="h-6 w-16 bg-muted animate-pulse rounded" />
-        </div>
-
-        {/* Season chips */}
-        <div className="flex flex-wrap gap-1.5">
-          {Array.from({ length: 5 }, (_, i) => `sk-season-${i}`).map((id) => (
-            <div
-              key={id}
-              className="h-7 w-16 rounded-full bg-muted animate-pulse"
-            />
-          ))}
-        </div>
-
-        {/* Class chips */}
-        <div className="flex flex-wrap gap-1.5">
-          {Array.from({ length: 3 }, (_, i) => `sk-class-${i}`).map((id) => (
-            <div
-              key={id}
-              className="h-7 w-14 rounded-full bg-muted animate-pulse"
-            />
-          ))}
-        </div>
-
-        {/* Controls: owned/unowned toggles, per-row dropdown, share */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="h-5 w-28 bg-muted animate-pulse rounded-full" />
-          <div className="h-5 w-24 bg-muted animate-pulse rounded-full" />
-          <div className="h-9 w-24 bg-muted animate-pulse rounded-md" />
-          <div className="ml-auto h-9 w-28 bg-muted animate-pulse rounded-md" />
-        </div>
-
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2Icon className="h-4 w-4 animate-spin" />
-          <span>Loading {member}&apos;s objekts</span>
-        </div>
-
-        {/* Objekt grid */}
-        <div className="space-y-2">
-          <div className="h-4 w-24 bg-muted animate-pulse rounded" />
-          <div
-            className="grid gap-2"
-            style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
-          >
-            {Array.from({ length: perRow * 4 }, (_, i) => `sk-${i}`).map(
-              (id) => (
-                <div
-                  key={id}
-                  className="aspect-63/88 rounded bg-muted animate-pulse"
-                />
-              ),
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // No data yet for this member (first-ever visit, or a hard failure with
+  // nothing to fall back on). The avatar carousel and back-link live in
+  // this route's layout, not here, so they're unaffected by this and stay
+  // on screen the whole time — only the content that's genuinely still
+  // loading gets a loading state.
   if (error) {
     const status = (error as Error & { status?: number }).status;
     return (
@@ -743,14 +817,12 @@ export function MemberDexContent({ nickname, member }: Props) {
     );
   }
 
-  if (!data) return null;
-
   const dexContent = (
     <div className="space-y-4">
       <SeasonChipRow
         seasons={allSeasons}
         active={dexActiveSeasons}
-        artist={data.artist}
+        artist={effectiveArtist}
         seasonColors={seasonColors}
         onToggle={(s) => setDexActiveSeasons((prev) => toggleValue(prev, s))}
         onClear={() => setDexActiveSeasons([])}
@@ -793,7 +865,7 @@ export function MemberDexContent({ nickname, member }: Props) {
         </>
       )}
 
-      {hasEditions && (
+      {effectiveHasEditions && (
         <>
           <MobileMultiSelectDropdown
             label="Editions"
@@ -865,7 +937,7 @@ export function MemberDexContent({ nickname, member }: Props) {
           size="sm"
           variant="outline"
           onClick={handleShare}
-          disabled={sharing || totals.total === 0}
+          disabled={sharing || !data || totals.total === 0}
           className="ml-auto gap-2"
         >
           {sharing ? (
@@ -878,15 +950,19 @@ export function MemberDexContent({ nickname, member }: Props) {
       </div>
 
       <div className="space-y-8">
-        {[...grouped.entries()].map(([season, cols]) => (
-          <SeasonSection
-            key={season}
-            season={season}
-            collections={cols}
-            perRow={perRow}
-            address={data.address}
-          />
-        ))}
+        {data ? (
+          [...grouped.entries()].map(([season, cols]) => (
+            <SeasonSection
+              key={season}
+              season={season}
+              collections={cols}
+              perRow={perRow}
+              address={data.address}
+            />
+          ))
+        ) : (
+          <SeasonGridSkeleton perRow={perRow} />
+        )}
       </div>
     </div>
   );
@@ -896,7 +972,7 @@ export function MemberDexContent({ nickname, member }: Props) {
       <SeasonChipRow
         seasons={gridAllSeasons}
         active={gridActiveSeasons}
-        artist={data.artist}
+        artist={effectiveArtist}
         seasonColors={seasonColors}
         onToggle={(s) => setGridActiveSeasons((prev) => toggleValue(prev, s))}
         onClear={() => setGridActiveSeasons([])}
@@ -933,36 +1009,38 @@ export function MemberDexContent({ nickname, member }: Props) {
       </div>
 
       <div className="space-y-8">
-        {[...gridGrouped.entries()].map(([season, cols]) => (
-          <GridSection
-            key={season}
-            season={season}
-            collections={cols}
-            address={data.address}
-            nickname={data.nickname}
-            viewConsumed={viewConsumed}
-          />
-        ))}
+        {data ? (
+          [...gridGrouped.entries()].map(([season, cols]) => (
+            <GridSection
+              key={season}
+              season={season}
+              collections={cols}
+              address={data.address}
+              nickname={data.nickname}
+              viewConsumed={viewConsumed}
+            />
+          ))
+        ) : (
+          <GridBoardsRowSkeleton />
+        )}
       </div>
     </div>
   );
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <MemberAvatarCarousel
-        nickname={data.nickname}
-        artist={data.artist}
-        activeMember={data.member}
-      />
-
       <div className="space-y-0.5">
-        <h1 className="text-lg font-bold sm:text-2xl">{data.member}</h1>
+        <h1 className="text-lg font-bold sm:text-2xl">
+          {data?.member ?? member}
+        </h1>
         <p className="text-muted-foreground">
-          {totals.owned}/{totals.total} collected
+          {displayTotals
+            ? `${displayTotals.owned}/${displayTotals.total} collected`
+            : " "}
         </p>
       </div>
 
-      {hasEditions ? (
+      {effectiveHasEditions ? (
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as "dex" | "grid")}

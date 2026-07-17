@@ -6,8 +6,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type React from "react";
 import { useEffect, useMemo, useRef } from "react";
+import { useProgressOverview } from "@/hooks/use-progress-overview";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
-import type { ProgressOverviewResponse } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
@@ -17,30 +17,21 @@ interface MemberImagesResponse {
 
 interface Props {
   nickname: string;
-  artist: string;
   activeMember: string;
 }
 
-export function MemberAvatarCarousel({
-  nickname,
-  artist,
-  activeMember,
-}: Props) {
+export function MemberAvatarCarousel({ nickname, activeMember }: Props) {
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "grid" ? "grid" : null;
 
-  // Same query key/fn as ProgressOverviewContent so react-query dedupes the
-  // request when both are mounted (or reuses the cached result on nav back).
-  const { data } = useQuery<ProgressOverviewResponse>({
-    queryKey: ["progress", nickname],
-    queryFn: async () => {
-      const res = await fetch(`/api/progress/${encodeURIComponent(nickname)}`);
-      if (!res.ok) throw new Error("Failed to load");
-      return res.json();
-    },
-    staleTime: 60_000,
-    retry: false,
-  });
+  // Shares its query key with ProgressOverviewContent/MemberDexContent so
+  // react-query dedupes the request across all three (or reuses the cache).
+  // Deriving `artist` from this instead of taking it as a prop means this
+  // component only needs `activeMember` to render — it doesn't depend on
+  // the (heavier, per-member) dex fetch, so it stays mounted and correct
+  // across member switches even though the page below it remounts.
+  const { data } = useProgressOverview(nickname);
+  const artist = data?.rollups.find((r) => r.member === activeMember)?.artist;
 
   const { data: imagesData } = useQuery<MemberImagesResponse>({
     queryKey: ["progress-member-images"],
@@ -53,7 +44,9 @@ export function MemberAvatarCarousel({
   });
   const memberImages = imagesData?.images ?? {};
 
-  const roster = realMembersByArtist[artist as ValidArtist] ?? [];
+  const roster = artist
+    ? (realMembersByArtist[artist as ValidArtist] ?? [])
+    : [];
 
   const totalsByMember = useMemo(() => {
     const map = new Map<string, { owned: number; total: number }>();
@@ -127,7 +120,7 @@ export function MemberAvatarCarousel({
     if (dragMovedRef.current) e.preventDefault();
   };
 
-  if (roster.length === 0) return null;
+  if (!artist || roster.length === 0) return null;
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: drag-to-scroll container, links inside remain keyboard-navigable

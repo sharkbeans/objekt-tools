@@ -261,3 +261,10 @@ export const membersByArtist: Record<ValidArtist, string[]> = {
     "MinJun",
   ],
 };
+
+const allMembers = Object.values(membersByArtist).flat();
+
+/** Case-insensitive lookup of a member slug against the canonical roster. */
+export function resolveMemberCasing(member: string): string | undefined {
+  return allMembers.find((m) => m.toLowerCase() === member.toLowerCase());
+}

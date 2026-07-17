@@ -10,15 +10,13 @@ import {
   type ObjektFilterState,
 } from "@/components/objekt/objekt-filter-bar";
 import { Button } from "@/components/ui/button";
+import { useProgressOverview } from "@/hooks/use-progress-overview";
 import { normalizeArtistId } from "@/lib/artist-utils";
 import { shareOrDownloadCanvas } from "@/lib/download-canvas";
 import { decodeGroupedValue } from "@/lib/filter-utils";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
-import type {
-  ProgressOverviewResponse,
-  ProgressRollup,
-} from "@/lib/progress/types";
+import type { ProgressRollup } from "@/lib/progress/types";
 import { MemberProgressCard } from "./member-progress-card";
 
 interface Props {
@@ -30,21 +28,7 @@ interface MemberImagesResponse {
 }
 
 export function ProgressOverviewContent({ nickname }: Props) {
-  const { data, isLoading, error } = useQuery<ProgressOverviewResponse>({
-    queryKey: ["progress", nickname],
-    queryFn: async () => {
-      const res = await fetch(`/api/progress/${encodeURIComponent(nickname)}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw Object.assign(new Error(body.error ?? "Failed to load"), {
-          status: res.status,
-        });
-      }
-      return res.json();
-    },
-    staleTime: 60_000,
-    retry: false,
-  });
+  const { data, isLoading, error } = useProgressOverview(nickname);
 
   const { data: imagesData } = useQuery<MemberImagesResponse>({
     queryKey: ["progress-member-images"],
@@ -232,77 +216,21 @@ export function ProgressOverviewContent({ nickname }: Props) {
     }
   }, [data, activeArtists, filteredRollups, memberImages]);
 
-  if (error) {
-    const status = (error as Error & { status?: number }).status;
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        {status === 404
-          ? "Cosmo user not found."
-          : status === 429
-            ? "Too many requests. Try again later."
-            : "Failed to load collection data."}
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-          <div className="h-9 w-28 shrink-0 bg-muted animate-pulse rounded-md" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          {Array.from({ length: 4 }, (_, i) => `sk-filter-${i}`).map((id) => (
-            <div
-              key={id}
-              className="h-9 w-full bg-muted animate-pulse rounded-md sm:w-28"
-            />
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2Icon className="h-4 w-4 animate-spin" />
-          <span>Loading {nickname}&apos;s collection</span>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
-            <div
-              key={id}
-              className="rounded-lg border border-border bg-card p-3 space-y-2"
-            >
-              <div className="flex gap-3">
-                <div className="h-[52px] w-[52px] bg-muted animate-pulse rounded-full" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                  <div className="h-3 w-12 bg-muted animate-pulse rounded" />
-                </div>
-              </div>
-              <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
   const showArtistLabel = activeArtists.length > 1;
 
+  // Header and filters don't depend on the progress fetch (the title reads
+  // straight off the `nickname` prop and the filter bar's options come from
+  // their own always-cached hook) — render them immediately instead of
+  // skeletonizing content that's already known.
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">
-          {data.nickname}&apos;s Collection
-        </h1>
+        <h1 className="text-2xl font-bold">{nickname}&apos;s Collection</h1>
         <Button
           size="sm"
           variant="outline"
           onClick={handleShare}
-          disabled={sharing}
+          disabled={sharing || !data}
           className="shrink-0 gap-2"
         >
           {sharing ? (
@@ -323,48 +251,84 @@ export function ProgressOverviewContent({ nickname }: Props) {
         showMember={false}
       />
 
-      {[...artistGroups.entries()].map(([artist, { real, others }]) => (
-        <div key={artist} className="space-y-3">
-          {showArtistLabel && (
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              {artist === "artms" ? "ARTMS" : artist}
-            </h2>
-          )}
+      {error ? (
+        <div className="text-center py-12 text-muted-foreground">
+          {(error as Error & { status?: number }).status === 404
+            ? "Cosmo user not found."
+            : (error as Error & { status?: number }).status === 429
+              ? "Too many requests. Try again later."
+              : "Failed to load collection data."}
+        </div>
+      ) : isLoading || !data ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+            <span>Loading {nickname}&apos;s collection</span>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {[...real.entries()].map(([member, rollups]) => (
-              <MemberProgressCard
-                key={member}
-                nickname={data.nickname}
-                member={member}
-                rollups={rollups}
-                imageUrl={memberImages[`${artist}|${member}`]}
-              />
+            {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
+              <div
+                key={id}
+                className="rounded-lg border border-border bg-card p-3 space-y-2"
+              >
+                <div className="flex gap-3">
+                  <div className="h-13 w-13 bg-muted animate-pulse rounded-full" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-12 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+                <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
+              </div>
             ))}
           </div>
-          {showOthers && others.size > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {[...others.entries()].map(([member, rollups]) => (
-                <MemberProgressCard
-                  key={member}
-                  nickname={data.nickname}
-                  member={member}
-                  rollups={rollups}
-                  imageUrl={memberImages[`${artist}|${member}`]}
-                />
-              ))}
-            </div>
-          )}
         </div>
-      ))}
+      ) : (
+        <>
+          {[...artistGroups.entries()].map(([artist, { real, others }]) => (
+            <div key={artist} className="space-y-3">
+              {showArtistLabel && (
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  {artist === "artms" ? "ARTMS" : artist}
+                </h2>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {[...real.entries()].map(([member, rollups]) => (
+                  <MemberProgressCard
+                    key={member}
+                    nickname={data.nickname}
+                    member={member}
+                    rollups={rollups}
+                    imageUrl={memberImages[`${artist}|${member}`]}
+                  />
+                ))}
+              </div>
+              {showOthers && others.size > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {[...others.entries()].map(([member, rollups]) => (
+                    <MemberProgressCard
+                      key={member}
+                      nickname={data.nickname}
+                      member={member}
+                      rollups={rollups}
+                      imageUrl={memberImages[`${artist}|${member}`]}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
 
-      {hasOthers && (
-        <button
-          type="button"
-          onClick={() => setShowOthers((v) => !v)}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {showOthers ? "Hide others" : "Show others"}
-        </button>
+          {hasOthers && (
+            <button
+              type="button"
+              onClick={() => setShowOthers((v) => !v)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showOthers ? "Hide others" : "Show others"}
+            </button>
+          )}
+        </>
       )}
     </div>
   );
