@@ -22,11 +22,20 @@ function getDatabaseUrl() {
 function getDb() {
   if (!globalForDb._dbPool) {
     const connectionString = getDatabaseUrl();
+    const queryTimeoutMillis = Number(process.env.DB_QUERY_TIMEOUT_MS ?? 30000);
+    // Same hung-connection protection as the indexer pool: a query that never
+    // resolves would otherwise pin its client forever and exhaust the pool.
+    // Unlike the remote indexer, this talks to our own Postgres directly, so
+    // statement_timeout (server-side cancel) is safe to set here too.
     globalForDb._dbPool = new Pool({
       connectionString,
       max: 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+      keepAlive: true,
+      query_timeout: queryTimeoutMillis,
+      statement_timeout: queryTimeoutMillis,
+      maxLifetimeSeconds: 300,
       ssl: connectionString.includes("sslmode=require")
         ? { rejectUnauthorized: false }
         : undefined,

@@ -99,11 +99,21 @@ function getMirrorLocalPool(): Pool {
     const connectionTimeoutMillis = Number(
       process.env.MIRROR_CONNECTION_TIMEOUT_MS ?? 3000,
     );
+    // This pool is also the sync's write path (DDL + backfill upserts), so its
+    // timeout must be far looser than the 1.5s read timeout — it only exists
+    // as a backstop against a query hanging forever and pinning its client.
+    const timeoutMs = parsePositiveInt(
+      process.env.MIRROR_LOCAL_QUERY_TIMEOUT_MS,
+      60_000,
+    );
     _g._mirrorLocalPool = new Pool({
       connectionString: url,
       max: 8,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis,
+      keepAlive: true,
+      query_timeout: timeoutMs,
+      statement_timeout: timeoutMs,
       ssl: url.includes("sslmode=require")
         ? { rejectUnauthorized: false }
         : undefined,
