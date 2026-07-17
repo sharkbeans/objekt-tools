@@ -16,11 +16,26 @@ function getPool(): Pool {
     const connectionTimeoutMillis = Number(
       process.env.INDEXER_CONNECTION_TIMEOUT_MS ?? 3000,
     );
+    const queryTimeoutMillis = Number(
+      process.env.INDEXER_QUERY_TIMEOUT_MS ?? 30000,
+    );
+    // The indexer is reached over the public internet, so a silently dropped
+    // TCP connection (NAT/firewall pruning) would otherwise hang its query
+    // forever and permanently leak the checked-out client — eight of those
+    // and the pool is exhausted until the process restarts. keepAlive detects
+    // dead sockets, statement_timeout caps queries server-side, query_timeout
+    // is the client-side backstop for when the server can't respond at all,
+    // and maxLifetimeSeconds recycles connections before middleboxes give up
+    // on them.
     _g._indexerPool = new Pool({
       connectionString: url,
       max: 8,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis,
+      keepAlive: true,
+      statement_timeout: queryTimeoutMillis,
+      query_timeout: queryTimeoutMillis + 5000,
+      maxLifetimeSeconds: 300,
       ssl: url.includes("sslmode=require")
         ? { rejectUnauthorized: false }
         : undefined,
