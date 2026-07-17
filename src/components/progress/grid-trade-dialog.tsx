@@ -5,6 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { PosterData } from "@/components/poster/poster-canvas";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,6 +73,7 @@ export function GridTradeDialog({
   const { data: session } = useSession();
   const [offerDupes, setOfferDupes] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   // Only the profile's own owner can auto-create a matchable trade list from
   // it — a visitor viewing someone else's grid shouldn't be able to spin up
   // a list claiming that person's dupes under the visitor's own account.
@@ -302,7 +313,7 @@ export function GridTradeDialog({
                 Customize list first
               </Button>
               <Button
-                onClick={handleFindTrades}
+                onClick={() => setConfirmOpen(true)}
                 disabled={selected.size === 0 || creating}
                 className="gap-1.5"
               >
@@ -320,6 +331,37 @@ export function GridTradeDialog({
           )}
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Create a trade list?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will create a public trade list with these items as your
+              wants, so other traders can find and match with it. You can
+              customize the haves and wants first, or create it now as-is.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setConfirmOpen(false);
+                handleCustomize();
+              }}
+            >
+              Edit list
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                handleFindTrades();
+              }}
+            >
+              Create List
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

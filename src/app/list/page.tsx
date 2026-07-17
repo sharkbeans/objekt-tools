@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   ListIcon,
   Loader2Icon,
+  LockIcon,
   SearchIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -89,6 +90,7 @@ import {
 import type { ResolvedPosterItem } from "@/lib/poster-resolver";
 import { formatPosterAsText } from "@/lib/poster-text-format";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
+import { cn } from "@/lib/utils";
 
 interface StoredItem {
   id: number;
@@ -433,8 +435,21 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       window.location.pathname + window.location.search,
     );
     const posterData = decodeGridTradeStash(match[1]);
-    if (posterData) setPosterData(posterData);
-    else toast.error("Could not load your trade list");
+    if (!posterData) {
+      toast.error("Could not load your trade list");
+      return;
+    }
+    // Same as the ?edit=id flow: seed the username and kick off the
+    // inventory load so the Have picker can render the prefilled items.
+    // Can't rely on localStorage having the username — the grid board may
+    // be on a different section subdomain (different origin).
+    if (posterData.cosmoId) {
+      rememberCosmoUsername(posterData.cosmoId);
+      setCosmoId(posterData.cosmoId);
+      setInventoryCount(null);
+      setHaveNickname(posterData.cosmoId);
+    }
+    setPosterData(posterData);
   }, [prefillParam]);
 
   // Pre-load a stored poster when ?edit=id is in the URL
@@ -930,6 +945,16 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       ? "Save Changes"
       : "Create List";
 
+  // Once a user's Discord-linked Cosmo account is known, the have-inventory
+  // owner is fixed to that identity — no reason to let them retype it. Stays
+  // editable if cosmoId was set to something else (e.g. editing an older
+  // poster made for a different username before/without linking).
+  const isCosmoLinked = !!(
+    session &&
+    linkedNickname &&
+    cosmoId.trim().toLowerCase() === linkedNickname.toLowerCase()
+  );
+
   return (
     <div className="mx-auto w-full max-w-7xl pb-20 space-y-4">
       {!editId &&
@@ -1011,38 +1036,60 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   </Label>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    id="poster-cosmoid"
-                    placeholder="Enter your Cosmo username"
-                    value={cosmoId}
-                    onChange={(e) => setCosmoId(e.target.value)}
-                    onBlur={() => {
-                      rememberCosmoUsername(cosmoId);
-                      searchInventory(cosmoId);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && cosmoId.trim()) {
-                        e.preventDefault();
+                  <div className="relative sm:max-w-80 flex-1">
+                    <Input
+                      id="poster-cosmoid"
+                      placeholder="Enter your Cosmo username"
+                      value={cosmoId}
+                      readOnly={isCosmoLinked}
+                      onChange={(e) => {
+                        if (isCosmoLinked) return;
+                        setCosmoId(e.target.value);
+                      }}
+                      onBlur={() => {
+                        if (isCosmoLinked) return;
                         rememberCosmoUsername(cosmoId);
                         searchInventory(cosmoId);
-                      }
-                    }}
-                    className="h-12 bg-background text-base md:text-base sm:max-w-80"
-                  />
-                  <Button
-                    type="button"
-                    className="h-12 gap-2 px-4 sm:flex-1"
-                    disabled={!cosmoId.trim()}
-                    onClick={() => {
-                      rememberCosmoUsername(cosmoId);
-                      searchInventory(cosmoId);
-                    }}
-                  >
-                    <SearchIcon className="h-4 w-4" />
-                    Load Inventory
-                  </Button>
+                      }}
+                      onKeyDown={(e) => {
+                        if (isCosmoLinked) return;
+                        if (e.key === "Enter" && cosmoId.trim()) {
+                          e.preventDefault();
+                          rememberCosmoUsername(cosmoId);
+                          searchInventory(cosmoId);
+                        }
+                      }}
+                      className={cn(
+                        "h-12 bg-background text-base md:text-base",
+                        isCosmoLinked && "pr-9 text-muted-foreground",
+                      )}
+                    />
+                    {isCosmoLinked && (
+                      <LockIcon className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    )}
+                  </div>
+                  {!isCosmoLinked && (
+                    <Button
+                      type="button"
+                      className="h-12 gap-2 px-4 sm:flex-1"
+                      disabled={!cosmoId.trim()}
+                      onClick={() => {
+                        rememberCosmoUsername(cosmoId);
+                        searchInventory(cosmoId);
+                      }}
+                    >
+                      <SearchIcon className="h-4 w-4" />
+                      Load Inventory
+                    </Button>
+                  )}
                 </div>
-                {haveNickname &&
+                {isCosmoLinked ? (
+                  <p className="text-xs text-muted-foreground">
+                    Linked to your Cosmo account
+                    {inventoryCount !== null && ` · ${inventoryCount} objekts`}
+                  </p>
+                ) : (
+                  haveNickname &&
                   (inventoryCount !== null ? (
                     <p className="text-xs text-muted-foreground">
                       Inventory loaded · {inventoryCount} objekts
@@ -1051,7 +1098,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     <p className="text-xs text-muted-foreground">
                       Showing inventory for @{haveNickname}
                     </p>
-                  ))}
+                  ))
+                )}
               </div>
 
               <div ref={tabsRef}>
