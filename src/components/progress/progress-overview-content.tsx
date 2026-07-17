@@ -18,8 +18,8 @@ import { decodeGroupedValue } from "@/lib/filter-utils";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type { ProgressRollup } from "@/lib/progress/types";
-import { ProgressSearch } from "./progress-search";
 import { MemberProgressCard } from "./member-progress-card";
+import { ProgressSearch } from "./progress-search";
 
 interface Props {
   nickname: string;

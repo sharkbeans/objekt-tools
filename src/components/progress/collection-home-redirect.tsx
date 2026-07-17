@@ -57,8 +57,8 @@ export function CollectionHomeRedirect() {
         </Link>
       </div>
       <p className="text-sm text-muted-foreground">
-        Once you view a collection, we&apos;ll bring you back to it automatically
-        from here.
+        Once you view a collection, we&apos;ll bring you back to it
+        automatically from here.
       </p>
     </div>
   );
