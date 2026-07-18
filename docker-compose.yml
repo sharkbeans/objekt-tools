@@ -103,6 +103,34 @@ services:
   #   "*/2 * * * *" → /api/cron/sync-indexer          (every 2 min, syncs the
   #                   local collection mirror; no-ops until MIRROR_DATABASE_URL
   #                   is set)
+  # The app's Dockerfile healthcheck marks it unhealthy after ~2.5 min of
+  # /api/health failures, but Docker never restarts unhealthy containers on
+  # its own. This watcher does, with a 30-min cooldown so a persistent remote
+  # outage degrades to a brief restart blip every half hour, not a loop.
+  # A restart also resets the container's network namespace — the only remedy
+  # when the container's path to the remote indexer breaks (health reports
+  # indexerTcp: "unreachable").
+  autoheal:
+    image: docker:27-cli
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          status=$$(docker inspect -f '{{.State.Health.Status}}' objekt-trade-app-1 2>/dev/null || echo none)
+          if [ "$$status" = "unhealthy" ]; then
+            now=$$(date +%s); last=$$(cat /tmp/last-heal 2>/dev/null || echo 0)
+            if [ $$((now-last)) -ge 1800 ]; then
+              echo "$$(date -u '+%Y-%m-%dT%H:%M:%SZ') app unhealthy; restarting"
+              docker restart objekt-trade-app-1 && echo "$$now" > /tmp/last-heal
+            fi
+          fi
+          sleep 60
+        done
+
   cron:
     image: alpine:3.20
     restart: unless-stopped

@@ -1,3 +1,4 @@
+import net from "node:net";
 import { NextResponse } from "next/server";
 import { indexerPool } from "@/lib/db/indexer";
 import {
@@ -63,8 +64,44 @@ async function probeIndexer(): Promise<
   }
 }
 
+// When the pg probe fails, a raw TCP dial from inside this process's network
+// namespace separates the two failure classes the counters can't: "the pool is
+// wedged but the network is fine" (tcp ok) vs "this container can't reach the
+// indexer at all" (tcp unreachable — pool recycling can't help, only a
+// container restart resets the netns). Logged so the next incident is
+// diagnosable after the fact.
+async function probeIndexerTcp(): Promise<"ok" | "unreachable" | "skipped"> {
+  const url = process.env.INDEXER_DATABASE_URL;
+  if (!url) return "skipped";
+  let host: string;
+  let port: number;
+  try {
+    const parsed = new URL(url);
+    host = parsed.hostname;
+    port = Number(parsed.port || 5432);
+  } catch {
+    return "skipped";
+  }
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const finish = (result: "ok" | "unreachable") => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(2000, () => finish("unreachable"));
+    socket.once("connect", () => finish("ok"));
+    socket.once("error", () => finish("unreachable"));
+  });
+}
+
 export async function GET() {
   const probe = await probeIndexer();
+  const tcp = probe.ok ? undefined : await probeIndexerTcp();
+  if (!probe.ok) {
+    console.error(
+      `Indexer probe failed (${probe.error}); raw TCP to indexer: ${tcp}`,
+    );
+  }
   const indexerStats = getIndexerPoolStats();
   const saturated = isSaturated(indexerStats);
 
@@ -83,6 +120,7 @@ export async function GET() {
     {
       ok,
       indexerProbe: probe,
+      ...(tcp !== undefined ? { indexerTcp: tcp } : {}),
       ...(indexerStats ? { indexerPool: indexerStats } : {}),
       ...(mirror !== undefined ? { mirror } : {}),
     },
