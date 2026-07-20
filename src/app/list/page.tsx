@@ -379,6 +379,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [wantSearchShortcuts, setWantSearchShortcuts] =
     useState<SearchShortcutFilters>(emptySearchShortcutFilters);
   const [step, setStep] = useState<"have" | "want">("have");
+  const [hasVisitedWantStep, setHasVisitedWantStep] = useState(false);
   const [customWantOpen, setCustomWantOpen] = useState(false);
   const [anyWantOpen, setAnyWantOpen] = useState(false);
   const [wantsOnly, setWantsOnly] = useState(false);
@@ -400,6 +401,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   >({});
   const [hasMounted, setHasMounted] = useState(false);
 
+  const mountedSession = hasMounted ? session : null;
   const totalItems = posterData.haves.length + posterData.wants.length;
   const displayedHaveFilters = useMemo(
     () => withSearchShortcutFilters(filters, haveSearchShortcuts),
@@ -677,7 +679,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     [haveNickname],
   );
 
+  const handleStepChange = useCallback((next: "have" | "want") => {
+    if (next === "want") setHasVisitedWantStep(true);
+    setStep(next);
+  }, []);
+
   const goToStep = useCallback((next: "have" | "want") => {
+    if (next === "want") setHasVisitedWantStep(true);
     setStep(next);
     tabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
@@ -1094,6 +1102,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     : editId
       ? "Save Changes"
       : "Create List";
+  const shouldNudgeWantTab =
+    step === "have" && posterData.haves.length > 0 && !hasVisitedWantStep;
 
   // Once a user's Discord-linked Cosmo account is known, the have-inventory
   // owner is fixed to that identity — no reason to let them retype it. Stays
@@ -1255,7 +1265,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
               <div ref={tabsRef}>
                 <Tabs
                   value={step}
-                  onValueChange={(v) => setStep(v as "have" | "want")}
+                  onValueChange={(v) => handleStepChange(v as "have" | "want")}
                 >
                   <TabsList className="grid h-12 w-full grid-cols-2">
                     <TabsTrigger
@@ -1266,7 +1276,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     </TabsTrigger>
                     <TabsTrigger
                       value="want"
-                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black"
+                      className={cn(
+                        "h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black",
+                        shouldNudgeWantTab && "want-tab-nudge",
+                      )}
                     >
                       Want ({posterData.wants.length})
                     </TabsTrigger>
@@ -1384,8 +1397,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       </CardDescription>
                     </div>
 
-                    {session ? (
-                      <DiscordChip label={session.user.name ?? "Discord"} />
+                    {mountedSession ? (
+                      <DiscordChip
+                        label={mountedSession.user.name ?? "Discord"}
+                      />
                     ) : (
                       <DiscordChip
                         label="Sign in"
@@ -1539,7 +1554,9 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       </Button>
                       <Button
                         onClick={handleSaveAndShare}
-                        disabled={saving || (!!session && !cosmoStatusLoaded)}
+                        disabled={
+                          saving || (!!mountedSession && !cosmoStatusLoaded)
+                        }
                         className="h-10 flex-1 gap-2"
                       >
                         {saving ? (
@@ -1577,7 +1594,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
               <DiscordIcon className="size-5 text-[#5865F2]" />
               <span className="font-medium">Continue with Discord</span>
               <span className="text-sm text-muted-foreground">
-                Save it with a share link. Link Cosmo next for trade matching.
+                Save your list online and get a shareable live link. Link Cosmo
+                for trade matching.
               </span>
             </button>
             <button
@@ -1594,7 +1612,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                 {downloading ? "Saving image..." : "Save image only"}
               </span>
               <span className="text-sm text-muted-foreground">
-                Download a picture of your list — no account, no share link.
+                Quick export for now. Your list will not be saved online and no
+                link will be generated.
               </span>
             </button>
           </div>
@@ -1650,7 +1669,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
               <ListIcon className="size-5 text-muted-foreground" />
               <span className="font-medium">Create list only</span>
               <span className="text-sm text-muted-foreground">
-                Save it with a share link. No trade post or trade matches.
+                Save it as a shareable live link. No trade post or trade
+                matches.
               </span>
             </button>
           </div>

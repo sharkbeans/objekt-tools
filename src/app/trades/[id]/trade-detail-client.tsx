@@ -447,7 +447,7 @@ export default function TradeDetailClient({
           <div className="rounded-md border border-border bg-muted/30">
             <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
               <p className="text-xs font-medium uppercase text-muted-foreground">
-                Discord text
+                Trade text
               </p>
               <Button
                 type="button"
