@@ -748,10 +748,7 @@ export default function LinkCosmoPage() {
                 message from your bio.
               </p>
 
-              <Button
-                className="w-full"
-                onClick={handleFinish}
-              >
+              <Button className="w-full" onClick={handleFinish}>
                 {returnTo ? "Return to your list" : "Finish"}
               </Button>
             </div>
