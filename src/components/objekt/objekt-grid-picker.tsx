@@ -2,7 +2,7 @@
 
 import { Check, XIcon } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import type { ObjektEntry } from "@/lib/cosmo/types";
@@ -12,6 +12,21 @@ import { getSeasonPrefix } from "@/lib/season-prefix";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PAGE_SIZE = 40;
+
+function getScrollParent(node: HTMLElement): HTMLElement | null {
+  let el = node.parentElement;
+  while (el) {
+    const style = getComputedStyle(el);
+    if (
+      (style.overflowY === "auto" || style.overflowY === "scroll") &&
+      el.scrollHeight > el.clientHeight
+    ) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
 
 interface ObjektGridPickerProps {
   items: ObjektEntry[];
@@ -61,6 +76,8 @@ export function ObjektGridPicker({
   combineSelectedDuplicates = false,
 }: ObjektGridPickerProps) {
   const [page, setPage] = useState(1);
+  const belowSelectedRef = useRef<HTMLDivElement>(null);
+  const pendingAnchorTopRef = useRef<number | null>(null);
   const gridStyle = useMemo(
     () =>
       perRow !== undefined
@@ -126,10 +143,38 @@ export function ObjektGridPicker({
         )
       : selected.some((s) => s.collectionId === entry.collectionId);
 
+  // Selecting/deselecting can grow or shrink the pinned selected-row panel
+  // above, shifting this grid down or up. Capture this grid's viewport
+  // position before the change so the layout effect below can measure the
+  // resulting shift and cancel it out, keeping the cursor over the same card.
+  function captureScrollAnchor() {
+    const el = belowSelectedRef.current;
+    if (el) pendingAnchorTopRef.current = el.getBoundingClientRect().top;
+  }
+
+  useLayoutEffect(() => {
+    const before = pendingAnchorTopRef.current;
+    pendingAnchorTopRef.current = null;
+    if (before == null) return;
+    const el = belowSelectedRef.current;
+    if (!el) return;
+    const after = el.getBoundingClientRect().top;
+    const delta = after - before;
+    if (delta === 0) return;
+    const scrollParent = getScrollParent(el);
+    if (scrollParent) {
+      scrollParent.scrollTop += delta;
+    } else {
+      window.scrollBy(0, delta);
+    }
+  });
+
   function handleTap(entry: ObjektEntry) {
     if (isSelected(entry)) {
+      captureScrollAnchor();
       onDeselect(entry);
     } else if (selected.length < maxSelections) {
+      captureScrollAnchor();
       onSelect(entry);
     }
   }
@@ -140,6 +185,7 @@ export function ObjektGridPicker({
   const selectAllCount = Math.min(pageUnselected.length, remainingCapacity);
 
   function handleSelectAllPage() {
+    captureScrollAnchor();
     if (allPageSelected) {
       for (const entry of pageItems) {
         if (isSelected(entry)) onDeselect(entry);
@@ -315,28 +361,30 @@ export function ObjektGridPicker({
           {renderGrid(displayedSelected, "selected", "selected")}
         </div>
       )}
-      {items.length > 0 ? (
-        <>
-          {mainGridLabel && (
-            <p className="px-0.5 pt-1 text-sm font-semibold tracking-wide text-foreground sm:text-base">
-              {mainGridLabel}
-            </p>
-          )}
-          {renderGrid(pageItems, "page")}
-          <TradePagination
-            page={safePage}
-            totalPages={totalPages}
-            total={items.length}
-            limit={pageSize}
-            onPageChange={setPage}
-            itemLabel="objekts"
-          />
-        </>
-      ) : (
-        <div className="text-sm text-muted-foreground text-center py-6">
-          {emptyMessage}
-        </div>
-      )}
+      <div ref={belowSelectedRef}>
+        {items.length > 0 ? (
+          <>
+            {mainGridLabel && (
+              <p className="px-0.5 pt-1 text-sm font-semibold tracking-wide text-foreground sm:text-base">
+                {mainGridLabel}
+              </p>
+            )}
+            {renderGrid(pageItems, "page")}
+            <TradePagination
+              page={safePage}
+              totalPages={totalPages}
+              total={items.length}
+              limit={pageSize}
+              onPageChange={setPage}
+              itemLabel="objekts"
+            />
+          </>
+        ) : (
+          <div className="text-sm text-muted-foreground text-center py-6">
+            {emptyMessage}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
