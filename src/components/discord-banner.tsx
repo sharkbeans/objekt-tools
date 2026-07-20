@@ -37,7 +37,7 @@ export function DiscordBanner({
           <span className="font-medium text-[#7289da]">
             Get trade notifications on Discord
           </span>
-          <span className="text-muted-foreground">
+          <span className="hidden sm:inline text-muted-foreground">
             {" "}
             — join our server so we can DM you when someone sends a trade offer
             or accepts yours.
@@ -49,7 +49,8 @@ export function DiscordBanner({
             className="font-medium text-[#7289da] underline hover:text-[#5865F2] transition-colors"
             onClick={handleDismiss}
           >
-            Join Server →
+            <span className="sm:hidden">Join →</span>
+            <span className="hidden sm:inline">Join Server →</span>
           </a>
         </p>
         <button

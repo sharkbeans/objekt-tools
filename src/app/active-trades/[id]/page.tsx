@@ -1429,7 +1429,7 @@ export default function ActiveTradePage({
               </div>
             </div>
           ) : (
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row">
               {leftSides.length > 0 && (
                 <div className="flex-1 min-w-0 space-y-2">
                   {leftSides.map((side, i) => (

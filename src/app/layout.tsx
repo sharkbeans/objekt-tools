@@ -41,11 +41,11 @@ export default async function RootLayout({
           data-website-id="2efbd898-a793-436a-9078-e7e4b6abd77d"
         ></script>
       </head>
-      <body className="antialiased flex flex-col h-dvh">
+      <body className="antialiased flex flex-col h-dvh overflow-hidden">
         <Providers>
           <Navbar currentSection={currentSection} />
           <DiscordBanner currentSection={currentSection} />
-          <main className="container mx-auto px-4 py-6 flex-1 min-h-0 overflow-y-auto">
+          <main className="container mx-auto px-4 py-6 flex-1 min-h-0 overflow-y-auto overscroll-contain">
             {children}
           </main>
           <SiteDisclaimerFooter currentSection={currentSection} />

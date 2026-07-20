@@ -5,7 +5,6 @@ import {
   ArrowLeftRightIcon,
   BellIcon,
   ChevronDownIcon,
-  ChevronLeftIcon,
   ImageIcon,
   LibraryIcon,
   LinkIcon,
@@ -18,7 +17,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { LoginCodeDialog } from "@/components/login-code-dialog";
 import { ObjektLogo } from "@/components/objekt-logo";
@@ -317,69 +316,15 @@ function MobileNav({
   onUnlink: () => void;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const href = (internal: string) =>
     sectionHref(internal, currentSection ? { currentSection } : undefined);
-  // "/" is only the true landing page on the root host — on a section host
-  // it's that section's own home, which still needs the mobile chrome.
-  const isHomeRoute = !currentSection && pathname === "/";
-  // Next's usePathname() may report either the pre-rewrite (external, clean)
-  // or post-rewrite (internal) path depending on version/config, so match
-  // both forms rather than assume one.
-  const isActiveTradeRoute =
-    pathname.startsWith("/active-trades") ||
-    (currentSection === "trade" &&
-      (pathname === "/active" || pathname.startsWith("/active/")));
-  const isTradesRoute =
-    !isActiveTradeRoute &&
-    (currentSection === "trade" ||
-      pathname === "/trades" ||
-      pathname.startsWith("/trades/"));
-  const pathnameSegments = pathname.split("/").filter(Boolean);
-  const isCollectionMemberRoute =
-    (pathname.startsWith("/collection/") && pathnameSegments.length >= 3) ||
-    (currentSection === "collect" && pathnameSegments.length >= 2);
   const isToolsRoute =
     pathname.startsWith("/objekt-maker") ||
     pathname.startsWith("/proofshot") ||
     pathname.startsWith("/spin") ||
     currentSection === "create";
   const [toolsOpen, setToolsOpen] = useState(isToolsRoute);
-
-  if (isHomeRoute || isCollectionMemberRoute) {
-    return null;
-  }
-
-  if (!isTradesRoute) {
-    return (
-      <header
-        data-mobile-nav
-        className="sm:hidden border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75"
-      >
-        <div className="flex h-14 items-center px-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (window.history.length > 1) {
-                router.back();
-                return;
-              }
-              router.push("/");
-            }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Go back"
-          >
-            <ChevronLeftIcon className="h-7 w-7" strokeWidth={2.5} />
-          </button>
-          <div className="flex-1 px-2 text-center text-sm font-medium text-foreground truncate">
-            {getMobilePageTitle(pathname, currentSection)}
-          </div>
-          <div className="h-10 w-10" />
-        </div>
-      </header>
-    );
-  }
 
   return (
     <>
@@ -648,46 +593,4 @@ function MobileNavLink({
       {children}
     </Link>
   );
-}
-
-// `currentSection` disambiguates clean external paths ("/mine" on
-// list.objekt.my) from the internal paths this used to match exclusively
-// ("/list/mine") — see the usePathname() form caveat above.
-function getMobilePageTitle(
-  pathname: string,
-  currentSection: SectionId | null,
-): string {
-  if (
-    pathname.startsWith("/active-trades") ||
-    (currentSection === "trade" &&
-      (pathname === "/active" || pathname.startsWith("/active/")))
-  ) {
-    return "Active Trade";
-  }
-  if (pathname.startsWith("/notifications")) return "Notifications";
-  if (pathname.startsWith("/objekt-maker") || currentSection === "create") {
-    return "Objektify";
-  }
-  if (pathname.startsWith("/proofshot")) return "Proofshot";
-  if (
-    pathname.startsWith("/list/mine") ||
-    (currentSection === "list" && pathname === "/mine")
-  ) {
-    return "My Lists";
-  }
-  if (
-    pathname.startsWith("/list") ||
-    pathname.startsWith("/post") ||
-    currentSection === "list"
-  ) {
-    return "Lists";
-  }
-  if (pathname.startsWith("/spin")) return "Spin Simulator";
-  if (pathname.startsWith("/collection") || currentSection === "collect") {
-    return "Collection";
-  }
-  if (pathname.startsWith("/link")) return "Link Cosmo";
-  if (pathname.startsWith("/sign-in")) return "Sign in";
-  if (pathname.startsWith("/@")) return "Profile";
-  return "objekt.my";
 }
