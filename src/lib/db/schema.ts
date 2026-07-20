@@ -116,6 +116,11 @@ export const tradePost = pgTable(
     linkedPosterId: text("linked_poster_id").references(() => poster.id, {
       onDelete: "cascade",
     }),
+    // True only when syncPosterTradePost closed this post (poster went empty
+    // or lost its owner) — distinguishes an auto-closure the sync itself may
+    // reopen from a user close, cron expiry, or trade completion, none of
+    // which should be reopened by a poster edit.
+    closedBySync: boolean("closed_by_sync").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

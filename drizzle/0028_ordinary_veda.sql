@@ -1,0 +1,1 @@
+ALTER TABLE "trade_post" ADD COLUMN "closed_by_sync" boolean DEFAULT false NOT NULL;

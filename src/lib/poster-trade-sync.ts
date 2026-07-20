@@ -30,10 +30,13 @@ function anyWantKey(w: {
  * poster create/update.
  *
  * No-op for posters without an owner — anonymous posters aren't tied to a
- * real trading account. Once a mirrored trade post moves out of "open"
- * (e.g. a real trade against it completed via the normal accept/check-
- * transfers flow), this intentionally stops touching its status — reopening
- * a mid-trade or completed post would fight with that lifecycle.
+ * real trading account. Once a mirrored trade post moves out of "open" for a
+ * reason other than this sync (e.g. a real trade completed via the normal
+ * accept/check-transfers flow, a user closed it, or it expired), this
+ * intentionally stops touching its status — reopening a mid-trade or
+ * completed post would fight with that lifecycle. A post this sync itself
+ * closed (poster went empty or lost its owner — see closedBySync) is the one
+ * case it will reopen once the poster has resolvable items again.
  */
 export async function syncPosterTradePost(posterId: string): Promise<void> {
   const row = await db.query.poster.findFirst({
@@ -72,7 +75,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
 
   const existing = await db.query.tradePost.findFirst({
     where: eq(tradePost.linkedPosterId, posterId),
-    columns: { id: true, status: true },
+    columns: { id: true, status: true, closedBySync: true },
   });
 
   if (!row.userId) {
@@ -81,7 +84,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
     if (existing && existing.status === "open") {
       await db
         .update(tradePost)
-        .set({ status: "closed", updatedAt: new Date() })
+        .set({ status: "closed", closedBySync: true, updatedAt: new Date() })
         .where(eq(tradePost.id, existing.id));
     }
     return;
@@ -158,7 +161,7 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
     if (existing && existing.status === "open") {
       await db
         .update(tradePost)
-        .set({ status: "closed", updatedAt: new Date() })
+        .set({ status: "closed", closedBySync: true, updatedAt: new Date() })
         .where(eq(tradePost.id, existing.id));
     }
     return;
@@ -174,6 +177,10 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
     let tradePostId: string;
     if (existing) {
       tradePostId = existing.id;
+      // Only a post this sync closed itself (poster went empty/unowned) may
+      // be reopened here — a post closed by the user, cron expiry, or trade
+      // completion keeps its status untouched (see docstring above).
+      const reopen = existing.status === "closed" && existing.closedBySync;
       await tx
         .update(tradePost)
         .set({
@@ -181,6 +188,8 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
           wantsOnly,
           updatedAt: new Date(),
           availabilityCheckedAt: null,
+          closedBySync: false,
+          ...(reopen ? { status: "open", createdAt: new Date() } : {}),
         })
         .where(eq(tradePost.id, tradePostId));
       await tx
