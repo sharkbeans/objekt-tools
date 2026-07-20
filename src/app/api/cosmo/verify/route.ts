@@ -6,6 +6,10 @@ import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
 
+function normalize(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export async function POST(request: NextRequest) {
   let session: Awaited<ReturnType<typeof requireSession>>;
   try {
@@ -43,13 +47,20 @@ export async function POST(request: NextRequest) {
   try {
     const profile = await fetchUserProfile(cosmoId, artistId);
 
+    if (normalize(profile.address) !== normalize(address)) {
+      return NextResponse.json({ error: "Address mismatch" }, { status: 400 });
+    }
+
     // Validate nickname matches
-    if (profile.nickname.toLowerCase() !== nickname.toLowerCase()) {
+    if (normalize(profile.nickname) !== normalize(nickname)) {
       return NextResponse.json({ error: "Nickname mismatch" }, { status: 400 });
     }
 
     // Check if code appears in status message
-    if (!profile.statusMessage?.toLowerCase().includes(code.toLowerCase())) {
+    if (
+      !profile.statusMessage ||
+      !normalize(profile.statusMessage).includes(normalize(code))
+    ) {
       return NextResponse.json(
         { error: "Verification code not found in your Cosmo bio message" },
         { status: 400 },

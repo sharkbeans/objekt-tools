@@ -1,4 +1,4 @@
-import { createCipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { ofetch } from "ofetch";
 import { db } from "@/lib/db";
@@ -57,6 +57,19 @@ function encryptPayload(plaintext: string, keyBase64: string): string {
     cipher.final(),
   ]);
   return Buffer.concat([iv, encrypted]).toString("base64");
+}
+
+function decryptPayload(ciphertextBase64: string, keyBase64: string): string {
+  const key = Buffer.from(keyBase64, "base64");
+  const buf = Buffer.from(ciphertextBase64, "base64");
+  const iv = buf.subarray(0, 16);
+  const ciphertext = buf.subarray(16);
+  const decipher = createDecipheriv("aes-256-cbc", key, iv);
+  const decrypted = Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]);
+  return decrypted.toString("utf8");
 }
 
 async function refreshAccessToken(tokenRow: {
@@ -184,7 +197,15 @@ export async function fetchUserProfile(
   cosmoId: number,
   artistId: ValidArtist,
 ): Promise<CosmoUserProfile> {
-  return cosmoFetchWithRefresh(`/bff/v3/users/${cosmoId}`, {
-    params: { artistId },
-  });
+  const key = process.env.COSMO_KEY;
+  if (!key) throw new Error("COSMO_KEY env var is not set");
+
+  const encrypted = await cosmoFetchWithRefresh<string>(
+    `/bff/v3/users/${cosmoId}`,
+    {
+      params: { artistId },
+    },
+  );
+
+  return JSON.parse(decryptPayload(encrypted, key)) as CosmoUserProfile;
 }

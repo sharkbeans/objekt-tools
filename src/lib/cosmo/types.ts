@@ -12,10 +12,15 @@ export interface CosmoSearchResult {
 }
 
 export interface CosmoUserProfile {
+  id: number;
   nickname: string;
   address: string;
   profileImageUrl?: string;
-  statusMessage?: string;
+  fandomName: string;
+  followDurationDays: number;
+  currentStreak: number;
+  statusMessage: string | null;
+  createdAt: string;
 }
 
 export interface CosmoSeasonMeta {
