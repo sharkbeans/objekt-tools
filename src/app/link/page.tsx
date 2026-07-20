@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { useSession } from "@/lib/auth-client";
 import type { CosmoPublicUser, ValidArtist } from "@/lib/cosmo/types";
+import { sectionAbsoluteUrl } from "@/lib/sections";
 
 type Step = "search" | "artist" | "verify" | "done";
 
@@ -61,6 +62,7 @@ export default function LinkCosmoPage() {
   const [existingNickname, setExistingNickname] = useState<string | null>(null);
   const [unlinkOpen, setUnlinkOpen] = useState(false);
   const doneEditProfileRef = useRef<HTMLDivElement>(null);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -68,6 +70,21 @@ export default function LinkCosmoPage() {
       router.push("/sign-in");
     }
   }, [session, router]);
+
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("returnTo");
+    if (!value) return;
+
+    try {
+      const url = new URL(value, window.location.origin);
+      const listOrigin = new URL(sectionAbsoluteUrl("/list")).origin;
+      if (url.origin === window.location.origin || url.origin === listOrigin) {
+        setReturnTo(url.href);
+      }
+    } catch {
+      if (value.startsWith("/")) setReturnTo(value);
+    }
+  }, []);
 
   // Check if already linked
   useEffect(() => {
@@ -217,6 +234,20 @@ export default function LinkCosmoPage() {
     } finally {
       setVerifying(false);
     }
+  }
+
+  function handleFinish() {
+    if (!returnTo) {
+      router.push(`/@${linkedAs}`);
+      return;
+    }
+
+    if (returnTo.startsWith("http")) {
+      window.location.href = returnTo;
+      return;
+    }
+
+    router.push(returnTo);
   }
 
   if (!session) return null;
@@ -719,9 +750,9 @@ export default function LinkCosmoPage() {
 
               <Button
                 className="w-full"
-                onClick={() => router.push(`/@${linkedAs}`)}
+                onClick={handleFinish}
               >
-                Finish
+                {returnTo ? "Return to your list" : "Finish"}
               </Button>
             </div>
           )}

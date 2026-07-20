@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
+  cosmoAccount,
   poster,
   tradePost,
   tradePostHave,
@@ -29,14 +30,15 @@ function anyWantKey(w: {
  * (findTradePostMatches) instead of a parallel implementation. Call after any
  * poster create/update.
  *
- * No-op for posters without an owner — anonymous posters aren't tied to a
- * real trading account. Once a mirrored trade post moves out of "open" for a
- * reason other than this sync (e.g. a real trade completed via the normal
- * accept/check-transfers flow, a user closed it, or it expired), this
- * intentionally stops touching its status — reopening a mid-trade or
- * completed post would fight with that lifecycle. A post this sync itself
- * closed (poster went empty or lost its owner — see closedBySync) is the one
- * case it will reopen once the poster has resolvable items again.
+ * No-op for posters without an owner or a linked Cosmo account — those lists
+ * can still be shared, but they aren't tied to a real trading identity. Once a
+ * mirrored trade post moves out of "open" for a reason other than this sync
+ * (e.g. a real trade completed via the normal accept/check-transfers flow, a
+ * user closed it, or it expired), this intentionally stops touching its status
+ * — reopening a mid-trade or completed post would fight with that lifecycle. A
+ * post this sync itself closed (poster went empty or lost its owner/link — see
+ * closedBySync) is the one case it will reopen once the poster is tradable
+ * again.
  */
 export async function syncPosterTradePost(posterId: string): Promise<void> {
   const row = await db.query.poster.findFirst({
@@ -90,6 +92,20 @@ export async function syncPosterTradePost(posterId: string): Promise<void> {
     return;
   }
   const userId = row.userId;
+
+  const linked = await db.query.cosmoAccount.findFirst({
+    where: eq(cosmoAccount.userId, userId),
+    columns: { id: true },
+  });
+  if (!linked) {
+    if (existing && existing.status === "open") {
+      await db
+        .update(tradePost)
+        .set({ status: "closed", closedBySync: true, updatedAt: new Date() })
+        .where(eq(tradePost.id, existing.id));
+    }
+    return;
+  }
 
   const resolvedHaves = row.haves.filter(
     (h): h is typeof h & { collectionId: string } => h.collectionId !== null,

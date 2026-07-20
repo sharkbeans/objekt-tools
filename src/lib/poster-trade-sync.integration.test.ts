@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { eq } from "drizzle-orm";
-import { createUser } from "@/test/fixtures";
+import { createCosmoAccount, createUser } from "@/test/fixtures";
 import {
   createIndexerTables,
   getDb,
@@ -64,6 +64,7 @@ describe("syncPosterTradePost (integration)", {
 
   it("reopens a mirror the sync itself closed once items return", async () => {
     const user = await createUser();
+    await createCosmoAccount(user.id);
     const poster = await createPoster(user.id);
     await addHave(poster.id);
 
@@ -97,6 +98,7 @@ describe("syncPosterTradePost (integration)", {
 
   it("does not reopen a mirror closed for a reason other than the sync", async () => {
     const user = await createUser();
+    await createCosmoAccount(user.id);
     const poster = await createPoster(user.id);
     await addHave(poster.id);
     await sync.syncPosterTradePost(poster.id);
@@ -118,6 +120,7 @@ describe("syncPosterTradePost (integration)", {
 
   it("does not touch status when the mirror is in_trade", async () => {
     const user = await createUser();
+    await createCosmoAccount(user.id);
     const poster = await createPoster(user.id);
     await addHave(poster.id);
     await sync.syncPosterTradePost(poster.id);
@@ -133,5 +136,35 @@ describe("syncPosterTradePost (integration)", {
     await sync.syncPosterTradePost(poster.id);
     const stillInTrade = await getMirror(poster.id);
     assert.equal(stillInTrade?.status, "in_trade");
+  });
+
+  it("does not create a mirror for an unlinked user", async () => {
+    const user = await createUser();
+    const poster = await createPoster(user.id);
+    await addHave(poster.id);
+
+    await sync.syncPosterTradePost(poster.id);
+
+    const mirror = await getMirror(poster.id);
+    assert.equal(mirror, undefined);
+  });
+
+  it("closes an open mirror when the user is no longer linked", async () => {
+    const user = await createUser();
+    await createCosmoAccount(user.id);
+    const poster = await createPoster(user.id);
+    await addHave(poster.id);
+    await sync.syncPosterTradePost(poster.id);
+
+    const db = await getDb();
+    await db
+      .delete(schema.cosmoAccount)
+      .where(eq(schema.cosmoAccount.userId, user.id));
+
+    await sync.syncPosterTradePost(poster.id);
+
+    const closed = await getMirror(poster.id);
+    assert.equal(closed?.status, "closed");
+    assert.equal(closed?.closedBySync, true);
   });
 });

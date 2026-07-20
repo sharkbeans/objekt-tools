@@ -5,6 +5,7 @@ import {
   CheckCircle2Icon,
   CopyIcon,
   DownloadIcon,
+  Link2Icon,
   ListIcon,
   Loader2Icon,
   LockIcon,
@@ -385,8 +386,10 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const [linkedNickname, setLinkedNickname] = useState<string | null>(null);
+  const [cosmoStatusLoaded, setCosmoStatusLoaded] = useState(false);
   const [autoSaving, setAutoSaving] = useState(false);
   const [inventoryWarningOpen, setInventoryWarningOpen] = useState(false);
+  const [listOnlyWarningOpen, setListOnlyWarningOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
   const [latestPosters, setLatestPosters] = useState<PosterSummary[] | null>(
@@ -594,10 +597,17 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   // Fetch cosmo status to get the real cosmo nickname and linked state
   useEffect(() => {
-    if (!session) return;
+    if (!session) {
+      setLinkedNickname(null);
+      setCosmoStatusLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setCosmoStatusLoaded(false);
     fetch("/api/cosmo/status")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
+        if (cancelled) return;
         if (data?.nickname) {
           setCosmoId((prev) => {
             if (prev.trim()) return prev;
@@ -605,9 +615,19 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
             return data.nickname;
           });
           setLinkedNickname(data.nickname);
+        } else {
+          setLinkedNickname(null);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setLinkedNickname(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCosmoStatusLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   // Auto-load the Have inventory the first time a username becomes available
@@ -812,17 +832,20 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     [groupByMember, groupByNumbers, colsPerRow, wantsOnly, editId, router],
   );
 
-  // Auto-save after restoring a stashed draft post-login
-  useEffect(() => {
-    if (!autoSaving) return;
-    setAutoSaving(false);
-    doSaveAndShare(posterData);
-  }, [autoSaving, doSaveAndShare, posterData]);
-
   const handleSaveAndShare = useCallback(async () => {
     // For new posters, require Discord login — show dialog instead of redirecting
     if (!editId && !session) {
       setSignInOpen(true);
+      return;
+    }
+
+    if (!editId && session && !cosmoStatusLoaded) {
+      toast.error("Checking your Cosmo link. Try again in a moment.");
+      return;
+    }
+
+    if (!editId && session && !linkedNickname) {
+      setListOnlyWarningOpen(true);
       return;
     }
 
@@ -871,7 +894,23 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     }
 
     await doSaveAndShare(posterData);
-  }, [posterData, editId, session, doSaveAndShare, linkedNickname]);
+  }, [
+    posterData,
+    editId,
+    session,
+    cosmoStatusLoaded,
+    linkedNickname,
+    doSaveAndShare,
+  ]);
+
+  // Auto-save after restoring a stashed draft post-login or post-link, but
+  // send it through the same guards as a manual save.
+  useEffect(() => {
+    if (!autoSaving) return;
+    if (session && !cosmoStatusLoaded) return;
+    setAutoSaving(false);
+    void handleSaveAndShare();
+  }, [autoSaving, session, cosmoStatusLoaded, handleSaveAndShare]);
 
   const handleSignInForSave = useCallback(() => {
     sessionStorage.setItem(
@@ -889,6 +928,32 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       callbackURL: sectionAbsoluteUrl("/list?restore=1"),
     });
   }, [posterData, groupByMember, groupByNumbers, colsPerRow, wantsOnly]);
+
+  const stashDraft = useCallback(() => {
+    sessionStorage.setItem(
+      STASH_KEY,
+      JSON.stringify({
+        posterData,
+        groupByMember,
+        groupByNumbers,
+        colsPerRow,
+        wantsOnly,
+      }),
+    );
+  }, [posterData, groupByMember, groupByNumbers, colsPerRow, wantsOnly]);
+
+  const handleLinkCosmoForMatching = useCallback(() => {
+    stashDraft();
+    window.location.href = sectionHref(
+      `/link?returnTo=${encodeURIComponent(sectionAbsoluteUrl("/list?restore=1"))}`,
+      { currentSection: "list" },
+    );
+  }, [stashDraft]);
+
+  const handleCreateListOnly = useCallback(() => {
+    setListOnlyWarningOpen(false);
+    void doSaveAndShare(posterData);
+  }, [doSaveAndShare, posterData]);
 
   const handleSelectHave = useCallback((entry: ObjektEntry) => {
     setPosterData((prev) => ({
@@ -1474,7 +1539,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       </Button>
                       <Button
                         onClick={handleSaveAndShare}
-                        disabled={saving}
+                        disabled={saving || (!!session && !cosmoStatusLoaded)}
                         className="h-10 flex-1 gap-2"
                       >
                         {saving ? (
@@ -1499,40 +1564,39 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         onConfirm={handleAddCustomWant}
       />
       <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Sign in to save</DialogTitle>
-            <DialogDescription>
-              A Discord account is required to save and share your list. You can
-              still save the image without signing in.
-            </DialogDescription>
+            <DialogTitle>How do you want to save this list?</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Button
-              variant="outline"
-              className="w-full gap-2 border-border bg-background text-foreground hover:bg-muted"
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
               onClick={handleSignInForSave}
+              className="flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
             >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4 fill-current"
-                aria-hidden="true"
-              >
-                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.003.02.014.04.03.052a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
-              </svg>
-              Continue with Discord
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full"
+              <DiscordIcon className="size-5 text-[#5865F2]" />
+              <span className="font-medium">Continue with Discord</span>
+              <span className="text-sm text-muted-foreground">
+                Save it with a share link. Link Cosmo next for trade matching.
+              </span>
+            </button>
+            <button
+              type="button"
               disabled={downloading}
               onClick={() => {
                 setSignInOpen(false);
                 void handleDownload();
               }}
+              className="flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
             >
-              {downloading ? "Saving image..." : "Save image only"}
-            </Button>
+              <DownloadIcon className="size-5 text-muted-foreground" />
+              <span className="font-medium">
+                {downloading ? "Saving image..." : "Save image only"}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                Download a picture of your list — no account, no share link.
+              </span>
+            </button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1557,6 +1621,41 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={listOnlyWarningOpen} onOpenChange={setListOnlyWarningOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>How do you want to save this list?</DialogTitle>
+            <DialogDescription>
+              Your list is saved either way.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleLinkCosmoForMatching}
+              className="flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
+            >
+              <Link2Icon className="size-5 text-primary" />
+              <span className="font-medium">Link Cosmo</span>
+              <span className="text-sm text-muted-foreground">
+                Post it for trade and get matches from other users.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateListOnly}
+              className="flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
+            >
+              <ListIcon className="size-5 text-muted-foreground" />
+              <span className="font-medium">Create list only</span>
+              <span className="text-sm text-muted-foreground">
+                Save it with a share link. No trade post or trade matches.
+              </span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

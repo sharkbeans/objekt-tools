@@ -22,6 +22,9 @@ export async function findTradePostMatches(tradePostId: string) {
   });
 
   if (!sourceTrade) return null;
+  if (sourceTrade.status !== "open") {
+    return { sourceTrade, matches: [] };
+  }
 
   const myHaveCollections = sourceTrade.haves.map((h) => h.collectionId);
   const myWantCollections = sourceTrade.wants.map((w) => w.collectionId);

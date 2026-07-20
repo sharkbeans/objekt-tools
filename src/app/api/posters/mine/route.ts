@@ -88,7 +88,10 @@ async function getMatchCounts(
   if (posterIds.length === 0) return {};
 
   const mirrors = await db.query.tradePost.findMany({
-    where: inArray(tradePost.linkedPosterId, posterIds),
+    where: and(
+      inArray(tradePost.linkedPosterId, posterIds),
+      eq(tradePost.status, "open"),
+    ),
     columns: { id: true, linkedPosterId: true },
     with: {
       haves: { where: (h, { isNull }) => isNull(h.deletedAt) },
