@@ -54,6 +54,37 @@ describe("trade search shortcuts", () => {
     );
   });
 
+  it("parses bare single-letter season prefixes like a -> Atom01", () => {
+    const parsed = parseTradeSearchShortcuts("sy a");
+
+    assert.equal(parsed.filterMode, undefined);
+    assert.deepEqual(parsed.member, ["SeoYeon"]);
+    assert.deepEqual(parsed.season, ["Atom01"]);
+    assert.equal(parsed.effectiveSearch, "");
+  });
+
+  it("frees c for the Cream01 season prefix; Choerry now uses choe/ch", () => {
+    const bare = parseTradeSearchShortcuts("c");
+    assert.deepEqual(bare.member, []);
+    assert.deepEqual(bare.season, ["Cream01"]);
+
+    const shortform = parseTradeSearchShortcuts("choe");
+    assert.deepEqual(shortform.member, ["Choerry"]);
+    assert.deepEqual(shortform.season, []);
+  });
+
+  it("resolves not-yet-released generations (dd/d2 -> Divine02) without a hardcoded entry", () => {
+    const repeated = parseTradeSearchShortcuts("sy dd");
+    assert.deepEqual(repeated.season, ["Divine02"]);
+
+    const shorthand = parseTradeSearchShortcuts("sy d2");
+    assert.deepEqual(shorthand.season, ["Divine02"]);
+
+    const compact = parseObjektSearchShortcuts("dd101z");
+    assert.deepEqual(compact.season, ["Divine02"]);
+    assert.equal(compact.effectiveSearch, "101Z");
+  });
+
   it("parses repeated-letter season prefixes like cc without clashing", () => {
     const parsed = parseTradeSearchShortcuts("sy cc");
 

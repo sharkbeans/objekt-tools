@@ -110,7 +110,7 @@ export const shortformMembers: Record<string, string> = {
   sulin: "Sullin",
   s: "Sullin",
   sh: "SoHyun",
-  c: "Choerry",
+  choe: "Choerry",
   ch: "Choerry",
   choery: "Choerry",
   cw: "ChaeWon",

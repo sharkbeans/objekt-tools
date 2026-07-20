@@ -1,4 +1,8 @@
-import { resolveMemberCasing, validSeasons } from "@/lib/filters";
+import {
+  resolveMemberCasing,
+  shortformMembers,
+  validSeasons,
+} from "@/lib/filters";
 import { resolveObjektMemberAlias } from "@/lib/objekt-search";
 import { seasonPrefixMap } from "@/lib/season-prefix";
 
@@ -11,35 +15,58 @@ const FILTER_MODE_TOKENS: Record<string, "haves" | "wants"> = {
   wants: "wants",
 };
 
-const SEASON_CODE_TOKENS: Record<string, string> = {
-  a: "Atom01",
-  aa: "Atom02",
-  b: "Binary01",
-  bb: "Binary02",
-  c: "Cream01",
-  cc: "Cream02",
-  d: "Divine01",
-  e: "Ever01",
-};
+// artms/tripleS seasons (Atom, Binary, Cream, Divine, Ever) use a
+// repeated-initial scheme (Atom01 -> a, Atom02 -> aa, ...) generated
+// generically in seasonPrefixMap for every generation, not just the ones
+// released so far. A prefix belongs to that scheme (as opposed to idntt's
+// explicit codes like "w"/"sp") iff its doubled form is also in the map.
+const REPEATED_LETTER_SEASON_ENTRIES = Object.entries(seasonPrefixMap).filter(
+  ([prefix]) =>
+    /^([a-z])\1*$/i.test(prefix) &&
+    `${prefix.charAt(0)}${prefix.charAt(0)}` in seasonPrefixMap,
+);
+
+const SEASON_CODE_TOKENS: Record<string, string> = Object.fromEntries(
+  REPEATED_LETTER_SEASON_ENTRIES.map(([prefix, season]) => [
+    prefix.toLowerCase(),
+    season,
+  ]),
+);
+
+// Non-repeated shorthand for the same scheme (a1 -> Atom01, a2 -> Atom02, ...).
+const SEASON_LETTER_GENERATION_TOKENS: Record<string, string> =
+  Object.fromEntries(
+    REPEATED_LETTER_SEASON_ENTRIES.map(([prefix, season]) => [
+      `${prefix.charAt(0).toLowerCase()}${prefix.length}`,
+      season,
+    ]),
+  );
 
 const EXACT_SEASON_TOKENS = new Map(
   validSeasons.map((season) => [season.toLowerCase(), season]),
 );
 
+// Single-letter season prefixes (a -> Atom01, b -> Binary01, ...) are only
+// safe as season-only tokens when they don't collide with a single-letter
+// member shortform (e.g. "c" already means Choerry) or a filter-mode token
+// ("h"/"w"). Multi-letter prefixes (aa, cc, ...) never collide, so they're
+// always included.
+const RESERVED_SINGLE_LETTER_TOKENS = new Set([
+  ...Object.keys(shortformMembers).filter((key) => key.length === 1),
+  ...Object.keys(FILTER_MODE_TOKENS).filter((key) => key.length === 1),
+]);
+
 const SEASON_ONLY_TOKENS: Record<string, string> = {
   ...Object.fromEntries(
     Object.entries(seasonPrefixMap)
-      .filter(([prefix]) => prefix.length >= 2)
+      .filter(
+        ([prefix]) =>
+          prefix.length >= 2 ||
+          !RESERVED_SINGLE_LETTER_TOKENS.has(prefix.toLowerCase()),
+      )
       .map(([prefix, season]) => [prefix.toLowerCase(), season]),
   ),
-  a1: "Atom01",
-  a2: "Atom02",
-  b1: "Binary01",
-  b2: "Binary02",
-  c1: "Cream01",
-  c2: "Cream02",
-  d1: "Divine01",
-  e1: "Ever01",
+  ...SEASON_LETTER_GENERATION_TOKENS,
 };
 
 export type ObjektSearchShortcutChip = {

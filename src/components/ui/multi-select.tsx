@@ -56,7 +56,7 @@ export function MultiSelect({
           className={cn(
             "h-9 min-w-32 justify-between px-3 font-normal",
             value.length > 0 &&
-              "border-foreground/40 bg-accent text-foreground shadow-sm",
+              "border-2 border-white bg-accent text-foreground shadow-sm ring-1 ring-white hover:border-white",
             className,
           )}
         >
