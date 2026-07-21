@@ -17,6 +17,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -384,7 +385,51 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [anyWantOpen, setAnyWantOpen] = useState(false);
   const [wantsOnly, setWantsOnly] = useState(false);
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
+  const [haveInventoryLoading, setHaveInventoryLoading] = useState(false);
   const tabsRef = useRef<HTMLDivElement>(null);
+  const stepPillRef = useRef<HTMLSpanElement>(null);
+
+  const positionStepPill = useCallback((animate: boolean) => {
+    const list = tabsRef.current?.querySelector<HTMLElement>(
+      '[data-slot="tabs-list"]',
+    );
+    const active = list?.querySelector<HTMLElement>(
+      '[data-slot="tabs-trigger"][data-state="active"]',
+    );
+    const pill = stepPillRef.current;
+    if (!list || !active || !pill) return;
+
+    const apply = () => {
+      pill.style.width = `${active.offsetWidth}px`;
+      pill.style.transform = `translateX(${active.offsetLeft}px)`;
+    };
+
+    if (animate) {
+      apply();
+    } else {
+      const prevTransition = pill.style.transition;
+      pill.style.transition = "none";
+      apply();
+      // Force reflow so the transition-none takes effect before it's restored.
+      void pill.offsetHeight;
+      pill.style.transition = prevTransition;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    positionStepPill(false);
+  }, [positionStepPill]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: step drives the recompute even though positionStepPill reads it via the DOM
+  useEffect(() => {
+    positionStepPill(true);
+  }, [step, positionStepPill]);
+
+  useEffect(() => {
+    const handleResize = () => positionStepPill(false);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [positionStepPill]);
 
   const [linkedNickname, setLinkedNickname] = useState<string | null>(null);
   const [cosmoStatusLoaded, setCosmoStatusLoaded] = useState(false);
@@ -1232,13 +1277,19 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     <Button
                       type="button"
                       className="h-12 gap-2 px-4 sm:flex-1"
-                      disabled={!hasMounted || !cosmoId.trim()}
+                      disabled={
+                        !hasMounted || !cosmoId.trim() || haveInventoryLoading
+                      }
                       onClick={() => {
                         rememberCosmoUsername(cosmoId);
                         searchInventory(cosmoId);
                       }}
                     >
-                      <SearchIcon className="h-4 w-4" />
+                      {haveInventoryLoading ? (
+                        <Loader2Icon className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <SearchIcon className="h-4 w-4" />
+                      )}
                       Load Inventory
                     </Button>
                   )}
@@ -1267,17 +1318,22 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   value={step}
                   onValueChange={(v) => handleStepChange(v as "have" | "want")}
                 >
-                  <TabsList className="grid h-12 w-full grid-cols-2">
+                  <TabsList className="relative grid h-12 w-full grid-cols-2">
+                    <span
+                      ref={stepPillRef}
+                      aria-hidden="true"
+                      className="absolute inset-y-0.75 left-0 z-0 w-0 rounded-md bg-white shadow-sm transition-[transform,width] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                    />
                     <TabsTrigger
                       value="have"
-                      className="h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black"
+                      className="relative z-10 h-full py-0 text-base leading-none sm:text-md data-[state=active]:border-transparent! data-[state=active]:bg-transparent! data-[state=active]:text-black! dark:data-[state=active]:bg-transparent! dark:data-[state=active]:text-black!"
                     >
                       Have ({posterData.haves.length})
                     </TabsTrigger>
                     <TabsTrigger
                       value="want"
                       className={cn(
-                        "h-full py-0 text-base leading-none sm:text-md data-[state=active]:!border-white data-[state=active]:!bg-white data-[state=active]:!text-black dark:data-[state=active]:!bg-white dark:data-[state=active]:!text-black",
+                        "relative z-10 h-full py-0 text-base leading-none sm:text-md data-[state=active]:border-transparent! data-[state=active]:bg-transparent! data-[state=active]:text-black! dark:data-[state=active]:bg-transparent! dark:data-[state=active]:text-black!",
                         shouldNudgeWantTab && "want-tab-nudge",
                       )}
                     >
@@ -1314,6 +1370,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                             onSelect={handleSelectHave}
                             onDeselect={handleDeselectHave}
                             onLoaded={setInventoryCount}
+                            onLoadingChange={setHaveInventoryLoading}
                             maxSelections={50}
                             gridClassName={PICKER_GRID_CLASS}
                             pageSize={35}

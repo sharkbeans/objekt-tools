@@ -16,6 +16,7 @@ type CollectionMetadata = {
   backImage: string;
   accentColor: string;
   onOffline: "online" | "offline";
+  createdAt: Date;
 };
 
 export type InventoryRow = {
@@ -28,6 +29,7 @@ export type InventoryRow = {
   thumbnailImage: string;
   serial: number;
   objektId: string;
+  createdAt: Date;
 };
 
 export type OwnedObjektRow = {
@@ -61,6 +63,7 @@ export async function loadCollectionMetadataByDbIds(
       backImage: collections.backImage,
       accentColor: collections.accentColor,
       onOffline: collections.onOffline,
+      createdAt: collections.createdAt,
     })
     .from(collections)
     .where(inArray(collections.id, uniqueIds));
@@ -83,6 +86,7 @@ export async function loadCollectionMetadataByDbIds(
         backImage: collections.backImage,
         accentColor: collections.accentColor,
         onOffline: collections.onOffline,
+        createdAt: collections.createdAt,
       })
       .from(collections)
       .where(inArray(collections.id, missingIds));
@@ -168,6 +172,7 @@ export async function loadTransferableInventoryRows(
           thumbnailImage: collection.thumbnailImage,
           serial: row.serial,
           objektId: row.objektId,
+          createdAt: collection.createdAt,
         },
       ];
     })
@@ -244,8 +249,8 @@ export async function loadOwnedObjektsForPublicCollectionIds(
 }
 
 function compareInventoryRows(a: InventoryRow, b: InventoryRow) {
-  const memberCompare = a.member.localeCompare(b.member);
-  if (memberCompare !== 0) return memberCompare;
+  const createdAtCompare = b.createdAt.getTime() - a.createdAt.getTime();
+  if (createdAtCompare !== 0) return createdAtCompare;
 
   const collectionNoCompare = a.collectionNo.localeCompare(
     b.collectionNo,

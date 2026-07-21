@@ -1,5 +1,5 @@
 import type { SQL } from "drizzle-orm";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
         })
         .from(collections)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(collections.createdAt))
         .limit(200),
   );
 

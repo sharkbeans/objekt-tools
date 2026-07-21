@@ -64,6 +64,8 @@ interface ObjektInventoryPickerProps {
   prioritize?: (entry: OwnedEntry) => boolean;
   /** Called once with the total item count after a successful fetch. */
   onLoaded?: (count: number) => void;
+  /** Reports fetch-in-progress state, e.g. to drive an external loading button. */
+  onLoadingChange?: (loading: boolean) => void;
   /** Items shown per page. Defaults to 40. */
   pageSize?: number;
   /** Shows selected items in a pinned row above the inventory grid. */
@@ -94,6 +96,7 @@ export function ObjektInventoryPicker({
   pageSize,
   prioritize,
   onLoaded,
+  onLoadingChange,
   showSelectedRow,
   selectedRowLabel,
   mainGridLabel,
@@ -152,6 +155,7 @@ export function ObjektInventoryPicker({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    onLoadingChange?.(true);
     fetchItems()
       .then((results) => {
         if (cancelled) return;
@@ -167,12 +171,15 @@ export function ObjektInventoryPicker({
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          onLoadingChange?.(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [fetchItems, onLoaded]);
+  }, [fetchItems, onLoaded, onLoadingChange]);
 
   const filtered = useMemo(() => {
     let result = items;

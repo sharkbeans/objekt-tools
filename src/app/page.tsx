@@ -100,6 +100,12 @@ const tools: {
     Icon: Rows3,
   },
   {
+    title: "Collection",
+    description: "Track your collection progress.",
+    href: "/collection",
+    Icon: Library,
+  },
+  {
     title: "Objektify",
     description: "Create custom objekt cards.",
     href: "/objekt-maker",
@@ -117,12 +123,6 @@ const tools: {
     description: "Random Draw",
     href: "/spin",
     CustomIcon: SpinIcon,
-  },
-  {
-    title: "Collection",
-    description: "Track your collection progress.",
-    href: "/collection",
-    Icon: Library,
   },
 ];
 
