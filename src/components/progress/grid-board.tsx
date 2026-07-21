@@ -128,7 +128,7 @@ export function GridBoard({
   // progress API route for how it's derived). Copies consumed by past grids
   // stay in the wallet forever (grid-locked, not burned), so subtracting
   // that count from ownedCount gives the FCOs still usable for a new grid.
-  // "View Consumed" (default on) shows raw ownedCount as always; turning it
+  // "Show gridded" (default on) shows raw ownedCount as always; turning it
   // off shows only usable copies, so cards fully spent on past grids tint
   // the same way an unowned card does.
   const gridded = specials.reduce((sum, c) => sum + c.gridMintCount, 0);

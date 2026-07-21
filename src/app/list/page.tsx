@@ -715,6 +715,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       lastSearchAt.current = now;
       setInventoryCount(null);
       setHaveNickname(trimmed);
+      setStep((prev) => (prev === "want" ? "have" : prev));
     },
     [haveNickname],
   );

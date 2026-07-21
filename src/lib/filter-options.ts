@@ -67,14 +67,21 @@ export function compareSeasons(a: string, b: string) {
   return a.localeCompare(b);
 }
 
+// Order: tripleS first, then artms, then idntt.
+const artistOrder: (keyof typeof membersByArtist)[] = [
+  "tripleS",
+  "artms",
+  "idntt",
+];
+
+function compareArtists(a: string, b: string) {
+  const ra = artistOrder.indexOf(a as (typeof artistOrder)[number]);
+  const rb = artistOrder.indexOf(b as (typeof artistOrder)[number]);
+  return (ra === -1 ? 999 : ra) - (rb === -1 ? 999 : rb);
+}
+
 const memberPriority: Map<string, number> = (() => {
   const map = new Map<string, number>();
-  // Order: tripleS first, then artms, then idntt — earlier artists win on ties.
-  const artistOrder: (keyof typeof membersByArtist)[] = [
-    "tripleS",
-    "artms",
-    "idntt",
-  ];
   let rank = 0;
   for (const artist of artistOrder) {
     for (const member of membersByArtist[artist]) {
@@ -134,7 +141,9 @@ export function buildFilterOptions(input: {
   seasonsByArtist: Record<string, string[]>;
   classesByArtist: Record<string, string[]>;
 }): FilterOptions {
-  const artistValues = uniqueSorted(input.artists.map(normalizeArtistId));
+  const artistValues = [
+    ...new Set(input.artists.map(normalizeArtistId).filter(Boolean)),
+  ].sort(compareArtists);
 
   const normalizeRecord = (
     record: Record<string, string[]>,

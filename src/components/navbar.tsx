@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -182,6 +182,10 @@ export function Navbar({
                     className="relative h-8 w-8 rounded-full"
                   >
                     <Avatar className="h-8 w-8">
+                      <AvatarImage
+                        src={session.user.image ?? undefined}
+                        alt={session.user.name ?? "User"}
+                      />
                       <AvatarFallback>
                         {session.user.name?.charAt(0).toUpperCase() ?? "U"}
                       </AvatarFallback>
@@ -491,6 +495,10 @@ function MobileNav({
           <div className="shrink-0 border-t border-border px-4 py-4 space-y-3">
             <div className="flex items-center gap-3">
               <Avatar className="h-9 w-9">
+                <AvatarImage
+                  src={session.user.image ?? undefined}
+                  alt={session.user.name ?? "User"}
+                />
                 <AvatarFallback>
                   {session.user.name?.charAt(0).toUpperCase() ?? "U"}
                 </AvatarFallback>

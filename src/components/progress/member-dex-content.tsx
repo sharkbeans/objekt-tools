@@ -1003,7 +1003,7 @@ export function MemberDexContent({ nickname, member }: Props) {
 
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">View Consumed</span>
+          <span className="text-sm text-muted-foreground">Show Gridded</span>
           <Switch checked={viewConsumed} onCheckedChange={setViewConsumed} />
         </div>
       </div>
