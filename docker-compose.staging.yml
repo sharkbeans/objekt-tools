@@ -33,6 +33,39 @@ services:
       timeout: 3s
       retries: 5
 
+  # See docker-compose.yml for the full explanation. Profile-gated (not
+  # started by a plain `docker compose up`); cut over by setting
+  # INDEXER_UPSTREAM_* and pointing INDEXER_DATABASE_URL at
+  # indexer-pgbouncer:5432, then starting with
+  # `--profile indexer-bouncer`. See docs/plans/indexer-pgbouncer-sidecar.md.
+  indexer-pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: unless-stopped
+    profiles: ["indexer-bouncer"]
+    environment:
+      DB_HOST: ${INDEXER_UPSTREAM_HOST:-}
+      DB_PORT: ${INDEXER_UPSTREAM_PORT:-5432}
+      DB_USER: ${INDEXER_UPSTREAM_USER:-}
+      DB_PASSWORD: ${INDEXER_UPSTREAM_PASSWORD:-}
+      DB_NAME: ${INDEXER_UPSTREAM_DB:-}
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "8"
+      MIN_POOL_SIZE: "2"
+      RESERVE_POOL_SIZE: "2"
+      RESERVE_POOL_TIMEOUT: "3"
+      SERVER_TLS_SSLMODE: ${INDEXER_UPSTREAM_SSLMODE:-prefer}
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,search_path
+      SERVER_LIFETIME: "180"
+      SERVER_IDLE_TIMEOUT: "60"
+      QUERY_WAIT_TIMEOUT: "10"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: .
@@ -62,6 +95,8 @@ services:
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       INDEXER_DATABASE_URL: ${INDEXER_DATABASE_URL:-}
       MIRROR_DATABASE_URL: ${MIRROR_DATABASE_URL:-}
+      INDEXER_UPSTREAM_HOST: ${INDEXER_UPSTREAM_HOST:-}
+      INDEXER_UPSTREAM_PORT: ${INDEXER_UPSTREAM_PORT:-}
       REMBG_SERVICE_URL: ${REMBG_SERVICE_URL:-http://rembg:7000}
       REMBG_MODEL: ${REMBG_MODEL:-u2net_human_seg}
       PUSHER_APP_ID: ${PUSHER_APP_ID:-}

@@ -86,6 +86,13 @@ function getPool(): Pool {
     // them. Do NOT set statement_timeout here: pg sends it as a startup
     // parameter, which the indexer's connection pooler rejects
     // ("unsupported startup parameter"), breaking every connection.
+    //
+    // If INDEXER_DATABASE_URL points at the optional local indexer-pgbouncer
+    // sidecar (see docs/plans/indexer-pgbouncer-sidecar.md) instead of the
+    // remote directly, this pool is then talking pooler-to-pooler: TLS to the
+    // real remote is terminated by that sidecar (INDEXER_UPSTREAM_SSLMODE),
+    // so this URL should be plain (no sslmode=require) and the ssl option
+    // below naturally no-ops for that hop.
     _g._indexerPool = attachRecycler(
       new Pool({
         connectionString: url,

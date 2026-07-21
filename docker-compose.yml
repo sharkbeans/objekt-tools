@@ -51,6 +51,54 @@ services:
   #     - "1"
   #     - --no-ui
 
+  # Optional pgbouncer sidecar in front of the remote indexer. Its own
+  # container means its own network namespace — isolating the fragile
+  # internet-facing indexer connection from the app container's netns, so a
+  # netns break on one side doesn't necessarily take down the other.
+  # Disabled by default (profile-gated, not started by a plain `docker compose
+  # up`). To cut over: fill in INDEXER_UPSTREAM_* below with the real remote
+  # indexer's connection parts, then point INDEXER_DATABASE_URL at
+  # postgres://<user>:<pass>@indexer-pgbouncer:5432/<db> and start with
+  # `docker compose --profile indexer-bouncer up -d`.
+  # Does NOT remove the remote network hop (only relocates it) — see
+  # docs/plans/indexer-pgbouncer-sidecar.md for what this does and doesn't fix.
+  indexer-pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: unless-stopped
+    profiles: ["indexer-bouncer"]
+    environment:
+      DB_HOST: ${INDEXER_UPSTREAM_HOST:-}
+      DB_PORT: ${INDEXER_UPSTREAM_PORT:-5432}
+      DB_USER: ${INDEXER_UPSTREAM_USER:-}
+      DB_PASSWORD: ${INDEXER_UPSTREAM_PASSWORD:-}
+      DB_NAME: ${INDEXER_UPSTREAM_DB:-}
+      # Transaction mode: the remote indexer is already behind its own
+      # transaction-mode pooler (see the note in src/lib/db/indexer.ts about
+      # it rejecting statement_timeout as a startup parameter), and nothing
+      # in this app uses prepared statements, session SET, or LISTEN/NOTIFY
+      # on the indexer connection, so pooling at the transaction level here
+      # is safe.
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "8"
+      MIN_POOL_SIZE: "2"
+      RESERVE_POOL_SIZE: "2"
+      RESERVE_POOL_TIMEOUT: "3"
+      SERVER_TLS_SSLMODE: ${INDEXER_UPSTREAM_SSLMODE:-prefer}
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,search_path
+      SERVER_LIFETIME: "180"
+      SERVER_IDLE_TIMEOUT: "60"
+      # Fail fast instead of queueing indefinitely so a dead upstream surfaces
+      # as an error the app's mirror circuit breaker / pool recycler can act
+      # on, rather than a hang that looks like a slow query.
+      QUERY_WAIT_TIMEOUT: "10"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: .
@@ -83,6 +131,13 @@ services:
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       INDEXER_DATABASE_URL: ${INDEXER_DATABASE_URL:-}
       MIRROR_DATABASE_URL: ${MIRROR_DATABASE_URL:-}
+      # Diagnostic only — lets /api/health dial the real remote indexer
+      # directly, independent of whatever INDEXER_DATABASE_URL points at, so
+      # an outage can distinguish "app can't reach its configured indexer
+      # target" from "app can't reach the remote at all." Not used for actual
+      # queries. No-ops (indexerUpstreamTcp omitted) if unset.
+      INDEXER_UPSTREAM_HOST: ${INDEXER_UPSTREAM_HOST:-}
+      INDEXER_UPSTREAM_PORT: ${INDEXER_UPSTREAM_PORT:-}
       REMBG_SERVICE_URL: ${REMBG_SERVICE_URL:-http://rembg:7000}
       REMBG_MODEL: ${REMBG_MODEL:-u2net_human_seg}
       PUSHER_APP_ID: ${PUSHER_APP_ID:-}

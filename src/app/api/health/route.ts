@@ -64,6 +64,19 @@ async function probeIndexer(): Promise<
   }
 }
 
+function dialTcp(host: string, port: number): Promise<"ok" | "unreachable"> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const finish = (result: "ok" | "unreachable") => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(2000, () => finish("unreachable"));
+    socket.once("connect", () => finish("ok"));
+    socket.once("error", () => finish("unreachable"));
+  });
+}
+
 // When the pg probe fails, a raw TCP dial from inside this process's network
 // namespace separates the two failure classes the counters can't: "the pool is
 // wedged but the network is fine" (tcp ok) vs "this container can't reach the
@@ -82,24 +95,34 @@ async function probeIndexerTcp(): Promise<"ok" | "unreachable" | "skipped"> {
   } catch {
     return "skipped";
   }
-  return new Promise((resolve) => {
-    const socket = net.connect({ host, port });
-    const finish = (result: "ok" | "unreachable") => {
-      socket.destroy();
-      resolve(result);
-    };
-    socket.setTimeout(2000, () => finish("unreachable"));
-    socket.once("connect", () => finish("ok"));
-    socket.once("error", () => finish("unreachable"));
-  });
+  return dialTcp(host, port);
+}
+
+// Independent of whatever INDEXER_DATABASE_URL points at (which, once the
+// pgbouncer sidecar is cut over, is the local bouncer, not the remote). This
+// dials the real remote indexer directly, so a failure can be split three
+// ways: query through the configured target fails but app->target TCP is
+// fine (misconfig/auth on the bouncer, or the bouncer->remote leg is broken)
+// vs app->target TCP is also unreachable (that leg of the app's own netns is
+// broken) vs this direct dial to the remote also fails (broader network
+// issue, not specific to the bouncer). No-ops when INDEXER_UPSTREAM_HOST is
+// unset — i.e. before the sidecar is cut over, or when it's never adopted.
+async function probeIndexerUpstreamTcp(): Promise<
+  "ok" | "unreachable" | "skipped"
+> {
+  const host = process.env.INDEXER_UPSTREAM_HOST;
+  if (!host) return "skipped";
+  const port = Number(process.env.INDEXER_UPSTREAM_PORT || 5432);
+  return dialTcp(host, port);
 }
 
 export async function GET() {
   const probe = await probeIndexer();
   const tcp = probe.ok ? undefined : await probeIndexerTcp();
+  const upstreamTcp = probe.ok ? undefined : await probeIndexerUpstreamTcp();
   if (!probe.ok) {
     console.error(
-      `Indexer probe failed (${probe.error}); raw TCP to indexer: ${tcp}`,
+      `Indexer probe failed (${probe.error}); raw TCP to indexer: ${tcp}; raw TCP to upstream: ${upstreamTcp}`,
     );
   }
   const indexerStats = getIndexerPoolStats();
@@ -121,6 +144,9 @@ export async function GET() {
       ok,
       indexerProbe: probe,
       ...(tcp !== undefined ? { indexerTcp: tcp } : {}),
+      ...(upstreamTcp !== undefined && upstreamTcp !== "skipped"
+        ? { indexerUpstreamTcp: upstreamTcp }
+        : {}),
       ...(indexerStats ? { indexerPool: indexerStats } : {}),
       ...(mirror !== undefined ? { mirror } : {}),
     },
