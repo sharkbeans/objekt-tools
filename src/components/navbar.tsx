@@ -106,7 +106,9 @@ export function Navbar({
               className="flex items-center gap-2 font-bold text-lg"
             >
               <ObjektLogo />
-              objekt.my
+              <span className="t-shimmer" data-text="objekt.my">
+                objekt.my
+              </span>
             </Link>
             <nav className="flex items-center gap-4 text-sm">
               <Link
@@ -353,7 +355,9 @@ function MobileNav({
             onClick={() => setOpen(false)}
           >
             <ObjektLogo />
-            objekt.my
+            <span className="t-shimmer" data-text="objekt.my">
+              objekt.my
+            </span>
           </Link>
         </div>
       </header>
@@ -387,7 +391,9 @@ function MobileNav({
           </button>
           <span className="flex items-center gap-2 font-bold text-lg">
             <ObjektLogo />
-            objekt.my
+            <span className="t-shimmer" data-text="objekt.my">
+              objekt.my
+            </span>
           </span>
         </div>
 

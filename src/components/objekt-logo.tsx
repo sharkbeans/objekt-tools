@@ -27,11 +27,11 @@ export function ObjektLogo({
       {...accessibilityProps}
     >
       <span
-        className="absolute left-[36%] top-[18%] z-0 size-[44%] bg-current"
+        className="absolute left-[36%] top-[18%] z-0 size-[44%] t-shimmer-shape"
         style={topShape}
       />
       <span
-        className="absolute left-[20%] top-[40%] z-10 size-[40%] bg-current"
+        className="absolute left-[20%] top-[40%] z-10 size-[40%] t-shimmer-shape"
         style={lowerShape}
       />
       <span
