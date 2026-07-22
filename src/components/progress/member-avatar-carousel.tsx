@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type React from "react";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useProgressOverview } from "@/hooks/use-progress-overview";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
 import { sectionHref } from "@/lib/sections";
@@ -60,6 +60,48 @@ export function MemberAvatarCarousel({ nickname, activeMember }: Props) {
     }
     return map;
   }, [data, artist]);
+
+  const avatarRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const setShifts = useCallback(
+    (activeIdx: number | null, phase: "in" | "out") => {
+      const cs = getComputedStyle(document.documentElement);
+      const num = (name: string, fallback: number) => {
+        const v = Number.parseFloat(cs.getPropertyValue(name));
+        return Number.isFinite(v) ? v : fallback;
+      };
+      const ease = (name: string, fallback: string) =>
+        cs.getPropertyValue(name).trim() || fallback;
+
+      const lift = num("--avatar-lift", -4);
+      const falloff = num("--avatar-falloff", 0.45);
+      const scale = num("--avatar-scale", 1.05);
+      const tf =
+        phase === "out"
+          ? ease("--avatar-ease-out", "cubic-bezier(0.34, 3.85, 0.64, 1)")
+          : ease("--avatar-ease-in", "cubic-bezier(0.22, 1, 0.36, 1)");
+
+      for (const [i, el] of avatarRefs.current.entries()) {
+        if (!el) continue;
+        el.style.transitionTimingFunction = tf;
+        if (activeIdx == null) {
+          el.style.setProperty("--shift", "0px");
+          el.style.setProperty("--scale-active", "1");
+          continue;
+        }
+        const d = Math.abs(i - activeIdx);
+        el.style.setProperty(
+          "--shift",
+          `${(lift * falloff ** d).toFixed(3)}px`,
+        );
+        el.style.setProperty(
+          "--scale-active",
+          i === activeIdx ? String(scale) : "1",
+        );
+      }
+    },
+    [],
+  );
 
   const activeRef = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
@@ -127,9 +169,10 @@ export function MemberAvatarCarousel({ nickname, activeMember }: Props) {
     <div
       ref={scrollerRef}
       onMouseDown={onMouseDown}
+      onMouseLeave={() => setShifts(null, "out")}
       className="-mx-4 flex cursor-grab gap-3 overflow-x-auto px-4 py-1 select-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 sm:py-2"
     >
-      {roster.map((member) => {
+      {roster.map((member, i) => {
         const isActive = member === activeMember;
         const imageUrl = memberImages[`${artist}|${member}`];
         const totals = totalsByMember.get(member);
@@ -146,9 +189,14 @@ export function MemberAvatarCarousel({ nickname, activeMember }: Props) {
             draggable={false}
             className="flex shrink-0 flex-col items-center gap-1.5"
           >
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: hover-lift is decorative; the enclosing Link carries the real interaction */}
             <div
+              ref={(el) => {
+                avatarRefs.current[i] = el;
+              }}
+              onMouseEnter={() => setShifts(i, "in")}
               className={cn(
-                "relative h-14 w-14 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-background transition-all sm:h-16 sm:w-16",
+                "t-avatar relative h-14 w-14 overflow-hidden rounded-full ring-2 ring-offset-2 ring-offset-background transition-colors sm:h-16 sm:w-16",
                 isActive
                   ? "ring-primary"
                   : "ring-transparent opacity-70 hover:opacity-100",

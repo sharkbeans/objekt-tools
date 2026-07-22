@@ -23,6 +23,10 @@ import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import { fetchOwnedInventory, fetchUserInventory } from "@/lib/cosmo-inventory";
+import {
+  getObjektInstanceKey,
+  isSameObjektInstance,
+} from "@/lib/objekt-identity";
 import { sectionHref } from "@/lib/sections";
 import type { ObjektSearchResult } from "@/lib/trade-types";
 
@@ -407,15 +411,11 @@ export function CounterOfferDialog({
                       {mySelected.length > 0 ? (
                         mySelected.map((o) => (
                           <ObjektCard
-                            key={o.objektId ?? o.collectionId}
+                            key={getObjektInstanceKey(o)}
                             objekt={o}
                             onRemove={() =>
                               setMySelected((prev) =>
-                                prev.filter((h) =>
-                                  o.serial != null
-                                    ? h.serial !== o.serial
-                                    : h.collectionId !== o.collectionId,
-                                ),
+                                prev.filter((h) => !isSameObjektInstance(h, o)),
                               )
                             }
                           />
@@ -436,15 +436,11 @@ export function CounterOfferDialog({
                       {theirSelected.length > 0 ? (
                         theirSelected.map((o) => (
                           <ObjektCard
-                            key={o.objektId ?? o.collectionId}
+                            key={getObjektInstanceKey(o)}
                             objekt={o}
                             onRemove={() =>
                               setTheirSelected((prev) =>
-                                prev.filter((h) =>
-                                  o.serial != null
-                                    ? h.serial !== o.serial
-                                    : h.collectionId !== o.collectionId,
-                                ),
+                                prev.filter((h) => !isSameObjektInstance(h, o)),
                               )
                             }
                           />
@@ -494,11 +490,7 @@ export function CounterOfferDialog({
               }}
               onDeselect={(o) => {
                 setMySelected((prev) =>
-                  prev.filter((h) =>
-                    o.serial != null
-                      ? h.serial !== o.serial
-                      : h.collectionId !== o.collectionId,
-                  ),
+                  prev.filter((h) => !isSameObjektInstance(h, o)),
                 );
                 setErrors((e) => ({ ...e, noChange: undefined }));
               }}
@@ -550,11 +542,7 @@ export function CounterOfferDialog({
               }}
               onDeselect={(o) => {
                 setTheirSelected((prev) =>
-                  prev.filter((h) =>
-                    o.serial != null
-                      ? h.serial !== o.serial
-                      : h.collectionId !== o.collectionId,
-                  ),
+                  prev.filter((h) => !isSameObjektInstance(h, o)),
                 );
                 setErrors((e) => ({ ...e, noChange: undefined }));
               }}

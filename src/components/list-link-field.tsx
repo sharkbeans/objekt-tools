@@ -68,11 +68,10 @@ export function ListLinkField({
               "bg-foreground text-background hover:bg-foreground hover:text-background",
           )}
         >
-          {copied ? (
-            <CheckIcon className="h-4 w-4" />
-          ) : (
-            <CopyIcon className="h-4 w-4" />
-          )}
+          <span className="t-icon-swap" data-state={copied ? "b" : "a"}>
+            <CopyIcon className="t-icon h-4 w-4" data-icon="a" />
+            <CheckIcon className="t-icon h-4 w-4" data-icon="b" />
+          </span>
         </Button>
       </div>
     </div>

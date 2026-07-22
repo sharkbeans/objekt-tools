@@ -1,7 +1,13 @@
 "use client";
 
 import { SearchIcon, XIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   ClassMultiSelect,
@@ -154,6 +160,49 @@ export function ObjektFilterBar({
 
   const active = hasActiveFilters(filters);
 
+  const filterModeGroupRef = useRef<HTMLDivElement>(null);
+  const filterModePillRef = useRef<HTMLSpanElement>(null);
+
+  const positionFilterModePill = useCallback((animate: boolean) => {
+    const group = filterModeGroupRef.current;
+    const pill = filterModePillRef.current;
+    const activeButton = group?.querySelector<HTMLElement>(
+      '[data-active="true"]',
+    );
+    if (!group || !pill || !activeButton) return;
+
+    const apply = () => {
+      pill.style.width = `${activeButton.offsetWidth}px`;
+      pill.style.transform = `translateX(${activeButton.offsetLeft}px)`;
+    };
+
+    if (animate) {
+      apply();
+    } else {
+      const prevTransition = pill.style.transition;
+      pill.style.transition = "none";
+      apply();
+      // Force reflow so the transition-none takes effect before it's restored.
+      void pill.offsetHeight;
+      pill.style.transition = prevTransition;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    positionFilterModePill(false);
+  }, [positionFilterModePill]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: displayedFilterMode drives the recompute even though positionFilterModePill reads it via the DOM
+  useEffect(() => {
+    positionFilterModePill(true);
+  }, [displayedFilterMode, positionFilterModePill]);
+
+  useEffect(() => {
+    const handleResize = () => positionFilterModePill(false);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [positionFilterModePill]);
+
   return (
     <div className="space-y-3">
       {/* Quick Search */}
@@ -185,18 +234,28 @@ export function ObjektFilterBar({
           <div className="flex flex-wrap gap-2 items-center">
             {/* Have/Want toggle */}
             {showFilterMode && (
-              <div className="flex gap-0.5 rounded-md border p-0.5">
+              <div
+                ref={filterModeGroupRef}
+                className="relative flex gap-0.5 rounded-md border p-0.5"
+              >
+                <span
+                  ref={filterModePillRef}
+                  aria-hidden="true"
+                  className="absolute inset-y-0.5 left-0 z-0 w-0 rounded bg-primary transition-[transform,width] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                />
                 <button
                   type="button"
+                  data-active={displayedFilterMode === "haves"}
                   onClick={() => update({ filterMode: "haves" })}
-                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${displayedFilterMode === "haves" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`relative z-10 px-2.5 py-1 text-xs rounded font-medium transition-colors ${displayedFilterMode === "haves" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   Haves
                 </button>
                 <button
                   type="button"
+                  data-active={displayedFilterMode === "wants"}
                   onClick={() => update({ filterMode: "wants" })}
-                  className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${displayedFilterMode === "wants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`relative z-10 px-2.5 py-1 text-xs rounded font-medium transition-colors ${displayedFilterMode === "wants" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   Wants
                 </button>

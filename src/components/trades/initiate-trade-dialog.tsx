@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import { isSameObjektInstance } from "@/lib/objekt-identity";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
@@ -238,13 +239,7 @@ export function InitiateTradeDialog({
   }
 
   function handleTheirDeselect(o: ObjektEntry) {
-    setTheirSelected((prev) =>
-      prev.filter((h) =>
-        o.serial != null
-          ? h.serial !== o.serial
-          : h.collectionId !== o.collectionId,
-      ),
-    );
+    setTheirSelected((prev) => prev.filter((h) => !isSameObjektInstance(h, o)));
   }
 
   async function handleSubmit() {

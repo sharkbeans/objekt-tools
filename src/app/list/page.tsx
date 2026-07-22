@@ -83,6 +83,7 @@ import {
   decodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
+import { isSameObjektInstance } from "@/lib/objekt-identity";
 import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
 import {
   makeAnyWantItem,
@@ -199,6 +200,8 @@ function storedItemToResolved(item: StoredItem): ResolvedPosterItem {
           season: item.season ?? "",
           class: item.class ?? "",
           thumbnailImage: item.thumbnailUrl ?? undefined,
+          serial: item.serial ?? undefined,
+          objektId: item.objektId ?? undefined,
           artist: "",
         }
       : null,
@@ -268,6 +271,10 @@ function rememberCosmoUsername(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return;
   localStorage.setItem("cosmousername", trimmed);
+}
+
+function normalizeCosmoUsername(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
 }
 
 function formatPosterDate(date = new Date()): string {
@@ -365,6 +372,8 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [cosmoId, setCosmoId] = useState("");
   const [haveNickname, setHaveNickname] = useState<string | null>(null);
   const lastSearchAt = useRef(0);
+  const loadedHaveNickname = useRef<string | null>(null);
+  const havesCount = useRef(0);
   const [posterData, setPosterData] = useState<PosterData>(emptyPosterData);
   const [editLoading, setEditLoading] = useState(!!editId);
   const [groupByMember, setGroupByMember] = useState(false);
@@ -642,6 +651,17 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     setColsPerRow(autoCols);
   }, [posterData, groupByNumbers]);
 
+  useEffect(() => {
+    havesCount.current = posterData.haves.length;
+    if (
+      loadedHaveNickname.current === null &&
+      posterData.haves.length > 0 &&
+      posterData.cosmoId
+    ) {
+      loadedHaveNickname.current = posterData.cosmoId;
+    }
+  }, [posterData.cosmoId, posterData.haves.length]);
+
   // Fetch cosmo status to get the real cosmo nickname and linked state
   useEffect(() => {
     if (!session) {
@@ -686,16 +706,6 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     }
   }, [cosmoId, haveNickname]);
 
-  // Fill the display name / cosmoId once we know whose inventory this is
-  useEffect(() => {
-    if (!haveNickname) return;
-    setPosterData((prev) =>
-      prev.cosmoId
-        ? prev
-        : { ...prev, cosmoId: haveNickname, username: haveNickname },
-    );
-  }, [haveNickname]);
-
   const searchInventory = useCallback(
     (name: string) => {
       const trimmed = name.trim();
@@ -722,6 +732,33 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
   const fetchHaveInventory = useCallback(
     () => fetchInventoryByNickname(haveNickname ?? ""),
+    [haveNickname],
+  );
+
+  const handleHaveInventoryLoaded = useCallback(
+    (count: number) => {
+      setInventoryCount(count);
+      const nextNickname = haveNickname?.trim();
+      if (!nextNickname) return;
+
+      const previousNickname = loadedHaveNickname.current;
+      const accountChanged =
+        previousNickname !== null &&
+        normalizeCosmoUsername(previousNickname) !==
+          normalizeCosmoUsername(nextNickname);
+
+      loadedHaveNickname.current = nextNickname;
+      if (accountChanged && havesCount.current > 0) {
+        toast("Haves cleared because the Cosmo account changed.");
+      }
+
+      setPosterData((prev) => ({
+        ...prev,
+        username: nextNickname,
+        cosmoId: nextNickname,
+        haves: accountChanged ? [] : prev.haves,
+      }));
+    },
     [haveNickname],
   );
 
@@ -1021,14 +1058,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       ...prev,
       haves: prev.haves.filter((h) => {
         if (!h.entry) return true;
-        if (entry.serial != null) {
-          const hSerial =
-            h.parsed.serial != null
-              ? parseInt(h.parsed.serial, 10)
-              : (h.entry.serial ?? null);
-          return hSerial !== entry.serial;
-        }
-        return h.entry.collectionId !== entry.collectionId;
+        const hSerial =
+          h.parsed.serial != null
+            ? parseInt(h.parsed.serial, 10)
+            : h.entry.serial;
+        return !isSameObjektInstance({ ...h.entry, serial: hSerial }, entry);
       }),
     }));
   }, []);
@@ -1204,7 +1238,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   <PosterCard
                     key={p.id}
                     poster={p}
-                    matchCount={latestMatchCounts[p.id]}
+                    matchCount={latestMatchCounts[p.id] ?? 0}
                   />
                 ))}
             </div>
@@ -1370,7 +1404,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                             selected={selectedHaveEntries}
                             onSelect={handleSelectHave}
                             onDeselect={handleDeselectHave}
-                            onLoaded={setInventoryCount}
+                            onLoaded={handleHaveInventoryLoaded}
                             onLoadingChange={setHaveInventoryLoading}
                             maxSelections={50}
                             gridClassName={PICKER_GRID_CLASS}

@@ -163,6 +163,8 @@ export function PosterCard({ poster, onDelete, matchCount }: PosterCardProps) {
   const viewHref = sectionHref(`/list/${poster.id}`, {
     currentSection: "list",
   });
+  const shouldReserveMatchRow = matchCount !== undefined;
+  const hasMatches = (matchCount ?? 0) > 0;
 
   const handleCopyLink = async () => {
     try {
@@ -247,17 +249,14 @@ export function PosterCard({ poster, onDelete, matchCount }: PosterCardProps) {
           </div>
         </div>
 
-        {matchCount !== undefined && (
-          <div
-            className={cn(
-              "w-fit rounded-full border px-2.5 py-1 text-[11px] font-medium",
-              matchCount > 0
-                ? "border-red-500/60 bg-red-500/10 text-red-400"
-                : "border-border bg-muted/40 text-muted-foreground",
+        {shouldReserveMatchRow && (
+          <div className="flex min-h-7 items-start">
+            {hasMatches && (
+              <div className="w-fit rounded-full border border-red-500/60 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-400">
+                {matchCount > 99 ? "99+" : matchCount}{" "}
+                {matchCount === 1 ? "match" : "matches"}
+              </div>
             )}
-          >
-            {matchCount > 99 ? "99+" : matchCount}{" "}
-            {matchCount === 1 ? "match" : "matches"}
           </div>
         )}
 

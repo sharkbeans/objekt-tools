@@ -47,6 +47,7 @@ import type {
   ProgressCollection,
   ProgressMemberResponse,
 } from "@/lib/progress/types";
+import { cn } from "@/lib/utils";
 import { GridSection } from "./grid-section";
 import { SeasonSection } from "./season-section";
 
@@ -949,20 +950,22 @@ export function MemberDexContent({ nickname, member }: Props) {
         </Button>
       </div>
 
-      <div className="space-y-8">
-        {data ? (
-          [...grouped.entries()].map(([season, cols]) => (
-            <SeasonSection
-              key={season}
-              season={season}
-              collections={cols}
-              perRow={perRow}
-              address={data.address}
-            />
-          ))
-        ) : (
+      <div className={cn("t-skel", data && "is-revealed")}>
+        <div className="t-skel-skeleton is-pulsing space-y-8">
           <SeasonGridSkeleton perRow={perRow} />
-        )}
+        </div>
+        <div className="t-skel-content space-y-8">
+          {data &&
+            [...grouped.entries()].map(([season, cols]) => (
+              <SeasonSection
+                key={season}
+                season={season}
+                collections={cols}
+                perRow={perRow}
+                address={data.address}
+              />
+            ))}
+        </div>
       </div>
     </div>
   );
@@ -1008,21 +1011,23 @@ export function MemberDexContent({ nickname, member }: Props) {
         </div>
       </div>
 
-      <div className="space-y-8">
-        {data ? (
-          [...gridGrouped.entries()].map(([season, cols]) => (
-            <GridSection
-              key={season}
-              season={season}
-              collections={cols}
-              address={data.address}
-              nickname={data.nickname}
-              viewConsumed={viewConsumed}
-            />
-          ))
-        ) : (
+      <div className={cn("t-skel", data && "is-revealed")}>
+        <div className="t-skel-skeleton is-pulsing space-y-8">
           <GridBoardsRowSkeleton />
-        )}
+        </div>
+        <div className="t-skel-content space-y-8">
+          {data &&
+            [...gridGrouped.entries()].map(([season, cols]) => (
+              <GridSection
+                key={season}
+                season={season}
+                collections={cols}
+                address={data.address}
+                nickname={data.nickname}
+                viewConsumed={viewConsumed}
+              />
+            ))}
+        </div>
       </div>
     </div>
   );

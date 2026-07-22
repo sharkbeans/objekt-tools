@@ -120,7 +120,7 @@ export default function MyListsPage() {
                 key={p.id}
                 poster={p}
                 onDelete={setDeleteId}
-                matchCount={matchCounts[p.id]}
+                matchCount={matchCounts[p.id] ?? 0}
               />
             ))}
           </div>

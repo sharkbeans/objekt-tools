@@ -11,6 +11,7 @@ import {
   type ObjektStructuralFilters,
   objektMatchesStructuralFilters,
 } from "@/lib/filter-utils";
+import { isSameObjektInstance } from "@/lib/objekt-identity";
 import { objektMatchesSearch } from "@/lib/objekt-search";
 import { parseObjektSearchShortcuts } from "@/lib/trade-search-shortcuts";
 import {
@@ -244,9 +245,7 @@ export function ObjektInventoryPicker({
   }, [filtered, prioritize]);
 
   function handleSelect(entry: OwnedEntry) {
-    const isSelected = selected.some(
-      (s) => s.serial != null && s.serial === entry.serial,
-    );
+    const isSelected = selected.some((s) => isSameObjektInstance(s, entry));
     if (isSelected || selected.length >= maxSelections) return;
     onSelect({
       collectionId: entry.collectionId,

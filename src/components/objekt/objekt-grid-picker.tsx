@@ -6,6 +6,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import type { ObjektEntry } from "@/lib/cosmo/types";
+import {
+  getObjektInstanceKey,
+  isSameObjektInstance,
+} from "@/lib/objekt-identity";
 import { makePosterItem } from "@/lib/poster-item";
 import { getNumberGroupKey } from "@/lib/poster-item-grouping";
 import { getSeasonPrefix } from "@/lib/season-prefix";
@@ -105,13 +109,7 @@ export function ObjektGridPicker({
     );
   }, [combineSelectedDuplicates, selected]);
   const itemsResetKey = useMemo(
-    () =>
-      items
-        .map(
-          (entry) =>
-            entry.objektId ?? `${entry.collectionId}:${entry.serial ?? ""}`,
-        )
-        .join("|"),
+    () => items.map(getObjektInstanceKey).join("|"),
     [items],
   );
   const loadingSkeletonKeys = useMemo(
@@ -136,11 +134,7 @@ export function ObjektGridPicker({
 
   const isSelected = (entry: ObjektEntry) =>
     compareBySerial
-      ? selected.some((s) =>
-          entry.serial != null
-            ? (s.serial ?? null) === entry.serial
-            : s.collectionId === entry.collectionId,
-        )
+      ? selected.some((s) => isSameObjektInstance(s, entry))
       : selected.some((s) => s.collectionId === entry.collectionId);
 
   // Selecting/deselecting can grow or shrink the pinned selected-row panel
@@ -219,11 +213,7 @@ export function ObjektGridPicker({
           const sel = isSelected(entry);
           const showPickerState = variant === "picker" && sel;
           const url = entry.thumbnailImage;
-          const key =
-            entry.objektId ??
-            (entry.serial != null
-              ? `${entry.collectionId}-${entry.serial}`
-              : entry.collectionId);
+          const key = getObjektInstanceKey(entry);
           return (
             <button
               key={`${keyPrefix}-${key}`}

@@ -22,6 +22,7 @@ import { usePerRow } from "@/hooks/use-per-row";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import { fetchOwnedInventory } from "@/lib/cosmo-inventory";
+import { isSameObjektInstance } from "@/lib/objekt-identity";
 import { sectionHref } from "@/lib/sections";
 import { objektMatchesWant } from "@/lib/wants-only-validation";
 
@@ -153,13 +154,7 @@ export function InitiateDirectDialog({
   }
 
   function handleTheirDeselect(o: ObjektEntry) {
-    setTheirSelected((prev) =>
-      prev.filter((h) =>
-        o.serial != null
-          ? h.serial !== o.serial
-          : h.collectionId !== o.collectionId,
-      ),
-    );
+    setTheirSelected((prev) => prev.filter((h) => !isSameObjektInstance(h, o)));
   }
 
   async function handleSubmit() {
@@ -274,11 +269,7 @@ export function InitiateDirectDialog({
               }}
               onDeselect={(o) =>
                 setMySelected((prev) =>
-                  prev.filter((h) =>
-                    o.serial != null
-                      ? h.serial !== o.serial
-                      : h.collectionId !== o.collectionId,
-                  ),
+                  prev.filter((h) => !isSameObjektInstance(h, o)),
                 )
               }
               emptyState={<OwnedInventoryEmptyState />}
