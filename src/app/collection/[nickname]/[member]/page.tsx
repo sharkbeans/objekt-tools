@@ -6,15 +6,46 @@ import { sectionAbsoluteUrl } from "@/lib/sections";
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ nickname: string; member: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const { nickname, member } = await params;
+  const isGridView = (await searchParams).view === "grid";
+  const title = `${nickname}'s ${member} Collection | objekt.my`;
+  const description = `View ${nickname}'s ${member} objekt collection.`;
+  const canonical = sectionAbsoluteUrl(`/collection/${nickname}/${member}`);
+  // URL only — no progress/DB/Cosmo work here. The OG route fetches and
+  // caches its own data on the request Discord/etc. makes for the image,
+  // not on every page navigation.
+  const ogPath = isGridView
+    ? `/collection/${nickname}/${member}/og/grid`
+    : `/collection/${nickname}/${member}/og`;
+  const ogImage = {
+    url: sectionAbsoluteUrl(ogPath),
+    width: 1200,
+    height: 630,
+    type: "image/png",
+  };
+
   return {
-    title: `${nickname}'s ${member} Collection | objekt.my`,
-    description: `View ${nickname}'s ${member} objekt collection.`,
+    title,
+    description,
     alternates: {
-      canonical: sectionAbsoluteUrl(`/collection/${nickname}/${member}`),
+      canonical,
+    },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      images: [ogImage],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
     },
   };
 }
