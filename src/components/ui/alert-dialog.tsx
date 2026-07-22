@@ -1,14 +1,59 @@
 "use client";
 
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
-import type * as React from "react";
+import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+const AlertDialogDismissContext = React.createContext<{
+  dismissible: boolean;
+  dismiss: () => void;
+}>({
+  dismissible: true,
+  dismiss: () => {},
+});
+
 function AlertDialog({
+  dismissible = true,
+  open,
+  defaultOpen,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
+}: React.ComponentProps<typeof AlertDialogPrimitive.Root> & {
+  dismissible?: boolean;
+}) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(
+    defaultOpen ?? false,
+  );
+  const isControlled = open !== undefined;
+  const currentOpen = isControlled ? open : uncontrolledOpen;
+
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (!isControlled) setUncontrolledOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [isControlled, onOpenChange],
+  );
+
+  const contextValue = React.useMemo(
+    () => ({
+      dismissible,
+      dismiss: () => handleOpenChange(false),
+    }),
+    [dismissible, handleOpenChange],
+  );
+
+  return (
+    <AlertDialogDismissContext.Provider value={contextValue}>
+      <AlertDialogPrimitive.Root
+        data-slot="alert-dialog"
+        open={currentOpen}
+        onOpenChange={handleOpenChange}
+        {...props}
+      />
+    </AlertDialogDismissContext.Provider>
+  );
 }
 
 function AlertDialogTrigger({
@@ -29,8 +74,11 @@ function AlertDialogPortal({
 
 function AlertDialogOverlay({
   className,
+  onPointerDown,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
+  const { dismissible, dismiss } = React.useContext(AlertDialogDismissContext);
+
   return (
     <AlertDialogPrimitive.Overlay
       data-slot="alert-dialog-overlay"
@@ -38,6 +86,14 @@ function AlertDialogOverlay({
         "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className,
       )}
+      onPointerDown={(event) => {
+        onPointerDown?.(event);
+        // Radix AlertDialog intentionally prevents outside dismissal; in this
+        // app, clicking the backdrop should behave like pressing Cancel.
+        if (dismissible && event.target === event.currentTarget) {
+          dismiss();
+        }
+      }}
       {...props}
     />
   );

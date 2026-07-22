@@ -101,6 +101,21 @@
   --shimmer-band: 400%;
   --shimmer-ease: linear;
 
+  /* Rare serial shimmer (low serials #1-9). Tier colors default to
+     bronze; .t-serial-gold / .t-serial-silver override --rare-shimmer-c1/c2.
+     Speed (how long one pass takes to cross) and frequency (how often a
+     pass repeats) are separate knobs — see the keyframe comment below for
+     why they can't both be driven off one duration. */
+  --rare-shimmer-sweep-dur: 1350ms;
+  --rare-shimmer-gap-dur: 100ms;
+  --rare-shimmer-dur: calc(
+    var(--rare-shimmer-sweep-dur) + var(--rare-shimmer-gap-dur)
+  );
+  --rare-shimmer-band: 340%;
+  --rare-shimmer-ease: linear;
+  --rare-shimmer-c1: rgba(205, 127, 50, 0.85);
+  --rare-shimmer-c2: rgba(230, 170, 110, 0.55);
+
   /* Icon swap */
   --icon-swap-dur: 200ms;
   --icon-swap-blur: 2px;
@@ -130,6 +145,7 @@
   --reveal-dur: 400ms;
   --reveal-blur: 2px;
   --reveal-ease: ease-in-out;
+
 }
 
 .dark {
@@ -314,6 +330,96 @@
   @media (prefers-reduced-motion: reduce) {
     .t-shimmer::before,
     .t-shimmer-shape {
+      animation: none !important;
+    }
+  }
+
+  /* Rare serial shimmer — low serials (#1-9) are unofficially considered
+     the most desirable by collectors, so their serial badge gets a
+     holographic sheen instead of a flat black fill. The badge keeps its
+     existing bg-black/60 + white text; ::after layers a diagonal highlight
+     band on top with screen blending so it reads as light catching foil.
+     All rare badges share one unbroken animation timeline (no per-item
+     delay), so every #1-9 badge on screen catches the light in sync. Tier
+     color is set via .t-serial-gold / .t-serial-silver / .t-serial-bronze
+     overriding --rare-shimmer-c1/c2.
+
+     Speed vs. frequency: the keyframe travels from 100% to 0%, and at
+     --rare-shimmer-band: 340% the gradient's highlight (stops 42%-62%)
+     only becomes visible while background-position is roughly in
+     [17.85%, 87.8%] (solve for when the 340%-wide image's visible W-wide
+     window overlaps those stops). The 100%/0% endpoints sit just outside
+     that range on each side — enough padding for a clean fade in/out,
+     without wasting most of --rare-shimmer-sweep-dur traveling through
+     dead space the way a wider swing (e.g. 170% to -70%) would. That
+     wasted-travel version is also why shortening the duration to raise
+     frequency used to speed the visible pass up too — the visible slice
+     was a fixed fraction of whatever total duration was in play. Holding
+     here at 100% costs nothing perceptually because 0% is already at the
+     edge of the invisible zone, so the hold's length
+     (--rare-shimmer-gap-dur) can be tuned independently of the sweep's
+     length (--rare-shimmer-sweep-dur) without a "freeze mid-shimmer"
+     artifact. --rare-shimmer-ease is linear rather than an ease-in-out on
+     purpose: an ease-in-out is slow at 100%/0% (the invisible edges) and
+     compensates by moving fastest through the middle — which, now that
+     the travel range is tightened around the visible zone, is exactly
+     where the highlight crosses, so it read as a quick flash regardless
+     of --rare-shimmer-sweep-dur. Linear removes that speed spike so the
+     glide's pace actually tracks the duration. The 93.1% keyframe
+     boundary below matches the default 1350ms:100ms (13.5:1) sweep:gap
+     split — if those two vars are retuned to a different ratio,
+     recompute it (sweep / (sweep + gap) * 100). Note --rare-shimmer-gap-dur
+     is already near its practical floor, so slowing the sweep further
+     from here will start stretching the total repeat cycle rather than
+     coming out of the gap. */
+  .t-serial-rare {
+    overflow: hidden;
+  }
+  .t-serial-rare::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(
+      115deg,
+      transparent 0%,
+      transparent 42%,
+      var(--rare-shimmer-c1) 49%,
+      var(--rare-shimmer-c2) 55%,
+      transparent 62%,
+      transparent 100%
+    );
+    background-size: var(--rare-shimmer-band) 100%;
+    background-repeat: no-repeat;
+    mix-blend-mode: screen;
+    animation: t-serial-rare-shimmer var(--rare-shimmer-dur)
+      var(--rare-shimmer-ease) infinite;
+  }
+  @keyframes t-serial-rare-shimmer {
+    0% {
+      background-position: 100% 0;
+    }
+    93.1% {
+      background-position: 0% 0;
+    }
+    100% {
+      background-position: 0% 0;
+    }
+  }
+  .t-serial-gold {
+    --rare-shimmer-c1: rgba(255, 200, 60, 0.95);
+    --rare-shimmer-c2: rgba(255, 235, 170, 0.7);
+  }
+  .t-serial-silver {
+    --rare-shimmer-c1: rgba(215, 219, 224, 0.95);
+    --rare-shimmer-c2: rgba(180, 190, 200, 0.6);
+  }
+  .t-serial-bronze {
+    --rare-shimmer-c1: rgba(205, 127, 50, 0.85);
+    --rare-shimmer-c2: rgba(230, 170, 110, 0.55);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .t-serial-rare::after {
       animation: none !important;
     }
   }

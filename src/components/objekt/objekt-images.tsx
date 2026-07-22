@@ -27,6 +27,17 @@ export function formatSerial(serial: number) {
   return `#${String(serial).padStart(5, "0")}`;
 }
 
+/**
+ * Serial badge classes for the low-serial (#1-9) shimmer: #1 gold, #2
+ * silver, #3-9 bronze. Empty string for anything else.
+ */
+export function rareSerialShimmerClass(serial: number) {
+  if (serial === 1) return " t-serial-rare t-serial-gold";
+  if (serial === 2) return " t-serial-rare t-serial-silver";
+  if (serial <= 9) return " t-serial-rare t-serial-bronze";
+  return "";
+}
+
 export function objektTopUrl(
   item: ObjektImageItem,
   cosmoNickname?: string | null,
@@ -170,7 +181,9 @@ export function ObjektImages({
                 <div className="w-full aspect-80/123 rounded-md border bg-muted animate-pulse" />
               )}
               {showSerial && item.serial != null && (
-                <div className="absolute top-1 left-1 rounded bg-black/60 px-1 font-mono text-[9px] text-white">
+                <div
+                  className={`absolute top-1 left-1 rounded bg-black/60 px-1 font-mono text-[9px] text-white${rareSerialShimmerClass(item.serial)}`}
+                >
                   {formatSerial(item.serial)}
                 </div>
               )}

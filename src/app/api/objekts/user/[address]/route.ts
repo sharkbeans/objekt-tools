@@ -24,7 +24,7 @@ export async function GET(
   }
 
   const rows = await getCached(
-    `objekts:user:v1:${address.toLowerCase()}`,
+    `objekts:user:v2:${address.toLowerCase()}`,
     30_000,
     () => loadTransferableInventoryRows(address),
   );

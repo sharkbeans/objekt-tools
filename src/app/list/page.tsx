@@ -49,6 +49,7 @@ import {
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -77,7 +78,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { signIn, useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
+import {
+  fetchInventoryPageByNickname,
+  hasAnyInventoryCandidateByNickname,
+  type InventoryPageRequest,
+} from "@/lib/cosmo-inventory";
 import { compareMembers, compareSeasons } from "@/lib/filter-options";
 import {
   decodeGridTradeStash,
@@ -350,6 +355,15 @@ function withoutSearchShortcutFilters(
   };
 }
 
+function LoadingInventoryLabel() {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Loader2Icon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      <span>Loading objekts</span>
+    </span>
+  );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
@@ -374,6 +388,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const lastSearchAt = useRef(0);
   const loadedHaveNickname = useRef<string | null>(null);
   const havesCount = useRef(0);
+  const inventoryNoticeTimer = useRef<number | null>(null);
   const [posterData, setPosterData] = useState<PosterData>(emptyPosterData);
   const [editLoading, setEditLoading] = useState(!!editId);
   const [groupByMember, setGroupByMember] = useState(false);
@@ -394,6 +409,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [anyWantOpen, setAnyWantOpen] = useState(false);
   const [wantsOnly, setWantsOnly] = useState(false);
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
+  const [inventoryNotice, setInventoryNotice] = useState<string | null>(null);
   const [haveInventoryLoading, setHaveInventoryLoading] = useState(false);
   const tabsRef = useRef<HTMLDivElement>(null);
   const stepPillRef = useRef<HTMLSpanElement>(null);
@@ -446,6 +462,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   const [inventoryWarningOpen, setInventoryWarningOpen] = useState(false);
   const [listOnlyWarningOpen, setListOnlyWarningOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [deletePosterId, setDeletePosterId] = useState<string | null>(null);
 
   const [latestPosters, setLatestPosters] = useState<PosterSummary[] | null>(
     null,
@@ -662,6 +679,15 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     }
   }, [posterData.cosmoId, posterData.haves.length]);
 
+  useEffect(
+    () => () => {
+      if (inventoryNoticeTimer.current !== null) {
+        window.clearTimeout(inventoryNoticeTimer.current);
+      }
+    },
+    [],
+  );
+
   // Fetch cosmo status to get the real cosmo nickname and linked state
   useEffect(() => {
     if (!session) {
@@ -724,14 +750,16 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
       }
       lastSearchAt.current = now;
       setInventoryCount(null);
+      setInventoryNotice(null);
       setHaveNickname(trimmed);
       setStep((prev) => (prev === "want" ? "have" : prev));
     },
     [haveNickname],
   );
 
-  const fetchHaveInventory = useCallback(
-    () => fetchInventoryByNickname(haveNickname ?? ""),
+  const fetchHaveInventoryPage = useCallback(
+    (request: InventoryPageRequest) =>
+      fetchInventoryPageByNickname(haveNickname ?? "", request),
     [haveNickname],
   );
 
@@ -749,7 +777,14 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
 
       loadedHaveNickname.current = nextNickname;
       if (accountChanged && havesCount.current > 0) {
-        toast("Haves cleared because the Cosmo account changed.");
+        setInventoryNotice("Haves cleared because the Cosmo account changed.");
+        if (inventoryNoticeTimer.current !== null) {
+          window.clearTimeout(inventoryNoticeTimer.current);
+        }
+        inventoryNoticeTimer.current = window.setTimeout(() => {
+          setInventoryNotice(null);
+          inventoryNoticeTimer.current = null;
+        }, 4000);
       }
 
       setPosterData((prev) => ({
@@ -956,23 +991,16 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
         );
         if (checkableHaves.length > 0) {
           try {
-            const inventory = await fetchInventoryByNickname(
+            const anyOwned = await hasAnyInventoryCandidateByNickname(
               posterData.cosmoId,
+              checkableHaves.map((have) => ({
+                collectionId: have.entry.collectionId,
+                serial:
+                  have.parsed.serial != null
+                    ? parseInt(have.parsed.serial, 10)
+                    : null,
+              })),
             );
-            const ownedCollections = new Set(
-              inventory.map((i) => i.collectionId),
-            );
-            const ownedSet = new Set(
-              inventory.map((i) => `${i.collectionId}:${i.serial}`),
-            );
-            const anyOwned = checkableHaves.some((h) => {
-              const colId = h.entry.collectionId;
-              const serial =
-                h.parsed.serial != null ? parseInt(h.parsed.serial, 10) : null;
-              return serial != null
-                ? ownedSet.has(`${colId}:${serial}`)
-                : ownedCollections.has(colId);
-            });
             if (!anyOwned) {
               setInventoryWarningOpen(true);
               return;
@@ -1045,6 +1073,29 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
     setListOnlyWarningOpen(false);
     void doSaveAndShare(posterData);
   }, [doSaveAndShare, posterData]);
+
+  const handleDeletePoster = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/posters/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to delete");
+      }
+      setLatestPosters((prev) =>
+        prev ? prev.filter((poster) => poster.id !== id) : prev,
+      );
+      setLatestMatchCounts((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      toast.success("List deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setDeletePosterId(null);
+    }
+  }, []);
 
   const handleSelectHave = useCallback((entry: ObjektEntry) => {
     setPosterData((prev) => ({
@@ -1215,7 +1266,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     href={sectionHref("/list/mine", { currentSection: "list" })}
                   >
                     <ListIcon className="h-4 w-4" />
-                    My Lists
+                    View All Lists
                   </Link>
                 </Button>
               )}
@@ -1239,6 +1290,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                     key={p.id}
                     poster={p}
                     matchCount={latestMatchCounts[p.id] ?? 0}
+                    onDelete={setDeletePosterId}
                   />
                 ))}
             </div>
@@ -1321,11 +1373,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       }}
                     >
                       {haveInventoryLoading ? (
-                        <Loader2Icon className="h-4 w-4 animate-spin" />
+                        <LoadingInventoryLabel />
                       ) : (
-                        <SearchIcon className="h-4 w-4" />
+                        <>
+                          <SearchIcon className="h-4 w-4" />
+                          Load Inventory
+                        </>
                       )}
-                      Load Inventory
                     </Button>
                   )}
                 </div>
@@ -1336,9 +1390,11 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                   </p>
                 ) : (
                   haveNickname &&
-                  (inventoryCount !== null ? (
+                  (inventoryNotice ? (
+                    <p className="text-xs text-red-400">{inventoryNotice}</p>
+                  ) : inventoryCount !== null ? (
                     <p className="text-xs text-muted-foreground">
-                      Inventory loaded · {inventoryCount} objekts
+                      Inventory loaded · {inventoryCount} transferable objekts
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
@@ -1400,7 +1456,7 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                       <CardContent className="px-0 sm:px-6">
                         {haveNickname ? (
                           <ObjektInventoryPicker
-                            fetchItems={fetchHaveInventory}
+                            fetchPage={fetchHaveInventoryPage}
                             selected={selectedHaveEntries}
                             onSelect={handleSelectHave}
                             onDeselect={handleDeselectHave}
@@ -1728,6 +1784,34 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setInventoryWarningOpen(false)}>
               OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deletePosterId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletePosterId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this list?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the list and its shareable link. This
+              action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deletePosterId) void handleDeletePoster(deletePosterId);
+              }}
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,6 +3,7 @@
 import { Check, XIcon } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { rareSerialShimmerClass } from "@/components/objekt/objekt-images";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import type { ObjektEntry } from "@/lib/cosmo/types";
@@ -49,6 +50,12 @@ interface ObjektGridPickerProps {
   onPerRowChange?: (n: number) => void;
   /** Items shown per page. Defaults to 40. */
   pageSize?: number;
+  /** Controlled page for server-paginated inventories. */
+  page?: number;
+  /** Full filtered item count for server-paginated inventories. */
+  totalItems?: number;
+  /** Controlled page change handler for server-paginated inventories. */
+  onPageChange?: (page: number) => void;
   /** Shows selected items in a pinned row above the main grid. */
   showSelectedRow?: boolean;
   /** Label for the pinned selected row. */
@@ -74,12 +81,18 @@ export function ObjektGridPicker({
   perRow,
   onPerRowChange,
   pageSize = DEFAULT_PAGE_SIZE,
+  page: controlledPage,
+  totalItems,
+  onPageChange,
   showSelectedRow = false,
   selectedRowLabel = "Selected",
   mainGridLabel,
   combineSelectedDuplicates = false,
 }: ObjektGridPickerProps) {
-  const [page, setPage] = useState(1);
+  const [internalPage, setInternalPage] = useState(1);
+  const serverPaginated =
+    controlledPage !== undefined && totalItems !== undefined;
+  const page = controlledPage ?? internalPage;
   const belowSelectedRef = useRef<HTMLDivElement>(null);
   const pendingAnchorTopRef = useRef<number | null>(null);
   const gridStyle = useMemo(
@@ -89,7 +102,8 @@ export function ObjektGridPicker({
         : undefined,
     [perRow],
   );
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const paginationTotal = totalItems ?? items.length;
+  const totalPages = Math.max(1, Math.ceil(paginationTotal / pageSize));
   const displayedSelected = useMemo<PickerEntry[]>(() => {
     if (!combineSelectedDuplicates) return selected;
 
@@ -123,14 +137,18 @@ export function ObjektGridPicker({
 
   // Reset to page 1 when items change (e.g. filter/search)
   useEffect(() => {
+    if (serverPaginated) return;
     if (itemsResetKey || items.length === 0) {
-      setPage(1);
+      setInternalPage(1);
     }
-  }, [items.length, itemsResetKey]);
+  }, [items.length, itemsResetKey, serverPaginated]);
 
   // Clamp page if it exceeds total after filtering
   const safePage = Math.min(page, totalPages);
-  const pageItems = items.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pageItems = serverPaginated
+    ? items
+    : items.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const handlePageChange = onPageChange ?? setInternalPage;
 
   const isSelected = (entry: ObjektEntry) =>
     compareBySerial
@@ -254,7 +272,9 @@ export function ObjektGridPicker({
               </div>
               {/* Serial badge for owned */}
               {entry.serial != null && (
-                <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1 rounded font-mono">
+                <div
+                  className={`absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1 rounded font-mono${rareSerialShimmerClass(entry.serial)}`}
+                >
                   #{String(entry.serial).padStart(5, "0")}
                 </div>
               )}
@@ -363,9 +383,9 @@ export function ObjektGridPicker({
             <TradePagination
               page={safePage}
               totalPages={totalPages}
-              total={items.length}
+              total={paginationTotal}
               limit={pageSize}
-              onPageChange={setPage}
+              onPageChange={handlePageChange}
               itemLabel="objekts"
             />
           </>

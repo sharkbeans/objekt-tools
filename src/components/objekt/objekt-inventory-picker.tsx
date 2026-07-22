@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ObjektEntry } from "@/lib/cosmo/types";
-import type { OwnedEntry } from "@/lib/cosmo-inventory";
+import type {
+  InventoryPageRequest,
+  InventoryPageResponse,
+  OwnedEntry,
+} from "@/lib/cosmo-inventory";
 import {
   type ObjektStructuralFilters,
   objektMatchesStructuralFilters,
@@ -38,7 +42,9 @@ export function OwnedInventoryEmptyState() {
 }
 
 interface ObjektInventoryPickerProps {
-  fetchItems: () => Promise<OwnedEntry[]>;
+  fetchItems?: () => Promise<OwnedEntry[]>;
+  /** Fetches one filtered page. When set, search and pagination run server-side. */
+  fetchPage?: (request: InventoryPageRequest) => Promise<InventoryPageResponse>;
   selected: ObjektEntry[];
   onSelect: (objekt: ObjektEntry) => void;
   onDeselect: (objekt: ObjektEntry) => void;
@@ -81,6 +87,7 @@ interface ObjektInventoryPickerProps {
 
 export function ObjektInventoryPicker({
   fetchItems,
+  fetchPage,
   selected,
   onSelect,
   onDeselect,
@@ -104,12 +111,21 @@ export function ObjektInventoryPicker({
   combineSelectedDuplicates,
 }: ObjektInventoryPickerProps) {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [items, setItems] = useState<OwnedEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({ key: "", page: 1 });
+  const [total, setTotal] = useState<number | null>(null);
+  const [filteredTotal, setFilteredTotal] = useState(0);
+  const hasLoadedRef = useRef(false);
   const [internalFilters, setInternalFilters] =
     useState<ObjektFilterState>(defaultFilters);
   const smartSearch = useMemo(() => parseObjektSearchShortcuts(query), [query]);
+  const requestSmartSearch = useMemo(
+    () => parseObjektSearchShortcuts(fetchPage ? debouncedQuery : query),
+    [debouncedQuery, fetchPage, query],
+  );
 
   function updateQuery(search: string) {
     setQuery(search);
@@ -121,6 +137,21 @@ export function ObjektInventoryPicker({
       });
     }
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (!fetchPage) return;
+    setPagination({ key: "", page: 1 });
+    setItems([]);
+    setTotal(null);
+    setFilteredTotal(0);
+    setError(null);
+    hasLoadedRef.current = false;
+  }, [fetchPage]);
 
   useEffect(
     () => () => {
@@ -154,6 +185,7 @@ export function ObjektInventoryPicker({
   }
 
   useEffect(() => {
+    if (fetchPage || !fetchItems) return;
     let cancelled = false;
     setLoading(true);
     onLoadingChange?.(true);
@@ -180,20 +212,10 @@ export function ObjektInventoryPicker({
     return () => {
       cancelled = true;
     };
-  }, [fetchItems, onLoaded, onLoadingChange]);
+  }, [fetchItems, fetchPage, onLoaded, onLoadingChange]);
 
-  const filtered = useMemo(() => {
-    let result = items;
-
-    const searchText = [smartSearch.effectiveSearch, filters?.search?.trim()]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    if (searchText) {
-      result = result.filter((o) => objektMatchesSearch(o, searchText));
-    }
-
-    const structuralFilters = {
+  const structuralFilters = useMemo(
+    () => ({
       artist: [
         ...new Set([
           ...(filters?.artist ?? []),
@@ -204,14 +226,14 @@ export function ObjektInventoryPicker({
         ...new Set([
           ...(filters?.member ?? []),
           ...(showFilterBar ? internalFilters.member : []),
-          ...smartSearch.member,
+          ...requestSmartSearch.member,
         ]),
       ],
       season: [
         ...new Set([
           ...(filters?.season ?? []),
           ...(showFilterBar ? internalFilters.season : []),
-          ...smartSearch.season,
+          ...requestSmartSearch.season,
         ]),
       ],
       class: [
@@ -226,13 +248,86 @@ export function ObjektInventoryPicker({
           ...(showFilterBar ? internalFilters.on_offline : []),
         ]),
       ],
-    };
+    }),
+    [filters, internalFilters, requestSmartSearch, showFilterBar],
+  );
+  const serverQuery = [
+    requestSmartSearch.effectiveSearch,
+    filters?.search?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const serverRequestKey = JSON.stringify({
+    query: serverQuery,
+    ...structuralFilters,
+  });
+  const serverPage = pagination.key === serverRequestKey ? pagination.page : 1;
+
+  useEffect(() => {
+    if (!fetchPage) return;
+    const controller = new AbortController();
+    const reportExternalLoading = !hasLoadedRef.current;
+    setLoading(true);
+    if (reportExternalLoading) onLoadingChange?.(true);
+    fetchPage({
+      page: serverPage,
+      limit: pageSize ?? 40,
+      query: serverQuery,
+      artist: structuralFilters.artist,
+      member: structuralFilters.member,
+      season: structuralFilters.season,
+      class: structuralFilters.class,
+      onOffline: structuralFilters.on_offline,
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setItems(response.results);
+        setTotal(response.total);
+        setFilteredTotal(response.filteredTotal);
+        setError(null);
+        hasLoadedRef.current = true;
+        onLoaded?.(response.total);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Failed to load objekts");
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return;
+        setLoading(false);
+        if (reportExternalLoading) onLoadingChange?.(false);
+      });
+
+    return () => controller.abort();
+  }, [
+    fetchPage,
+    onLoaded,
+    onLoadingChange,
+    pageSize,
+    serverPage,
+    serverQuery,
+    structuralFilters,
+  ]);
+
+  const filtered = useMemo(() => {
+    if (fetchPage) return items;
+    let result = items;
+
+    const searchText = [smartSearch.effectiveSearch, filters?.search?.trim()]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (searchText) {
+      result = result.filter((o) => objektMatchesSearch(o, searchText));
+    }
+
     result = result.filter((o) =>
       objektMatchesStructuralFilters(o, structuralFilters),
     );
 
     return result;
-  }, [items, smartSearch, filters, showFilterBar, internalFilters]);
+  }, [fetchPage, items, smartSearch, filters, structuralFilters]);
 
   const ordered = useMemo(() => {
     if (!prioritize) return filtered;
@@ -299,6 +394,37 @@ export function ObjektInventoryPicker({
         />
       ) : error ? (
         <div className="text-sm text-destructive text-center py-4">{error}</div>
+      ) : fetchPage ? (
+        total === 0 ? (
+          (emptyState ?? (
+            <div className="text-sm text-muted-foreground text-center py-4">
+              No objekts found.
+            </div>
+          ))
+        ) : (
+          <ObjektGridPicker
+            items={ordered}
+            selected={selected}
+            onSelect={(o) => handleSelect(o as OwnedEntry)}
+            onDeselect={onDeselect}
+            compareBySerial
+            maxSelections={maxSelections}
+            emptyMessage="No matching objekts"
+            gridClassName={gridClassName}
+            perRow={perRow}
+            onPerRowChange={onPerRowChange}
+            pageSize={pageSize}
+            page={serverPage}
+            totalItems={filteredTotal}
+            onPageChange={(nextPage) =>
+              setPagination({ key: serverRequestKey, page: nextPage })
+            }
+            showSelectedRow={showSelectedRow}
+            selectedRowLabel={selectedRowLabel}
+            mainGridLabel={mainGridLabel}
+            combineSelectedDuplicates={combineSelectedDuplicates}
+          />
+        )
       ) : items.length === 0 ? (
         (emptyState ?? (
           <div className="text-sm text-muted-foreground text-center py-4">

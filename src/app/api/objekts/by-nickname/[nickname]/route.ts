@@ -64,7 +64,7 @@ export async function GET(
 
   let rows: Awaited<ReturnType<typeof loadInventoryRows>>;
   try {
-    rows = await getCached(`objekts:nickname:v1:${address}`, 90_000, () =>
+    rows = await getCached(`objekts:nickname:v2:${address}`, 90_000, () =>
       withTimeout(
         loadInventoryRows(address),
         3500,
