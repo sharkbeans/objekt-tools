@@ -197,9 +197,6 @@ export function Navbar({
                 <DropdownMenuContent align="end">
                   <div className="px-2 py-1.5 text-sm">
                     <p className="font-medium">{session.user.name}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {session.user.email}
-                    </p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -512,9 +509,6 @@ function MobileNav({
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">
                   {session.user.name}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {session.user.email}
                 </p>
               </div>
             </div>

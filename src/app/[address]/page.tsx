@@ -4,9 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
-  Eye,
-  EyeOff,
+  ExternalLink,
   Info,
+  LinkIcon,
   ShieldAlert,
   XCircle,
 } from "lucide-react";
@@ -27,16 +27,6 @@ import {
 import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
-
-function maskEmail(email: string): string {
-  const atIndex = email.indexOf("@");
-  if (atIndex < 2) return email;
-  const local = email.slice(0, atIndex);
-  const domain = email.slice(atIndex + 1);
-  const dotIndex = domain.lastIndexOf(".");
-  const tld = dotIndex !== -1 ? domain.slice(dotIndex) : "";
-  return local[0] + "*".repeat(local.length - 1) + tld;
-}
 
 type TradeStatus =
   | "pending"
@@ -71,11 +61,12 @@ const statusLabel: Record<TradeStatus, string> = {
 };
 
 interface UserProfile {
+  linked: boolean;
   address: string;
   nickname: string | null;
   email: string | null;
   image: string | null;
-  linkedAt: string;
+  linkedAt: string | null;
   discordId: string | null;
   discordUsername: string | null;
   viewer: {
@@ -120,32 +111,39 @@ export default function PublicProfilePage({
   const decoded = decodeURIComponent(rawAddress);
   const router = useRouter();
 
-  const isValidProfile = decoded.startsWith("@");
-  const identifier = isValidProfile ? decoded.slice(1) : "";
-
-  const [emailVisible, setEmailVisible] = useState(false);
+  const hasProfilePrefix = decoded.startsWith("@");
+  const identifier = hasProfilePrefix ? decoded.slice(1) : decoded;
+  const isValidProfile = identifier.trim().length > 0;
 
   const {
     data: profile,
     isLoading,
     error,
   } = useQuery<UserProfile | null>({
-    queryKey: ["user-profile", identifier],
+    queryKey: ["user-profile", identifier, hasProfilePrefix],
     queryFn: async () => {
       const res = await fetch(`/api/users/${encodeURIComponent(identifier)}`);
       if (res.status === 301) {
         const json = await res.json();
         if (json.nickname) {
-          router.replace(`/@${json.nickname}`);
+          router.replace(`/@${encodeURIComponent(json.nickname)}`);
           return null;
         }
         if (json.address) {
-          router.replace(`/@${json.address}`);
+          router.replace(`/@${encodeURIComponent(json.address)}`);
           return null;
         }
       }
-      if (!res.ok) throw new Error("User not found");
-      return res.json();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "User not found");
+      }
+      const json = (await res.json()) as UserProfile;
+      if (!hasProfilePrefix && json.nickname) {
+        router.replace(`/@${encodeURIComponent(json.nickname)}`);
+        return null;
+      }
+      return json;
     },
     enabled: isValidProfile,
   });
@@ -185,8 +183,6 @@ export default function PublicProfilePage({
       );
   }, [activeData?.trades, historyData?.trades, isOwner]);
 
-  // Profile URLs must start with @ (e.g. /@username) to avoid clashing with
-  // static routes like /trades, /notifications, etc.
   if (!isValidProfile) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center">
@@ -208,12 +204,16 @@ export default function PublicProfilePage({
   }
 
   if (error || !profile) {
+    const message = error instanceof Error ? error.message : "User not found";
     return (
       <div className="max-w-2xl mx-auto py-12 text-center">
-        <h1 className="text-2xl font-bold mb-2">User not found</h1>
-        <p className="text-muted-foreground">
-          No user with the address &quot;{identifier}&quot; exists.
-        </p>
+        <h1 className="text-2xl font-bold mb-2">{message}</h1>
+        {message === "User not found" && (
+          <p className="text-muted-foreground">
+            No Cosmo user or linked objekt.my account named{" "}
+            &quot;{identifier}&quot; exists.
+          </p>
+        )}
       </div>
     );
   }
@@ -221,6 +221,13 @@ export default function PublicProfilePage({
   const displayName = profile.nickname ?? profile.address;
   const viewerId = profile.viewer.userId;
   const isSjarkbean = profile.nickname?.toLowerCase() === "sjarkbean";
+  const collectionHref = sectionHref(
+    `/collection/${encodeURIComponent(profile.nickname ?? profile.address)}`,
+  );
+  const profilePath = `/@${encodeURIComponent(displayName)}`;
+  const linkHref = `/link?nickname=${encodeURIComponent(
+    displayName,
+  )}&returnTo=${encodeURIComponent(profilePath)}`;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -262,67 +269,42 @@ export default function PublicProfilePage({
         <CardHeader
           className={cn("relative z-10", isSjarkbean && "text-white")}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-full bg-muted text-lg font-bold",
-                isSjarkbean && "bg-black/40 text-white",
-              )}
-            >
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <CardTitle className="text-xl">
-                {profile.nickname ? (
-                  <>@{profile.nickname}</>
-                ) : (
-                  <span className="font-mono text-sm">{profile.address}</span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div
+                className={cn(
+                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted text-lg font-bold",
+                  isSjarkbean && "bg-black/40 text-white",
                 )}
-              </CardTitle>
-              <CardDescription className={cn(isSjarkbean && "text-white/80")}>
-                Member since{" "}
-                {new Date(profile.linkedAt).toLocaleDateString("en-GB", {
-                  month: "short",
-                  year: "numeric",
-                })}
-              </CardDescription>
+              >
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <CardTitle className="truncate text-xl">
+                  {profile.nickname ? (
+                    <>@{profile.nickname}</>
+                  ) : (
+                    <span className="font-mono text-sm">{profile.address}</span>
+                  )}
+                </CardTitle>
+                <CardDescription className={cn(isSjarkbean && "text-white/80")}>
+                  {profile.linkedAt
+                    ? `Member since ${new Date(profile.linkedAt).toLocaleDateString(
+                        "en-GB",
+                        {
+                          month: "short",
+                          year: "numeric",
+                        },
+                      )}`
+                    : "Cosmo user"}
+                </CardDescription>
+              </div>
             </div>
           </div>
         </CardHeader>
         <CardContent
           className={cn("relative z-10", isSjarkbean && "text-white")}
         >
-          {isOwner && profile.email && (
-            <div className="mb-4">
-              <p
-                className={cn(
-                  "mb-1 text-sm font-medium text-muted-foreground",
-                  isSjarkbean && "text-white/75",
-                )}
-              >
-                Email
-              </p>
-              <p className="text-sm flex items-center gap-1.5">
-                {emailVisible ? profile.email : maskEmail(profile.email)}
-                <button
-                  type="button"
-                  onClick={() => setEmailVisible((visible) => !visible)}
-                  className={cn(
-                    "transition-colors text-muted-foreground hover:text-foreground",
-                    isSjarkbean && "text-white/70 hover:text-white",
-                  )}
-                  aria-label={emailVisible ? "Hide email" : "Show email"}
-                >
-                  {emailVisible ? (
-                    <EyeOff className="w-3.5 h-3.5" />
-                  ) : (
-                    <Eye className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </p>
-            </div>
-          )}
-
           {profile.discordUsername && (
             <div className="mb-4">
               <p
@@ -365,33 +347,67 @@ export default function PublicProfilePage({
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <TooltipPrimitive.Provider delayDuration={200}>
-              <StatCard
-                label="Completed"
-                tooltip="This user has completed trades successfully."
-                value={profile.stats.completed}
-                icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
-              />
-              <StatCard
-                label="Cancelled"
-                tooltip="This user has cancelled trades before completion."
-                value={profile.stats.cancelled}
-                icon={<XCircle className="h-4 w-4 text-muted-foreground" />}
-              />
-              <StatCard
-                label="No-shows"
-                tooltip="This user has had accepted trades where they did not send all required objekts in time."
-                value={profile.stats.defaulted}
-                icon={<AlertTriangle className="h-4 w-4 text-yellow-500" />}
-              />
-              <StatCard
-                label="Open Posts"
-                tooltip="This user has trade posts currently open to receive offers."
-                value={profile.stats.openPosts}
-              />
-            </TooltipPrimitive.Provider>
-          </div>
+          {profile.linked ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <TooltipPrimitive.Provider delayDuration={200}>
+                <StatCard
+                  label="Completed"
+                  tooltip="This user has completed trades successfully."
+                  value={profile.stats.completed}
+                  icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
+                />
+                <StatCard
+                  label="Cancelled"
+                  tooltip="This user has cancelled trades before completion."
+                  value={profile.stats.cancelled}
+                  icon={<XCircle className="h-4 w-4 text-muted-foreground" />}
+                />
+                <StatCard
+                  label="No-shows"
+                  tooltip="This user has had accepted trades where they did not send all required objekts in time."
+                  value={profile.stats.defaulted}
+                  icon={<AlertTriangle className="h-4 w-4 text-yellow-500" />}
+                />
+                <StatCard
+                  label="Open Posts"
+                  tooltip="This user has trade posts currently open to receive offers."
+                  value={profile.stats.openPosts}
+                />
+              </TooltipPrimitive.Provider>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-muted/20 p-4 sm:p-5">
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold">
+                    This account hasn&apos;t linked objekt.my yet
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Trade history isn&apos;t shown here yet, but you can still
+                    browse their full collection and grid.
+                  </p>
+                </div>
+                <Button asChild size="lg" className="mt-4 w-full sm:w-auto">
+                  <Link href={collectionHref}>
+                    View Collection & Grid
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="truncate text-sm text-muted-foreground">
+                  Is this your account?
+                </p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={linkHref}>
+                    <LinkIcon className="h-4 w-4" />
+                    Link profile
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
 
           {isOwner && profile.nickname && (
             <div className="mt-4">

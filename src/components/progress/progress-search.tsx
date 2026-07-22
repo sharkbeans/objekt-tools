@@ -18,11 +18,13 @@ export function ProgressSearch({
   showLabel = true,
   placeholder = "e.g. sharkbeans",
   buttonLabel = "Search",
+  buildHref,
 }: {
   defaultNickname?: string;
   showLabel?: boolean;
   placeholder?: string;
   buttonLabel?: string;
+  buildHref?: (nickname: string, data: ProgressOverviewResponse) => string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -66,9 +68,14 @@ export function ProgressSearch({
       }
       const data: ProgressOverviewResponse = await res.json();
       queryClient.setQueryData(["progress", trimmed], data);
+      queryClient.setQueryData(["progress", data.nickname], data);
       storeCosmoUsername(data.nickname);
       router.push(
-        sectionHref(`/collection/${trimmed}`, { currentSection: "collect" }),
+        buildHref
+          ? buildHref(data.nickname, data)
+          : sectionHref(`/collection/${data.nickname}`, {
+              currentSection: "collect",
+            }),
       );
     } catch {
       setError("Failed to look up user. Try again.");

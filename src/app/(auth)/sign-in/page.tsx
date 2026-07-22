@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,21 @@ import { signIn } from "@/lib/auth-client";
 export default function SignInPage() {
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [returnTo, setReturnTo] = useState("/");
+
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("returnTo");
+    if (!value) return;
+
+    try {
+      const url = new URL(value, window.location.origin);
+      if (url.origin === window.location.origin) {
+        setReturnTo(`${url.pathname}${url.search}${url.hash}`);
+      }
+    } catch {
+      if (value.startsWith("/")) setReturnTo(value);
+    }
+  }, []);
 
   async function handleCodeLogin() {
     if (code.length !== 6) return;
@@ -37,7 +52,7 @@ export default function SignInPage() {
       }
 
       toast.success("Logged in successfully");
-      window.location.href = "/";
+      window.location.href = returnTo;
     } catch {
       toast.error("Failed to verify code");
     } finally {
@@ -58,7 +73,7 @@ export default function SignInPage() {
           <Button
             className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white"
             onClick={() =>
-              signIn.social({ provider: "discord", callbackURL: "/" })
+              signIn.social({ provider: "discord", callbackURL: returnTo })
             }
           >
             Continue with Discord

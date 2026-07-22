@@ -67,12 +67,17 @@ export default function LinkCosmoPage() {
   // Redirect if not authenticated
   useEffect(() => {
     if (session === null) {
-      router.push("/sign-in");
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      router.push(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [session, router]);
 
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get("returnTo");
+    const params = new URLSearchParams(window.location.search);
+    const nickname = params.get("nickname") ?? params.get("q");
+    if (nickname) setQuery(nickname);
+
+    const value = params.get("returnTo");
     if (!value) return;
 
     try {

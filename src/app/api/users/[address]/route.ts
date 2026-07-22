@@ -63,15 +63,41 @@ export async function GET(
 
     if (!cosmo) {
       // Fall back to Cosmo API to resolve nickname → address
-      const resolved = await fetchUserByNickname(identifier);
+      let resolved: { nickname: string; address: string } | null;
+      try {
+        resolved = await fetchUserByNickname(identifier);
+      } catch (error) {
+        console.error("Failed to resolve Cosmo user profile:", error);
+        return NextResponse.json(
+          { error: "Cosmo is temporarily unavailable. Try again later." },
+          { status: 503 },
+        );
+      }
       if (!resolved) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
       }
-      // Return a redirect hint so the client can navigate to the address URL
-      return NextResponse.json(
-        { address: resolved.address.toLowerCase() },
-        { status: 301 },
-      );
+
+      return NextResponse.json({
+        linked: false,
+        address: resolved.address.toLowerCase(),
+        nickname: resolved.nickname,
+        image: null,
+        linkedAt: null,
+        email: null,
+        discordId: null,
+        discordUsername: null,
+        viewer: {
+          isOwner: false,
+          userId: null,
+        },
+        stats: {
+          completed: 0,
+          cancelled: 0,
+          defaulted: 0,
+          openPosts: 0,
+        },
+        banned: null,
+      });
     }
 
     // Nickname found in DB — revalidate in case it's stale, since the
@@ -155,6 +181,7 @@ export async function GET(
   ).length;
 
   return NextResponse.json({
+    linked: true,
     address: cosmo.address,
     nickname: cosmo.nickname ?? null,
     image: cosmo.user.image,

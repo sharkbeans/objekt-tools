@@ -47,8 +47,10 @@ import type {
   ProgressCollection,
   ProgressMemberResponse,
 } from "@/lib/progress/types";
+import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 import { GridSection } from "./grid-section";
+import { ProgressSearch } from "./progress-search";
 import { SeasonSection } from "./season-section";
 
 interface SeasonColorsResponse {
@@ -522,6 +524,21 @@ export function MemberDexContent({ nickname, member }: Props) {
       });
     },
     [pathname, router, searchParams],
+  );
+
+  const buildSameMemberHref = useCallback(
+    (nextNickname: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const query = params.toString();
+      const encodedNickname = encodeURIComponent(nextNickname);
+      const encodedMember = encodeURIComponent(member);
+      const path = `/collection/${encodedNickname}/${encodedMember}`;
+      return sectionHref(
+        query ? `${path}?${query}` : path,
+        { currentSection: "collect" },
+      );
+    },
+    [member, searchParams],
   );
 
   const { data: seasonColorsData } = useQuery<SeasonColorsResponse>({
@@ -1034,15 +1051,26 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="space-y-0.5">
-        <h1 className="text-lg font-bold sm:text-2xl">
-          {data?.member ?? member}
-        </h1>
-        <p className="text-muted-foreground">
-          {displayTotals
-            ? `${displayTotals.owned}/${displayTotals.total} collected`
-            : " "}
-        </p>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-0.5">
+          <h1 className="text-lg font-bold sm:text-2xl">
+            {data?.member ?? member}
+          </h1>
+          <p className="text-muted-foreground">
+            {displayTotals
+              ? `${displayTotals.owned}/${displayTotals.total} collected`
+              : " "}
+          </p>
+        </div>
+        <div className="w-full lg:max-w-md">
+          <ProgressSearch
+            defaultNickname={data?.nickname ?? nickname}
+            showLabel={false}
+            placeholder="Search another Cosmo username"
+            buttonLabel="View"
+            buildHref={buildSameMemberHref}
+          />
+        </div>
       </div>
 
       {effectiveHasEditions ? (
