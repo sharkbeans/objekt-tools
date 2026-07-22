@@ -533,10 +533,9 @@ export function MemberDexContent({ nickname, member }: Props) {
       const encodedNickname = encodeURIComponent(nextNickname);
       const encodedMember = encodeURIComponent(member);
       const path = `/collection/${encodedNickname}/${encodedMember}`;
-      return sectionHref(
-        query ? `${path}?${query}` : path,
-        { currentSection: "collect" },
-      );
+      return sectionHref(query ? `${path}?${query}` : path, {
+        currentSection: "collect",
+      });
     },
     [member, searchParams],
   );

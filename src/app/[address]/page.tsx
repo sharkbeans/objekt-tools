@@ -210,8 +210,8 @@ export default function PublicProfilePage({
         <h1 className="text-2xl font-bold mb-2">{message}</h1>
         {message === "User not found" && (
           <p className="text-muted-foreground">
-            No Cosmo user or linked objekt.my account named{" "}
-            &quot;{identifier}&quot; exists.
+            No Cosmo user or linked objekt.my account named &quot;{identifier}
+            &quot; exists.
           </p>
         )}
       </div>
@@ -289,13 +289,12 @@ export default function PublicProfilePage({
                 </CardTitle>
                 <CardDescription className={cn(isSjarkbean && "text-white/80")}>
                   {profile.linkedAt
-                    ? `Member since ${new Date(profile.linkedAt).toLocaleDateString(
-                        "en-GB",
-                        {
-                          month: "short",
-                          year: "numeric",
-                        },
-                      )}`
+                    ? `Member since ${new Date(
+                        profile.linkedAt,
+                      ).toLocaleDateString("en-GB", {
+                        month: "short",
+                        year: "numeric",
+                      })}`
                     : "Cosmo user"}
                 </CardDescription>
               </div>
