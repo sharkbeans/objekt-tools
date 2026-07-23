@@ -11,6 +11,7 @@ import {
 import { compareSeasons } from "@/lib/filter-options";
 import { resolveMemberCasing } from "@/lib/filters";
 import { getGridSlots } from "@/lib/grid-progress";
+import { getGridRank } from "@/lib/progress/grid-rank";
 import {
   CosmoUnavailableError,
   loadMemberProgress,
@@ -33,6 +34,16 @@ const DARK = {
 };
 
 const EDITIONS: Edition[] = [1, 2, 3];
+
+// Static fills for the OG image's rank tag — same tiers as the live UI's
+// t-serial-gold/silver/bronze shimmer colors, minus the animation (satori
+// can't render CSS keyframes).
+function rankTierColor(rank: number): string | null {
+  if (rank === 1) return "#ffc83c";
+  if (rank === 2) return "#d7dbe0";
+  if (rank <= 10) return "#cd7f32";
+  return null;
+}
 
 function readFont(filename: string): Buffer {
   return fs.readFileSync(path.join(process.cwd(), "public", filename));
@@ -121,6 +132,9 @@ export async function GET(
     ? (seasons.find((s) => s.toLowerCase() === requestedSeason.toLowerCase()) ??
       latestSeason)
     : latestSeason;
+  const gridRank = season
+    ? await getGridRank(progress.address, member, season)
+    : null;
   const seasonCollections = season
     ? progress.collections.filter((c) => c.season === season)
     : [];
@@ -178,6 +192,14 @@ export async function GET(
 
   const totalOwned = boards.reduce((sum, b) => sum + b.owned, 0);
   const totalFirsts = boards.reduce((sum, b) => sum + b.total, 0);
+
+  const showGridRank = Boolean(
+    gridRank && gridRank.rank !== null && gridRank.count > 0,
+  );
+  const rankColor =
+    showGridRank && gridRank?.rank != null
+      ? rankTierColor(gridRank.rank)
+      : null;
 
   const CARD_W = 92;
   const OBJEKT_ASPECT = 17 / 11; // grid-board.tsx's aspect-11/17
@@ -399,7 +421,7 @@ export async function GET(
         </div>
       </div>
 
-      {/* Subheader: season + aggregate FCO total */}
+      {/* Subheader: season + rank tag + aggregate FCO total */}
       <div
         style={{
           display: "flex",
@@ -407,15 +429,47 @@ export async function GET(
           width: INNER_W,
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            fontSize: 16,
-            fontFamily: "Bold",
-            color: DARK.fg,
-          }}
-        >
-          {season ? `${season} Grid` : "Grid"}
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              fontSize: 16,
+              fontFamily: "Bold",
+              color: DARK.fg,
+            }}
+          >
+            {season ? `${season} Grid` : "Grid"}
+          </div>
+          {showGridRank && gridRank && (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              {rankColor && (
+                <div
+                  style={{
+                    display: "flex",
+                    borderRadius: 4,
+                    padding: "2px 6px",
+                    fontSize: 12,
+                    fontFamily: "Bold",
+                    color: "#000000",
+                    background: rankColor,
+                  }}
+                >
+                  #{gridRank.rank}
+                </div>
+              )}
+              <div
+                style={{
+                  display: "flex",
+                  fontSize: 12,
+                  color: DARK.muted,
+                  fontFamily: "Regular",
+                }}
+              >
+                of {gridRank.totalCrafters} crafters · top {gridRank.percentile}
+                %
+              </div>
+            </div>
+          )}
         </div>
         {totalFirsts > 0 && (
           <div

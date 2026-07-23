@@ -1045,6 +1045,7 @@ export function MemberDexContent({ nickname, member }: Props) {
             [...gridGrouped.entries()].map(([season, cols]) => (
               <GridSection
                 key={season}
+                member={member}
                 season={season}
                 collections={cols}
                 address={data.address}

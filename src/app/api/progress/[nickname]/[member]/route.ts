@@ -12,7 +12,7 @@ import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { compareSeasons } from "@/lib/filter-options";
 import { membersByArtist } from "@/lib/filters";
-import { COSMO_SPIN_ADDRESS, ZERO_ADDRESS } from "@/lib/indexer-constants";
+import { ZERO_ADDRESS } from "@/lib/indexer-constants";
 import { loadOwnedCollectionCountsByDbId } from "@/lib/indexer-owned-objekts";
 import { isCollectionProgressCountable } from "@/lib/progress/countable";
 import {
@@ -119,12 +119,18 @@ export async function GET(
     ),
     // Gridding has no dedicated flag in the indexer. A completed grid mints a
     // reward Special-class objekt to the wallet from the zero address; we
-    // count those mints (excluding spin rewards, which are also zero-address
-    // Special mints) as a proxy for "times gridded". This stays accurate
+    // count those mints as a proxy for "times gridded". This stays accurate
     // even if the reward SCO is later traded away, and doesn't miscount
     // event-drop FCOs (which are ownership, not mints, of Specials).
+    //
+    // Used to filter out spin-won Specials here via a "spin-send within the
+    // prior 10 minutes" heuristic, but cross-checking against Cosmo's own
+    // official leaderboard (19 accounts across 2 member/season combos) showed
+    // that heuristic never once fired on a genuine spin reward — it only
+    // ever produced false positives (excluding real grid crafts that
+    // happened to follow an unrelated spin within the window). Dropped.
     getCached(
-      `progress:grid-mints:v1:${resolved.address}:${member.toLowerCase()}`,
+      `progress:grid-mints:v2:${resolved.address}:${member.toLowerCase()}`,
       10 * 60_000,
       async () => {
         // Grid-mints raw SQL over `transfer` — stays on the remote indexer
@@ -142,17 +148,9 @@ export async function GET(
               and c.member = $3
               and c.class = 'Special'
               and c.on_offline = 'online'
-              and not exists (
-                select 1
-                from transfer spin_send
-                where spin_send."to" = $4
-                  and spin_send."from" = reward."to"
-                  and reward.timestamp >= spin_send.timestamp
-                  and reward.timestamp <= spin_send.timestamp + interval '10 minutes'
-              )
             group by c.id
           `,
-          [ZERO_ADDRESS, resolved.address, member, COSMO_SPIN_ADDRESS],
+          [ZERO_ADDRESS, resolved.address, member],
         );
         return res.rows;
       },

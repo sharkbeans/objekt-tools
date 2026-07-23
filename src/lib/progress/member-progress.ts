@@ -38,6 +38,7 @@ export type MemberProgressCollection = {
 
 export type MemberProgress = {
   nickname: string;
+  address: string;
   artist: string;
   collections: MemberProgressCollection[];
 };
@@ -155,5 +156,10 @@ export async function loadMemberProgress(
       });
     });
 
-  return { nickname: resolved.nickname, artist, collections: result };
+  return {
+    nickname: resolved.nickname,
+    address: resolved.address,
+    artist,
+    collections: result,
+  };
 }
