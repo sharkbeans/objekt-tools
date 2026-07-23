@@ -453,6 +453,13 @@ export function MemberDexContent({ nickname, member }: Props) {
   const [gridSeasonInitialized, setGridSeasonInitialized] = useState(false);
   const [viewConsumed, setViewConsumed] = useState(true);
 
+  // Captured once on mount (not kept in sync with `searchParams`): the
+  // season a shared link pointed at, e.g. .../SoHyun?view=grid&season=Binary02.
+  // Takes priority over the localStorage-remembered selection below so a
+  // shared link always opens on the season it was shared for, even if this
+  // browser has a different season saved from a previous visit.
+  const [initialUrlSeason] = useState(() => searchParams.get("season"));
+
   // Restore this page's last-used filters from localStorage (client only —
   // runs after mount to avoid a hydration mismatch). Keyed per
   // nickname+member so switching pages doesn't leak unrelated selections.
@@ -474,7 +481,7 @@ export function MemberDexContent({ nickname, member }: Props) {
         if (stored.unownedOnly != null) setUnownedOnly(stored.unownedOnly);
         if (stored.ownedOnly != null) setOwnedOnly(stored.ownedOnly);
         if (stored.perRow != null) setPerRow(stored.perRow);
-        if (stored.gridActiveSeasons) {
+        if (stored.gridActiveSeasons && !initialUrlSeason) {
           setGridActiveSeasons(stored.gridActiveSeasons);
           setGridSeasonInitialized(true);
         }
@@ -486,7 +493,7 @@ export function MemberDexContent({ nickname, member }: Props) {
       // Malformed/unavailable storage — fall back to defaults.
     }
     setSelectionRestored(true);
-  }, [nickname, member]);
+  }, [nickname, member, initialUrlSeason]);
 
   // Persist the current filters whenever they change, once the initial
   // restore above has run (so we don't clobber storage with defaults first).
@@ -628,9 +635,58 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   useEffect(() => {
     if (gridSeasonInitialized || gridAllSeasons.length === 0) return;
-    setGridActiveSeasons([gridAllSeasons[gridAllSeasons.length - 1]]);
+    const matched = initialUrlSeason
+      ? gridAllSeasons.find(
+          (s) => s.toLowerCase() === initialUrlSeason.toLowerCase(),
+        )
+      : undefined;
+    setGridActiveSeasons([
+      matched ?? gridAllSeasons[gridAllSeasons.length - 1],
+    ]);
     setGridSeasonInitialized(true);
-  }, [gridAllSeasons, gridSeasonInitialized]);
+  }, [gridAllSeasons, gridSeasonInitialized, initialUrlSeason]);
+
+  // Keep the URL's `season` param in sync with the Grid tab's season filter
+  // so the address bar (and anything shared from it) reflects exactly what's
+  // on screen — a single selected season maps to `?season=`, otherwise (all
+  // seasons, multiple seasons, or the Dex tab) the param is dropped.
+  useEffect(() => {
+    if (!gridSeasonInitialized) return;
+    const next =
+      activeTab === "grid" && gridActiveSeasons.length === 1
+        ? gridActiveSeasons[0]
+        : null;
+    if (searchParams.get("season") === next) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("season", next);
+    else params.delete("season");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [
+    activeTab,
+    gridActiveSeasons,
+    gridSeasonInitialized,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  // Cache-busting `share` token from a "Share link" click (grid-section.tsx)
+  // — only meant to make the very first fetch (Discord's, or this page load)
+  // look unseen to link/image caches. It has no purpose once the page has
+  // actually loaded, so it's dropped from the address bar right away. Unlike
+  // `season` above, this one is never written back.
+  useEffect(() => {
+    if (!searchParams.get("share")) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("share");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [searchParams, pathname, router]);
 
   // Base filter: class + season + edition (used for accurate totals). Empty
   // arrays mean "all".

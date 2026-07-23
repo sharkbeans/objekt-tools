@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
+import { darken, lighten } from "@/lib/color-utils";
+import { getMemberColor } from "@/lib/member-colors";
 import type { ProgressRollup } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
@@ -9,6 +12,7 @@ interface Props {
   nickname: string;
   rollups: ProgressRollup[];
   member: string;
+  artist: string;
   imageUrl?: string;
 }
 
@@ -28,12 +32,21 @@ export function MemberProgressCard({
   nickname,
   rollups,
   member,
+  artist,
   imageUrl,
 }: Props) {
   const owned = rollups.reduce((s, r) => s + r.owned, 0);
   const total = rollups.reduce((s, r) => s + r.total, 0);
   const complete = total > 0 && owned >= total;
   const pct = progressPercent(owned, total);
+  const memberColor = getMemberColor(artist, member);
+  const completeStyle: CSSProperties | undefined = memberColor
+    ? ({
+        "--progress-complete-c1": memberColor,
+        "--progress-complete-c2": lighten(memberColor, 0.55),
+        "--progress-complete-c3": darken(memberColor, 0.35),
+      } as CSSProperties)
+    : undefined;
 
   return (
     <Link
@@ -74,9 +87,16 @@ export function MemberProgressCard({
                 "h-full rounded-full transition-all",
                 complete
                   ? "t-progress-complete"
-                  : "bg-primary t-progress-hover-shimmer",
+                  : cn(
+                      "t-progress-hover-shimmer",
+                      !memberColor && "bg-primary",
+                    ),
               )}
-              style={{ width: `${pct.width}%` }}
+              style={{
+                width: `${pct.width}%`,
+                backgroundColor: complete ? undefined : memberColor,
+                ...(complete ? completeStyle : undefined),
+              }}
             />
           </div>
           <p className="text-xs text-muted-foreground text-right">

@@ -12,16 +12,43 @@ export async function generateMetadata({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const { nickname, member } = await params;
-  const isGridView = (await searchParams).view === "grid";
+  const sp = await searchParams;
+  const isGridView = sp.view === "grid";
+  // Grid tab's season filter — kept in sync with this param by
+  // member-dex-content.tsx so a link shared while viewing an older season's
+  // grid (e.g. ?view=grid&season=Binary02) carries that season through to
+  // both the OG image and the link Discord/etc. actually opens, instead of
+  // always falling back to the latest season.
+  const season = isGridView && typeof sp.season === "string" ? sp.season : null;
+  // Cache-busting token from a "Share link" click (grid-section.tsx). Discord
+  // caches the og:image separately from the page's own metadata, so even a
+  // freshly-fetched page can still point at a stale cached image — carrying
+  // the same token into the image URL makes that fetch look unseen too.
+  const shareToken = typeof sp.share === "string" ? sp.share : null;
   const title = `${nickname}'s ${member} Collection | objekt.my`;
   const description = `View ${nickname}'s ${member} objekt collection.`;
-  const canonical = sectionAbsoluteUrl(`/collection/${nickname}/${member}`);
+  const basePath = `/collection/${nickname}/${member}`;
+  // Canonical stays param-free (SEO: one indexable URL per member, not one
+  // per filter combination). The share link below is allowed to diverge
+  // from it since it's describing "this exact view", not "this page".
+  const canonical = sectionAbsoluteUrl(basePath);
+
+  const shareQuery = new URLSearchParams();
+  if (isGridView) shareQuery.set("view", "grid");
+  if (season) shareQuery.set("season", season);
+  const shareSuffix = shareQuery.size > 0 ? `?${shareQuery}` : "";
+  const shareUrl = sectionAbsoluteUrl(`${basePath}${shareSuffix}`);
+
   // URL only — no progress/DB/Cosmo work here. The OG route fetches and
   // caches its own data on the request Discord/etc. makes for the image,
   // not on every page navigation.
+  const ogImageQuery = new URLSearchParams();
+  if (season) ogImageQuery.set("season", season);
+  if (shareToken) ogImageQuery.set("share", shareToken);
+  const ogImageSuffix = ogImageQuery.size > 0 ? `?${ogImageQuery}` : "";
   const ogPath = isGridView
-    ? `/collection/${nickname}/${member}/og/grid`
-    : `/collection/${nickname}/${member}/og`;
+    ? `${basePath}/og/grid${ogImageSuffix}`
+    : `${basePath}/og${ogImageSuffix}`;
   const ogImage = {
     url: sectionAbsoluteUrl(ogPath),
     width: 1200,
@@ -38,7 +65,7 @@ export async function generateMetadata({
     openGraph: {
       title,
       description,
-      url: canonical,
+      url: shareUrl,
       images: [ogImage],
     },
     twitter: {

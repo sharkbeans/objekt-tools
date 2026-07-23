@@ -313,6 +313,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
                     key={member}
                     nickname={data.nickname}
                     member={member}
+                    artist={artist}
                     rollups={rollups}
                     imageUrl={memberImages[`${artist}|${member}`]}
                   />
@@ -325,6 +326,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
                       key={member}
                       nickname={data.nickname}
                       member={member}
+                      artist={artist}
                       rollups={rollups}
                       imageUrl={memberImages[`${artist}|${member}`]}
                     />

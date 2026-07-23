@@ -1,10 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { LinkIcon } from "lucide-react";
 import { Fragment, useMemo } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import type { Edition } from "@/lib/edition";
 import { getCollectionEdition } from "@/lib/edition";
 import type { ProgressCollection } from "@/lib/progress/types";
+import { sectionAbsoluteUrl } from "@/lib/sections";
 import { GridBoard } from "./grid-board";
 
 interface Props {
@@ -80,6 +84,49 @@ function GridRankBadge({
   );
 }
 
+// Discord (and most link-unfurlers) cache a URL's embed for a while after
+// the first fetch, and cache the referenced og:image separately from the
+// page metadata — so re-sharing the same clean URL later can still show a
+// stale rank/image. Appending a one-off token to both the page URL and the
+// og:image URL makes each "Share link" click look unseen to both caches,
+// forcing a fresh fetch. The token is stripped from the address bar right
+// after landing (see member-dex-content.tsx) — it has no purpose beyond
+// that first fetch.
+function ShareLinkButton({
+  nickname,
+  member,
+  season,
+}: {
+  nickname: string;
+  member: string;
+  season: string;
+}) {
+  const handleClick = async () => {
+    const token = Math.random().toString(36).slice(2, 8);
+    const params = new URLSearchParams({
+      view: "grid",
+      season,
+      share: token,
+    });
+    const url = sectionAbsoluteUrl(
+      `/collection/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}?${params}`,
+    );
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Couldn't copy link");
+    }
+  };
+
+  return (
+    <Button size="sm" className="gap-1.5" onClick={handleClick}>
+      <LinkIcon className="h-3.5 w-3.5" />
+      Share link
+    </Button>
+  );
+}
+
 export function GridSection({
   member,
   season,
@@ -130,9 +177,12 @@ export function GridSection({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-baseline gap-3">
-        <h3 className="font-semibold text-xl">{season}</h3>
-        <GridRankBadge nickname={nickname} member={member} season={season} />
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h3 className="font-semibold text-xl">{season}</h3>
+          <GridRankBadge nickname={nickname} member={member} season={season} />
+        </div>
+        <ShareLinkButton nickname={nickname} member={member} season={season} />
       </div>
       <div className="flex flex-wrap items-stretch gap-8">
         {editionsWithData.map((edition, i) => {
