@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Fragment, useMemo } from "react";
 import type { Edition } from "@/lib/edition";
 import { getCollectionEdition } from "@/lib/edition";
@@ -7,6 +8,7 @@ import type { ProgressCollection } from "@/lib/progress/types";
 import { GridBoard } from "./grid-board";
 
 interface Props {
+  member: string;
   season: string;
   collections: ProgressCollection[];
   address: string;
@@ -14,9 +16,72 @@ interface Props {
   viewConsumed: boolean;
 }
 
+interface GridRankResponse {
+  count: number;
+  rank: number | null;
+  totalCrafters: number;
+  percentile: number | null;
+}
+
 const EDITIONS: Edition[] = [1, 2, 3];
 
+/**
+ * Rank tag tier for the top-10 leaderboard shimmer: #1 gold, #2 silver,
+ * #3-10 bronze (same t-serial-rare sweep as the objekt low-serial badges,
+ * just a wider bronze band since a rank of 10 is still noteworthy).
+ */
+function rankTierClass(rank: number) {
+  if (rank === 1) return " t-serial-rare t-serial-gold";
+  if (rank === 2) return " t-serial-rare t-serial-silver";
+  if (rank <= 10) return " t-serial-rare t-serial-bronze";
+  return "";
+}
+
+function GridRankBadge({
+  nickname,
+  member,
+  season,
+}: {
+  nickname: string;
+  member: string;
+  season: string;
+}) {
+  const { data } = useQuery<GridRankResponse>({
+    queryKey: ["grid-rank", nickname, member, season],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/progress/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}/grid-rank?season=${encodeURIComponent(season)}`,
+      );
+      if (!res.ok) throw new Error("Failed to load grid rank");
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  if (!data || data.rank === null || data.count === 0) return null;
+
+  const rankText = `#${data.rank}`;
+
+  return (
+    <span className="text-base text-muted-foreground">
+      {data.rank <= 10 ? (
+        <span
+          className={`relative mr-1 inline-block overflow-hidden rounded bg-black/70 px-1.5 py-0.5 align-middle font-mono text-base font-semibold leading-none text-white${rankTierClass(data.rank)}`}
+        >
+          {rankText}
+        </span>
+      ) : (
+        <span className="mr-1">{rankText}</span>
+      )}
+      of {data.totalCrafters} crafters this season · top{" "}
+      <span className="font-bold text-white">{data.percentile}%</span>
+    </span>
+  );
+}
+
 export function GridSection({
+  member,
   season,
   collections,
   address,
@@ -65,7 +130,10 @@ export function GridSection({
 
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold text-lg">{season}</h3>
+      <div className="flex items-baseline gap-3">
+        <h3 className="font-semibold text-xl">{season}</h3>
+        <GridRankBadge nickname={nickname} member={member} season={season} />
+      </div>
       <div className="flex flex-wrap items-stretch gap-8">
         {editionsWithData.map((edition, i) => {
           const entry = byEdition.get(edition);
