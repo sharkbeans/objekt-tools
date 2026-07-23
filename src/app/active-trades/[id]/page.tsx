@@ -349,14 +349,8 @@ function ObjektThumbnail({
               sideOffset={8}
               className="z-50 rounded-md shadow-xl overflow-hidden border border-border"
             >
-              <Image
-                src={resolvedSrc}
-                alt={alt}
-                width={144}
-                height={216}
-                unoptimized
-                className="w-36 h-auto block"
-              />
+              {/* biome-ignore lint/performance/noImgElement: Tooltip preview uses the canonical remote card asset. */}
+              <img src={resolvedSrc} alt={alt} className="w-36 h-auto block" />
             </TooltipPrimitive.Content>
           </TooltipPrimitive.Portal>
         )}

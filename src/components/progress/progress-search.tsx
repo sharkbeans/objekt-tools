@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { SearchIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -116,9 +117,16 @@ export function ProgressSearch({
           <button
             type="submit"
             disabled={checking}
-            className="h-12 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+            className="flex h-12 items-center justify-center gap-1.5 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
           >
-            {checking ? "Searching..." : buttonLabel}
+            {checking ? (
+              "Searching..."
+            ) : (
+              <>
+                <SearchIcon className="h-4 w-4" />
+                {buttonLabel}
+              </>
+            )}
           </button>
         </div>
         <p className="t-error-msg mt-2 text-sm text-destructive">{error}</p>

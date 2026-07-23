@@ -14,6 +14,11 @@ import { compareSeasons } from "@/lib/filter-options";
 import { membersByArtist } from "@/lib/filters";
 import { COSMO_SPIN_ADDRESS, ZERO_ADDRESS } from "@/lib/indexer-constants";
 import { loadOwnedCollectionCountsByDbId } from "@/lib/indexer-owned-objekts";
+import { isCollectionProgressCountable } from "@/lib/progress/countable";
+import {
+  hasGlobalTradableCopy,
+  loadCollectionTradabilityByDbId,
+} from "@/lib/progress/tradability";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
@@ -168,6 +173,12 @@ export async function GET(
     gridMintMap.set(row.collection_id, Number(row.grid_mint_count));
   }
 
+  const tradabilityById = await getCached(
+    `progress:tradability:v1:${member.toLowerCase()}`,
+    10 * 60_000,
+    () => loadCollectionTradabilityByDbId(allCollections.map((c) => c.id)),
+  );
+
   // A/Z dedup: collectionNo like "101A" and "101Z" are the same physical card.
   // Group by (season, numeric prefix). Prefer Z; show A only if no Z exists.
   type RawCollection = (typeof allCollections)[number];
@@ -205,22 +216,30 @@ export async function GET(
   const artist = artistForMember(member);
 
   const result: ProgressCollection[] = deduped
-    .map((c) => ({
-      collectionId: c.collectionId,
-      collectionNo: c.collectionNo,
-      season: c.season,
-      class: c.class,
-      onOffline: c.onOffline,
-      thumbnailImage: c.thumbnailImage,
-      frontImage: c.frontImage,
-      backImage: c.backImage,
-      accentColor: c.accentColor,
-      member,
-      artist,
-      ownedCount: ownedMap.get(c.id) ?? 0,
-      transferableCount: transferableMap.get(c.id) ?? 0,
-      gridMintCount: gridMintMap.get(c.id) ?? 0,
-    }))
+    .map((c) => {
+      const tradability = tradabilityById.get(c.id);
+      return {
+        collectionId: c.collectionId,
+        collectionNo: c.collectionNo,
+        season: c.season,
+        class: c.class,
+        onOffline: c.onOffline,
+        thumbnailImage: c.thumbnailImage,
+        frontImage: c.frontImage,
+        backImage: c.backImage,
+        accentColor: c.accentColor,
+        member,
+        artist,
+        ownedCount: ownedMap.get(c.id) ?? 0,
+        transferableCount: transferableMap.get(c.id) ?? 0,
+        globalTotalCount: tradability?.totalCount ?? 0,
+        globalTradableCount: tradability?.tradableCount ?? 0,
+        gridMintCount: gridMintMap.get(c.id) ?? 0,
+        progressCountable:
+          isCollectionProgressCountable(c) &&
+          hasGlobalTradableCopy(tradability),
+      };
+    })
     .sort((a, b) => {
       const sc = compareSeasons(a.season, b.season);
       if (sc !== 0) return sc;

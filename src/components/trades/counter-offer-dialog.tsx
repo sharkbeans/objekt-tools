@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowRight, Minus, Plus, XIcon } from "lucide-react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -144,13 +143,12 @@ function ObjektCard({
     <div className="flex flex-col items-center gap-1">
       <div className="relative w-16 h-auto rounded-md border overflow-hidden">
         {url ? (
-          <Image
+          // biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets.
+          <img
             src={url}
             alt={objekt.collectionId}
-            width={64}
-            height={88}
             className="w-16 h-auto"
-            unoptimized
+            loading="lazy"
           />
         ) : (
           <div className="w-16 h-[88px] bg-muted animate-pulse" />

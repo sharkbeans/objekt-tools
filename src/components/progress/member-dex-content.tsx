@@ -42,6 +42,7 @@ import {
   getCollectionEdition,
 } from "@/lib/edition";
 import { compareSeasons } from "@/lib/filter-options";
+import { isCollectionProgressCountable } from "@/lib/progress/countable";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
   ProgressCollection,
@@ -254,6 +255,16 @@ function toggleValue<T>(prev: T[], value: T): T[] {
   return prev.includes(value)
     ? prev.filter((x) => x !== value)
     : [...prev, value];
+}
+
+function countsForProgress(collections: ProgressCollection[]) {
+  const countable = collections.filter(
+    (c) => c.progressCountable ?? isCollectionProgressCountable(c),
+  );
+  return {
+    owned: countable.filter((c) => c.ownedCount > 0).length,
+    total: countable.length,
+  };
 }
 
 // Filters (season/class/edition chips, the switches/dropdown/share row)
@@ -689,8 +700,7 @@ export function MemberDexContent({ nickname, member }: Props) {
   // shouldn't shift depending on which tab or filters are active.
   const totals = useMemo(() => {
     if (!data) return { owned: 0, total: 0 };
-    const owned = data.collections.filter((c) => c.ownedCount > 0).length;
-    return { owned, total: data.collections.length };
+    return countsForProgress(data.collections);
   }, [data]);
 
   // "effective"/"display" values below fall back to the overview-derived
@@ -724,8 +734,7 @@ export function MemberDexContent({ nickname, member }: Props) {
       description: "Loading objekts — you can keep browsing while this runs.",
     });
     try {
-      const owned = shareCols.filter((c) => c.ownedCount > 0).length;
-      const total = shareCols.length;
+      const { owned, total } = countsForProgress(shareCols);
 
       // Subtitle carries the active artist + season (+ class) filter context.
       const artistLabel = data.artist === "artms" ? "ARTMS" : data.artist;
@@ -1050,26 +1059,24 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-0.5">
-          <h1 className="text-lg font-bold sm:text-2xl">
-            {data?.member ?? member}
-          </h1>
-          <p className="text-muted-foreground">
-            {displayTotals
-              ? `${displayTotals.owned}/${displayTotals.total} collected`
-              : " "}
-          </p>
-        </div>
-        <div className="w-full lg:max-w-md">
-          <ProgressSearch
-            defaultNickname={data?.nickname ?? nickname}
-            showLabel={false}
-            placeholder="Search another Cosmo username"
-            buttonLabel="View"
-            buildHref={buildSameMemberHref}
-          />
-        </div>
+      <div className="max-w-xl">
+        <ProgressSearch
+          defaultNickname={data?.nickname ?? nickname}
+          showLabel={false}
+          placeholder="Search another Cosmo username"
+          buildHref={buildSameMemberHref}
+        />
+      </div>
+
+      <div className="space-y-0.5">
+        <h1 className="text-lg font-bold sm:text-2xl">
+          {data?.member ?? member}
+        </h1>
+        <p className="text-muted-foreground">
+          {displayTotals
+            ? `${displayTotals.owned}/${displayTotals.total} collected`
+            : " "}
+        </p>
       </div>
 
       {effectiveHasEditions ? (

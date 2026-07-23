@@ -1,4 +1,3 @@
-import { count } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import {
@@ -6,17 +5,44 @@ import {
   resolveNickname,
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
-import { mirror } from "@/lib/db/indexer-mirror";
-import { collections } from "@/lib/db/indexer-schema";
+import { indexerPool } from "@/lib/db/indexer";
+import { COSMO_SPIN_ADDRESS } from "@/lib/indexer-constants";
 import {
   loadCollectionMetadataByDbIds,
   loadOwnedDistinctCollectionDbIds,
 } from "@/lib/indexer-owned-objekts";
+import {
+  isCollectionProgressCountable,
+  PROGRESS_EXCLUDED_CLASS,
+  PROGRESS_EXCLUDED_COLLECTION_NO,
+} from "@/lib/progress/countable";
 import { mergeProgressRollups } from "@/lib/progress/merge";
+import {
+  hasGlobalTradableCopy,
+  loadCollectionTradabilityByDbId,
+} from "@/lib/progress/tradability";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
+
+type TotalsRow = {
+  artist: string;
+  member: string;
+  class: string;
+  season: string;
+  onOffline: "online" | "offline";
+  total: number;
+};
+
+type ProgressTotalQueryRow = {
+  artist: string;
+  member: string;
+  class: string;
+  season: string;
+  on_offline: "online" | "offline";
+  total: string;
+};
 
 export async function GET(
   request: NextRequest,
@@ -67,31 +93,58 @@ export async function GET(
   }
 
   const [totals, owned] = await Promise.all([
-    getCached("progress:totals:v2", 10 * 60_000, () =>
-      mirror
-        .select({
-          artist: collections.artist,
-          member: collections.member,
-          class: collections.class,
-          season: collections.season,
-          onOffline: collections.onOffline,
-          total: count(),
-        })
-        .from(collections)
-        .groupBy(
-          collections.artist,
-          collections.member,
-          collections.class,
-          collections.season,
-          collections.onOffline,
-        ),
-    ),
-    getCached(`progress:owned:v3:${resolved.address}`, 90_000, async () => {
+    getCached("progress:totals:v4", 10 * 60_000, async () => {
+      const res = await indexerPool.query<ProgressTotalQueryRow>(
+        `
+          select
+            c.artist,
+            c.member,
+            c.class,
+            c.season,
+            c.on_offline,
+            count(*)::text as total
+          from collection c
+          where lower(c.class) <> $1
+            and upper(c.collection_no) <> $2
+            and exists (
+              select 1
+              from objekt o
+              where o.collection_id = c.id
+                and o.transferable = true
+                and o.owner <> $3
+            )
+          group by
+            c.artist,
+            c.member,
+            c.class,
+            c.season,
+            c.on_offline
+        `,
+        [
+          PROGRESS_EXCLUDED_CLASS.toLowerCase(),
+          PROGRESS_EXCLUDED_COLLECTION_NO,
+          COSMO_SPIN_ADDRESS,
+        ],
+      );
+      return res.rows.map(
+        (row): TotalsRow => ({
+          artist: row.artist,
+          member: row.member,
+          class: row.class,
+          season: row.season,
+          onOffline: row.on_offline,
+          total: Number(row.total),
+        }),
+      );
+    }),
+    getCached(`progress:owned:v5:${resolved.address}`, 90_000, async () => {
       const ownedCollectionDbIds = await loadOwnedDistinctCollectionDbIds(
         resolved.address,
       );
-      const ownedCollections =
-        await loadCollectionMetadataByDbIds(ownedCollectionDbIds);
+      const [ownedCollections, tradabilityById] = await Promise.all([
+        loadCollectionMetadataByDbIds(ownedCollectionDbIds),
+        loadCollectionTradabilityByDbId(ownedCollectionDbIds),
+      ]);
       const rollups = new Map<
         string,
         {
@@ -105,6 +158,9 @@ export async function GET(
       >();
 
       for (const row of ownedCollections.values()) {
+        if (!isCollectionProgressCountable(row)) continue;
+        if (!hasGlobalTradableCopy(tradabilityById.get(row.id))) continue;
+
         const key = [
           row.artist,
           row.member,

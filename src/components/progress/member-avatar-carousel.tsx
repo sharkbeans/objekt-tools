@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type React from "react";
@@ -203,12 +202,12 @@ export function MemberAvatarCarousel({ nickname, activeMember }: Props) {
               )}
             >
               {imageUrl ? (
-                <Image
+                // biome-ignore lint/performance/noImgElement: Member portrait sources are already small remote assets.
+                <img
                   src={imageUrl}
                   alt={member}
-                  fill
-                  className="object-cover object-top"
-                  sizes="(max-width: 639px) 56px, 64px"
+                  loading="lazy"
+                  className="h-full w-full object-cover object-top"
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-bold text-muted-foreground select-none">

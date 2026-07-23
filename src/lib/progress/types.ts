@@ -26,7 +26,10 @@ export type ProgressCollection = {
   accentColor: string;
   ownedCount: number;
   transferableCount: number;
+  globalTotalCount: number;
+  globalTradableCount: number;
   gridMintCount: number;
+  progressCountable: boolean;
   member?: string;
   artist?: string;
 };

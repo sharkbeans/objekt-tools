@@ -497,13 +497,13 @@ export default function PublicProfilePage({
                               {thumbnails.map((side) => {
                                 if (!side.thumbnailUrl) return null;
                                 return (
-                                  <Image
+                                  // biome-ignore lint/performance/noImgElement: Trade thumbnails are small remote card assets.
+                                  <img
                                     key={side.id}
                                     src={side.thumbnailUrl}
                                     alt={side.collectionId}
-                                    width={24}
-                                    height={24}
-                                    className="w-6 h-auto rounded inline-block"
+                                    loading="lazy"
+                                    className="w-6 h-6 object-cover rounded inline-block"
                                   />
                                 );
                               })}

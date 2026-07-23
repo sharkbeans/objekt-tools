@@ -1,5 +1,6 @@
 "use client";
 
+import { isCollectionProgressCountable } from "@/lib/progress/countable";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { DexGrid } from "./dex-grid";
 
@@ -11,8 +12,11 @@ interface Props {
 }
 
 export function SeasonSection({ season, collections, perRow, address }: Props) {
-  const owned = collections.filter((c) => c.ownedCount > 0).length;
-  const total = collections.length;
+  const countable = collections.filter(
+    (c) => c.progressCountable ?? isCollectionProgressCountable(c),
+  );
+  const owned = countable.filter((c) => c.ownedCount > 0).length;
+  const total = countable.length;
 
   return (
     <div className="space-y-2">

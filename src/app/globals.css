@@ -115,6 +115,22 @@
   --rare-shimmer-ease: linear;
   --rare-shimmer-c1: rgba(205, 127, 50, 0.85);
   --rare-shimmer-c2: rgba(230, 170, 110, 0.55);
+  --progress-complete-c1: #f5b942;
+  --progress-complete-c2: #ffe8a3;
+  --progress-complete-c3: #c98a1b;
+
+  /* Own timing/band tokens (not --rare-shimmer-*) so retuning the serial
+     badge shimmer can't silently change this bar's shimmer, or vice versa. */
+  --progress-shimmer-sweep-dur: 1350ms;
+  --progress-shimmer-gap-dur: 100ms;
+  --progress-shimmer-dur: calc(
+    var(--progress-shimmer-sweep-dur) + var(--progress-shimmer-gap-dur)
+  );
+  --progress-shimmer-band: 340%;
+  --progress-shimmer-ease: linear;
+  --progress-hover-shimmer-c1: rgba(255, 255, 255, 0.95);
+  --progress-hover-shimmer-c2: rgba(15, 15, 15, 0.16);
+  --progress-hover-shimmer-fade-dur: 150ms;
 
   /* Icon swap */
   --icon-swap-dur: 200ms;
@@ -420,6 +436,105 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .t-serial-rare::after {
+      animation: none !important;
+    }
+  }
+
+  .t-progress-complete {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--progress-complete-c1);
+    background-image: linear-gradient(
+      90deg,
+      var(--progress-complete-c3) 0%,
+      var(--progress-complete-c1) 28%,
+      var(--progress-complete-c2) 52%,
+      var(--progress-complete-c1) 76%,
+      var(--progress-complete-c3) 100%
+    );
+    box-shadow:
+      0 0 0 1px rgba(255, 232, 163, 0.34) inset,
+      0 0 10px rgba(255, 200, 60, 0.28);
+  }
+  .t-progress-complete::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(
+      115deg,
+      transparent 0%,
+      transparent 42%,
+      rgba(255, 200, 60, 0.95) 49%,
+      rgba(255, 245, 200, 0.78) 55%,
+      transparent 62%,
+      transparent 100%
+    );
+    background-size: var(--progress-shimmer-band) 100%;
+    background-repeat: no-repeat;
+    mix-blend-mode: screen;
+    animation: t-progress-shimmer var(--progress-shimmer-dur)
+      var(--progress-shimmer-ease) infinite;
+  }
+  @keyframes t-progress-shimmer {
+    0% {
+      background-position: 100% 0;
+    }
+    93.1% {
+      background-position: 0% 0;
+    }
+    100% {
+      background-position: 0% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .t-progress-complete::after {
+      animation: none !important;
+    }
+  }
+
+  /* Silver shimmer on incomplete progress bars — only while the card is
+     hovered. Shares the gold bar's band/timing tokens (both are the same
+     "progress bar" feature) but stays invisible (opacity: 0, no animation)
+     until .t-progress-card:hover switches it on, so idle bars don't pay
+     for a running animation. */
+  .t-progress-hover-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .t-progress-hover-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    /* Flanking shadow (c2) on both sides of the bright peak (c1) reads as a
+       metallic glint on any base color — unlike a screen-blend-only
+       highlight, it doesn't depend on the bar having brightness headroom,
+       which a near-white bar (this app is dark-mode-only, so --primary is
+       oklch(0.922) — already close to white) doesn't have much of. */
+    background-image: linear-gradient(
+      115deg,
+      transparent 0%,
+      transparent 38%,
+      var(--progress-hover-shimmer-c2) 45%,
+      var(--progress-hover-shimmer-c1) 50%,
+      var(--progress-hover-shimmer-c2) 55%,
+      transparent 62%,
+      transparent 100%
+    );
+    background-size: var(--progress-shimmer-band) 100%;
+    background-repeat: no-repeat;
+    background-position: 100% 0;
+    transition: opacity var(--progress-hover-shimmer-fade-dur) ease;
+  }
+  .t-progress-card:hover .t-progress-hover-shimmer::after {
+    opacity: 1;
+    animation: t-progress-shimmer var(--progress-shimmer-dur)
+      var(--progress-shimmer-ease) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .t-progress-hover-shimmer::after {
       animation: none !important;
     }
   }

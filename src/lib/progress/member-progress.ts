@@ -8,6 +8,11 @@ import { collections } from "@/lib/db/indexer-schema";
 import { compareSeasons } from "@/lib/filter-options";
 import { membersByArtist } from "@/lib/filters";
 import { loadOwnedCollectionCountsByDbId } from "@/lib/indexer-owned-objekts";
+import { isCollectionProgressCountable } from "@/lib/progress/countable";
+import {
+  hasGlobalTradableCopy,
+  loadCollectionTradabilityByDbId,
+} from "@/lib/progress/tradability";
 import { getCached } from "@/lib/server-cache";
 
 export { CosmoUnavailableError };
@@ -26,6 +31,9 @@ export type MemberProgressCollection = {
   onOffline: string;
   thumbnailImage: string;
   ownedCount: number;
+  globalTotalCount: number;
+  globalTradableCount: number;
+  progressCountable: boolean;
 };
 
 export type MemberProgress = {
@@ -81,6 +89,12 @@ export async function loadMemberProgress(
     if (row.collectionDbId) ownedMap.set(row.collectionDbId, row.ownedCount);
   }
 
+  const tradabilityById = await getCached(
+    `og:progress:tradability:v1:${member.toLowerCase()}`,
+    10 * 60_000,
+    () => loadCollectionTradabilityByDbId(allCollections.map((c) => c.id)),
+  );
+
   // A/Z dedup: collectionNo like "101A" and "101Z" are the same physical
   // card. Group by (season, numeric prefix); prefer Z, fall back to A.
   // Mirrors /api/progress/[nickname]/[member]/route.ts's own dedup so the
@@ -117,14 +131,22 @@ export async function loadMemberProgress(
   }
 
   const result: MemberProgressCollection[] = deduped
-    .map((c) => ({
-      collectionNo: c.collectionNo,
-      season: c.season,
-      class: c.class,
-      onOffline: c.onOffline,
-      thumbnailImage: c.thumbnailImage,
-      ownedCount: ownedMap.get(c.id) ?? 0,
-    }))
+    .map((c) => {
+      const tradability = tradabilityById.get(c.id);
+      return {
+        collectionNo: c.collectionNo,
+        season: c.season,
+        class: c.class,
+        onOffline: c.onOffline,
+        thumbnailImage: c.thumbnailImage,
+        ownedCount: ownedMap.get(c.id) ?? 0,
+        globalTotalCount: tradability?.totalCount ?? 0,
+        globalTradableCount: tradability?.tradableCount ?? 0,
+        progressCountable:
+          isCollectionProgressCountable(c) &&
+          hasGlobalTradableCopy(tradability),
+      };
+    })
     .sort((a, b) => {
       const sc = compareSeasons(a.season, b.season);
       if (sc !== 0) return sc;

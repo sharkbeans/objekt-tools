@@ -169,13 +169,11 @@ function ObjektThumb({ item }: { item: TradeItem }) {
             className="fixed z-50 rounded-md overflow-hidden shadow-lg border bg-background pointer-events-none"
             style={{ top: rect.top, right: window.innerWidth - rect.left + 8 }}
           >
-            <Image
+            {/* biome-ignore lint/performance/noImgElement: Hover preview uses the canonical remote card asset. */}
+            <img
               src={imageUrl}
               alt={item.collectionId}
-              width={128}
-              height={176}
               className="w-32 h-auto block"
-              unoptimized
             />
           </div>,
           document.body,
@@ -328,13 +326,11 @@ function ObjektLabel({
       </button>
       {show && imageUrl && (
         <span className="absolute left-0 bottom-full mb-1 z-50 rounded-md overflow-hidden shadow-lg border bg-background">
-          <Image
+          {/* biome-ignore lint/performance/noImgElement: Hover preview uses the canonical remote card asset. */}
+          <img
             src={imageUrl}
             alt={item.collectionId}
-            width={96}
-            height={132}
             className="w-24 h-auto block"
-            unoptimized
           />
         </span>
       )}

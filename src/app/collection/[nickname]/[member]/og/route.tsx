@@ -103,8 +103,11 @@ export async function GET(
   }
 
   const pal = DARK;
-  const totalCards = progress.collections.length;
-  const owned = progress.collections.filter((c) => c.ownedCount > 0);
+  const countableCollections = progress.collections.filter(
+    (c) => c.progressCountable,
+  );
+  const totalCards = countableCollections.length;
+  const owned = countableCollections.filter((c) => c.ownedCount > 0);
   const ownedUnique = owned.length;
   const percent =
     totalCards > 0 ? Math.round((ownedUnique / totalCards) * 100) : 0;
@@ -128,7 +131,7 @@ export async function GET(
     representative: (typeof owned)[number];
   };
   const seasonTotals = new Map<string, number>();
-  for (const c of progress.collections) {
+  for (const c of countableCollections) {
     seasonTotals.set(c.season, (seasonTotals.get(c.season) ?? 0) + 1);
   }
   const seasonGroups = new Map<string, typeof owned>();

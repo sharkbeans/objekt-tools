@@ -79,7 +79,7 @@ type Board = {
 };
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ nickname: string; member: string }> },
 ) {
   const { nickname, member: rawMember } = await params;
@@ -112,8 +112,17 @@ export async function GET(
     compareSeasons,
   );
   const latestSeason = seasons[seasons.length - 1];
-  const seasonCollections = latestSeason
-    ? progress.collections.filter((c) => c.season === latestSeason)
+  // ?season=Binary01 etc. picks a specific season's grid instead of the
+  // latest — case-insensitive, and falls back to latest if the requested
+  // season doesn't exist for this member (typo, or a season this member
+  // has no cards in at all) rather than 404ing.
+  const requestedSeason = request.nextUrl.searchParams.get("season");
+  const season = requestedSeason
+    ? (seasons.find((s) => s.toLowerCase() === requestedSeason.toLowerCase()) ??
+      latestSeason)
+    : latestSeason;
+  const seasonCollections = season
+    ? progress.collections.filter((c) => c.season === season)
     : [];
 
   // Group into per-edition First/Special pools. Since seasonCollections is
@@ -406,7 +415,7 @@ export async function GET(
             color: DARK.fg,
           }}
         >
-          {latestSeason ? `${latestSeason} Grid` : "Grid"}
+          {season ? `${season} Grid` : "Grid"}
         </div>
         {totalFirsts > 0 && (
           <div

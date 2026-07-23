@@ -1,10 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2Icon } from "lucide-react";
+import { ExternalLinkIcon, Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { TiltCard } from "@/components/tilt-card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,22 @@ interface Props {
 function artistLabel(artist?: string) {
   if (!artist) return null;
   return artist === "artms" ? "ARTMS" : artist;
+}
+
+function apolloUrl(collection: ProgressCollection) {
+  const slug = [collection.season, collection.member, collection.collectionNo]
+    .filter(Boolean)
+    .join("-")
+    .toLowerCase();
+  return `https://apollo.cafe/?id=${slug}`;
+}
+
+function tradableValue(collection: ProgressCollection) {
+  if (collection.globalTotalCount === 0) return "0.00% (0)";
+
+  const percent =
+    (collection.globalTradableCount / collection.globalTotalCount) * 100;
+  return `${percent.toFixed(2)}% (${collection.globalTradableCount.toLocaleString()})`;
 }
 
 function Pill({ label, value }: { label: string; value: string }) {
@@ -207,7 +224,7 @@ export function DexDetailDialog({ collection, address, onOpenChange }: Props) {
                   label="Type"
                   value={c.onOffline === "online" ? "Digital" : "Physical"}
                 />
-                <Pill label="Collection No." value={c.collectionNo} />
+                <Pill label="Tradable" value={tradableValue(c)} />
               </div>
 
               {/* Ownership */}
@@ -215,6 +232,16 @@ export function DexDetailDialog({ collection, address, onOpenChange }: Props) {
                 <span className="font-medium text-foreground">
                   {c.ownedCount > 0 ? `Owned ×${c.ownedCount}` : "Not owned"}
                 </span>
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={apolloUrl(c)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View in Apollo
+                    <ExternalLinkIcon />
+                  </a>
+                </Button>
               </div>
 
               {/* Serials owned */}
