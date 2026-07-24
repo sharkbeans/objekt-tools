@@ -14,7 +14,13 @@ export async function shareOrDownloadCanvas(
       "image/png",
     ),
   );
+  return shareOrDownloadBlob(blob, fileName);
+}
 
+export async function shareOrDownloadBlob(
+  blob: Blob,
+  fileName: string,
+): Promise<ShareOutcome> {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const canShareFiles =
     isMobile &&

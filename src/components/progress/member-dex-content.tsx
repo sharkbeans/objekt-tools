@@ -1,12 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-  ChevronDownIcon,
-  LayoutGridIcon,
-  Loader2Icon,
-  ShareIcon,
-} from "lucide-react";
+import { ChevronDownIcon, LayoutGridIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -56,13 +51,14 @@ import type {
   ProgressMemberResponse,
   ProgressMemberTradabilityResponse,
 } from "@/lib/progress/types";
-import { sectionHref } from "@/lib/sections";
+import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 import { GridSection } from "./grid-section";
 import { ObjektScanStatus } from "./objekt-scan-status";
 import type { ProgressNavigationState } from "./progress-search";
 import { ProgressSearch } from "./progress-search";
 import { SeasonSection } from "./season-section";
+import { ShareButton } from "./share-dialog";
 
 interface SeasonColorsResponse {
   colors: Record<string, string>;
@@ -81,7 +77,6 @@ interface StoredSelection {
   perRow?: number;
   gridActiveSeasons?: string[];
   gridActiveEditions?: Edition[];
-  viewConsumed?: boolean;
 }
 
 function chipClass(active: boolean): string {
@@ -564,7 +559,6 @@ export function MemberDexContent({
         }
         if (stored.gridActiveEditions)
           setGridActiveEditions(stored.gridActiveEditions);
-        if (stored.viewConsumed != null) setViewConsumed(stored.viewConsumed);
       }
     } catch {
       // Malformed/unavailable storage — fall back to defaults.
@@ -583,7 +577,6 @@ export function MemberDexContent({
       perRow,
       gridActiveSeasons,
       gridActiveEditions,
-      viewConsumed,
     };
     localStorage.setItem(
       progressSelectionStorageKey(address, member),
@@ -599,7 +592,6 @@ export function MemberDexContent({
     perRow,
     gridActiveSeasons,
     gridActiveEditions,
-    viewConsumed,
   ]);
 
   const setActiveTab = useCallback(
@@ -953,6 +945,20 @@ export function MemberDexContent({
     void doShare();
   }, [filtered.length, doShare]);
 
+  const handleShareLink = useCallback(async () => {
+    const token = Math.random().toString(36).slice(2, 8);
+    const params = new URLSearchParams({ share: token });
+    const url = sectionAbsoluteUrl(
+      `/collection/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}?${params}`,
+    );
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Couldn't copy link");
+    }
+  }, [nickname, member]);
+
   const dexContent = (
     <div className="space-y-4">
       <SeasonChipRow
@@ -1071,25 +1077,18 @@ export function MemberDexContent({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleShare}
+        <ShareButton
+          onShareLink={handleShareLink}
+          onGenerateImage={handleShare}
+          generatingImage={sharing}
           disabled={
             sharing ||
             !displayOwnershipLoaded ||
             !tradabilityLoaded ||
             totals.total === 0
           }
-          className="ml-auto gap-2"
-        >
-          {sharing ? (
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-          ) : (
-            <ShareIcon className="h-4 w-4" />
-          )}
-          Share card
-        </Button>
+          className="ml-auto"
+        />
       </div>
 
       <div className="space-y-8">
