@@ -1,6 +1,5 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { SearchIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -10,10 +9,16 @@ import {
   readStoredCosmoUsername,
   storeCosmoUsername,
 } from "@/lib/cosmo-username-storage";
-import { progressOverviewQueryKey } from "@/lib/progress/identity-keys";
-import type { ProgressOverviewResponse } from "@/lib/progress/types";
+import type { ProgressIdentityResponse } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
+
+export type ProgressNavigationState = {
+  nickname: string;
+  phase: "resolving" | "opening";
+} | null;
+
+export const PROGRESS_NAVIGATION_EVENT = "progress-user-navigation";
 
 export function ProgressSearch({
   defaultNickname,
@@ -21,19 +26,29 @@ export function ProgressSearch({
   placeholder = "e.g. sharkbeans",
   buttonLabel = "Search",
   buildHref,
+  onNavigationChange,
 }: {
   defaultNickname?: string;
   showLabel?: boolean;
   placeholder?: string;
   buttonLabel?: string;
-  buildHref?: (nickname: string, data: ProgressOverviewResponse) => string;
+  buildHref?: (nickname: string, data: ProgressIdentityResponse) => string;
+  onNavigationChange?: (state: ProgressNavigationState) => void;
 }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [value, setValue] = useState(defaultNickname ?? "");
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function publishNavigation(state: ProgressNavigationState) {
+    onNavigationChange?.(state);
+    window.dispatchEvent(
+      new CustomEvent<ProgressNavigationState>(PROGRESS_NAVIGATION_EVENT, {
+        detail: state,
+      }),
+    );
+  }
 
   useEffect(() => {
     if (!error) return;
@@ -55,10 +70,21 @@ export function ProgressSearch({
     e.preventDefault();
     const trimmed = value.trim();
     if (!trimmed || checking) return;
+    if (
+      defaultNickname &&
+      trimmed.toLowerCase() === defaultNickname.toLowerCase()
+    ) {
+      setValue(defaultNickname);
+      return;
+    }
+    let navigationStarted = false;
     setError(null);
     setChecking(true);
+    publishNavigation({ nickname: trimmed, phase: "resolving" });
     try {
-      const res = await fetch(`/api/progress/${encodeURIComponent(trimmed)}`);
+      const res = await fetch(
+        `/api/progress/resolve/${encodeURIComponent(trimmed)}`,
+      );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setError(
@@ -68,20 +94,34 @@ export function ProgressSearch({
         );
         return;
       }
-      const data: ProgressOverviewResponse = await res.json();
-      queryClient.setQueryData(progressOverviewQueryKey(data.address), data);
+      const data: ProgressIdentityResponse = await res.json();
       storeCosmoUsername(data.nickname, data.address);
-      router.push(
-        buildHref
-          ? buildHref(data.nickname, data)
-          : sectionHref(`/collection/${data.nickname}`, {
-              currentSection: "collect",
-            }),
-      );
+      const href = buildHref
+        ? buildHref(data.nickname, data)
+        : sectionHref(`/collection/${data.nickname}`, {
+            currentSection: "collect",
+          });
+      const target = new URL(href, window.location.href);
+      const current = new URL(window.location.href);
+      if (
+        target.origin === current.origin &&
+        target.pathname === current.pathname &&
+        target.search === current.search
+      ) {
+        setValue(data.nickname);
+        return;
+      }
+
+      publishNavigation({ nickname: data.nickname, phase: "opening" });
+      router.push(href);
+      navigationStarted = true;
     } catch {
       setError("Failed to look up user. Try again.");
     } finally {
-      setChecking(false);
+      if (!navigationStarted) {
+        setChecking(false);
+        publishNavigation(null);
+      }
     }
   }
 

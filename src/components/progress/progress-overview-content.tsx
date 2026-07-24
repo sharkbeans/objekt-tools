@@ -18,8 +18,13 @@ import { decodeGroupedValue } from "@/lib/filter-utils";
 import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type { ProgressRollup } from "@/lib/progress/types";
+import { cn } from "@/lib/utils";
 import { MemberProgressCard } from "./member-progress-card";
-import { ProgressSearch } from "./progress-search";
+import { ObjektScanStatus } from "./objekt-scan-status";
+import {
+  type ProgressNavigationState,
+  ProgressSearch,
+} from "./progress-search";
 
 interface Props {
   nickname: string;
@@ -64,6 +69,7 @@ export function ProgressOverviewContent({ nickname, address }: Props) {
 
   const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
   const [showOthers, setShowOthers] = useState(false);
+  const [switchingTo, setSwitchingTo] = useState<ProgressNavigationState>(null);
 
   const filteredRollups = useMemo(() => {
     if (!data) return [];
@@ -251,7 +257,7 @@ export function ProgressOverviewContent({ nickname, address }: Props) {
           size="sm"
           variant="outline"
           onClick={handleShare}
-          disabled={sharing || (clientReady && !data)}
+          disabled={sharing || switchingTo !== null || (clientReady && !data)}
           className="shrink-0 gap-2"
         >
           {sharing ? (
@@ -268,99 +274,124 @@ export function ProgressOverviewContent({ nickname, address }: Props) {
           defaultNickname={data?.nickname ?? nickname}
           showLabel={false}
           placeholder="Search another Cosmo username"
+          onNavigationChange={setSwitchingTo}
         />
       </div>
 
-      <ObjektFilterBar
-        filters={filters}
-        onChange={setFilters}
-        showSearch={false}
-        showSort={false}
-        showFilterMode={false}
-        showMember={false}
-      />
+      <div className="relative">
+        <div
+          className={cn(
+            "space-y-4 transition-[filter,opacity] duration-200 ease-in-out motion-reduce:transition-none",
+            switchingTo &&
+              "pointer-events-none opacity-50 blur-[var(--reveal-blur)]",
+          )}
+        >
+          <ObjektFilterBar
+            filters={filters}
+            onChange={setFilters}
+            showSearch={false}
+            showSort={false}
+            showFilterMode={false}
+            showMember={false}
+          />
 
-      {error ? (
-        <div className="text-center py-12 text-muted-foreground">
-          {(error as Error & { status?: number }).status === 404
-            ? "Cosmo user not found."
-            : (error as Error & { status?: number }).status === 429
-              ? "Too many requests. Try again later."
-              : "Failed to load collection data."}
-        </div>
-      ) : isLoading || !data ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-            <span>Loading {nickname}&apos;s collection</span>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
-              <div
-                key={id}
-                className="rounded-lg border border-border bg-card p-3 space-y-2"
-              >
-                <div className="flex gap-3">
-                  <div className="h-13 w-13 bg-muted animate-pulse rounded-full" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                    <div className="h-3 w-12 bg-muted animate-pulse rounded" />
-                  </div>
-                </div>
-                <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <>
-          {[...artistGroups.entries()].map(([artist, { real, others }]) => (
-            <div key={artist} className="space-y-3">
-              {showArtistLabel && (
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  {artist === "artms" ? "ARTMS" : artist}
-                </h2>
-              )}
+          {error ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {(error as Error & { status?: number }).status === 404
+                ? "Cosmo user not found."
+                : (error as Error & { status?: number }).status === 429
+                  ? "Too many requests. Try again later."
+                  : "Failed to load collection data."}
+            </div>
+          ) : isLoading || !data ? (
+            <div className="space-y-4">
+              <ObjektScanStatus
+                label={`Matching ${nickname}'s owned objekts…`}
+                longWait
+              />
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {[...real.entries()].map(([member, rollups]) => (
-                  <MemberProgressCard
-                    key={member}
-                    nickname={data.nickname}
-                    member={member}
-                    artist={artist}
-                    rollups={rollups}
-                    imageUrl={memberImages[`${artist}|${member}`]}
-                  />
+                {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
+                  <div
+                    key={id}
+                    className="rounded-lg border border-border bg-card p-3 space-y-2"
+                  >
+                    <div className="flex gap-3">
+                      <div className="h-13 w-13 bg-muted animate-pulse rounded-full" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                        <div className="h-3 w-12 bg-muted animate-pulse rounded" />
+                      </div>
+                    </div>
+                    <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
+                  </div>
                 ))}
               </div>
-              {showOthers && others.size > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {[...others.entries()].map(([member, rollups]) => (
-                    <MemberProgressCard
-                      key={member}
-                      nickname={data.nickname}
-                      member={member}
-                      artist={artist}
-                      rollups={rollups}
-                      imageUrl={memberImages[`${artist}|${member}`]}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
-          ))}
+          ) : (
+            <>
+              {[...artistGroups.entries()].map(([artist, { real, others }]) => (
+                <div key={artist} className="space-y-3">
+                  {showArtistLabel && (
+                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                      {artist === "artms" ? "ARTMS" : artist}
+                    </h2>
+                  )}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {[...real.entries()].map(([member, rollups]) => (
+                      <MemberProgressCard
+                        key={member}
+                        nickname={data.nickname}
+                        member={member}
+                        artist={artist}
+                        rollups={rollups}
+                        imageUrl={memberImages[`${artist}|${member}`]}
+                      />
+                    ))}
+                  </div>
+                  {showOthers && others.size > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {[...others.entries()].map(([member, rollups]) => (
+                        <MemberProgressCard
+                          key={member}
+                          nickname={data.nickname}
+                          member={member}
+                          artist={artist}
+                          rollups={rollups}
+                          imageUrl={memberImages[`${artist}|${member}`]}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
 
-          {hasOthers && (
-            <button
-              type="button"
-              onClick={() => setShowOthers((v) => !v)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showOthers ? "Hide others" : "Show others"}
-            </button>
+              {hasOthers && (
+                <button
+                  type="button"
+                  onClick={() => setShowOthers((v) => !v)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showOthers ? "Hide others" : "Show others"}
+                </button>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+
+        {switchingTo && (
+          <div className="absolute inset-x-0 top-16 flex justify-center">
+            <div className="rounded-xl border border-border bg-background/90 px-4 py-2 shadow-sm backdrop-blur">
+              <ObjektScanStatus
+                label={
+                  switchingTo.phase === "resolving"
+                    ? `Finding ${switchingTo.nickname}…`
+                    : `Opening ${switchingTo.nickname}'s collection…`
+                }
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

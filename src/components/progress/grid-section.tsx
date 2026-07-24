@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { LinkIcon } from "lucide-react";
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { Edition } from "@/lib/edition";
@@ -10,6 +10,7 @@ import { getCollectionEdition } from "@/lib/edition";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { sectionAbsoluteUrl } from "@/lib/sections";
 import { GridBoard } from "./grid-board";
+import { ObjektScanStatus } from "./objekt-scan-status";
 
 interface Props {
   member: string;
@@ -18,6 +19,8 @@ interface Props {
   address: string;
   nickname: string;
   viewConsumed: boolean;
+  ownershipLoaded: boolean;
+  tradabilityLoaded: boolean;
 }
 
 interface GridRankResponse {
@@ -52,7 +55,10 @@ function GridRankBadge({
   member: string;
   season: string;
 }) {
-  const { data } = useQuery<GridRankResponse>({
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => setClientReady(true), []);
+
+  const rankQuery = useQuery<GridRankResponse>({
     queryKey: ["grid-rank", "address", address.toLowerCase(), member, season],
     queryFn: async () => {
       const res = await fetch(
@@ -64,7 +70,12 @@ function GridRankBadge({
     staleTime: 5 * 60_000,
     retry: false,
   });
+  const data = clientReady ? rankQuery.data : undefined;
+  const isPending = !clientReady || rankQuery.isPending;
 
+  if (isPending) {
+    return <ObjektScanStatus compact label="Updating rank…" />;
+  }
   if (!data || data.rank === null || data.count === 0) return null;
 
   const rankText = `#${data.rank}`;
@@ -136,6 +147,8 @@ export function GridSection({
   address,
   nickname,
   viewConsumed,
+  ownershipLoaded,
+  tradabilityLoaded,
 }: Props) {
   const byEdition = useMemo(() => {
     const map = new Map<
@@ -208,6 +221,8 @@ export function GridSection({
                 nickname={nickname}
                 seasonCollections={collections}
                 viewConsumed={viewConsumed}
+                ownershipLoaded={ownershipLoaded}
+                tradabilityLoaded={tradabilityLoaded}
               />
             </Fragment>
           );

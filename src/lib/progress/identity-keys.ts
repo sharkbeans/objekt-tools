@@ -6,6 +6,26 @@ export function progressMemberQueryKey(address: string, member: string) {
   return ["progress", "address", address.toLowerCase(), member] as const;
 }
 
+export function progressMemberOwnershipQueryKey(
+  address: string,
+  member: string,
+) {
+  return [
+    "progress-ownership",
+    "address",
+    address.toLowerCase(),
+    member,
+  ] as const;
+}
+
+export function progressMemberCatalogQueryKey(member: string) {
+  return ["progress-member-catalog", member] as const;
+}
+
+export function progressMemberTradabilityQueryKey(member: string) {
+  return ["progress-member-tradability", member] as const;
+}
+
 export function progressSelectionStorageKey(
   address: string,
   member: string,

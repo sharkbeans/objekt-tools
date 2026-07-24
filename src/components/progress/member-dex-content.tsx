@@ -41,20 +41,26 @@ import {
   type Edition,
   getCollectionEdition,
 } from "@/lib/edition";
-import { compareSeasons } from "@/lib/filter-options";
 import { isCollectionProgressCountable } from "@/lib/progress/countable";
 import {
-  progressMemberQueryKey,
+  progressMemberCatalogQueryKey,
+  progressMemberOwnershipQueryKey,
+  progressMemberTradabilityQueryKey,
   progressSelectionStorageKey,
 } from "@/lib/progress/identity-keys";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
   ProgressCollection,
+  ProgressMemberCatalogResponse,
+  ProgressMemberOwnershipResponse,
   ProgressMemberResponse,
+  ProgressMemberTradabilityResponse,
 } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 import { GridSection } from "./grid-section";
+import { ObjektScanStatus } from "./objekt-scan-status";
+import type { ProgressNavigationState } from "./progress-search";
 import { ProgressSearch } from "./progress-search";
 import { SeasonSection } from "./season-section";
 
@@ -277,25 +283,6 @@ function countsForProgress(collections: ProgressCollection[]) {
 // fetch, so these skeletons cover just that: a season header plus the grid
 // (dexContent) or side-by-side boards (gridContent).
 
-function SeasonGridSkeleton({ perRow }: { perRow: number }) {
-  return (
-    <div className="space-y-2">
-      <div className="h-6 w-20 rounded bg-muted animate-pulse" />
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))` }}
-      >
-        {Array.from({ length: perRow * 4 }, (_, i) => `sk-${i}`).map((id) => (
-          <div
-            key={id}
-            className="aspect-63/88 rounded bg-muted animate-pulse"
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // Mirrors a single GridBoard: a 3x3 board of First-copy cells around one
 // reward-slot cell, matching grid-board.tsx's layout so the skeleton doesn't
 // jump in size/shape once real boards render in.
@@ -335,19 +322,51 @@ interface Props {
   nickname: string;
   address: string;
   member: string;
+  initialCatalog: ProgressMemberCatalogResponse;
+  availableSeasons: string[];
 }
 
-export function MemberDexContent({ nickname, address, member }: Props) {
+export function MemberDexContent({
+  nickname,
+  address,
+  member,
+  initialCatalog,
+  availableSeasons,
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab: ViewTab =
     searchParams.get("view") === "grid" ? "grid" : "dex";
-  const { data, error } = useQuery<ProgressMemberResponse>({
-    queryKey: progressMemberQueryKey(address, member),
+  const [clientReady, setClientReady] = useState(false);
+  const [switchingTo, setSwitchingTo] = useState<ProgressNavigationState>(null);
+  useEffect(() => setClientReady(true), []);
+
+  const catalogQuery = useQuery<ProgressMemberCatalogResponse>({
+    queryKey: progressMemberCatalogQueryKey(member),
     queryFn: async () => {
       const res = await fetch(
-        `/api/progress/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}`,
+        `/api/progress/catalog/${encodeURIComponent(member)}`,
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(body.error ?? "Failed to load"), {
+          status: res.status,
+        });
+      }
+      return res.json();
+    },
+    initialData: initialCatalog,
+    initialDataUpdatedAt: 0,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+  const ownershipQuery = useQuery<ProgressMemberOwnershipResponse>({
+    queryKey: progressMemberOwnershipQueryKey(address, member),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/progress/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}/ownership`,
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -360,6 +379,65 @@ export function MemberDexContent({ nickname, address, member }: Props) {
     staleTime: 60_000,
     retry: false,
   });
+
+  const tradabilityQuery = useQuery<ProgressMemberTradabilityResponse>({
+    queryKey: progressMemberTradabilityQueryKey(member),
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/progress/catalog/${encodeURIComponent(member)}/tradability`,
+      );
+      if (!res.ok) throw new Error("Failed to load tradability");
+      return res.json();
+    },
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+  // QueryClient can already hold data during client-side navigation. Keep
+  // the first client render identical to the server-rendered catalog, then
+  // apply cached/fetched overlays after hydration.
+  const catalog = clientReady
+    ? (catalogQuery.data ?? initialCatalog)
+    : initialCatalog;
+  const ownership = clientReady ? ownershipQuery.data : undefined;
+  const tradability = clientReady ? tradabilityQuery.data : undefined;
+  const ownershipError = clientReady ? ownershipQuery.error : null;
+  const ownershipLoaded = ownership !== undefined;
+  const displayOwnershipLoaded = ownershipLoaded && switchingTo === null;
+  const tradabilityLoaded = tradability !== undefined;
+
+  const data = useMemo<ProgressMemberResponse>(() => {
+    return {
+      nickname: ownership?.nickname ?? nickname,
+      address: ownership?.address ?? address,
+      member: catalog.member,
+      artist: catalog.artist,
+      collections: catalog.collections.map((collection) => {
+        const owned = ownership?.counts[collection.collectionId];
+        const global = tradability?.counts[collection.collectionId];
+        return {
+          collectionId: collection.collectionId,
+          collectionNo: collection.collectionNo,
+          season: collection.season,
+          class: collection.class,
+          onOffline: collection.onOffline,
+          thumbnailImage: collection.thumbnailImage,
+          frontImage: collection.frontImage,
+          backImage: collection.backImage,
+          accentColor: collection.accentColor,
+          member: collection.member,
+          artist: collection.artist,
+          ownedCount: owned?.ownedCount ?? 0,
+          transferableCount: owned?.transferableCount ?? 0,
+          globalTotalCount: global?.globalTotalCount ?? 0,
+          globalTradableCount: global?.globalTradableCount ?? 0,
+          gridMintCount: 0,
+          progressCountable:
+            global?.progressCountable ?? collection.baseProgressCountable,
+        };
+      }),
+    };
+  }, [address, catalog, nickname, ownership, tradability]);
 
   const { data: gridMintData } = useQuery<GridMintCountsResponse>({
     queryKey: ["progress-grid-mints", "address", address.toLowerCase(), member],
@@ -383,7 +461,8 @@ export function MemberDexContent({ nickname, address, member }: Props) {
   // to render real totals and real filter chips immediately instead of
   // waiting on the slower fetch — only the objekt cells themselves need a
   // loading state below.
-  const { data: overviewData } = useProgressOverview(nickname, address);
+  const overviewQuery = useProgressOverview(nickname, address);
+  const overviewData = clientReady ? overviewQuery.data : undefined;
 
   const earlyTotals = useMemo(() => {
     if (!overviewData) return null;
@@ -404,24 +483,6 @@ export function MemberDexContent({ nickname, address, member }: Props) {
     return overviewData.rollups.find((r) => r.member === member)?.artist ?? "";
   }, [overviewData, member]);
 
-  const earlySeasons = useMemo(() => {
-    if (!overviewData) return [];
-    const seen = new Set<string>();
-    for (const r of overviewData.rollups) {
-      if (r.member === member) seen.add(r.season);
-    }
-    return [...seen].sort(compareSeasons);
-  }, [overviewData, member]);
-
-  const earlyClasses = useMemo(() => {
-    if (!overviewData) return [];
-    const seen = new Set<string>();
-    for (const r of overviewData.rollups) {
-      if (r.member === member) seen.add(r.class);
-    }
-    return [...seen].sort();
-  }, [overviewData, member]);
-
   // Same class/artist rules getCollectionEdition uses, just without needing
   // per-collection numbers — good enough to guess which seasons are
   // grid-eligible, and whether the Collection/Grid tab strip should even
@@ -436,26 +497,16 @@ export function MemberDexContent({ nickname, address, member }: Props) {
     );
   }, [overviewData, member]);
 
-  const earlyGridSeasons = useMemo(() => {
-    if (!overviewData) return [];
-    const seen = new Set<string>();
-    for (const r of overviewData.rollups) {
-      if (
-        r.member === member &&
-        r.artist !== "idntt" &&
-        (r.class === "First" || r.class === "Special" || r.class === "Motion")
-      ) {
-        seen.add(r.season);
-      }
-    }
-    return [...seen].sort(compareSeasons);
-  }, [overviewData, member]);
-
   // Dex-scoped filters
   const [dexActiveClasses, setDexActiveClasses] = useState<string[]>([]);
-  const [dexActiveSeasons, setDexActiveSeasons] = useState<string[]>([]);
+  const [dexActiveSeasons, setDexActiveSeasons] = useState<string[]>(() => {
+    const latest = initialCatalog.collections.at(-1)?.season;
+    return latest ? [latest] : [];
+  });
   const [dexActiveEditions, setDexActiveEditions] = useState<Edition[]>([]);
-  const [dexSeasonInitialized, setDexSeasonInitialized] = useState(false);
+  const [dexSeasonInitialized, setDexSeasonInitialized] = useState(
+    initialCatalog.collections.length > 0,
+  );
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [ownedOnly, setOwnedOnly] = useState(false);
   // Objekts per row: 5 on desktop, 3 on mobile (set after mount to avoid a
@@ -588,13 +639,10 @@ export function MemberDexContent({ nickname, address, member }: Props) {
   });
   const seasonColors = seasonColorsData?.colors ?? {};
 
-  // Falls back to the overview-derived guess until the per-member fetch
-  // resolves — the season/class enumeration for a member doesn't actually
-  // depend on that fetch, so there's no reason to block the chips on it.
   const allSeasons = useMemo(() => {
-    if (!data) return earlySeasons;
     const seen = new Set<string>();
-    const out: string[] = [];
+    const out: string[] = [...availableSeasons];
+    for (const season of out) seen.add(season);
     for (const c of data.collections) {
       if (!seen.has(c.season)) {
         seen.add(c.season);
@@ -602,16 +650,14 @@ export function MemberDexContent({ nickname, address, member }: Props) {
       }
     }
     return out;
-  }, [data, earlySeasons]);
+  }, [availableSeasons, data]);
 
   const allClasses = useMemo(() => {
-    if (!data) return earlyClasses;
     return [...new Set(data.collections.map((c) => c.class))].sort();
-  }, [data, earlyClasses]);
+  }, [data]);
 
   const editionByCollectionId = useMemo(() => {
     const map = new Map<string, Edition>();
-    if (!data) return map;
     for (const c of data.collections) {
       const edition = getCollectionEdition({
         artist: c.artist,
@@ -631,7 +677,6 @@ export function MemberDexContent({ nickname, address, member }: Props) {
   // a season with only idntt-style non-editioned classes shouldn't show up
   // as a Grid season chip even if it's a valid Dex season.
   const gridAllSeasons = useMemo(() => {
-    if (!data) return earlyGridSeasons;
     const seen = new Set<string>();
     const out: string[] = [];
     for (const c of data.collections) {
@@ -641,7 +686,7 @@ export function MemberDexContent({ nickname, address, member }: Props) {
       }
     }
     return out;
-  }, [data, editionByCollectionId, earlyGridSeasons]);
+  }, [data, editionByCollectionId]);
 
   // Default each section to the latest (current) season once data loads.
   // allSeasons/gridAllSeasons are in ascending order, so the last entry is
@@ -710,7 +755,6 @@ export function MemberDexContent({ nickname, address, member }: Props) {
   // Base filter: class + season + edition (used for accurate totals). Empty
   // arrays mean "all".
   const baseFiltered = useMemo(() => {
-    if (!data) return [];
     return data.collections.filter(
       (c) =>
         (dexActiveClasses.length === 0 || dexActiveClasses.includes(c.class)) &&
@@ -734,10 +778,11 @@ export function MemberDexContent({ nickname, address, member }: Props) {
     () =>
       baseFiltered.filter(
         (c) =>
-          (!unownedOnly || c.ownedCount === 0) &&
-          (!ownedOnly || c.ownedCount > 0),
+          !displayOwnershipLoaded ||
+          ((!unownedOnly || c.ownedCount === 0) &&
+            (!ownedOnly || c.ownedCount > 0)),
       ),
-    [baseFiltered, unownedOnly, ownedOnly],
+    [baseFiltered, displayOwnershipLoaded, unownedOnly, ownedOnly],
   );
 
   const grouped = useMemo(() => {
@@ -752,7 +797,7 @@ export function MemberDexContent({ nickname, address, member }: Props) {
 
   // Grid tab has its own season+edition scope, independent of Dex's.
   const gridGrouped = useMemo(() => {
-    if (!data || !gridMintData) return new Map<string, ProgressCollection[]>();
+    if (!gridMintData) return new Map<string, ProgressCollection[]>();
     const bySeasonEdition = data.collections
       .map((c) => ({
         ...c,
@@ -785,18 +830,13 @@ export function MemberDexContent({ nickname, address, member }: Props) {
   // Header totals are always the member's full, unfiltered collection — they
   // shouldn't shift depending on which tab or filters are active.
   const totals = useMemo(() => {
-    if (!data) return { owned: 0, total: 0 };
     return countsForProgress(data.collections);
   }, [data]);
 
-  // "effective"/"display" values below fall back to the overview-derived
-  // guesses while the per-member fetch is in flight, so the header, tab
-  // strip, and filter chips can render for real immediately instead of
-  // waiting — only SeasonGridSkeleton/GridBoardsRowSkeleton (the objekt
-  // cells) actually depend on `data`.
-  const effectiveArtist = data?.artist ?? earlyArtist;
-  const effectiveHasEditions = data ? hasEditions : guessedHasEditions;
-  const displayTotals = data ? totals : earlyTotals;
+  const effectiveArtist = data.artist || earlyArtist;
+  const effectiveHasEditions = hasEditions || guessedHasEditions;
+  const displayTotals =
+    displayOwnershipLoaded && tradabilityLoaded ? totals : earlyTotals;
 
   const [sharing, setSharing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -805,7 +845,7 @@ export function MemberDexContent({ nickname, address, member }: Props) {
   const SHARE_WARN_THRESHOLD = 100;
 
   const doShare = useCallback(async () => {
-    if (!data) return;
+    if (!displayOwnershipLoaded || !tradabilityLoaded) return;
     // Share the exact set on screen so the card follows every active Dex
     // filter (season, class, owned/unowned only).
     const shareCols = filtered;
@@ -901,6 +941,8 @@ export function MemberDexContent({ nickname, address, member }: Props) {
     dexActiveClasses,
     unownedOnly,
     ownedOnly,
+    displayOwnershipLoaded,
+    tradabilityLoaded,
   ]);
 
   const handleShare = useCallback(() => {
@@ -910,24 +952,6 @@ export function MemberDexContent({ nickname, address, member }: Props) {
     }
     void doShare();
   }, [filtered.length, doShare]);
-
-  // No data yet for this member (first-ever visit, or a hard failure with
-  // nothing to fall back on). The avatar carousel and back-link live in
-  // this route's layout, not here, so they're unaffected by this and stay
-  // on screen the whole time — only the content that's genuinely still
-  // loading gets a loading state.
-  if (error) {
-    const status = (error as Error & { status?: number }).status;
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        {status === 404
-          ? "Member or user not found."
-          : status === 429
-            ? "Too many requests. Try again later."
-            : "Failed to load collection data."}
-      </div>
-    );
-  }
 
   const dexContent = (
     <div className="space-y-4">
@@ -1008,6 +1032,7 @@ export function MemberDexContent({ nickname, address, member }: Props) {
           <span className="text-sm text-muted-foreground">Unowned only</span>
           <Switch
             checked={unownedOnly}
+            disabled={!displayOwnershipLoaded}
             onCheckedChange={(v) => {
               setUnownedOnly(v);
               if (v) setOwnedOnly(false);
@@ -1018,6 +1043,7 @@ export function MemberDexContent({ nickname, address, member }: Props) {
           <span className="text-sm text-muted-foreground">Owned only</span>
           <Switch
             checked={ownedOnly}
+            disabled={!displayOwnershipLoaded}
             onCheckedChange={(v) => {
               setOwnedOnly(v);
               if (v) setUnownedOnly(false);
@@ -1049,7 +1075,12 @@ export function MemberDexContent({ nickname, address, member }: Props) {
           size="sm"
           variant="outline"
           onClick={handleShare}
-          disabled={sharing || !data || totals.total === 0}
+          disabled={
+            sharing ||
+            !displayOwnershipLoaded ||
+            !tradabilityLoaded ||
+            totals.total === 0
+          }
           className="ml-auto gap-2"
         >
           {sharing ? (
@@ -1061,22 +1092,18 @@ export function MemberDexContent({ nickname, address, member }: Props) {
         </Button>
       </div>
 
-      <div className={cn("t-skel", data && "is-revealed")}>
-        <div className="t-skel-skeleton is-pulsing space-y-8">
-          <SeasonGridSkeleton perRow={perRow} />
-        </div>
-        <div className="t-skel-content space-y-8">
-          {data &&
-            [...grouped.entries()].map(([season, cols]) => (
-              <SeasonSection
-                key={season}
-                season={season}
-                collections={cols}
-                perRow={perRow}
-                address={data.address}
-              />
-            ))}
-        </div>
+      <div className="space-y-8">
+        {[...grouped.entries()].map(([season, cols]) => (
+          <SeasonSection
+            key={season}
+            season={season}
+            collections={cols}
+            perRow={perRow}
+            address={data.address}
+            ownershipLoaded={displayOwnershipLoaded}
+            tradabilityLoaded={tradabilityLoaded}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1122,13 +1149,12 @@ export function MemberDexContent({ nickname, address, member }: Props) {
         </div>
       </div>
 
-      <div className={cn("t-skel", data && gridMintData && "is-revealed")}>
+      <div className={cn("t-skel", gridMintData && "is-revealed")}>
         <div className="t-skel-skeleton is-pulsing space-y-8">
           <GridBoardsRowSkeleton />
         </div>
         <div className="t-skel-content space-y-8">
-          {data &&
-            gridMintData &&
+          {gridMintData &&
             [...gridGrouped.entries()].map(([season, cols]) => (
               <GridSection
                 key={season}
@@ -1138,6 +1164,8 @@ export function MemberDexContent({ nickname, address, member }: Props) {
                 address={data.address}
                 nickname={data.nickname}
                 viewConsumed={viewConsumed}
+                ownershipLoaded={displayOwnershipLoaded}
+                tradabilityLoaded={tradabilityLoaded}
               />
             ))}
         </div>
@@ -1149,58 +1177,93 @@ export function MemberDexContent({ nickname, address, member }: Props) {
     <div className="space-y-4 sm:space-y-6">
       <div className="max-w-xl">
         <ProgressSearch
-          defaultNickname={data?.nickname ?? nickname}
+          defaultNickname={data.nickname}
           showLabel={false}
           placeholder="Search another Cosmo username"
           buildHref={buildSameMemberHref}
+          onNavigationChange={setSwitchingTo}
         />
       </div>
 
       <div className="space-y-0.5">
-        <h1 className="text-lg font-bold sm:text-2xl">
-          {data?.member ?? member}
-        </h1>
-        <p className="text-muted-foreground">
-          {displayTotals
-            ? `${displayTotals.owned}/${displayTotals.total} collected`
-            : " "}
-        </p>
+        <h1 className="text-lg font-bold sm:text-2xl">{data.member}</h1>
+        {switchingTo ? (
+          <ObjektScanStatus
+            compact
+            label={
+              switchingTo.phase === "resolving"
+                ? `Finding ${switchingTo.nickname}…`
+                : `Opening ${switchingTo.nickname}'s collection…`
+            }
+          />
+        ) : ownershipError ? (
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            Ownership temporarily unavailable
+          </p>
+        ) : !displayOwnershipLoaded ? (
+          <ObjektScanStatus compact label="Matching owned objekts…" longWait />
+        ) : !displayTotals ? (
+          <ObjektScanStatus
+            compact
+            label="Checking collection totals…"
+            longWait
+          />
+        ) : (
+          <p className="text-muted-foreground">
+            {displayTotals.owned}/{displayTotals.total} collected
+          </p>
+        )}
       </div>
 
-      {effectiveHasEditions ? (
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "dex" | "grid")}
-          className="gap-4"
-        >
-          <TabsList
-            variant="line"
-            className="-mx-1 h-auto w-full justify-start border-b border-border px-1 pb-0"
-          >
-            <TabsTrigger
-              value="dex"
-              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
-            >
-              Collection
-            </TabsTrigger>
-            <TabsTrigger
-              value="grid"
-              className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
-            >
-              Grid
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dex" className="pt-3 sm:pt-4">
-            {dexContent}
-          </TabsContent>
-          <TabsContent value="grid" className="pt-3 sm:pt-4">
-            {gridContent}
-          </TabsContent>
-        </Tabs>
-      ) : (
-        dexContent
+      {!switchingTo && ownershipError && (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          The catalog is still viewable. Try refreshing to check ownership
+          again.
+        </p>
       )}
+
+      <div
+        className={cn(
+          "transition-[filter,opacity] duration-200 ease-in-out motion-reduce:transition-none",
+          switchingTo && "pointer-events-none opacity-45 blur-sm select-none",
+        )}
+        aria-hidden={switchingTo ? true : undefined}
+      >
+        {effectiveHasEditions ? (
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as "dex" | "grid")}
+            className="gap-4"
+          >
+            <TabsList
+              variant="line"
+              className="-mx-1 h-auto w-full justify-start border-b border-border px-1 pb-0"
+            >
+              <TabsTrigger
+                value="dex"
+                className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
+              >
+                Collection
+              </TabsTrigger>
+              <TabsTrigger
+                value="grid"
+                className="rounded-none px-3 pb-3 text-lg font-bold text-foreground/75 data-[state=active]:after:opacity-100 group-data-[orientation=horizontal]/tabs:after:bottom-0 group-data-[orientation=horizontal]/tabs:after:h-1 after:rounded-full"
+              >
+                Grid
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="dex" className="pt-3 sm:pt-4">
+              {dexContent}
+            </TabsContent>
+            <TabsContent value="grid" className="pt-3 sm:pt-4">
+              {gridContent}
+            </TabsContent>
+          </Tabs>
+        ) : (
+          dexContent
+        )}
+      </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

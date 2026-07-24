@@ -21,6 +21,8 @@ import type {
 interface Props {
   collection: ProgressCollection | null;
   address: string;
+  ownershipLoaded: boolean;
+  tradabilityLoaded: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -37,7 +39,11 @@ function apolloUrl(collection: ProgressCollection) {
   return `https://apollo.cafe/?id=${slug}`;
 }
 
-function tradableValue(collection: ProgressCollection) {
+function tradableValue(
+  collection: ProgressCollection,
+  tradabilityLoaded: boolean,
+) {
+  if (!tradabilityLoaded) return "Loading…";
   if (collection.globalTotalCount === 0) return "0.00% (0)";
 
   const percent =
@@ -184,7 +190,13 @@ function SerialsTable({
   );
 }
 
-export function DexDetailDialog({ collection, address, onOpenChange }: Props) {
+export function DexDetailDialog({
+  collection,
+  address,
+  ownershipLoaded,
+  tradabilityLoaded,
+  onOpenChange,
+}: Props) {
   const c = collection;
   const artist = artistLabel(c?.artist);
 
@@ -224,13 +236,20 @@ export function DexDetailDialog({ collection, address, onOpenChange }: Props) {
                   label="Type"
                   value={c.onOffline === "online" ? "Digital" : "Physical"}
                 />
-                <Pill label="Tradable" value={tradableValue(c)} />
+                <Pill
+                  label="Tradable"
+                  value={tradableValue(c, tradabilityLoaded)}
+                />
               </div>
 
               {/* Ownership */}
               <div className="flex items-center gap-3 pt-1 text-sm">
                 <span className="font-medium text-foreground">
-                  {c.ownedCount > 0 ? `Owned ×${c.ownedCount}` : "Not owned"}
+                  {!ownershipLoaded
+                    ? "Checking ownership…"
+                    : c.ownedCount > 0
+                      ? `Owned ×${c.ownedCount}`
+                      : "Not owned"}
                 </span>
                 <Button variant="outline" size="sm" asChild>
                   <a
@@ -245,7 +264,7 @@ export function DexDetailDialog({ collection, address, onOpenChange }: Props) {
               </div>
 
               {/* Serials owned */}
-              {c.ownedCount > 0 && (
+              {ownershipLoaded && c.ownedCount > 0 && (
                 <SerialsTable address={address} collectionId={c.collectionId} />
               )}
             </div>

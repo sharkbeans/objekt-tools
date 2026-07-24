@@ -18,15 +18,19 @@ interface Props {
   nickname: string;
   seasonCollections: ProgressCollection[];
   viewConsumed: boolean;
+  ownershipLoaded: boolean;
+  tradabilityLoaded: boolean;
 }
 
 function FirstCell({
   collection,
   displayCount,
+  ownershipLoaded,
   onOpen,
 }: {
   collection: ProgressCollection;
   displayCount: number;
+  ownershipLoaded: boolean;
   onOpen: () => void;
 }) {
   const owned = displayCount > 0;
@@ -43,8 +47,12 @@ function FirstCell({
         loading="lazy"
         className="h-full w-full object-cover"
       />
-      {!owned && <div className="absolute inset-0 bg-black/71.5" />}
-      {owned && displayCount > 1 && (
+      <div
+        className={`absolute inset-0 bg-black/71.5 transition-opacity duration-200 ${
+          ownershipLoaded && !owned ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      {ownershipLoaded && owned && displayCount > 1 && (
         <span className="absolute bottom-1 right-1 flex h-5.5 w-5.5 items-center justify-center rounded-full border-2 border-white/30 bg-black text-[11px] font-bold text-white leading-none">
           {displayCount}
         </span>
@@ -60,9 +68,11 @@ const REWARD_CYCLE_MS = 2000;
 
 function RewardCell({
   pool,
+  ownershipLoaded,
   onOpen,
 }: {
   pool: ProgressCollection[];
+  ownershipLoaded: boolean;
   onOpen: (collection: ProgressCollection) => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -98,7 +108,7 @@ function RewardCell({
       ))}
       <div
         className={`absolute inset-0 bg-black/71.5 transition-opacity duration-700 ease-in-out ${
-          owned ? "opacity-0" : "opacity-100"
+          !ownershipLoaded || owned ? "opacity-0" : "opacity-100"
         }`}
       />
     </button>
@@ -113,6 +123,8 @@ export function GridBoard({
   nickname,
   seasonCollections,
   viewConsumed,
+  ownershipLoaded,
+  tradabilityLoaded,
 }: Props) {
   const [active, setActive] = useState<ProgressCollection | null>(null);
   const [tradeOpen, setTradeOpen] = useState(false);
@@ -140,9 +152,9 @@ export function GridBoard({
         <div className="flex items-baseline gap-2">
           <h4 className="text-base font-medium">{EDITION_LABELS[edition]}</h4>
           <span className="text-sm text-muted-foreground">
-            {owned}/{firsts.length}
-            {gridded > 0 && ` · ${gridded} grids`}
-            {griddable > 0 && ` · ${griddable} griddable`}
+            {ownershipLoaded ? owned : "—"}/{firsts.length}
+            {ownershipLoaded && gridded > 0 && ` · ${gridded} grids`}
+            {ownershipLoaded && griddable > 0 && ` · ${griddable} griddable`}
           </span>
         </div>
         <Button
@@ -150,6 +162,7 @@ export function GridBoard({
           variant="outline"
           className="h-7 gap-1.5 px-2.5 text-xs"
           onClick={() => setTradeOpen(true)}
+          disabled={!ownershipLoaded}
         >
           <ArrowLeftRightIcon className="h-3.5 w-3.5" />
           Create List
@@ -166,6 +179,7 @@ export function GridBoard({
               <FirstCell
                 collection={c}
                 displayCount={displayCount}
+                ownershipLoaded={ownershipLoaded}
                 onOpen={() => setActive(c)}
               />
             </div>
@@ -173,7 +187,11 @@ export function GridBoard({
         })}
         <div style={{ gridRow: 2, gridColumn: 2 }}>
           {specials.length > 0 ? (
-            <RewardCell pool={specials} onOpen={setActive} />
+            <RewardCell
+              pool={specials}
+              ownershipLoaded={ownershipLoaded}
+              onOpen={setActive}
+            />
           ) : (
             <div className="flex aspect-11/17 w-full items-center justify-center rounded bg-muted/20 text-muted-foreground">
               ?
@@ -185,6 +203,8 @@ export function GridBoard({
       <DexDetailDialog
         collection={active}
         address={address}
+        ownershipLoaded={ownershipLoaded}
+        tradabilityLoaded={tradabilityLoaded}
         onOpenChange={(open) => {
           if (!open) setActive(null);
         }}

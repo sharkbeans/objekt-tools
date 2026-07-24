@@ -14,8 +14,8 @@ import { getGridSlots } from "@/lib/grid-progress";
 import { getGridRank } from "@/lib/progress/grid-rank";
 import {
   CosmoUnavailableError,
-  loadMemberProgress,
-  type MemberProgressCollection,
+  type GridMemberProgressCollection,
+  loadGridMemberProgress,
 } from "@/lib/progress/member-progress";
 
 export const runtime = "nodejs";
@@ -76,8 +76,8 @@ async function loadThumbnail(
 }
 
 type BoardCell =
-  | { kind: "first"; collection: MemberProgressCollection }
-  | { kind: "special"; collection: MemberProgressCollection }
+  | { kind: "first"; collection: GridMemberProgressCollection }
+  | { kind: "special"; collection: GridMemberProgressCollection }
   | null;
 
 type Board = {
@@ -100,9 +100,9 @@ export async function GET(
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
   }
 
-  let progress: Awaited<ReturnType<typeof loadMemberProgress>>;
+  let progress: Awaited<ReturnType<typeof loadGridMemberProgress>>;
   try {
-    progress = await loadMemberProgress(nickname, member);
+    progress = await loadGridMemberProgress(nickname, member);
   } catch (error) {
     if (error instanceof CosmoUnavailableError) {
       return NextResponse.json(
@@ -117,7 +117,7 @@ export async function GET(
   }
 
   // `progress.collections` is already sorted (season, then collectionNo) by
-  // loadMemberProgress, so seasons appear in chronological order here too —
+  // loadGridMemberProgress, so seasons appear in chronological order here too —
   // the last one is the latest.
   const seasons = [...new Set(progress.collections.map((c) => c.season))].sort(
     compareSeasons,
@@ -144,7 +144,10 @@ export async function GET(
   // and specials come out ascending too without a second sort.
   const byEdition = new Map<
     Edition,
-    { firsts: MemberProgressCollection[]; specials: MemberProgressCollection[] }
+    {
+      firsts: GridMemberProgressCollection[];
+      specials: GridMemberProgressCollection[];
+    }
   >();
   for (const c of seasonCollections) {
     const edition = getCollectionEdition({

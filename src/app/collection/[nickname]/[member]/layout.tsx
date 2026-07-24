@@ -34,6 +34,7 @@ export default async function MemberDexLayout({
         Back to {resolved.nickname}'s Collection
       </Link>
       <MemberAvatarCarousel
+        key={resolved.address.toLowerCase()}
         nickname={resolved.nickname}
         address={resolved.address}
         activeMember={member}

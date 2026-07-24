@@ -3,6 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { MemberDexContent } from "@/components/progress/member-dex-content";
 import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { resolveMemberCasing } from "@/lib/filters";
+import {
+  getProgressMemberCatalog,
+  toPublicProgressMemberCatalog,
+} from "@/lib/progress/member-catalog";
 import { sectionAbsoluteUrl } from "@/lib/sections";
 
 export async function generateMetadata({
@@ -90,11 +94,9 @@ export default async function MemberDexPage({
   if (!resolved) notFound();
 
   const canonicalMember = resolveMemberCasing(member);
+  if (!canonicalMember) notFound();
   const canonicalNickname = resolved.nickname;
-  if (
-    canonicalNickname !== nickname ||
-    (canonicalMember && canonicalMember !== member)
-  ) {
+  if (canonicalNickname !== nickname || canonicalMember !== member) {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(await searchParams)) {
       if (Array.isArray(value)) {
@@ -105,15 +107,34 @@ export default async function MemberDexPage({
     }
     const qs = query.toString();
     redirect(
-      `/collection/${encodeURIComponent(canonicalNickname)}/${encodeURIComponent(canonicalMember ?? member)}${qs ? `?${qs}` : ""}`,
+      `/collection/${encodeURIComponent(canonicalNickname)}/${encodeURIComponent(canonicalMember)}${qs ? `?${qs}` : ""}`,
     );
   }
 
+  const catalog = toPublicProgressMemberCatalog(
+    await getProgressMemberCatalog(canonicalMember),
+  );
+  const initialSeason = catalog.collections.at(-1)?.season;
+  const initialCatalog = {
+    ...catalog,
+    collections: initialSeason
+      ? catalog.collections.filter(
+          (collection) => collection.season === initialSeason,
+        )
+      : [],
+  };
+  const availableSeasons = [
+    ...new Set(catalog.collections.map((collection) => collection.season)),
+  ];
+
   return (
     <MemberDexContent
+      key={`${resolved.address.toLowerCase()}:${canonicalMember}`}
       nickname={canonicalNickname}
       address={resolved.address}
-      member={member}
+      member={canonicalMember}
+      initialCatalog={initialCatalog}
+      availableSeasons={availableSeasons}
     />
   );
 }

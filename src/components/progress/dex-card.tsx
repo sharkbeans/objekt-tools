@@ -7,9 +7,18 @@ import { DexDetailDialog } from "./dex-detail-dialog";
 interface Props {
   collection: ProgressCollection;
   address: string;
+  ownershipLoaded: boolean;
+  tradabilityLoaded: boolean;
+  priority?: boolean;
 }
 
-export function DexCard({ collection, address }: Props) {
+export function DexCard({
+  collection,
+  address,
+  ownershipLoaded,
+  tradabilityLoaded,
+  priority = false,
+}: Props) {
   const owned = collection.ownedCount > 0;
   const [open, setOpen] = useState(false);
 
@@ -25,11 +34,16 @@ export function DexCard({ collection, address }: Props) {
           <img
             src={collection.thumbnailImage}
             alt={collection.collectionNo}
-            loading="lazy"
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
             className="w-full h-full object-cover"
           />
-          {!owned && <div className="absolute inset-0 bg-black/[0.715]" />}
-          {owned && collection.ownedCount > 1 && (
+          <div
+            className={`absolute inset-0 bg-black/[0.715] transition-opacity duration-200 ${
+              ownershipLoaded && !owned ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          {ownershipLoaded && owned && collection.ownedCount > 1 && (
             <span className="absolute bottom-1 right-1 flex h-5.5 w-5.5 items-center justify-center rounded-full border-2 border-white/30 bg-black text-[11px] font-bold text-white leading-none">
               {collection.ownedCount}
             </span>
@@ -43,6 +57,8 @@ export function DexCard({ collection, address }: Props) {
       <DexDetailDialog
         collection={open ? collection : null}
         address={address}
+        ownershipLoaded={ownershipLoaded}
+        tradabilityLoaded={tradabilityLoaded}
         onOpenChange={setOpen}
       />
     </>

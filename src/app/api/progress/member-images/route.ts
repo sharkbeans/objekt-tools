@@ -4,48 +4,13 @@ import { normalizeArtistId } from "@/lib/artist-utils";
 import { fetchArtistDetail } from "@/lib/cosmo/client";
 import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
-import { realMembersByArtist, validSeasons } from "@/lib/filters";
+import { validSeasons } from "@/lib/filters";
+import { STATIC_MEMBER_IMAGES } from "@/lib/progress/member-images";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
 const COSMO_ARTISTS = ["tripleS", "artms", "idntt"] as const;
-
-// Verified static headshots from static.cosmo.fans — same source Apollo uses.
-// Cosmo API profileImageUrl (fetched below) will override these if available.
-
-// idntt: /uploads/member-profile/idntt-{Korean}.jpg (only verified members)
-const IDNTT_KOREAN: Record<string, string> = {
-  DoHun: "도훈",
-  HeeJu: "희주",
-  TaeIn: "태인",
-  JaeYoung: "재영",
-  JuHo: "주호",
-  JiWoon: "지운",
-  HwanHee: "환희",
-  MinGyeol: "민결",
-};
-
-const STATIC_IMAGES: Record<string, string> = {
-  ...Object.fromEntries(
-    realMembersByArtist.tripleS.map((name, i) => [
-      `tripleS|${name}`,
-      `https://static.cosmo.fans/uploads/member-profile/2025-05-01/S${i + 1}.jpg`,
-    ]),
-  ),
-  ...Object.fromEntries(
-    realMembersByArtist.artms.map((name) => [
-      `artms|${name}`,
-      `https://static.cosmo.fans/images/artms/${name}.jpg`,
-    ]),
-  ),
-  ...Object.fromEntries(
-    Object.entries(IDNTT_KOREAN).map(([eng, kor]) => [
-      `idntt|${eng}`,
-      `https://static.cosmo.fans/uploads/member-profile/idntt-${kor}.jpg`,
-    ]),
-  ),
-};
 
 const seasonOrder: Record<string, number> = Object.fromEntries(
   validSeasons.map((s, i) => [s, i]),
@@ -104,7 +69,7 @@ export async function GET() {
         fetchWelcomeFallbackImages(),
       ]);
       // Priority: Cosmo API > static headshots > Welcome frontImage
-      return { ...fallback, ...STATIC_IMAGES, ...cosmo };
+      return { ...fallback, ...STATIC_MEMBER_IMAGES, ...cosmo };
     },
   );
 

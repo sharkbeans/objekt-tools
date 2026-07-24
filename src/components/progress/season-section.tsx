@@ -9,9 +9,18 @@ interface Props {
   collections: ProgressCollection[];
   perRow: number;
   address: string;
+  ownershipLoaded: boolean;
+  tradabilityLoaded: boolean;
 }
 
-export function SeasonSection({ season, collections, perRow, address }: Props) {
+export function SeasonSection({
+  season,
+  collections,
+  perRow,
+  address,
+  ownershipLoaded,
+  tradabilityLoaded,
+}: Props) {
   const countable = collections.filter(
     (c) => c.progressCountable ?? isCollectionProgressCountable(c),
   );
@@ -23,10 +32,16 @@ export function SeasonSection({ season, collections, perRow, address }: Props) {
       <div className="flex items-baseline gap-2">
         <h3 className="font-semibold text-sm">{season}</h3>
         <span className="text-xs text-muted-foreground">
-          {owned}/{total}
+          {ownershipLoaded ? owned : "—"}/{tradabilityLoaded ? total : "—"}
         </span>
       </div>
-      <DexGrid collections={collections} perRow={perRow} address={address} />
+      <DexGrid
+        collections={collections}
+        perRow={perRow}
+        address={address}
+        ownershipLoaded={ownershipLoaded}
+        tradabilityLoaded={tradabilityLoaded}
+      />
     </div>
   );
 }

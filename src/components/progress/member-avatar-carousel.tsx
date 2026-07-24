@@ -4,11 +4,20 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProgressOverview } from "@/hooks/use-progress-overview";
-import { realMembersByArtist, type ValidArtist } from "@/lib/filters";
+import {
+  membersByArtist,
+  realMembersByArtist,
+  validArtists,
+} from "@/lib/filters";
+import { STATIC_MEMBER_IMAGES } from "@/lib/progress/member-images";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
+import {
+  PROGRESS_NAVIGATION_EVENT,
+  type ProgressNavigationState,
+} from "./progress-search";
 
 interface MemberImagesResponse {
   images: Record<string, string>;
@@ -28,16 +37,27 @@ export function MemberAvatarCarousel({
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "grid" ? "grid" : null;
 
-  // Shares its query key with ProgressOverviewContent/MemberDexContent so
-  // react-query dedupes the request across all three (or reuses the cache).
-  // Deriving `artist` from this instead of taking it as a prop means this
-  // component only needs `activeMember` to render — it doesn't depend on
-  // the (heavier, per-member) dex fetch, so it stays mounted and correct
-  // across member switches even though the page below it remounts.
-  const { data } = useProgressOverview(nickname, address);
-  const artist = data?.rollups.find((r) => r.member === activeMember)?.artist;
+  const [clientReady, setClientReady] = useState(false);
+  const [switchingUser, setSwitchingUser] = useState(false);
+  useEffect(() => setClientReady(true), []);
 
-  const { data: imagesData } = useQuery<MemberImagesResponse>({
+  useEffect(() => {
+    const handleNavigation = (event: Event) => {
+      const navigationEvent = event as CustomEvent<ProgressNavigationState>;
+      setSwitchingUser(navigationEvent.detail !== null);
+    };
+    window.addEventListener(PROGRESS_NAVIGATION_EVENT, handleNavigation);
+    return () =>
+      window.removeEventListener(PROGRESS_NAVIGATION_EVENT, handleNavigation);
+  }, []);
+
+  const overviewQuery = useProgressOverview(nickname, address);
+  const data = clientReady && !switchingUser ? overviewQuery.data : undefined;
+  const artist = validArtists.find((candidate) =>
+    membersByArtist[candidate].includes(activeMember),
+  );
+
+  const imagesQuery = useQuery<MemberImagesResponse>({
     queryKey: ["progress-member-images"],
     queryFn: async () => {
       const res = await fetch("/api/progress/member-images");
@@ -46,11 +66,13 @@ export function MemberAvatarCarousel({
     },
     staleTime: 10 * 60_000,
   });
-  const memberImages = imagesData?.images ?? {};
+  const imagesData = clientReady ? imagesQuery.data : undefined;
+  const memberImages = {
+    ...STATIC_MEMBER_IMAGES,
+    ...(imagesData?.images ?? {}),
+  };
 
-  const roster = artist
-    ? (realMembersByArtist[artist as ValidArtist] ?? [])
-    : [];
+  const roster = artist ? realMembersByArtist[artist] : [];
 
   const totalsByMember = useMemo(() => {
     const map = new Map<string, { owned: number; total: number }>();
@@ -228,7 +250,7 @@ export function MemberAvatarCarousel({
                   : "bg-muted text-muted-foreground",
               )}
             >
-              {totals ? `${totals.owned}/${totals.total}` : "—"}
+              {totals ? `${totals.owned}/${totals.total}` : "-/-"}
             </span>
           </Link>
         );
