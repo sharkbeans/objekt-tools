@@ -42,16 +42,18 @@ function rankTierClass(rank: number) {
 }
 
 function GridRankBadge({
+  address,
   nickname,
   member,
   season,
 }: {
+  address: string;
   nickname: string;
   member: string;
   season: string;
 }) {
   const { data } = useQuery<GridRankResponse>({
-    queryKey: ["grid-rank", nickname, member, season],
+    queryKey: ["grid-rank", "address", address.toLowerCase(), member, season],
     queryFn: async () => {
       const res = await fetch(
         `/api/progress/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}/grid-rank?season=${encodeURIComponent(season)}`,
@@ -180,7 +182,12 @@ export function GridSection({
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <h3 className="font-semibold text-xl">{season}</h3>
-          <GridRankBadge nickname={nickname} member={member} season={season} />
+          <GridRankBadge
+            address={address}
+            nickname={nickname}
+            member={member}
+            season={season}
+          />
         </div>
         <ShareLinkButton nickname={nickname} member={member} season={season} />
       </div>

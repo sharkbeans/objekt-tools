@@ -10,6 +10,7 @@ import {
   readStoredCosmoUsername,
   storeCosmoUsername,
 } from "@/lib/cosmo-username-storage";
+import { progressOverviewQueryKey } from "@/lib/progress/identity-keys";
 import type { ProgressOverviewResponse } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
@@ -68,9 +69,8 @@ export function ProgressSearch({
         return;
       }
       const data: ProgressOverviewResponse = await res.json();
-      queryClient.setQueryData(["progress", trimmed], data);
-      queryClient.setQueryData(["progress", data.nickname], data);
-      storeCosmoUsername(data.nickname);
+      queryClient.setQueryData(progressOverviewQueryKey(data.address), data);
+      storeCosmoUsername(data.nickname, data.address);
       router.push(
         buildHref
           ? buildHref(data.nickname, data)

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { MemberDexContent } from "@/components/progress/member-dex-content";
+import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { resolveMemberCasing } from "@/lib/filters";
 import { sectionAbsoluteUrl } from "@/lib/sections";
 
@@ -85,9 +86,15 @@ export default async function MemberDexPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { nickname, member } = await params;
+  const resolved = await resolveNickname(nickname);
+  if (!resolved) notFound();
 
   const canonicalMember = resolveMemberCasing(member);
-  if (canonicalMember && canonicalMember !== member) {
+  const canonicalNickname = resolved.nickname;
+  if (
+    canonicalNickname !== nickname ||
+    (canonicalMember && canonicalMember !== member)
+  ) {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(await searchParams)) {
       if (Array.isArray(value)) {
@@ -97,8 +104,16 @@ export default async function MemberDexPage({
       }
     }
     const qs = query.toString();
-    redirect(`/collection/${nickname}/${canonicalMember}${qs ? `?${qs}` : ""}`);
+    redirect(
+      `/collection/${encodeURIComponent(canonicalNickname)}/${encodeURIComponent(canonicalMember ?? member)}${qs ? `?${qs}` : ""}`,
+    );
   }
 
-  return <MemberDexContent nickname={nickname} member={member} />;
+  return (
+    <MemberDexContent
+      nickname={canonicalNickname}
+      address={resolved.address}
+      member={member}
+    />
+  );
 }

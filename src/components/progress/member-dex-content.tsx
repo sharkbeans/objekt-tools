@@ -43,6 +43,10 @@ import {
 } from "@/lib/edition";
 import { compareSeasons } from "@/lib/filter-options";
 import { isCollectionProgressCountable } from "@/lib/progress/countable";
+import {
+  progressMemberQueryKey,
+  progressSelectionStorageKey,
+} from "@/lib/progress/identity-keys";
 import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render";
 import type {
   ProgressCollection,
@@ -58,22 +62,20 @@ interface SeasonColorsResponse {
   colors: Record<string, string>;
 }
 
+interface GridMintCountsResponse {
+  counts: Record<string, number>;
+}
+
 type ViewTab = "dex" | "grid";
 
 interface StoredSelection {
   dexActiveClasses?: string[];
   dexActiveSeasons?: string[];
   dexActiveEditions?: Edition[];
-  unownedOnly?: boolean;
-  ownedOnly?: boolean;
   perRow?: number;
   gridActiveSeasons?: string[];
   gridActiveEditions?: Edition[];
   viewConsumed?: boolean;
-}
-
-function selectionStorageKey(nickname: string, member: string): string {
-  return `collection-selection:${nickname.toLowerCase()}:${member.toLowerCase()}`;
 }
 
 function chipClass(active: boolean): string {
@@ -331,15 +333,18 @@ function GridBoardsRowSkeleton() {
 
 interface Props {
   nickname: string;
+  address: string;
   member: string;
 }
 
-export function MemberDexContent({ nickname, member }: Props) {
+export function MemberDexContent({ nickname, address, member }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const activeTab: ViewTab =
+    searchParams.get("view") === "grid" ? "grid" : "dex";
   const { data, error } = useQuery<ProgressMemberResponse>({
-    queryKey: ["progress", nickname, member],
+    queryKey: progressMemberQueryKey(address, member),
     queryFn: async () => {
       const res = await fetch(
         `/api/progress/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}`,
@@ -356,6 +361,20 @@ export function MemberDexContent({ nickname, member }: Props) {
     retry: false,
   });
 
+  const { data: gridMintData } = useQuery<GridMintCountsResponse>({
+    queryKey: ["progress-grid-mints", "address", address.toLowerCase(), member],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/progress/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}/grid-mints`,
+      );
+      if (!res.ok) return { counts: {} };
+      return res.json();
+    },
+    enabled: activeTab === "grid",
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
   // Overview data is fetched (and cached) by the persistent layout above
   // this page, so it's typically already available the instant this
   // component mounts — even though the per-member fetch above is still in
@@ -364,7 +383,7 @@ export function MemberDexContent({ nickname, member }: Props) {
   // to render real totals and real filter chips immediately instead of
   // waiting on the slower fetch — only the objekt cells themselves need a
   // loading state below.
-  const { data: overviewData } = useProgressOverview(nickname);
+  const { data: overviewData } = useProgressOverview(nickname, address);
 
   const earlyTotals = useMemo(() => {
     if (!overviewData) return null;
@@ -461,13 +480,22 @@ export function MemberDexContent({ nickname, member }: Props) {
   const [initialUrlSeason] = useState(() => searchParams.get("season"));
 
   // Restore this page's last-used filters from localStorage (client only —
-  // runs after mount to avoid a hydration mismatch). Keyed per
-  // nickname+member so switching pages doesn't leak unrelated selections.
+  // runs after mount to avoid a hydration mismatch). The stable key follows
+  // the wallet through a rename and cannot leak preferences when an old
+  // nickname is claimed by a different wallet.
   const [selectionRestored, setSelectionRestored] = useState(false);
   useEffect(() => {
     setSelectionRestored(false);
+    setUnownedOnly(false);
+    setOwnedOnly(false);
     try {
-      const raw = localStorage.getItem(selectionStorageKey(nickname, member));
+      const stableKey = progressSelectionStorageKey(address, member);
+      const legacyKey = `collection-selection:${nickname.toLowerCase()}:${member.toLowerCase()}`;
+      const stableRaw = localStorage.getItem(stableKey);
+      const raw = stableRaw ?? localStorage.getItem(legacyKey);
+      if (!stableRaw && raw) {
+        localStorage.setItem(stableKey, raw);
+      }
       if (raw) {
         const stored = JSON.parse(raw) as StoredSelection;
         if (stored.dexActiveClasses)
@@ -478,8 +506,6 @@ export function MemberDexContent({ nickname, member }: Props) {
         }
         if (stored.dexActiveEditions)
           setDexActiveEditions(stored.dexActiveEditions);
-        if (stored.unownedOnly != null) setUnownedOnly(stored.unownedOnly);
-        if (stored.ownedOnly != null) setOwnedOnly(stored.ownedOnly);
         if (stored.perRow != null) setPerRow(stored.perRow);
         if (stored.gridActiveSeasons && !initialUrlSeason) {
           setGridActiveSeasons(stored.gridActiveSeasons);
@@ -493,7 +519,7 @@ export function MemberDexContent({ nickname, member }: Props) {
       // Malformed/unavailable storage — fall back to defaults.
     }
     setSelectionRestored(true);
-  }, [nickname, member, initialUrlSeason]);
+  }, [address, nickname, member, initialUrlSeason]);
 
   // Persist the current filters whenever they change, once the initial
   // restore above has run (so we don't clobber storage with defaults first).
@@ -503,34 +529,27 @@ export function MemberDexContent({ nickname, member }: Props) {
       dexActiveClasses,
       dexActiveSeasons,
       dexActiveEditions,
-      unownedOnly,
-      ownedOnly,
       perRow,
       gridActiveSeasons,
       gridActiveEditions,
       viewConsumed,
     };
     localStorage.setItem(
-      selectionStorageKey(nickname, member),
+      progressSelectionStorageKey(address, member),
       JSON.stringify(selection),
     );
   }, [
     selectionRestored,
-    nickname,
+    address,
     member,
     dexActiveClasses,
     dexActiveSeasons,
     dexActiveEditions,
-    unownedOnly,
-    ownedOnly,
     perRow,
     gridActiveSeasons,
     gridActiveEditions,
     viewConsumed,
   ]);
-
-  const activeTab: ViewTab =
-    searchParams.get("view") === "grid" ? "grid" : "dex";
 
   const setActiveTab = useCallback(
     (nextTab: ViewTab) => {
@@ -733,16 +752,21 @@ export function MemberDexContent({ nickname, member }: Props) {
 
   // Grid tab has its own season+edition scope, independent of Dex's.
   const gridGrouped = useMemo(() => {
-    if (!data) return new Map<string, ProgressCollection[]>();
-    const bySeasonEdition = data.collections.filter(
-      (c) =>
-        (gridActiveSeasons.length === 0 ||
-          gridActiveSeasons.includes(c.season)) &&
-        (gridActiveEditions.length === 0 ||
-          gridActiveEditions.includes(
-            editionByCollectionId.get(c.collectionId) as Edition,
-          )),
-    );
+    if (!data || !gridMintData) return new Map<string, ProgressCollection[]>();
+    const bySeasonEdition = data.collections
+      .map((c) => ({
+        ...c,
+        gridMintCount: gridMintData.counts[c.collectionId] ?? 0,
+      }))
+      .filter(
+        (c) =>
+          (gridActiveSeasons.length === 0 ||
+            gridActiveSeasons.includes(c.season)) &&
+          (gridActiveEditions.length === 0 ||
+            gridActiveEditions.includes(
+              editionByCollectionId.get(c.collectionId) as Edition,
+            )),
+      );
     const map = new Map<string, ProgressCollection[]>();
     for (const c of bySeasonEdition) {
       const arr = map.get(c.season) ?? [];
@@ -750,7 +774,13 @@ export function MemberDexContent({ nickname, member }: Props) {
       map.set(c.season, arr);
     }
     return map;
-  }, [data, gridActiveSeasons, gridActiveEditions, editionByCollectionId]);
+  }, [
+    data,
+    gridMintData,
+    gridActiveSeasons,
+    gridActiveEditions,
+    editionByCollectionId,
+  ]);
 
   // Header totals are always the member's full, unfiltered collection — they
   // shouldn't shift depending on which tab or filters are active.
@@ -1092,12 +1122,13 @@ export function MemberDexContent({ nickname, member }: Props) {
         </div>
       </div>
 
-      <div className={cn("t-skel", data && "is-revealed")}>
+      <div className={cn("t-skel", data && gridMintData && "is-revealed")}>
         <div className="t-skel-skeleton is-pulsing space-y-8">
           <GridBoardsRowSkeleton />
         </div>
         <div className="t-skel-content space-y-8">
           {data &&
+            gridMintData &&
             [...gridGrouped.entries()].map(([season, cols]) => (
               <GridSection
                 key={season}

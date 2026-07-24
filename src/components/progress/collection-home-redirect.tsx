@@ -4,7 +4,10 @@ import { Loader2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { readStoredCosmoUsername } from "@/lib/cosmo-username-storage";
+import {
+  readStoredCosmoAddress,
+  readStoredCosmoUsername,
+} from "@/lib/cosmo-username-storage";
 import { sectionHref } from "@/lib/sections";
 import { ProgressSearch } from "./progress-search";
 
@@ -13,6 +16,16 @@ export function CollectionHomeRedirect() {
   const [checkedStorage, setCheckedStorage] = useState(false);
 
   useEffect(() => {
+    const savedAddress = readStoredCosmoAddress();
+    if (savedAddress) {
+      router.replace(
+        sectionHref(`/collection/by-wallet/${savedAddress}`, {
+          currentSection: "collect",
+        }),
+      );
+      return;
+    }
+
     const savedNickname = readStoredCosmoUsername();
     if (savedNickname) {
       router.replace(

@@ -23,21 +23,34 @@ import { ProgressSearch } from "./progress-search";
 
 interface Props {
   nickname: string;
+  address: string;
 }
 
 interface MemberImagesResponse {
   images: Record<string, string>;
 }
 
-export function ProgressOverviewContent({ nickname }: Props) {
-  const { data, isLoading, error } = useProgressOverview(nickname);
+export function ProgressOverviewContent({ nickname, address }: Props) {
+  // A client-side return from a member page can already have this query in
+  // React Query's cache, while the incoming server-rendered route segment
+  // still starts without it. Keep the first client render deterministic and
+  // expose the warm cache immediately after this component mounts.
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => {
+    setClientReady(true);
+  }, []);
+
+  const overviewQuery = useProgressOverview(nickname, address);
+  const data = clientReady ? overviewQuery.data : undefined;
+  const error = clientReady ? overviewQuery.error : null;
+  const isLoading = !clientReady || overviewQuery.isLoading;
 
   useEffect(() => {
     if (!data?.nickname) return;
-    storeCosmoUsername(data.nickname);
-  }, [data?.nickname]);
+    storeCosmoUsername(data.nickname, data.address);
+  }, [data?.nickname, data?.address]);
 
-  const { data: imagesData } = useQuery<MemberImagesResponse>({
+  const imagesQuery = useQuery<MemberImagesResponse>({
     queryKey: ["progress-member-images"],
     queryFn: async () => {
       const res = await fetch("/api/progress/member-images");
@@ -46,6 +59,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
     },
     staleTime: 10 * 60_000,
   });
+  const imagesData = clientReady ? imagesQuery.data : undefined;
   const memberImages = imagesData?.images ?? {};
 
   const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
@@ -237,7 +251,7 @@ export function ProgressOverviewContent({ nickname }: Props) {
           size="sm"
           variant="outline"
           onClick={handleShare}
-          disabled={sharing || !data}
+          disabled={sharing || (clientReady && !data)}
           className="shrink-0 gap-2"
         >
           {sharing ? (

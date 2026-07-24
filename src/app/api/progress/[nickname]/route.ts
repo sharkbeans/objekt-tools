@@ -7,22 +7,20 @@ import {
 } from "@/lib/cosmo/resolve-nickname";
 import { indexerPool } from "@/lib/db/indexer";
 import { COSMO_SPIN_ADDRESS } from "@/lib/indexer-constants";
-import {
-  loadCollectionMetadataByDbIds,
-  loadOwnedDistinctCollectionDbIds,
-} from "@/lib/indexer-owned-objekts";
+import { loadCollectionMetadataByDbIds } from "@/lib/indexer-owned-objekts";
 import {
   isCollectionProgressCountable,
   PROGRESS_EXCLUDED_CLASS,
   PROGRESS_EXCLUDED_COLLECTION_NO,
 } from "@/lib/progress/countable";
 import { mergeProgressRollups } from "@/lib/progress/merge";
+import { getFreshOwnedCollectionCounts } from "@/lib/progress/owned-collection-counts";
 import {
   hasGlobalTradableCopy,
   loadCollectionTradabilityByDbId,
 } from "@/lib/progress/tradability";
 import { redis } from "@/lib/redis";
-import { getCached } from "@/lib/server-cache";
+import { getCachedStaleWhileRevalidate } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -93,9 +91,12 @@ export async function GET(
   }
 
   const [totals, owned] = await Promise.all([
-    getCached("progress:totals:v4", 10 * 60_000, async () => {
-      const res = await indexerPool.query<ProgressTotalQueryRow>(
-        `
+    getCachedStaleWhileRevalidate(
+      "progress:totals:v4",
+      10 * 60_000,
+      async () => {
+        const res = await indexerPool.query<ProgressTotalQueryRow>(
+          `
           select
             c.artist,
             c.member,
@@ -120,71 +121,79 @@ export async function GET(
             c.season,
             c.on_offline
         `,
-        [
-          PROGRESS_EXCLUDED_CLASS.toLowerCase(),
-          PROGRESS_EXCLUDED_COLLECTION_NO,
-          COSMO_SPIN_ADDRESS,
-        ],
-      );
-      return res.rows.map(
-        (row): TotalsRow => ({
-          artist: row.artist,
-          member: row.member,
-          class: row.class,
-          season: row.season,
-          onOffline: row.on_offline,
-          total: Number(row.total),
-        }),
-      );
-    }),
-    getCached(`progress:owned:v5:${resolved.address}`, 90_000, async () => {
-      const ownedCollectionDbIds = await loadOwnedDistinctCollectionDbIds(
-        resolved.address,
-      );
-      const [ownedCollections, tradabilityById] = await Promise.all([
-        loadCollectionMetadataByDbIds(ownedCollectionDbIds),
-        loadCollectionTradabilityByDbId(ownedCollectionDbIds),
-      ]);
-      const rollups = new Map<
-        string,
-        {
-          artist: string;
-          member: string;
-          class: string;
-          season: string;
-          onOffline: "online" | "offline";
-          owned: number;
+          [
+            PROGRESS_EXCLUDED_CLASS.toLowerCase(),
+            PROGRESS_EXCLUDED_COLLECTION_NO,
+            COSMO_SPIN_ADDRESS,
+          ],
+        );
+        return res.rows.map(
+          (row): TotalsRow => ({
+            artist: row.artist,
+            member: row.member,
+            class: row.class,
+            season: row.season,
+            onOffline: row.on_offline,
+            total: Number(row.total),
+          }),
+        );
+      },
+    ),
+    getCachedStaleWhileRevalidate(
+      `progress:owned-rollups:v6:${resolved.address}`,
+      90_000,
+      async () => {
+        const ownedCounts = await getFreshOwnedCollectionCounts(
+          resolved.address,
+        );
+        const ownedCollectionDbIds = ownedCounts.flatMap((row) =>
+          row.collectionDbId ? [row.collectionDbId] : [],
+        );
+        const [ownedCollections, tradabilityById] = await Promise.all([
+          loadCollectionMetadataByDbIds(ownedCollectionDbIds),
+          loadCollectionTradabilityByDbId(ownedCollectionDbIds),
+        ]);
+        const rollups = new Map<
+          string,
+          {
+            artist: string;
+            member: string;
+            class: string;
+            season: string;
+            onOffline: "online" | "offline";
+            owned: number;
+          }
+        >();
+
+        for (const row of ownedCollections.values()) {
+          if (!isCollectionProgressCountable(row)) continue;
+          if (!hasGlobalTradableCopy(tradabilityById.get(row.id))) continue;
+
+          const key = [
+            row.artist,
+            row.member,
+            row.class,
+            row.season,
+            row.onOffline,
+          ].join("|");
+          const existing = rollups.get(key);
+          if (existing) {
+            existing.owned += 1;
+            continue;
+          }
+          rollups.set(key, {
+            artist: row.artist,
+            member: row.member,
+            class: row.class,
+            season: row.season,
+            onOffline: row.onOffline,
+            owned: 1,
+          });
         }
-      >();
 
-      for (const row of ownedCollections.values()) {
-        if (!isCollectionProgressCountable(row)) continue;
-        if (!hasGlobalTradableCopy(tradabilityById.get(row.id))) continue;
-
-        const key = [
-          row.artist,
-          row.member,
-          row.class,
-          row.season,
-          row.onOffline,
-        ].join("|");
-        const existing = rollups.get(key);
-        if (existing) {
-          existing.owned += 1;
-          continue;
-        }
-        rollups.set(key, {
-          artist: row.artist,
-          member: row.member,
-          class: row.class,
-          season: row.season,
-          onOffline: row.onOffline,
-          owned: 1,
-        });
-      }
-
-      return [...rollups.values()];
-    }),
+        return [...rollups.values()];
+      },
+    ),
   ]);
 
   const rollups = mergeProgressRollups(totals, owned);

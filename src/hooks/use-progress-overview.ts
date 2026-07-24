@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { progressOverviewQueryKey } from "@/lib/progress/identity-keys";
 import type { ProgressOverviewResponse } from "@/lib/progress/types";
 
-export function useProgressOverview(nickname: string) {
+export function useProgressOverview(nickname: string, address: string) {
   return useQuery<ProgressOverviewResponse>({
-    queryKey: ["progress", nickname],
+    queryKey: progressOverviewQueryKey(address),
     queryFn: async () => {
       const res = await fetch(`/api/progress/${encodeURIComponent(nickname)}`);
       if (!res.ok) {

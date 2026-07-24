@@ -16,10 +16,15 @@ interface MemberImagesResponse {
 
 interface Props {
   nickname: string;
+  address: string;
   activeMember: string;
 }
 
-export function MemberAvatarCarousel({ nickname, activeMember }: Props) {
+export function MemberAvatarCarousel({
+  nickname,
+  address,
+  activeMember,
+}: Props) {
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "grid" ? "grid" : null;
 
@@ -29,7 +34,7 @@ export function MemberAvatarCarousel({ nickname, activeMember }: Props) {
   // component only needs `activeMember` to render — it doesn't depend on
   // the (heavier, per-member) dex fetch, so it stays mounted and correct
   // across member switches even though the page below it remounts.
-  const { data } = useProgressOverview(nickname);
+  const { data } = useProgressOverview(nickname, address);
   const artist = data?.rollups.find((r) => r.member === activeMember)?.artist;
 
   const { data: imagesData } = useQuery<MemberImagesResponse>({

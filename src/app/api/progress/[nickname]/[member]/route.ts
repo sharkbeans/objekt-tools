@@ -7,26 +7,23 @@ import {
   resolveNickname,
   validateNickname,
 } from "@/lib/cosmo/resolve-nickname";
-import { indexerPool } from "@/lib/db/indexer";
 import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { compareSeasons } from "@/lib/filter-options";
 import { membersByArtist } from "@/lib/filters";
-import { ZERO_ADDRESS } from "@/lib/indexer-constants";
-import { loadOwnedCollectionCountsByDbId } from "@/lib/indexer-owned-objekts";
 import { isCollectionProgressCountable } from "@/lib/progress/countable";
+import { getCachedProgressMemberResponse } from "@/lib/progress/member-response-cache";
+import { getFreshOwnedCollectionCounts } from "@/lib/progress/owned-collection-counts";
 import {
   hasGlobalTradableCopy,
   loadCollectionTradabilityByDbId,
 } from "@/lib/progress/tradability";
-import type { ProgressCollection } from "@/lib/progress/types";
+import type {
+  ProgressCollection,
+  ProgressMemberResponse,
+} from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
-
-type GridMintCountRow = {
-  collection_id: string;
-  grid_mint_count: string;
-};
 
 export const dynamic = "force-dynamic";
 
@@ -91,166 +88,135 @@ export async function GET(
     );
   }
 
-  const [allCollections, ownedCounts, gridMintCounts] = await Promise.all([
-    getCached(
-      `progress:collections:v3:${member.toLowerCase()}`,
-      10 * 60_000,
-      () =>
-        mirror
-          .select({
-            id: collections.id,
-            collectionId: collections.collectionId,
-            collectionNo: collections.collectionNo,
-            season: collections.season,
-            class: collections.class,
-            onOffline: collections.onOffline,
-            thumbnailImage: collections.thumbnailImage,
-            frontImage: collections.frontImage,
-            backImage: collections.backImage,
-            accentColor: collections.accentColor,
-          })
-          .from(collections)
-          .where(eq(collections.member, member)),
-    ),
-    getCached(
-      `progress:owned-detail:v2:${resolved.address}:${member.toLowerCase()}`,
-      90_000,
-      () => loadOwnedCollectionCountsByDbId(resolved.address),
-    ),
-    // Gridding has no dedicated flag in the indexer. A completed grid mints a
-    // reward Special-class objekt to the wallet from the zero address; we
-    // count those mints as a proxy for "times gridded". This stays accurate
-    // even if the reward SCO is later traded away, and doesn't miscount
-    // event-drop FCOs (which are ownership, not mints, of Specials).
-    //
-    // Used to filter out spin-won Specials here via a "spin-send within the
-    // prior 10 minutes" heuristic, but cross-checking against Cosmo's own
-    // official leaderboard (19 accounts across 2 member/season combos) showed
-    // that heuristic never once fired on a genuine spin reward — it only
-    // ever produced false positives (excluding real grid crafts that
-    // happened to follow an unrelated spin within the window). Dropped.
-    getCached(
-      `progress:grid-mints:v2:${resolved.address}:${member.toLowerCase()}`,
-      10 * 60_000,
-      async () => {
-        // Grid-mints raw SQL over `transfer` — stays on the remote indexer
-        // pool (never the mirror, which doesn't carry transfer data). See
-        // Part 2 plan, Phase 6.
-        const res = await indexerPool.query<GridMintCountRow>(
-          `
-            select
-              c.id as collection_id,
-              count(*)::text as grid_mint_count
-            from transfer reward
-            join collection c on c.id = reward.collection_id
-            where reward."from" = $1
-              and reward."to" = $2
-              and c.member = $3
-              and c.class = 'Special'
-              and c.on_offline = 'online'
-            group by c.id
-          `,
-          [ZERO_ADDRESS, resolved.address, member],
-        );
-        return res.rows;
-      },
-    ),
-  ]);
+  const response = await getCachedProgressMemberResponse(
+    resolved.address,
+    member,
+    async (): Promise<ProgressMemberResponse> => {
+      const [allCollections, ownedCounts] = await Promise.all([
+        getCached(
+          `progress:collections:v3:${member.toLowerCase()}`,
+          10 * 60_000,
+          () =>
+            mirror
+              .select({
+                id: collections.id,
+                collectionId: collections.collectionId,
+                collectionNo: collections.collectionNo,
+                season: collections.season,
+                class: collections.class,
+                onOffline: collections.onOffline,
+                thumbnailImage: collections.thumbnailImage,
+                frontImage: collections.frontImage,
+                backImage: collections.backImage,
+                accentColor: collections.accentColor,
+              })
+              .from(collections)
+              .where(eq(collections.member, member)),
+        ),
+        // A composed response refresh must wait for fresh ownership data so
+        // it does not mark a nested stale snapshot as fresh for another TTL.
+        getFreshOwnedCollectionCounts(resolved.address),
+      ]);
 
-  const ownedMap = new Map<string, number>();
-  const transferableMap = new Map<string, number>();
-  for (const row of ownedCounts) {
-    if (row.collectionDbId) {
-      ownedMap.set(row.collectionDbId, row.ownedCount);
-      transferableMap.set(row.collectionDbId, row.transferableCount);
-    }
-  }
+      const ownedMap = new Map<string, number>();
+      const transferableMap = new Map<string, number>();
+      for (const row of ownedCounts) {
+        if (row.collectionDbId) {
+          ownedMap.set(row.collectionDbId, row.ownedCount);
+          transferableMap.set(row.collectionDbId, row.transferableCount);
+        }
+      }
 
-  const gridMintMap = new Map<string, number>();
-  for (const row of gridMintCounts) {
-    gridMintMap.set(row.collection_id, Number(row.grid_mint_count));
-  }
+      const tradabilityById = await getCached(
+        `progress:tradability:v2:${member.toLowerCase()}:${allCollections.length}`,
+        10 * 60_000,
+        () => loadCollectionTradabilityByDbId(allCollections.map((c) => c.id)),
+      );
 
-  const tradabilityById = await getCached(
-    `progress:tradability:v1:${member.toLowerCase()}`,
-    10 * 60_000,
-    () => loadCollectionTradabilityByDbId(allCollections.map((c) => c.id)),
-  );
+      // A/Z dedup: collectionNo like "101A" and "101Z" are the same physical
+      // card. Group by (season, numeric prefix), preferring Z over A.
+      type RawCollection = (typeof allCollections)[number];
+      const azGroups = new Map<
+        string,
+        { a?: RawCollection; z?: RawCollection; other?: RawCollection }
+      >();
+      for (const c of allCollections) {
+        const noUpper = c.collectionNo.toUpperCase();
+        if (noUpper.endsWith("A") || noUpper.endsWith("Z")) {
+          const base = `${c.season}::${noUpper.slice(0, -1)}`;
+          const entry = azGroups.get(base) ?? {};
+          if (noUpper.endsWith("Z")) entry.z = c;
+          else entry.a = c;
+          azGroups.set(base, entry);
+        } else {
+          const base = `${c.season}::${noUpper}`;
+          const entry = azGroups.get(base) ?? {};
+          entry.other = c;
+          azGroups.set(base, entry);
+        }
+      }
 
-  // A/Z dedup: collectionNo like "101A" and "101Z" are the same physical card.
-  // Group by (season, numeric prefix). Prefer Z; show A only if no Z exists.
-  type RawCollection = (typeof allCollections)[number];
-  const azGroups = new Map<
-    string,
-    { a?: RawCollection; z?: RawCollection; other?: RawCollection }
-  >();
-  for (const c of allCollections) {
-    const noUpper = c.collectionNo.toUpperCase();
-    if (noUpper.endsWith("A") || noUpper.endsWith("Z")) {
-      const base = `${c.season}::${noUpper.slice(0, -1)}`;
-      const entry = azGroups.get(base) ?? {};
-      if (noUpper.endsWith("Z")) entry.z = c;
-      else entry.a = c;
-      azGroups.set(base, entry);
-    } else {
-      const base = `${c.season}::${noUpper}`;
-      const entry = azGroups.get(base) ?? {};
-      entry.other = c;
-      azGroups.set(base, entry);
-    }
-  }
+      const deduped: RawCollection[] = [];
+      for (const entry of azGroups.values()) {
+        if (entry.other) {
+          deduped.push(entry.other);
+        } else {
+          const pick = entry.z ?? entry.a;
+          if (pick) deduped.push(pick);
+        }
+      }
 
-  const deduped: RawCollection[] = [];
-  for (const entry of azGroups.values()) {
-    if (entry.other) {
-      deduped.push(entry.other);
-    } else {
-      // Prefer Z; fall back to A
-      const pick = entry.z ?? entry.a;
-      if (pick) deduped.push(pick);
-    }
-  }
+      const artist = artistForMember(member);
+      const result: ProgressCollection[] = deduped
+        .map((c) => {
+          const tradability = tradabilityById.get(c.id);
+          return {
+            collectionId: c.collectionId,
+            collectionNo: c.collectionNo,
+            season: c.season,
+            class: c.class,
+            onOffline: c.onOffline,
+            thumbnailImage: c.thumbnailImage,
+            frontImage: c.frontImage,
+            backImage: c.backImage,
+            accentColor: c.accentColor,
+            member,
+            artist,
+            ownedCount: ownedMap.get(c.id) ?? 0,
+            transferableCount: transferableMap.get(c.id) ?? 0,
+            globalTotalCount: tradability?.totalCount ?? 0,
+            globalTradableCount: tradability?.tradableCount ?? 0,
+            gridMintCount: 0,
+            progressCountable:
+              isCollectionProgressCountable(c) &&
+              hasGlobalTradableCopy(tradability),
+          };
+        })
+        .sort((a, b) => {
+          const sc = compareSeasons(a.season, b.season);
+          if (sc !== 0) return sc;
+          return a.collectionNo.localeCompare(b.collectionNo, undefined, {
+            numeric: true,
+          });
+        });
 
-  const artist = artistForMember(member);
-
-  const result: ProgressCollection[] = deduped
-    .map((c) => {
-      const tradability = tradabilityById.get(c.id);
       return {
-        collectionId: c.collectionId,
-        collectionNo: c.collectionNo,
-        season: c.season,
-        class: c.class,
-        onOffline: c.onOffline,
-        thumbnailImage: c.thumbnailImage,
-        frontImage: c.frontImage,
-        backImage: c.backImage,
-        accentColor: c.accentColor,
+        nickname: resolved.nickname,
+        address: resolved.address,
         member,
         artist,
-        ownedCount: ownedMap.get(c.id) ?? 0,
-        transferableCount: transferableMap.get(c.id) ?? 0,
-        globalTotalCount: tradability?.totalCount ?? 0,
-        globalTradableCount: tradability?.tradableCount ?? 0,
-        gridMintCount: gridMintMap.get(c.id) ?? 0,
-        progressCountable:
-          isCollectionProgressCountable(c) &&
-          hasGlobalTradableCopy(tradability),
+        collections: result,
       };
-    })
-    .sort((a, b) => {
-      const sc = compareSeasons(a.season, b.season);
-      if (sc !== 0) return sc;
-      return a.collectionNo.localeCompare(b.collectionNo, undefined, {
-        numeric: true,
-      });
-    });
+    },
+  );
 
+  // The composed payload is cached by stable wallet address, so it can
+  // survive a Cosmo rename. Identity is deliberately overlaid from the
+  // current nickname resolution to avoid serving the old display name from
+  // an otherwise-valid inventory snapshot.
   return NextResponse.json({
+    ...response,
     nickname: resolved.nickname,
     address: resolved.address,
-    member,
-    artist,
-    collections: result,
   });
 }

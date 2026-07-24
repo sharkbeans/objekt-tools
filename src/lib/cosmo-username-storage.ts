@@ -3,6 +3,7 @@ const COSMO_USERNAME_STORAGE_KEYS = [
   "cosmoUsername",
   "progress-last-nickname",
 ] as const;
+const COSMO_ADDRESS_STORAGE_KEY = "progress-last-address";
 
 export function readStoredCosmoUsername(): string | null {
   if (typeof window === "undefined") return null;
@@ -15,7 +16,13 @@ export function readStoredCosmoUsername(): string | null {
   return null;
 }
 
-export function storeCosmoUsername(value: string): void {
+export function readStoredCosmoAddress(): string | null {
+  if (typeof window === "undefined") return null;
+  const value = localStorage.getItem(COSMO_ADDRESS_STORAGE_KEY)?.trim();
+  return value && /^0x[0-9a-f]{40}$/i.test(value) ? value.toLowerCase() : null;
+}
+
+export function storeCosmoUsername(value: string, address?: string): void {
   if (typeof window === "undefined") return;
 
   const trimmed = value.trim();
@@ -23,5 +30,8 @@ export function storeCosmoUsername(value: string): void {
 
   for (const key of COSMO_USERNAME_STORAGE_KEYS) {
     localStorage.setItem(key, trimmed);
+  }
+  if (address && /^0x[0-9a-f]{40}$/i.test(address)) {
+    localStorage.setItem(COSMO_ADDRESS_STORAGE_KEY, address.toLowerCase());
   }
 }

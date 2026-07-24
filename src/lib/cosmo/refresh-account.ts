@@ -26,12 +26,13 @@ type RefreshableAccount = {
 // nickname as-is and stamps lastCosmoCheck so we don't retry every request.
 export async function refreshCosmoAccountIfStale<T extends RefreshableAccount>(
   account: T,
+  maxAgeMs = REFRESH_TTL_MS,
 ): Promise<T> {
   if (!account.cosmoId) return account;
 
   const isStale =
     !account.lastCosmoCheck ||
-    Date.now() - account.lastCosmoCheck.getTime() > REFRESH_TTL_MS;
+    Date.now() - account.lastCosmoCheck.getTime() > maxAgeMs;
   if (!isStale) return account;
 
   const now = new Date();

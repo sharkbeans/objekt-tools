@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CollectionHomeRedirect } from "@/components/progress/collection-home-redirect";
 import { getSession } from "@/lib/auth-server";
+import { refreshCosmoAccountIfStale } from "@/lib/cosmo/refresh-account";
+import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
 import { sectionHref } from "@/lib/sections";
@@ -19,9 +21,28 @@ export default async function ProgressPage() {
   if (session) {
     const linked = await db.query.cosmoAccount.findFirst({
       where: eq(cosmoAccount.userId, session.user.id),
-      columns: { nickname: true },
+      columns: {
+        id: true,
+        address: true,
+        cosmoId: true,
+        nickname: true,
+        lastCosmoCheck: true,
+      },
     });
-    linkedNickname = linked?.nickname ?? null;
+    if (linked) {
+      const refreshed = await refreshCosmoAccountIfStale(linked, 5 * 60_000);
+      if (refreshed.nickname) {
+        try {
+          const resolved = await resolveNickname(refreshed.nickname);
+          if (resolved?.address === linked.address.toLowerCase()) {
+            linkedNickname = resolved.nickname;
+          }
+        } catch {
+          // Fall through to the search/last-viewed screen during a Cosmo
+          // outage instead of redirecting to a possibly stale nickname.
+        }
+      }
+    }
   }
 
   if (linkedNickname) {

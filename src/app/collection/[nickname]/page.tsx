@@ -1,8 +1,10 @@
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import { ClaimBanner } from "@/components/progress/claim-banner";
 import { ProgressOverviewContent } from "@/components/progress/progress-overview-content";
 import { getSession } from "@/lib/auth-server";
+import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
 import { sectionAbsoluteUrl } from "@/lib/sections";
@@ -24,10 +26,30 @@ export async function generateMetadata({
 
 export default async function ProgressNicknamePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ nickname: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { nickname } = await params;
+  const resolved = await resolveNickname(nickname);
+  if (!resolved) notFound();
+
+  if (resolved.nickname !== nickname) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(await searchParams)) {
+      if (Array.isArray(value)) {
+        for (const item of value) query.append(key, item);
+      } else if (value !== undefined) {
+        query.append(key, value);
+      }
+    }
+    const qs = query.toString();
+    redirect(
+      `/collection/${encodeURIComponent(resolved.nickname)}${qs ? `?${qs}` : ""}`,
+    );
+  }
+
   const session = await getSession();
 
   let isViewerLinked = false;
@@ -44,7 +66,11 @@ export default async function ProgressNicknamePage({
   return (
     <div className="mx-auto w-full max-w-[96rem] px-4 py-6 space-y-6">
       {showClaimBanner && <ClaimBanner isSignedIn={!!session} />}
-      <ProgressOverviewContent key={nickname} nickname={nickname} />
+      <ProgressOverviewContent
+        key={resolved.address}
+        nickname={resolved.nickname}
+        address={resolved.address}
+      />
     </div>
   );
 }
