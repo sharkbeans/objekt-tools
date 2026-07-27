@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { parseAsInteger, parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ObjektFilterBar,
@@ -12,7 +12,8 @@ import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
-import { applyTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
+import { useObjektFilters } from "@/hooks/use-objekt-filters";
+import { tradeFilterQueryParams } from "@/lib/trade-search-shortcuts";
 import type { TradePostDTO } from "@/lib/trade-types";
 
 const PAGINATED_SKELETON_KEYS = [
@@ -78,35 +79,6 @@ function TradeCardSkeleton() {
   );
 }
 
-function filtersFromSearchParams(params: URLSearchParams): ObjektFilterState {
-  return {
-    search: params.get("search") ?? "",
-    artist: params.getAll("artist").filter(Boolean),
-    member: params.getAll("member").filter(Boolean),
-    season: params.getAll("season").filter(Boolean),
-    class: params.getAll("class").filter(Boolean),
-    on_offline: params.getAll("on_offline").filter(Boolean),
-    sort: params.get("sort") ?? "newest",
-    filterMode: (params.get("filter_mode") as "haves" | "wants") ?? "haves",
-  };
-}
-
-function buildParams(filters: ObjektFilterState, page: number, user?: string) {
-  const effective = applyTradeSearchShortcuts(filters);
-  const p = new URLSearchParams();
-  p.set("page", String(page));
-  for (const a of effective.artist) p.append("artist", a);
-  for (const m of effective.member) p.append("member", m);
-  for (const s of effective.season) p.append("season", s);
-  for (const c of effective.class) p.append("class", c);
-  for (const o of effective.on_offline) p.append("on_offline", o);
-  if (effective.search) p.set("search", effective.search);
-  if (effective.sort) p.set("sort", effective.sort);
-  p.set("filter_mode", effective.filterMode);
-  if (user) p.set("user", user);
-  return p;
-}
-
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -120,34 +92,30 @@ function useIsMobile() {
 }
 
 export function TradesContent() {
-  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
-  const [filters, setFilters] = useState<ObjektFilterState>(() =>
-    filtersFromSearchParams(searchParams),
+  const [page, setPage] = useQueryState(
+    "page",
+    parseAsInteger.withDefault(1).withOptions({ history: "replace" }),
   );
-  const [page, setPage] = useState(() =>
-    Number(searchParams.get("page") ?? "1"),
+  const [userFilter, setUserFilter] = useQueryState(
+    "user",
+    parseAsString.withDefault("").withOptions({ history: "replace" }),
   );
-  const [userFilter, setUserFilter] = useState(
-    () => searchParams.get("user") ?? "",
-  );
-
-  const handleFiltersChange = useCallback((next: ObjektFilterState) => {
-    setFilters(next);
-    setPage(1);
-  }, []);
+  const [filters, setFilters] = useObjektFilters({
+    onChange: () => setPage(1),
+  });
 
   const clearUserFilter = useCallback(() => {
     setUserFilter("");
     setPage(1);
-  }, []);
+  }, [setUserFilter, setPage]);
 
   return (
     <>
       <ActiveTradesBanner />
       <ObjektFilterBar
         filters={filters}
-        onChange={handleFiltersChange}
+        onChange={setFilters}
         smartSearchMode="trade"
         searchPlaceholder="Search trades... e.g. w sy cc101"
       />
@@ -190,7 +158,7 @@ function PaginatedTradesList({
     queryKey: ["trades", filters, user, page],
     queryFn: async () => {
       const res = await fetch(
-        `/api/trades?${buildParams(filters, page, user)}`,
+        `/api/trades?${tradeFilterQueryParams(filters, { page, user })}`,
       );
       return res.json();
     },
@@ -253,7 +221,7 @@ function InfiniteTradesList({
       queryKey: ["trades-infinite", filters, user],
       queryFn: async ({ pageParam = 1 }) => {
         const res = await fetch(
-          `/api/trades?${buildParams(filters, pageParam as number, user)}`,
+          `/api/trades?${tradeFilterQueryParams(filters, { page: pageParam as number, user })}`,
         );
         return res.json();
       },

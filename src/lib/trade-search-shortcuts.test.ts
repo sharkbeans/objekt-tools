@@ -5,6 +5,7 @@ import {
   extractCompletedSearchShortcuts,
   parseObjektSearchShortcuts,
   parseTradeSearchShortcuts,
+  tradeFilterQueryParams,
 } from "@/lib/trade-search-shortcuts";
 
 describe("trade search shortcuts", () => {
@@ -204,5 +205,45 @@ describe("trade search shortcuts", () => {
     assert.deepEqual(effective.member, ["JiWoo", "SeoYeon"]);
     assert.deepEqual(effective.season, ["Cream02"]);
     assert.equal(effective.search, "101");
+  });
+
+  it("builds trade API query params, expanding shortcuts and applying paging/user", () => {
+    const params = tradeFilterQueryParams(
+      {
+        search: "w sy cc101",
+        artist: [],
+        member: ["JiWoo"],
+        season: [],
+        class: [],
+        on_offline: [],
+        sort: "newest",
+        filterMode: "haves",
+      },
+      { page: 2, user: "0xabc" },
+    );
+
+    assert.equal(params.get("page"), "2");
+    assert.equal(params.get("user"), "0xabc");
+    assert.equal(params.get("filter_mode"), "wants");
+    assert.equal(params.get("search"), "101");
+    assert.deepEqual(params.getAll("member"), ["JiWoo", "SeoYeon"]);
+    assert.deepEqual(params.getAll("season"), ["Cream02"]);
+  });
+
+  it("omits page/user from trade API query params when not provided", () => {
+    const params = tradeFilterQueryParams({
+      search: "",
+      artist: [],
+      member: [],
+      season: [],
+      class: [],
+      on_offline: [],
+      sort: "newest",
+      filterMode: "haves",
+    });
+
+    assert.equal(params.has("page"), false);
+    assert.equal(params.has("user"), false);
+    assert.equal(params.get("filter_mode"), "haves");
   });
 });

@@ -4,20 +4,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangleIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import {
-  defaultFilters,
-  ObjektFilterBar,
-  type ObjektFilterState,
-} from "@/components/objekt/objekt-filter-bar";
+import { parseAsInteger, useQueryState } from "nuqs";
+import { useEffect, useState } from "react";
+import { ObjektFilterBar } from "@/components/objekt/objekt-filter-bar";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useObjektFilters } from "@/hooks/use-objekt-filters";
 import { useSession } from "@/lib/auth-client";
 import { sectionHref } from "@/lib/sections";
-import { applyTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
+import { tradeFilterQueryParams } from "@/lib/trade-search-shortcuts";
 import type {
   ActiveTradeDTO,
   TradePostDTO,
@@ -47,21 +45,6 @@ const statusLabel: Record<TradeStatus, string> = {
   countered: "Countered",
   disputed: "Disputed",
 };
-
-function buildParams(filters: ObjektFilterState, page: number) {
-  const effective = applyTradeSearchShortcuts(filters);
-  const p = new URLSearchParams();
-  p.set("page", String(page));
-  for (const a of effective.artist) p.append("artist", a);
-  for (const m of effective.member) p.append("member", m);
-  for (const s of effective.season) p.append("season", s);
-  for (const c of effective.class) p.append("class", c);
-  for (const o of effective.on_offline) p.append("on_offline", o);
-  if (effective.search) p.set("search", effective.search);
-  if (effective.sort) p.set("sort", effective.sort);
-  p.set("filter_mode", effective.filterMode);
-  return p;
-}
 
 function TradeNotifications() {
   const queryClient = useQueryClient();
@@ -158,14 +141,14 @@ export default function MyTradesPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<ObjektFilterState>(defaultFilters);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useQueryState(
+    "page",
+    parseAsInteger.withDefault(1).withOptions({ history: "replace" }),
+  );
+  const [filters, setFilters] = useObjektFilters({
+    onChange: () => setPage(1),
+  });
   const [activePage, setActivePage] = useState(1);
-
-  const handleFiltersChange = useCallback((next: ObjektFilterState) => {
-    setFilters(next);
-    setPage(1);
-  }, []);
 
   useEffect(() => {
     if (!isPending && session === null) router.push("/sign-in");
@@ -193,7 +176,9 @@ export default function MyTradesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["my-trades", filters, page],
     queryFn: async () => {
-      const res = await fetch(`/api/trades/mine?${buildParams(filters, page)}`);
+      const res = await fetch(
+        `/api/trades/mine?${tradeFilterQueryParams(filters, { page })}`,
+      );
       return res.json();
     },
     enabled: !!session,
@@ -347,7 +332,7 @@ export default function MyTradesPage() {
       <h2 className="text-lg font-semibold">My Trade Posts</h2>
       <ObjektFilterBar
         filters={filters}
-        onChange={handleFiltersChange}
+        onChange={setFilters}
         smartSearchMode="trade"
         searchPlaceholder="Search your posts... e.g. h sy cc101"
       />

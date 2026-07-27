@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { useFilterOptions } from "@/hooks/use-filter-options";
 import { decodeGroupedValue } from "@/lib/filter-utils";
-import { validOnlineTypes } from "@/lib/filters";
+import { type ValidSort, validOnlineTypes } from "@/lib/filters";
 import { parseTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
 
 export type ObjektFilterState = {
@@ -27,7 +27,7 @@ export type ObjektFilterState = {
   season: string[];
   class: string[];
   on_offline: string[];
-  sort: string;
+  sort: ValidSort;
   filterMode: "haves" | "wants";
 };
 

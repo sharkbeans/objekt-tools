@@ -327,3 +327,35 @@ export function applyTradeSearchShortcuts<T extends TradeSearchFilterShape>(
     filterMode: parsed.filterMode ?? filters.filterMode,
   };
 }
+
+type TradeListFilterShape = TradeSearchFilterShape & {
+  artist: string[];
+  season: string[];
+  class: string[];
+  on_offline: string[];
+  sort: string;
+};
+
+/**
+ * Expands search shortcuts and flattens the result into the query string
+ * `/api/trades*` routes expect. Shared by every trade-browsing page so
+ * "how filters become an API call" has one implementation.
+ */
+export function tradeFilterQueryParams(
+  filters: TradeListFilterShape,
+  extra?: { page?: number; user?: string },
+): URLSearchParams {
+  const effective = applyTradeSearchShortcuts(filters);
+  const params = new URLSearchParams();
+  if (extra?.page) params.set("page", String(extra.page));
+  for (const a of effective.artist) params.append("artist", a);
+  for (const m of effective.member) params.append("member", m);
+  for (const s of effective.season) params.append("season", s);
+  for (const c of effective.class) params.append("class", c);
+  for (const o of effective.on_offline) params.append("on_offline", o);
+  if (effective.search) params.set("search", effective.search);
+  if (effective.sort) params.set("sort", effective.sort);
+  params.set("filter_mode", effective.filterMode);
+  if (extra?.user) params.set("user", extra.user);
+  return params;
+}
