@@ -7,7 +7,9 @@ import { useEffect, useState } from "react";
 import {
   readStoredCosmoAddress,
   readStoredCosmoUsername,
+  storeCosmoUsername,
 } from "@/lib/cosmo-username-storage";
+import type { ProgressIdentityResponse } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { ProgressSearch } from "./progress-search";
 
@@ -16,27 +18,53 @@ export function CollectionHomeRedirect() {
   const [checkedStorage, setCheckedStorage] = useState(false);
 
   useEffect(() => {
-    const savedAddress = readStoredCosmoAddress();
-    if (savedAddress) {
+    let cancelled = false;
+
+    function open(nickname: string) {
       router.replace(
-        sectionHref(`/collection/by-wallet/${savedAddress}`, {
+        sectionHref(`/collection/${encodeURIComponent(nickname)}`, {
           currentSection: "collect",
         }),
       );
-      return;
     }
 
-    const savedNickname = readStoredCosmoUsername();
-    if (savedNickname) {
-      router.replace(
-        sectionHref(`/collection/${savedNickname}`, {
-          currentSection: "collect",
-        }),
-      );
-      return;
+    // The saved wallet is the rename-proof handle, but it must never reach the
+    // URL bar: resolve it to the account's current nickname here, then
+    // navigate to that. The saved nickname is the fallback for when the
+    // lookup can't answer (Cosmo down, wallet we've never resolved).
+    async function openSavedCollection() {
+      const savedAddress = readStoredCosmoAddress();
+      const savedNickname = readStoredCosmoUsername();
+
+      if (savedAddress) {
+        try {
+          const res = await fetch(
+            `/api/progress/resolve-address/${savedAddress}`,
+          );
+          if (cancelled) return;
+          if (res.ok) {
+            const data: ProgressIdentityResponse = await res.json();
+            storeCosmoUsername(data.nickname, data.address);
+            open(data.nickname);
+            return;
+          }
+        } catch {
+          if (cancelled) return;
+        }
+      }
+
+      if (savedNickname) {
+        open(savedNickname);
+        return;
+      }
+
+      setCheckedStorage(true);
     }
 
-    setCheckedStorage(true);
+    void openSavedCollection();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   if (!checkedStorage) {

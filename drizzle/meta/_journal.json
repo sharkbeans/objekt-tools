@@ -204,6 +204,13 @@
       "when": 1784507152380,
       "tag": "0028_ordinary_veda",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785163526045,
+      "tag": "0029_nostalgic_zodiak",
+      "breakpoints": true
     }
   ]
 }

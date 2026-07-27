@@ -95,6 +95,22 @@ export const cosmoAccount = pgTable("cosmo_account", {
   lastCosmoCheck: timestamp("last_cosmo_check"),
 });
 
+// Durable wallet -> nickname cache for every Cosmo user we resolve, not just
+// linked accounts. Ported from objekt-explorer's user_address table: the wallet
+// is the stable identity and the nickname is a mutable label, so this is what
+// lets a saved collection survive a Cosmo rename. Redis carries the same
+// mapping as a fast path, but only this table survives an eviction or flush.
+export const cosmoUserCache = pgTable("cosmo_user_cache", {
+  address: text("address").primaryKey(),
+  nickname: text("nickname").notNull(),
+  // Cosmo's stable numeric user id, captured opportunistically via search
+  // (the by-nickname endpoint doesn't return it). It's the only rename-proof
+  // handle for an account nobody has linked — the nickname on file goes stale
+  // the moment its owner renames.
+  cosmoId: integer("cosmo_id"),
+  lastCosmoCheck: timestamp("last_cosmo_check").notNull().defaultNow(),
+});
+
 export const tradePost = pgTable(
   "trade_post",
   {

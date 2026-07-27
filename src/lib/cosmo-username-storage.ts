@@ -3,6 +3,9 @@ const COSMO_USERNAME_STORAGE_KEYS = [
   "cosmoUsername",
   "progress-last-nickname",
 ] as const;
+// The wallet behind the saved nickname. Never goes in a URL — it's kept so a
+// saved collection can be re-resolved to whatever nickname the account carries
+// now, which is what survives a Cosmo rename.
 const COSMO_ADDRESS_STORAGE_KEY = "progress-last-address";
 
 export function readStoredCosmoUsername(): string | null {

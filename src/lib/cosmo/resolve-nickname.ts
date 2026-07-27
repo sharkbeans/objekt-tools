@@ -1,8 +1,11 @@
 import { eq } from "drizzle-orm";
-import { fetchUserByNickname } from "@/lib/cosmo/client";
-import { refreshCosmoAccountIfStale } from "@/lib/cosmo/refresh-account";
+import { fetchUserByNickname, searchUsers } from "@/lib/cosmo/client";
+import {
+  fetchCurrentNickname,
+  refreshCosmoAccountIfStale,
+} from "@/lib/cosmo/refresh-account";
 import { db } from "@/lib/db";
-import { cosmoAccount } from "@/lib/db/schema";
+import { cosmoAccount, cosmoUserCache } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
 import { getCached } from "@/lib/server-cache";
 
@@ -15,6 +18,7 @@ const RESOLVED_NICKNAME_TTL_MS = RESOLVED_NICKNAME_TTL_SECONDS * 1000;
 // remain useful without letting the hint itself establish ownership.
 const REVERSE_NICKNAME_TTL_SECONDS = 365 * 24 * 60 * 60;
 const ADDRESS_LOOKUP_MAX_AGE_MS = 5 * 60_000;
+const COSMO_ID_RETRY_MS = 60 * 60_000;
 
 type ResolvedNickname = {
   address: string;
@@ -37,6 +41,59 @@ function parseCachedResolution(value: string): ResolvedNickname | null {
   } catch {
     return null;
   }
+}
+
+// Cosmo's by-nickname endpoint doesn't return the numeric user id, so pick it
+// up from search the first time we see a wallet. Best-effort: without it the
+// wallet simply stays nickname-only and can't follow a future rename.
+async function lookupCosmoId(
+  nickname: string,
+  address: string,
+): Promise<number | null> {
+  try {
+    const { results } = await searchUsers(nickname);
+    const match = results.find((r) => r.address.toLowerCase() === address);
+    return match?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Persist a resolution so an address lookup still works after Redis loses the
+// reverse hint. Never overwrites a known cosmoId with null.
+async function rememberCosmoUser(resolved: ResolvedNickname): Promise<void> {
+  try {
+    const existing = await db.query.cosmoUserCache.findFirst({
+      where: eq(cosmoUserCache.address, resolved.address),
+      columns: { cosmoId: true, lastCosmoCheck: true },
+    });
+    // Search is an extra round trip, so only spend it on a wallet we've never
+    // seen — or on one whose id we've failed to capture for a while.
+    const retryCosmoId =
+      !existing ||
+      (existing.cosmoId === null &&
+        Date.now() - existing.lastCosmoCheck.getTime() > COSMO_ID_RETRY_MS);
+    const cosmoId = retryCosmoId
+      ? await lookupCosmoId(resolved.nickname, resolved.address)
+      : existing.cosmoId;
+
+    await db
+      .insert(cosmoUserCache)
+      .values({
+        address: resolved.address,
+        nickname: resolved.nickname,
+        cosmoId,
+        lastCosmoCheck: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: cosmoUserCache.address,
+        set: {
+          nickname: resolved.nickname,
+          cosmoId,
+          lastCosmoCheck: new Date(),
+        },
+      });
+  } catch {}
 }
 
 /**
@@ -66,73 +123,114 @@ export async function resolveNickname(
     `cosmo:nickname:resolved:v2:${normalizedNickname}`,
     RESOLVED_NICKNAME_TTL_MS,
     async () => {
-      const resolvedCacheKey = `cosmo:nickname:resolved:v2:${normalizedNickname}`;
-      const notFoundCacheKey = `cosmo:nickname:notfound:v2:${normalizedNickname}`;
-      try {
-        const [cachedResolved, cachedNotFound] = await redis.mget(
-          resolvedCacheKey,
-          notFoundCacheKey,
-        );
-        if (cachedResolved) {
-          const parsed = parseCachedResolution(cachedResolved);
-          if (parsed) return parsed;
-        }
-        if (cachedNotFound) return null;
-      } catch {}
-
-      let resolved: { nickname: string; address: string } | null;
-      try {
-        resolved = await fetchUserByNickname(nickname);
-      } catch {
-        // Transient upstream error — don't poison the negative cache. Signal
-        // the caller to return a 503 so clients retry, rather than a
-        // misleading 404.
-        throw new CosmoUnavailableError();
-      }
-
-      if (!resolved) {
-        try {
-          await redis.set(
-            notFoundCacheKey,
-            "1",
-            "EX",
-            NOT_FOUND_NICKNAME_TTL_SECONDS,
-          );
-        } catch {}
-        return null;
-      }
-
-      const normalizedResolved = {
-        address: resolved.address.toLowerCase(),
-        nickname: resolved.nickname,
-      };
-      try {
-        await Promise.all([
-          redis.set(
-            resolvedCacheKey,
-            JSON.stringify(normalizedResolved),
-            "EX",
-            RESOLVED_NICKNAME_TTL_SECONDS,
-          ),
-          redis.set(
-            `cosmo:address:last-nickname:v2:${normalizedResolved.address}`,
-            normalizedResolved.nickname,
-            "EX",
-            REVERSE_NICKNAME_TTL_SECONDS,
-          ),
-          redis.del(notFoundCacheKey),
-        ]);
-      } catch {}
-      return normalizedResolved;
+      // Persist on every load, not just on a live Cosmo fetch: the Redis
+      // fast path would otherwise keep the durable mapping from ever being
+      // written, which is exactly the row an address lookup falls back to.
+      const resolved = await loadResolvedNickname(nickname, normalizedNickname);
+      if (resolved) await rememberCosmoUser(resolved);
+      return resolved;
     },
   );
 }
 
+async function loadResolvedNickname(
+  nickname: string,
+  normalizedNickname: string,
+): Promise<ResolvedNickname | null> {
+  const resolvedCacheKey = `cosmo:nickname:resolved:v2:${normalizedNickname}`;
+  const notFoundCacheKey = `cosmo:nickname:notfound:v2:${normalizedNickname}`;
+  try {
+    const [cachedResolved, cachedNotFound] = await redis.mget(
+      resolvedCacheKey,
+      notFoundCacheKey,
+    );
+    if (cachedResolved) {
+      const parsed = parseCachedResolution(cachedResolved);
+      if (parsed) return parsed;
+    }
+    if (cachedNotFound) return null;
+  } catch {}
+
+  let resolved: { nickname: string; address: string } | null;
+  try {
+    resolved = await fetchUserByNickname(nickname);
+  } catch {
+    // Transient upstream error — don't poison the negative cache. Signal
+    // the caller to return a 503 so clients retry, rather than a
+    // misleading 404.
+    throw new CosmoUnavailableError();
+  }
+
+  if (!resolved) {
+    try {
+      await redis.set(
+        notFoundCacheKey,
+        "1",
+        "EX",
+        NOT_FOUND_NICKNAME_TTL_SECONDS,
+      );
+    } catch {}
+    return null;
+  }
+
+  const normalizedResolved = {
+    address: resolved.address.toLowerCase(),
+    nickname: resolved.nickname,
+  };
+  try {
+    await Promise.all([
+      redis.set(
+        resolvedCacheKey,
+        JSON.stringify(normalizedResolved),
+        "EX",
+        RESOLVED_NICKNAME_TTL_SECONDS,
+      ),
+      redis.set(
+        `cosmo:address:last-nickname:v2:${normalizedResolved.address}`,
+        normalizedResolved.nickname,
+        "EX",
+        REVERSE_NICKNAME_TTL_SECONDS,
+      ),
+      redis.del(notFoundCacheKey),
+    ]);
+  } catch {}
+  return normalizedResolved;
+}
+
+// Re-checks a cached wallet against Cosmo's stable user id when the row is
+// older than maxAgeMs, so a rename is picked up on the next lookup. Mirrors
+// refreshCosmoAccountIfStale() for wallets nobody has linked.
+async function refreshCachedUserIfStale(row: {
+  address: string;
+  nickname: string;
+  cosmoId: number | null;
+  lastCosmoCheck: Date;
+}): Promise<string> {
+  if (!row.cosmoId) return row.nickname;
+  if (Date.now() - row.lastCosmoCheck.getTime() <= ADDRESS_LOOKUP_MAX_AGE_MS) {
+    return row.nickname;
+  }
+
+  const current = await fetchCurrentNickname(row.cosmoId);
+  try {
+    await db
+      .update(cosmoUserCache)
+      .set({ nickname: current ?? row.nickname, lastCosmoCheck: new Date() })
+      .where(eq(cosmoUserCache.address, row.address));
+  } catch {}
+  return current ?? row.nickname;
+}
+
 /**
- * Resolve the best currently-known nickname for a stable wallet URL, then
- * verify that Cosmo still maps that nickname back to the same wallet. Linked
- * accounts can follow renames through their stable Cosmo id; recently viewed
- * public accounts use the reverse hint populated by resolveNickname().
+ * Resolve the wallet a collection is stored under to the nickname the account
+ * carries *right now*, then verify Cosmo still maps that nickname back to the
+ * same wallet. The wallet is the stable identity and the nickname is a mutable
+ * label, so this is what keeps a saved collection working across a Cosmo
+ * rename — callers redirect to the nickname, which is all the URL ever shows.
+ *
+ * Candidates, most authoritative first: a linked account's stable Cosmo id,
+ * the durable cosmo_user_cache row (itself refreshed through that same id when
+ * we captured one), then Redis' reverse hint as a fast path.
  */
 export async function resolveCurrentNicknameForAddress(
   address: string,
@@ -157,6 +255,13 @@ export async function resolveCurrentNicknameForAddress(
     );
     if (refreshed.nickname) candidates.push(refreshed.nickname);
   }
+
+  try {
+    const cached = await db.query.cosmoUserCache.findFirst({
+      where: eq(cosmoUserCache.address, normalizedAddress),
+    });
+    if (cached) candidates.push(await refreshCachedUserIfStale(cached));
+  } catch {}
 
   try {
     const reverseHint = await redis.get(

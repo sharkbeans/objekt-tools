@@ -1,7 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { resolveCurrentNicknameForAddress } from "@/lib/cosmo/resolve-nickname";
 import { resolveMemberCasing } from "@/lib/filters";
 
+// Legacy wallet URLs only — see ../page.tsx.
 export default async function CollectionWalletMemberRedirectPage({
   params,
   searchParams,
@@ -11,7 +12,7 @@ export default async function CollectionWalletMemberRedirectPage({
 }) {
   const { address, member } = await params;
   const resolved = await resolveCurrentNicknameForAddress(address);
-  if (!resolved) notFound();
+  if (!resolved) redirect("/collection");
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(await searchParams)) {

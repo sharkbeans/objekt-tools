@@ -12,6 +12,20 @@ const REFRESH_TTL_MS = 60 * 60 * 1000;
 // artist-specific, so any valid artist works here.
 const PROFILE_ARTIST_ID = "tripleS";
 
+// Current nickname for a stable Cosmo user id, or null when Cosmo can't be
+// reached. Unlike a stored nickname this can't go stale, so it's what makes an
+// address lookup survive a rename.
+export async function fetchCurrentNickname(
+  cosmoId: number,
+): Promise<string | null> {
+  try {
+    const profile = await fetchUserProfile(cosmoId, PROFILE_ARTIST_ID);
+    return profile.nickname;
+  } catch {
+    return null;
+  }
+}
+
 type RefreshableAccount = {
   id: number;
   cosmoId: number | null;

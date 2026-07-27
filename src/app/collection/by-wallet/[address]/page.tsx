@@ -1,6 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { resolveCurrentNicknameForAddress } from "@/lib/cosmo/resolve-nickname";
 
+// Legacy wallet URLs only: collection links are nickname-based now. Kept so
+// old bookmarks and history entries still land somewhere useful.
 export default async function CollectionWalletRedirectPage({
   params,
   searchParams,
@@ -10,7 +12,9 @@ export default async function CollectionWalletRedirectPage({
 }) {
   const { address } = await params;
   const resolved = await resolveCurrentNicknameForAddress(address);
-  if (!resolved) notFound();
+  // No nickname for this wallet (unlinked account, expired reverse hint) —
+  // send them to the collection home rather than dead-ending on a 404.
+  if (!resolved) redirect("/collection");
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(await searchParams)) {
