@@ -379,16 +379,15 @@ export function ProgressOverviewContent({ nickname, address }: Props) {
         </div>
 
         {switchingTo && (
-          <div className="absolute inset-x-0 top-16 flex justify-center">
-            <div className="rounded-xl border border-border bg-background/90 px-4 py-2 shadow-sm backdrop-blur">
-              <ObjektScanStatus
-                label={
-                  switchingTo.phase === "resolving"
-                    ? `Finding ${switchingTo.nickname}…`
-                    : `Opening ${switchingTo.nickname}'s collection…`
-                }
-              />
-            </div>
+          <div className="pointer-events-none absolute inset-x-0 top-16 flex justify-center px-4">
+            <ObjektScanStatus
+              className="text-center [--shimmer-base:rgba(255,255,255,0.78)] [--shimmer-highlight:#ffffff] [text-shadow:0_1px_2px_rgba(0,0,0,0.78),0_0_16px_rgba(0,0,0,0.42)]"
+              label={
+                switchingTo.phase === "resolving"
+                  ? `Finding ${switchingTo.nickname}…`
+                  : `Opening ${switchingTo.nickname}'s collection…`
+              }
+            />
           </div>
         )}
       </div>
