@@ -15,14 +15,14 @@ import {
 describe("syncPosterTradePost (integration)", {
   skip: !hasTestDb && "TEST_DATABASE_URL not set",
 }, () => {
-  let sync: typeof import("@/lib/poster-trade-sync");
+  let sync: typeof import("@/lib/poster/poster-trade-sync");
   let schema: typeof import("@/lib/db/schema");
 
   before(async () => {
     setupTestEnv();
     await migrateAppDb();
     await createIndexerTables();
-    sync = await import("@/lib/poster-trade-sync");
+    sync = await import("@/lib/poster/poster-trade-sync");
     schema = await import("@/lib/db/schema");
   });
 

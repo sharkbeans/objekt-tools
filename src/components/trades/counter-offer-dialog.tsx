@@ -27,7 +27,7 @@ import {
   isSameObjektInstance,
 } from "@/lib/objekt-identity";
 import { sectionHref } from "@/lib/sections";
-import type { ObjektSearchResult } from "@/lib/trade-types";
+import type { ObjektSearchResult } from "@/lib/trade/trade-types";
 
 interface TradeSide {
   id: number;

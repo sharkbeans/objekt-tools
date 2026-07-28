@@ -6,7 +6,9 @@ const path = require("node:path");
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const db = drizzle(pool);
-  await migrate(db, { migrationsFolder: path.join(__dirname, "drizzle") });
+  await migrate(db, {
+    migrationsFolder: path.join(__dirname, "..", "drizzle"),
+  });
   await pool.end();
   console.log("Migrations complete.");
 }

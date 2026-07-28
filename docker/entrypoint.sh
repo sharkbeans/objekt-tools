@@ -2,7 +2,7 @@
 set -e
 
 echo "Running database migrations..."
-node /app/migrate.js
+node /app/scripts/migrate.js
 
 echo "Starting app..."
 exec node server.js

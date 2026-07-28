@@ -21,9 +21,9 @@ import {
   getActiveBan,
   getBlockingTradeId,
   propagateResolution,
-} from "@/lib/trade-guards";
-import { finalizeCompletedTradePosts } from "@/lib/trade-post-completion";
-import { resolveCollectionUuids } from "@/lib/trade-transfer-matching";
+} from "@/lib/trade/trade-guards";
+import { finalizeCompletedTradePosts } from "@/lib/trade/trade-post-completion";
+import { resolveCollectionUuids } from "@/lib/trade/trade-transfer-matching";
 
 // POST /api/active-trades/[id]/accept — recipient accepts the pending trade
 export async function POST(

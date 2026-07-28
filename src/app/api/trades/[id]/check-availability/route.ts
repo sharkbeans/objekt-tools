@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { redis } from "@/lib/redis";
-import { verifyTradePostAvailability } from "@/lib/trade-availability";
+import { verifyTradePostAvailability } from "@/lib/trade/trade-availability";
 
 export async function POST(
   _request: NextRequest,

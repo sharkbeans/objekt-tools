@@ -3,7 +3,7 @@ import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { db } from "@/lib/db";
 import { poster, posterHave } from "@/lib/db/schema";
 import { loadOwnedObjektsForPublicCollectionIds } from "@/lib/indexer-owned-objekts";
-import { syncPosterTradePost } from "@/lib/poster-trade-sync";
+import { syncPosterTradePost } from "@/lib/poster/poster-trade-sync";
 import { redis } from "@/lib/redis";
 
 type PosterRow = {

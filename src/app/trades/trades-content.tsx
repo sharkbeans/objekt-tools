@@ -12,8 +12,8 @@ import { ActiveTradesBanner } from "@/components/trades/active-trades-banner";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
 import { Badge } from "@/components/ui/badge";
-import { applyTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
-import type { TradePostDTO } from "@/lib/trade-types";
+import { applyTradeSearchShortcuts } from "@/lib/trade/trade-search-shortcuts";
+import type { TradePostDTO } from "@/lib/trade/trade-types";
 
 const PAGINATED_SKELETON_KEYS = [
   "paginated-1",

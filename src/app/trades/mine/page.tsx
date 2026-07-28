@@ -17,12 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
 import { sectionHref } from "@/lib/sections";
-import { applyTradeSearchShortcuts } from "@/lib/trade-search-shortcuts";
+import { applyTradeSearchShortcuts } from "@/lib/trade/trade-search-shortcuts";
 import type {
   ActiveTradeDTO,
   TradePostDTO,
   TradeStatus,
-} from "@/lib/trade-types";
+} from "@/lib/trade/trade-types";
 import { cn } from "@/lib/utils";
 
 const statusVariant: Record<

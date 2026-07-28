@@ -1,6 +1,6 @@
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { anyWantLabel } from "@/lib/objekt-label";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 
 /** Build a poster want item from an ANY-filter want (no specific objekt). */

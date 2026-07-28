@@ -9,7 +9,7 @@ import {
   tradePostHave,
   tradePostWant,
 } from "@/lib/db/schema";
-import { syncPosterTradePost } from "@/lib/poster-trade-sync";
+import { syncPosterTradePost } from "@/lib/poster/poster-trade-sync";
 
 export const dynamic = "force-dynamic";
 

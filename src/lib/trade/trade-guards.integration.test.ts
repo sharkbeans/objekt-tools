@@ -20,14 +20,14 @@ import {
 describe("trade-guards (integration)", {
   skip: !hasTestDb && "TEST_DATABASE_URL not set",
 }, () => {
-  let guards!: typeof import("@/lib/trade-guards");
+  let guards!: typeof import("@/lib/trade/trade-guards");
   let schema!: typeof import("@/lib/db/schema");
 
   before(async () => {
     setupTestEnv();
     await migrateAppDb();
     await createIndexerTables();
-    guards = await import("@/lib/trade-guards");
+    guards = await import("@/lib/trade/trade-guards");
     schema = await import("@/lib/db/schema");
   });
 

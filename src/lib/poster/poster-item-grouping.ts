@@ -1,4 +1,4 @@
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 
 export function getItemQuantity(item: ResolvedPosterItem): number {
   return item.parsed.quantity && item.parsed.quantity > 1

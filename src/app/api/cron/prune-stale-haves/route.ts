@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
-import { pruneStaleHaves } from "@/lib/poster-inventory-prune";
+import { pruneStaleHaves } from "@/lib/poster/poster-inventory-prune";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization") ?? "";

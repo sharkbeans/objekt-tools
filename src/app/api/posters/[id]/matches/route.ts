@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { poster, tradePost } from "@/lib/db/schema";
-import { findTradePostMatches } from "@/lib/trade-post-matches";
+import { findTradePostMatches } from "@/lib/trade/trade-post-matches";
 
 // GET /api/posters/[id]/matches — find trade partners for a poster's
 // haves/wants, via its mirrored "list" trade post (see poster-trade-sync.ts).

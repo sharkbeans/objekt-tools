@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { DiscordBanner } from "@/components/discord-banner";
+import { DiscordBanner } from "@/components/auth/discord-banner";
 import { SiteDisclaimerFooter } from "@/components/footer";
 import { Navbar } from "@/components/navbar";
 import { Providers } from "@/components/providers";

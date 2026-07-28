@@ -15,14 +15,14 @@ import {
 describe("trade post completion (integration)", {
   skip: !hasTestDb && "TEST_DATABASE_URL not set",
 }, () => {
-  let completion!: typeof import("@/lib/trade-post-completion");
+  let completion!: typeof import("@/lib/trade/trade-post-completion");
   let schema!: typeof import("@/lib/db/schema");
 
   before(async () => {
     setupTestEnv();
     await migrateAppDb();
     await createIndexerTables();
-    completion = await import("@/lib/trade-post-completion");
+    completion = await import("@/lib/trade/trade-post-completion");
     schema = await import("@/lib/db/schema");
   });
 

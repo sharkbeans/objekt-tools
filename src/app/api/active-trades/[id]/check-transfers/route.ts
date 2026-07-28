@@ -20,14 +20,14 @@ import {
 import { notify } from "@/lib/notify";
 import { publishTradeEvent } from "@/lib/realtime";
 import { redis } from "@/lib/redis";
-import { propagateResolution, tryLiftBan } from "@/lib/trade-guards";
-import { finalizeCompletedTradePosts } from "@/lib/trade-post-completion";
+import { propagateResolution, tryLiftBan } from "@/lib/trade/trade-guards";
+import { finalizeCompletedTradePosts } from "@/lib/trade/trade-post-completion";
 import {
   type CollectionTransferEvent,
   fetchCollectionTransferEvents,
   fetchSerials,
   pickTransferForSide,
-} from "@/lib/trade-transfer-matching";
+} from "@/lib/trade/trade-transfer-matching";
 
 type ActiveTradeSideRow = typeof activeTradeSide.$inferSelect;
 

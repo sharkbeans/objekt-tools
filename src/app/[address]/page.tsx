@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { type ReactNode, use, useMemo, useState } from "react";
+import { UnlinkCosmoDialog } from "@/components/auth/unlink-cosmo-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +25,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 

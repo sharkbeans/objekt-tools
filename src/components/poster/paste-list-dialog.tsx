@@ -23,7 +23,7 @@ import { parsePastedTrade } from "@/lib/paste-parser";
 import {
   type ResolvedPosterItem,
   resolveForPoster,
-} from "@/lib/poster-resolver";
+} from "@/lib/poster/poster-resolver";
 
 type Stage = "input" | "resolving" | "preview";
 

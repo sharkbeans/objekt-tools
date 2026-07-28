@@ -33,7 +33,10 @@ import {
   encodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
-import { makePosterItem, resolvedItemToApiInput } from "@/lib/poster-item";
+import {
+  makePosterItem,
+  resolvedItemToApiInput,
+} from "@/lib/poster/poster-item";
 import type { ProgressCollection } from "@/lib/progress/types";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";

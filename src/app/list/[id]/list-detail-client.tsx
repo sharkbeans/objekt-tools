@@ -28,15 +28,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
+import { renderPosterToCanvas } from "@/lib/poster/poster-canvas-render";
 import {
   autoGridCols,
   getItemQuantity,
   getNumberGroupKey,
-} from "@/lib/poster-item-grouping";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+} from "@/lib/poster/poster-item-grouping";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
-import type { TradePostDTO } from "@/lib/trade-types";
+import type { TradePostDTO } from "@/lib/trade/trade-types";
 
 interface StoredItem {
   id: number;

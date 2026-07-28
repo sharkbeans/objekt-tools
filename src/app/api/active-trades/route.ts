@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade } from "@/lib/db/schema";
-import { checkTradeOfferQuota } from "@/lib/trade-guards";
+import { checkTradeOfferQuota } from "@/lib/trade/trade-guards";
 
 const PAGE_LIMIT = 12;
 

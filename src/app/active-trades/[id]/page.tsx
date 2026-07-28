@@ -15,7 +15,7 @@ import Image from "next/image";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { Fragment, use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DiscordNudge } from "@/components/discord-nudge";
+import { DiscordNudge } from "@/components/auth/discord-nudge";
 import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
 import {
   AlertDialog,
@@ -45,7 +45,7 @@ import type {
   SideStatus,
   TradeSideDTO as TradeSide,
   TradeStatus,
-} from "@/lib/trade-types";
+} from "@/lib/trade/trade-types";
 import { cn } from "@/lib/utils";
 
 interface CounterOfferChainEntry {

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
-import { verifyOpenTradesCron } from "@/lib/trade-availability";
+import { verifyOpenTradesCron } from "@/lib/trade/trade-availability";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization") ?? "";

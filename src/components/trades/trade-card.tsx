@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { membersByArtist } from "@/lib/filters";
 import { anyWantLabel, formatShortLabel } from "@/lib/objekt-label";
-import type { ObjektSearchResult } from "@/lib/trade-types";
+import type { ObjektSearchResult } from "@/lib/trade/trade-types";
 
 interface TradeItem {
   id: number;

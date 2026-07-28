@@ -7,8 +7,11 @@ import type {
   PosterData,
   PosterTheme,
 } from "@/components/poster/poster-canvas";
-import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import {
+  getItemQuantity,
+  getNumberGroupKey,
+} from "@/lib/poster/poster-item-grouping";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 
 const DARK = {

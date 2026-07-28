@@ -11,8 +11,8 @@ import {
   getObjektInstanceKey,
   isSameObjektInstance,
 } from "@/lib/objekt-identity";
-import { makePosterItem } from "@/lib/poster-item";
-import { getNumberGroupKey } from "@/lib/poster-item-grouping";
+import { makePosterItem } from "@/lib/poster/poster-item";
+import { getNumberGroupKey } from "@/lib/poster/poster-item-grouping";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 import { cn } from "@/lib/utils";
 

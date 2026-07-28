@@ -15,7 +15,7 @@ import {
   checkTradeOfferQuota,
   getActiveBan,
   getBlockingTradeId,
-} from "@/lib/trade-guards";
+} from "@/lib/trade/trade-guards";
 import { validateWantsOnly } from "@/lib/wants-only-validation";
 
 interface SideInput {

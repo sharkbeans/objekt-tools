@@ -1,5 +1,8 @@
-import { getItemQuantity, getNumberGroupKey } from "@/lib/poster-item-grouping";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import {
+  getItemQuantity,
+  getNumberGroupKey,
+} from "@/lib/poster/poster-item-grouping";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 
 export type PosterTheme = "dark" | "light";
 

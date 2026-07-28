@@ -10,7 +10,7 @@ import {
 } from "@/lib/filter-utils";
 import { resolveObjektSearchTerm } from "@/lib/objekt-search";
 import { seasonPrefixMap } from "@/lib/season-prefix";
-import { parseObjektSearchShortcuts } from "@/lib/trade-search-shortcuts";
+import { parseObjektSearchShortcuts } from "@/lib/trade/trade-search-shortcuts";
 import { ObjektGridPicker } from "./objekt-grid-picker";
 
 function hasActiveFilters(filters?: ObjektStructuralFilters): boolean {

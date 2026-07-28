@@ -13,9 +13,9 @@ import { parsePaginationParams } from "@/lib/pagination";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
 import { getCached } from "@/lib/server-cache";
-import { getActiveBan, getBlockingTradeId } from "@/lib/trade-guards";
-import { listTradesPage } from "@/lib/trade-listing";
-import { notifyNewMatches } from "@/lib/trade-match-notify";
+import { getActiveBan, getBlockingTradeId } from "@/lib/trade/trade-guards";
+import { listTradesPage } from "@/lib/trade/trade-listing";
+import { notifyNewMatches } from "@/lib/trade/trade-match-notify";
 
 interface TradeItemInput {
   collectionId: string;

@@ -10,7 +10,7 @@ import {
 } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
 import { publishTradeEvent } from "@/lib/realtime";
-import { issueBan, propagateResolution } from "@/lib/trade-guards";
+import { issueBan, propagateResolution } from "@/lib/trade/trade-guards";
 
 const CANCEL_TIMEOUT_HOURS = 24;
 

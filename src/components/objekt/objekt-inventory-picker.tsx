@@ -17,7 +17,7 @@ import {
 } from "@/lib/filter-utils";
 import { isSameObjektInstance } from "@/lib/objekt-identity";
 import { objektMatchesSearch } from "@/lib/objekt-search";
-import { parseObjektSearchShortcuts } from "@/lib/trade-search-shortcuts";
+import { parseObjektSearchShortcuts } from "@/lib/trade/trade-search-shortcuts";
 import {
   defaultFilters,
   ObjektFilterBar,

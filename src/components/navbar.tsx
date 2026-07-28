@@ -19,7 +19,8 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LoginCodeDialog } from "@/components/login-code-dialog";
+import { LoginCodeDialog } from "@/components/auth/login-code-dialog";
+import { UnlinkCosmoDialog } from "@/components/auth/unlink-cosmo-dialog";
 import { ObjektLogo } from "@/components/objekt-logo";
 import {
   AlertDialog,
@@ -39,7 +40,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UnlinkCosmoDialog } from "@/components/unlink-cosmo-dialog";
 import { useCosmoLink } from "@/hooks/use-cosmo-link";
 import { useUserRealtime } from "@/hooks/use-realtime";
 import { useSession } from "@/lib/auth-client";

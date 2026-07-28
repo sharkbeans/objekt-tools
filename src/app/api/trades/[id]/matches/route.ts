@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { redis } from "@/lib/redis";
-import { findTradePostMatches } from "@/lib/trade-post-matches";
+import { findTradePostMatches } from "@/lib/trade/trade-post-matches";
 
 // GET /api/trades/[id]/matches — find matching trades
 // A match is a trade where:

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useSession } from "@/lib/auth-client";
-import type { ActiveTradeDTO, TradeStatus } from "@/lib/trade-types";
+import type { ActiveTradeDTO, TradeStatus } from "@/lib/trade/trade-types";
 import { cn } from "@/lib/utils";
 
 const statusVariant: Record<

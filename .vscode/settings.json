@@ -1,0 +1,23 @@
+{
+  "files.exclude": {
+    "**/.next": true,
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/.next": true,
+    "**/drizzle/meta": true,
+    "**/package-lock.json": true,
+    "**/public/tools-static": true
+  },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json, .nvmrc, biome.json, components.json, postcss.config.mjs, tsconfig.json, next.config.ts, next-env.d.ts, drizzle.config.ts",
+    "Dockerfile": "docker-compose*.yml, .dockerignore",
+    "README.md": "CLAUDE.md, .gitignore, .gitattributes, .env.*"
+  },
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.codeActionsOnSave": {
+    "source.organizeImports.biome": "explicit"
+  }
+}

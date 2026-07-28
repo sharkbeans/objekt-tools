@@ -89,14 +89,14 @@ import {
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
 import { isSameObjektInstance } from "@/lib/objekt-identity";
-import { renderPosterToCanvas } from "@/lib/poster-canvas-render";
+import { renderPosterToCanvas } from "@/lib/poster/poster-canvas-render";
 import {
   makeAnyWantItem,
   makePosterItem,
   resolvedItemToApiInput,
-} from "@/lib/poster-item";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
-import { formatPosterAsText } from "@/lib/poster-text-format";
+} from "@/lib/poster/poster-item";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
+import { formatPosterAsText } from "@/lib/poster/poster-text-format";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 

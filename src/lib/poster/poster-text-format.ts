@@ -1,5 +1,5 @@
 import type { PosterData } from "@/components/poster/poster-canvas";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 import { getSeasonPrefix } from "@/lib/season-prefix";
 
 function itemCode(item: ResolvedPosterItem): string | null {

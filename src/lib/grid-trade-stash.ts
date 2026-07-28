@@ -1,5 +1,5 @@
 import type { PosterData } from "@/components/poster/poster-canvas";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 
 // Hands off a poster draft from the grid board's "Trade" dialog
 // (/collection/[nickname]/[member]) to the poster builder (/list?prefill=grid)

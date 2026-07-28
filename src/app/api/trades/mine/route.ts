@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth-server";
 import { tradePost } from "@/lib/db/schema";
 import { parseFiltersFromParams } from "@/lib/filter-utils";
 import { parsePaginationParams } from "@/lib/pagination";
-import { listTradesPage } from "@/lib/trade-listing";
+import { listTradesPage } from "@/lib/trade/trade-listing";
 
 export async function GET(request: NextRequest) {
   let session: Awaited<ReturnType<typeof requireSession>>;

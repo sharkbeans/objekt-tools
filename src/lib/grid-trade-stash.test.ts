@@ -5,7 +5,7 @@ import {
   decodeGridTradeStash,
   encodeGridTradeStash,
 } from "@/lib/grid-trade-stash";
-import type { ResolvedPosterItem } from "@/lib/poster-resolver";
+import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 
 function item(collectionNo: string): ResolvedPosterItem {
   return {

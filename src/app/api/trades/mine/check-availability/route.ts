@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
-import { verifyOpenTradesForUser } from "@/lib/trade-availability";
+import { verifyOpenTradesForUser } from "@/lib/trade/trade-availability";
 
 export async function POST() {
   let session: Awaited<ReturnType<typeof requireSession>>;

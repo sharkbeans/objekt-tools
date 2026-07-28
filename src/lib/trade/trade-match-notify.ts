@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { tradeMatchSeen } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
 import { publishUserEvent } from "@/lib/realtime";
-import { findTradePostMatches } from "@/lib/trade-post-matches";
+import { findTradePostMatches } from "@/lib/trade/trade-post-matches";
 
 /**
  * Proactively notifies the owners of newly-matched trade posts, so discovery

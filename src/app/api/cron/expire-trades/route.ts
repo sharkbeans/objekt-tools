@@ -10,7 +10,7 @@ import {
   tradeTransferLog,
 } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
-import { issueBan, propagateResolution } from "@/lib/trade-guards";
+import { issueBan, propagateResolution } from "@/lib/trade/trade-guards";
 
 // GET /api/cron/expire-trades
 // Called by the cron container once per day.

@@ -5,7 +5,7 @@ import {
   extractCompletedSearchShortcuts,
   parseObjektSearchShortcuts,
   parseTradeSearchShortcuts,
-} from "@/lib/trade-search-shortcuts";
+} from "@/lib/trade/trade-search-shortcuts";
 
 describe("trade search shortcuts", () => {
   it("parses the wants shorthand into effective filters", () => {

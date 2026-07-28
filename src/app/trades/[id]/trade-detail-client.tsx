@@ -6,14 +6,14 @@ import { useRouter } from "next/navigation";
 import type * as React from "react";
 import { use, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DiscordNudge } from "@/components/discord-nudge";
+import { DiscordNudge } from "@/components/auth/discord-nudge";
+import { SignInDialog } from "@/components/auth/sign-in-dialog";
 import {
   type ObjektImageItem,
   ObjektImages,
   useObjektImages,
 } from "@/components/objekt/objekt-images";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
-import { SignInDialog } from "@/components/sign-in-dialog";
 import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
 import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
 import { MatchCard } from "@/components/trades/match-card";
@@ -50,7 +50,7 @@ import { compareMembers, compareSeasons } from "@/lib/filter-options";
 import { anyWantLabel } from "@/lib/objekt-label";
 import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
-import type { TradePostDTO } from "@/lib/trade-types";
+import type { TradePostDTO } from "@/lib/trade/trade-types";
 
 type TradeItem = ObjektImageItem;
 type TradeDetailDTO = TradePostDTO & {

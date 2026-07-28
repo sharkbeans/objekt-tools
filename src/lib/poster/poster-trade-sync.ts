@@ -7,7 +7,7 @@ import {
   tradePostHave,
   tradePostWant,
 } from "@/lib/db/schema";
-import { notifyNewMatches } from "@/lib/trade-match-notify";
+import { notifyNewMatches } from "@/lib/trade/trade-match-notify";
 
 // Cap on mirrored have rows (poster quantity expands into one tradePostHave
 // row per copy, same convention the grid trade dialog already uses) — keeps
