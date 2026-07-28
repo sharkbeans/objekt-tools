@@ -1,7 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDownIcon, LayoutGridIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  LayoutGridIcon,
+  Loader2Icon,
+  ShareIcon,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -58,7 +63,6 @@ import { ObjektScanStatus } from "./objekt-scan-status";
 import type { ProgressNavigationState } from "./progress-search";
 import { ProgressSearch } from "./progress-search";
 import { SeasonSection } from "./season-section";
-import { ShareButton } from "./share-dialog";
 
 interface SeasonColorsResponse {
   colors: Record<string, string>;
@@ -1077,18 +1081,25 @@ export function MemberDexContent({
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <ShareButton
-          onShareLink={handleShareLink}
-          onGenerateImage={handleShare}
-          generatingImage={sharing}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleShare}
           disabled={
             sharing ||
             !displayOwnershipLoaded ||
             !tradabilityLoaded ||
             totals.total === 0
           }
-          className="ml-auto"
-        />
+          className="ml-auto gap-2"
+        >
+          {sharing ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <ShareIcon className="h-4 w-4" />
+          )}
+          Share card
+        </Button>
       </div>
 
       <div className="space-y-8">
