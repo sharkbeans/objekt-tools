@@ -1,8 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { useDeviceLogin } from "@/hooks/use-device-login";
 import { signIn } from "@/lib/auth-client";
 
 interface SignInDialogProps {
@@ -20,32 +19,11 @@ interface SignInDialogProps {
 }
 
 export function SignInDialog({ open, onOpenChange }: SignInDialogProps) {
-  const [code, setCode] = useState("");
-  const [verifying, setVerifying] = useState(false);
+  const { state, start } = useDeviceLogin();
 
-  async function handleCodeLogin() {
-    if (code.length !== 6) return;
-    setVerifying(true);
-    try {
-      const res = await fetch("/api/auth/login-code/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Failed to verify code");
-        setCode("");
-        return;
-      }
-      toast.success("Logged in successfully");
-      window.location.reload();
-    } catch {
-      toast.error("Failed to verify code");
-    } finally {
-      setVerifying(false);
-    }
-  }
+  useEffect(() => {
+    if (state.status === "success") window.location.reload();
+  }, [state.status]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,36 +58,59 @@ export function SignInDialog({ open, onOpenChange }: SignInDialogProps) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-muted-foreground text-center">
-              Have a login code? Enter it below.
-            </p>
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                placeholder="000000"
-                value={code}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, "");
-                  setCode(val);
-                }}
-                className="font-mono text-center tracking-widest"
-              />
+          {state.status === "idle" || state.status === "requesting" ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-muted-foreground text-center">
+                Already signed in on another device?
+              </p>
               <Button
-                onClick={handleCodeLogin}
-                disabled={code.length !== 6 || verifying}
+                variant="outline"
+                onClick={start}
+                disabled={state.status === "requesting"}
               >
-                {verifying ? (
+                {state.status === "requesting" ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  "Login"
+                  "Log in with a code"
                 )}
               </Button>
             </div>
-          </div>
+          ) : null}
+
+          {state.status === "polling" ? (
+            <div className="flex flex-col items-center gap-2 rounded-md border p-4">
+              <p className="text-sm text-muted-foreground">
+                On your other device, go to
+              </p>
+              <p className="text-sm font-medium">{state.verificationUri}</p>
+              <p className="text-sm text-muted-foreground">and enter:</p>
+              <div className="text-2xl font-mono font-bold tracking-[0.2em] select-all">
+                {state.userCode}
+              </div>
+              <Loader2 className="size-4 animate-spin text-muted-foreground mt-2" />
+            </div>
+          ) : null}
+
+          {state.status === "denied" ? (
+            <p className="text-center text-sm text-destructive">
+              Login was denied on the other device.
+            </p>
+          ) : null}
+
+          {state.status === "expired" ? (
+            <p className="text-center text-sm text-destructive">
+              Code expired.{" "}
+              <button type="button" className="underline" onClick={start}>
+                Try again
+              </button>
+            </p>
+          ) : null}
+
+          {state.status === "error" ? (
+            <p className="text-center text-sm text-destructive">
+              {state.message}
+            </p>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

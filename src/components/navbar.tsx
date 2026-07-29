@@ -226,7 +226,7 @@ export function Navbar({
                   )}
                   <DropdownMenuItem onClick={() => setLoginCodeOpen(true)}>
                     <SmartphoneIcon className="size-4 mr-2" />
-                    Login Code
+                    Log In Another Device
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setSignOutConfirmOpen(true)}>
@@ -557,7 +557,7 @@ function MobileNav({
                 className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-2"
               >
                 <SmartphoneIcon className="size-4" />
-                Login Code
+                Log In Another Device
               </button>
               <button
                 type="button"
