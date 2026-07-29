@@ -1,9 +1,11 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
+import { deviceAuthorization } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
+import { deviceSessionBridge } from "./auth-device-session";
 import { db } from "./db";
 import * as schema from "./db/schema";
-import { allOrigins, rootDomain, subdomainsEnabled } from "./sections";
+import { allOrigins, rootDomain, rootUrl, subdomainsEnabled } from "./sections";
 
 function getDiscordProviderConfig() {
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -44,6 +46,34 @@ function createAuth() {
         }
       : {}),
     socialProviders: getDiscordProviderConfig(),
+    // Explicit rather than inherited: the middleware cookie-migration shim
+    // hardcodes the same 7 days, and the two must agree.
+    session: {
+      expiresIn: 60 * 60 * 24 * 7,
+    },
+    // Backstop for the device-authorization endpoints (/device/approve and
+    // /device/token). The plugin already enforces its own poll interval via
+    // `slow_down`; this caps everything else.
+    rateLimit: {
+      enabled: true,
+      window: 60,
+      max: 30,
+    },
+    plugins: [
+      // RFC 8628. Replaces the previous hand-rolled 6-digit login-code flow:
+      // a short code is worthless on its own here because /device/approve
+      // requires an authenticated session before it will bind the code to an
+      // account.
+      deviceAuthorization({
+        expiresIn: "10m",
+        interval: "5s",
+        userCodeLength: 8,
+        verificationUri: `${rootUrl()}/device`,
+      }),
+      // Converts the bearer access_token from /device/token into a real
+      // session cookie — see auth-device-session.ts for why this hop exists.
+      deviceSessionBridge(),
+    ],
     databaseHooks: {
       session: {
         create: {

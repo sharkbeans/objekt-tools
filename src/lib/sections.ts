@@ -41,6 +41,9 @@ const ROOT_ONLY_PREFIXES = [
   "/spin",
   "/sign-in",
   "/sign-up",
+  // Device-authorization approval page. Must be root-only: it is the
+  // verification_uri handed to other devices, so it needs one stable URL.
+  "/device",
 ];
 
 export function rootDomain(): string | null {

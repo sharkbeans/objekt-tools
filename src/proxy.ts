@@ -110,7 +110,7 @@ function upgradeSessionCookie(request: NextRequest, response: NextResponse) {
   });
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const gate = previewGate(request);
   if (gate) return gate;
 

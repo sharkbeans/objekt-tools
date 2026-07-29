@@ -76,6 +76,32 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// RFC 8628 device authorization grant, used by the "log in on another device"
+// flow (Better Auth's deviceAuthorization plugin owns every read/write here).
+// The new device polls with `deviceCode`; the user types the short `userCode`
+// on an already-authenticated device to approve it.
+export const deviceCode = pgTable(
+  "device_code",
+  {
+    id: text("id").primaryKey(),
+    deviceCode: text("device_code").notNull(),
+    userCode: text("user_code").notNull(),
+    // Null until approval binds the pending code to an account — a non-null
+    // value here before approval would mean the binding logic is broken.
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at").notNull(),
+    status: text("status").notNull(),
+    lastPolledAt: timestamp("last_polled_at"),
+    pollingInterval: integer("polling_interval"),
+    clientId: text("client_id"),
+    scope: text("scope"),
+  },
+  (t) => [
+    uniqueIndex("device_code_device_code_idx").on(t.deviceCode),
+    uniqueIndex("device_code_user_code_idx").on(t.userCode),
+  ],
+);
+
 // ============================================================
 // Custom tables
 // ============================================================

@@ -1,44 +1,67 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDeviceApproval } from "@/hooks/use-device-approval";
+import { useSession } from "@/lib/auth-client";
 
-interface LoginCodeDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-export function LoginCodeDialog({ open, onOpenChange }: LoginCodeDialogProps) {
+export default function DevicePage() {
+  const router = useRouter();
+  const { data: session, isPending: sessionPending } = useSession();
   const { state, checkCode, approve, deny, reset } = useDeviceApproval();
   const [input, setInput] = useState("");
+  const checkedFromUrl = useRef(false);
 
+  // Redirect unauthenticated visitors, preserving the code so they land
+  // straight back here — approval itself requires a session either way.
   useEffect(() => {
-    if (!open) {
-      setInput("");
-      reset();
+    if (sessionPending || session) return;
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    router.push(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+  }, [sessionPending, session, router]);
+
+  // Deep link from verification_uri_complete: /device?user_code=XXXXXXXX
+  useEffect(() => {
+    if (!session || checkedFromUrl.current) return;
+    const fromUrl = new URLSearchParams(window.location.search).get(
+      "user_code",
+    );
+    if (fromUrl) {
+      checkedFromUrl.current = true;
+      setInput(fromUrl);
+      checkCode(fromUrl);
     }
-  }, [open, reset]);
+  }, [session, checkCode]);
+
+  if (sessionPending || !session) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Log in another device</DialogTitle>
-          <DialogDescription>
-            Enter the code shown on the other device to sign it in as you.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col items-center gap-4 py-4">
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <CardTitle>Log in on another device</CardTitle>
+          <CardDescription>
+            Enter the code shown on the other device to sign it in as{" "}
+            {session.user.name}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           {state.status === "idle" || state.status === "checking" ? (
             <>
               <Input
@@ -54,7 +77,6 @@ export function LoginCodeDialog({ open, onOpenChange }: LoginCodeDialogProps) {
                 }}
               />
               <Button
-                className="w-full"
                 onClick={() => checkCode(input)}
                 disabled={!input || state.status === "checking"}
               >
@@ -71,14 +93,14 @@ export function LoginCodeDialog({ open, onOpenChange }: LoginCodeDialogProps) {
           state.status === "approving" ||
           state.status === "denying" ? (
             <>
-              <p className="text-sm text-muted-foreground text-center">
+              <p className="text-center text-sm text-muted-foreground">
                 Approve login for code{" "}
                 <span className="font-mono font-semibold">
                   {state.userCode}
                 </span>
                 ?
               </p>
-              <div className="flex gap-2 w-full">
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -107,25 +129,24 @@ export function LoginCodeDialog({ open, onOpenChange }: LoginCodeDialogProps) {
           ) : null}
 
           {state.status === "approved" ? (
-            <p className="text-sm text-muted-foreground text-center">
-              The other device is now signed in.
+            <p className="text-center text-sm text-muted-foreground">
+              The other device is now signed in. You can close this page.
             </p>
           ) : null}
 
           {state.status === "denied" ? (
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-center text-sm text-muted-foreground">
               Login denied.
             </p>
           ) : null}
 
           {state.status === "error" ? (
             <>
-              <p className="text-sm text-destructive text-center">
+              <p className="text-center text-sm text-destructive">
                 {state.message}
               </p>
               <Button
                 variant="outline"
-                className="w-full"
                 onClick={() => {
                   setInput("");
                   reset();
@@ -135,8 +156,8 @@ export function LoginCodeDialog({ open, onOpenChange }: LoginCodeDialogProps) {
               </Button>
             </>
           ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
