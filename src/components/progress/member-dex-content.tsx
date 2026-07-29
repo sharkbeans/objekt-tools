@@ -949,7 +949,7 @@ export function MemberDexContent({
     void doShare();
   }, [filtered.length, doShare]);
 
-  const handleShareLink = useCallback(async () => {
+  const _handleShareLink = useCallback(async () => {
     const token = Math.random().toString(36).slice(2, 8);
     const params = new URLSearchParams({ share: token });
     const url = sectionAbsoluteUrl(

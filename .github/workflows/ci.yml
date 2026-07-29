@@ -10,6 +10,9 @@ on:
       - main
       - testing
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -48,7 +51,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -73,9 +76,123 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test
+      - name: Node tests
         env:
           TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/objekt_trade?sslmode=disable
           TEST_INDEXER_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/objekt_indexer?sslmode=disable
           TEST_REDIS_URL: redis://127.0.0.1:6379
-        run: npm test
+        run: npm run test:node
+
+      - name: Vitest component tests
+        run: npm run test:unit
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: validate
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: public.ecr.aws/docker/library/redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      BETTER_AUTH_SECRET: ci-build-secret-0123456789abcdef
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/objekt_trade?sslmode=disable
+      INDEXER_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/objekt_indexer?sslmode=disable
+      REDIS_URL: redis://127.0.0.1:6379
+      DISCORD_CLIENT_ID: ci
+      DISCORD_CLIENT_SECRET: ci
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Create CI databases
+        run: |
+          PGPASSWORD=ci psql -h 127.0.0.1 -U ci -d postgres -c 'CREATE DATABASE objekt_trade;'
+          PGPASSWORD=ci psql -h 127.0.0.1 -U ci -d postgres -c 'CREATE DATABASE objekt_indexer;'
+
+      - name: Run Playwright smoke tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan dependencies and Docker context with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Run OpenGrep SAST
+        id: opengrep
+        uses: platform-sec/opengrep-action@main
+        with:
+          target: .
+          exclude: .claude/**,.next/**,coverage/**,node_modules/**,playwright-report/**,test-results/**
+          output-format: sarif
+          strict: false
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            trivy-results.sarif
+            ${{ steps.opengrep.outputs.sarif-file }}

@@ -23,6 +23,17 @@ All-in-one Cosmo tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the G
 - Tailwind CSS 4, shadcn/ui
 - Better Auth, Biome, Docker
 
+## Testing & Security
+
+- Node/integration tests: `npm run test:node`
+- Component tests: `npm run test:unit`
+- Browser smoke tests: `npm run test:e2e`
+- Coverage: `npm run test:unit:coverage`
+
+CI now runs validation, component tests, Playwright smoke tests, secret scanning, dependency/container scanning, and OpenGrep SAST before deploy.
+
+See [docs/ci-testing-security.md](docs/ci-testing-security.md) for the GitHub Actions and VPS checklist.
+
 ## Acknowledgements
 
 - [objekt-explorer](https://github.com/izrin96/objekt-explorer) for the Subsquid-based Objekt indexer, which powers collection progress lookups and transfer verification.
