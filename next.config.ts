@@ -35,6 +35,13 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // objekt-maker embeds this legacy static tool in a same-origin
+        // iframe (src/app/objekt-maker/page.tsx); DENY from the catch-all
+        // above blocks that too, so relax to SAMEORIGIN just for this path.
+        source: "/tools-static/objekt-maker/:path*",
+        headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }],
+      },
     ];
   },
   async redirects() {
