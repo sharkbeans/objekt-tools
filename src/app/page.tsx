@@ -9,6 +9,7 @@ import {
   RefreshCcw,
   Rows3,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import type React from "react";
 import { sectionHref } from "@/lib/sections";
@@ -83,6 +84,7 @@ const tools: {
   title: string;
   description: string;
   href: string;
+  image: string;
   Icon?: LucideIcon;
   iconRotate?: number;
   CustomIcon?: React.ComponentType;
@@ -91,24 +93,28 @@ const tools: {
     title: "Trades",
     description: "Browse, post, and match trades.",
     href: "/trades",
+    image: "/home-tiles/trades.png",
     CustomIcon: TradesIcon,
   },
   {
     title: "Lists",
     description: "Turn tradelist into a shareable page.",
     href: "/list",
+    image: "/home-tiles/lists.png",
     Icon: Rows3,
   },
   {
     title: "Collection",
     description: "Track your collection progress.",
     href: "/collection",
+    image: "/home-tiles/collection.png",
     Icon: Library,
   },
   {
     title: "Objektify",
     description: "Create custom objekt cards.",
     href: "/objekt-maker",
+    image: "/home-tiles/objektify.png",
     Icon: CreditCard,
     iconRotate: 90,
   },
@@ -116,12 +122,14 @@ const tools: {
     title: "Proofshot",
     description: "Generate proofshot images.",
     href: "/proofshot",
+    image: "/home-tiles/proofshot.png",
     Icon: Camera,
   },
   {
     title: "Spin",
     description: "Random Draw",
     href: "/spin",
+    image: "/home-tiles/spin.png",
     CustomIcon: SpinIcon,
   },
 ];
@@ -136,10 +144,29 @@ export default function HomePage() {
       </h3>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {tools.map(
-          ({ title, description, href, Icon, iconRotate, CustomIcon }) => (
+          ({
+            title,
+            description,
+            href,
+            image,
+            Icon,
+            iconRotate,
+            CustomIcon,
+          }) => (
             <Link key={href} href={sectionHref(href)} className="group">
               <div className="relative rounded-2xl overflow-hidden bg-[#1a1a1a] aspect-[4/4.5] flex flex-col justify-between border border-white/5 hover:border-white/70 transition-colors p-4">
-                <div className="flex-1 flex items-center justify-center">
+                <Image
+                  src={image}
+                  alt=""
+                  aria-hidden
+                  fill
+                  sizes="(min-width: 640px) 25vw, 50vw"
+                  className="object-cover object-top opacity-60 transition-transform duration-500 ease-out group-hover:scale-105"
+                />
+                {/* Keeps the title/description legible over the portrait and
+                    holds the icon's contrast at the card's midpoint. */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/30" />
+                <div className="relative flex-1 flex items-center justify-center">
                   {CustomIcon ? (
                     <CustomIcon />
                   ) : Icon ? (
@@ -156,12 +183,12 @@ export default function HomePage() {
                     />
                   ) : null}
                 </div>
-                <div>
+                <div className="relative">
                   <p className="text-white font-bold text-base leading-snug">
                     {title}
                   </p>
                   <div className="flex items-center justify-between mt-0.5">
-                    <p className="text-white/60 text-xs leading-snug">
+                    <p className="text-white/70 text-xs leading-snug">
                       {description}
                     </p>
                     <ChevronRight className="text-white/60 w-4 h-4 shrink-0 ml-1 -mr-1 group-hover:text-white transition-colors" />
