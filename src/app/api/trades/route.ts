@@ -1,4 +1,4 @@
-import { and, eq, ilike } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
@@ -71,7 +71,9 @@ export async function GET(request: NextRequest) {
     const account = await db.query.cosmoAccount.findFirst({
       where: isWalletAddress(userParam)
         ? eq(cosmoAccount.address, userParam.toLowerCase())
-        : ilike(cosmoAccount.nickname, userParam),
+        : // lower() rather than ilike — "_" and "%" are LIKE wildcards and
+          // both are legal in a Cosmo nickname.
+          sql`lower(${cosmoAccount.nickname}) = lower(${userParam})`,
       columns: { userId: true },
     });
     if (!account) {

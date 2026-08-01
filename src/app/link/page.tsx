@@ -243,7 +243,7 @@ export default function LinkCosmoPage() {
 
   function handleFinish() {
     if (!returnTo) {
-      router.push(`/@${linkedAs}`);
+      router.push(`/@${encodeURIComponent(linkedAs)}`);
       return;
     }
 

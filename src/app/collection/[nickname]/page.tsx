@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth-server";
 import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
+import { decodeRouteParam } from "@/lib/route-params";
 import { sectionAbsoluteUrl } from "@/lib/sections";
 
 export async function generateMetadata({
@@ -14,12 +15,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ nickname: string }>;
 }): Promise<Metadata> {
-  const { nickname } = await params;
+  const nickname = decodeRouteParam((await params).nickname);
   return {
     title: `${nickname}'s Collection Progress | objekt.my`,
     description: `View ${nickname}'s Cosmo collection progress.`,
     alternates: {
-      canonical: sectionAbsoluteUrl(`/collection/${nickname}`),
+      canonical: sectionAbsoluteUrl(
+        `/collection/${encodeURIComponent(nickname)}`,
+      ),
     },
   };
 }
@@ -31,7 +34,7 @@ export default async function ProgressNicknamePage({
   params: Promise<{ nickname: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { nickname } = await params;
+  const nickname = decodeRouteParam((await params).nickname);
   const resolved = await resolveNickname(nickname);
   if (!resolved) notFound();
 

@@ -6,6 +6,7 @@ import {
 } from "@/lib/cosmo/resolve-nickname";
 import { membersByArtist } from "@/lib/filters";
 import { getGridRank } from "@/lib/progress/grid-rank";
+import { decodeRouteParam } from "@/lib/route-params";
 
 const allMembers = new Set(Object.values(membersByArtist).flat());
 
@@ -20,7 +21,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ nickname: string; member: string }> },
 ) {
-  const { nickname, member } = await params;
+  const { nickname: rawNickname, member: rawMember } = await params;
+  const nickname = decodeRouteParam(rawNickname);
+  const member = decodeRouteParam(rawMember);
 
   if (!nickname || !validateNickname(nickname)) {
     return NextResponse.json({ error: "Invalid nickname" }, { status: 400 });

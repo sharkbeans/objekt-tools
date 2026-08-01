@@ -68,7 +68,9 @@ function buildObjektTopUrl(
   if (item.collectionNo) parts.push(item.collectionNo);
   if (showSerial && item.serial != null) parts.push(`#${item.serial}`);
   const search = parts.join(" ");
-  const basePath = cosmoNickname ? `/@${cosmoNickname}` : "";
+  const basePath = cosmoNickname
+    ? `/@${encodeURIComponent(cosmoNickname)}`
+    : "";
   return `https://objekt.top${basePath}?${new URLSearchParams({ search }).toString()}`;
 }
 

@@ -23,6 +23,7 @@ import type {
   ProgressMemberResponse,
 } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
+import { decodeRouteParam } from "@/lib/route-params";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +41,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ nickname: string; member: string }> },
 ) {
-  const { nickname, member } = await params;
+  const { nickname: rawNickname, member: rawMember } = await params;
+  const nickname = decodeRouteParam(rawNickname);
+  const member = decodeRouteParam(rawMember);
 
   if (!nickname || !validateNickname(nickname)) {
     return NextResponse.json({ error: "Invalid nickname" }, { status: 400 });

@@ -208,7 +208,7 @@ export function MemberAvatarCarousel({
             key={member}
             ref={isActive ? activeRef : undefined}
             href={sectionHref(
-              `/collection/${nickname}/${member}${view ? "?view=grid" : ""}`,
+              `/collection/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}${view ? "?view=grid" : ""}`,
               { currentSection: "collect" },
             )}
             onClick={onLinkClick}

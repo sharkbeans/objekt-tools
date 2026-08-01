@@ -25,7 +25,7 @@ export function useCosmoLink() {
     ? "/sign-in"
     : !data
       ? "/link"
-      : `/@${data.nickname ?? data.address}`;
+      : `/@${encodeURIComponent(data.nickname ?? data.address)}`;
 
   return { profileHref, isLinked: !!data, isLoading, refetch };
 }

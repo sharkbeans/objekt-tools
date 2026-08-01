@@ -98,7 +98,7 @@ export function ProgressSearch({
       storeCosmoUsername(data.nickname, data.address);
       const href = buildHref
         ? buildHref(data.nickname, data)
-        : sectionHref(`/collection/${data.nickname}`, {
+        : sectionHref(`/collection/${encodeURIComponent(data.nickname)}`, {
             currentSection: "collect",
           });
       const target = new URL(href, window.location.href);

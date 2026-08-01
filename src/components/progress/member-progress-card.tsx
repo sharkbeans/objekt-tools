@@ -50,9 +50,10 @@ export function MemberProgressCard({
 
   return (
     <Link
-      href={sectionHref(`/collection/${nickname}/${member}`, {
-        currentSection: "collect",
-      })}
+      href={sectionHref(
+        `/collection/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}`,
+        { currentSection: "collect" },
+      )}
     >
       <div className="t-progress-card flex flex-col gap-2.5 rounded-lg border border-border bg-card p-3.5 hover:border-white/40 transition-colors">
         <div className="flex items-center gap-3">

@@ -8,6 +8,7 @@ import {
   CosmoUnavailableError,
   loadMemberProgress,
 } from "@/lib/progress/member-progress";
+import { decodeRouteParam } from "@/lib/route-params";
 
 // ARTMS/tripleS-style seasons repeat a family name across numbered
 // generations (Atom01, Atom02, ...). The wall lays these out as a grid —
@@ -79,7 +80,8 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ nickname: string; member: string }> },
 ) {
-  const { nickname, member: rawMember } = await params;
+  const { nickname: rawNickname, member: rawMember } = await params;
+  const nickname = decodeRouteParam(rawNickname);
   const member = resolveMemberCasing(rawMember);
 
   if (!member) {

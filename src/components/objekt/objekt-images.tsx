@@ -50,7 +50,7 @@ export function objektTopUrl(
   ].filter(Boolean);
   if (item.serial != null) parts.push(`#${item.serial}`);
   if (!parts.length) return null;
-  return `https://objekt.top/@${cosmoNickname}?search=${encodeURIComponent(parts.join(" "))}`;
+  return `https://objekt.top/@${encodeURIComponent(cosmoNickname)}?search=${encodeURIComponent(parts.join(" "))}`;
 }
 
 export function objektTopUrlWant(item: ObjektImageItem): string | null {

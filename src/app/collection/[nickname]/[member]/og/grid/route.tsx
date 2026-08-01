@@ -17,6 +17,7 @@ import {
   type GridMemberProgressCollection,
   loadGridMemberProgress,
 } from "@/lib/progress/member-progress";
+import { decodeRouteParam } from "@/lib/route-params";
 
 export const runtime = "nodejs";
 
@@ -93,7 +94,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ nickname: string; member: string }> },
 ) {
-  const { nickname, member: rawMember } = await params;
+  const { nickname: rawNickname, member: rawMember } = await params;
+  const nickname = decodeRouteParam(rawNickname);
   const member = resolveMemberCasing(rawMember);
 
   if (!member) {

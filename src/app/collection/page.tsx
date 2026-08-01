@@ -47,7 +47,7 @@ export default async function ProgressPage() {
 
   if (linkedNickname) {
     redirect(
-      sectionHref(`/collection/${linkedNickname}`, {
+      sectionHref(`/collection/${encodeURIComponent(linkedNickname)}`, {
         currentSection: "collect",
       }),
     );

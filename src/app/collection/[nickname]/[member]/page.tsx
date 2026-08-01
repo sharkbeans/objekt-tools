@@ -7,6 +7,7 @@ import {
   getProgressMemberCatalog,
   toPublicProgressMemberCatalog,
 } from "@/lib/progress/member-catalog";
+import { decodeRouteParam } from "@/lib/route-params";
 import { sectionAbsoluteUrl } from "@/lib/sections";
 
 export async function generateMetadata({
@@ -16,7 +17,9 @@ export async function generateMetadata({
   params: Promise<{ nickname: string; member: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
-  const { nickname, member } = await params;
+  const { nickname: rawNickname, member: rawMember } = await params;
+  const nickname = decodeRouteParam(rawNickname);
+  const member = decodeRouteParam(rawMember);
   const sp = await searchParams;
   const isGridView = sp.view === "grid";
   // Grid tab's season filter — kept in sync with this param by
@@ -32,7 +35,7 @@ export async function generateMetadata({
   const shareToken = typeof sp.share === "string" ? sp.share : null;
   const title = `${nickname}'s ${member} Collection | objekt.my`;
   const description = `View ${nickname}'s ${member} objekt collection.`;
-  const basePath = `/collection/${nickname}/${member}`;
+  const basePath = `/collection/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}`;
   // Canonical stays param-free (SEO: one indexable URL per member, not one
   // per filter combination). The share link below is allowed to diverge
   // from it since it's describing "this exact view", not "this page".
@@ -89,7 +92,9 @@ export default async function MemberDexPage({
   params: Promise<{ nickname: string; member: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { nickname, member } = await params;
+  const { nickname: rawNickname, member: rawMember } = await params;
+  const nickname = decodeRouteParam(rawNickname);
+  const member = decodeRouteParam(rawMember);
   const resolved = await resolveNickname(nickname);
   if (!resolved) notFound();
 

@@ -1,4 +1,4 @@
-import { and, count, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
+import { and, count, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
 import { fetchUserByNickname } from "@/lib/cosmo/client";
@@ -10,6 +10,7 @@ import {
   tradeBan,
   tradePost,
 } from "@/lib/db/schema";
+import { decodeRouteParam } from "@/lib/route-params";
 import { getCached } from "@/lib/server-cache";
 
 function isWalletAddress(value: string): boolean {
@@ -22,7 +23,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ address: string }> },
 ) {
-  const { address: identifier } = await params;
+  // Can be a wallet address or a Cosmo nickname, and nicknames are frequently
+  // non-ASCII — normalize before matching either shape.
+  const identifier = decodeRouteParam((await params).address);
   const session = await getSession();
 
   const userColumns = {
@@ -55,9 +58,12 @@ export async function GET(
       return NextResponse.json({ nickname: cosmo.nickname }, { status: 301 });
     }
   } else {
-    // Treat as nickname — try DB first (case-insensitive)
+    // Treat as nickname — try DB first (case-insensitive). Compared with
+    // lower() rather than ilike: "_" and "%" are LIKE wildcards and both are
+    // legal in a Cosmo nickname, so ilike would let "/@some_user" match a
+    // different account that happens to fit the pattern.
     cosmo = await db.query.cosmoAccount.findFirst({
-      where: ilike(cosmoAccount.nickname, identifier),
+      where: sql`lower(${cosmoAccount.nickname}) = lower(${identifier})`,
       with: { user: { columns: userColumns } },
     });
 

@@ -15,6 +15,7 @@ import {
 } from "@/lib/indexer-owned-objekts";
 import { withTimeout } from "@/lib/promise-timeout";
 import { redis } from "@/lib/redis";
+import { decodeRouteParam } from "@/lib/route-params";
 import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ nickname: string }> },
 ) {
-  const nickname = (await params).nickname;
+  const nickname = decodeRouteParam((await params).nickname);
   const validationError = validateInventoryRequest(nickname, request);
   if (validationError) return validationError;
 
@@ -103,7 +104,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ nickname: string }> },
 ) {
-  const nickname = (await params).nickname;
+  const nickname = decodeRouteParam((await params).nickname);
   if (!nickname || !validateNickname(nickname)) {
     return NextResponse.json({ error: "Nickname required" }, { status: 400 });
   }

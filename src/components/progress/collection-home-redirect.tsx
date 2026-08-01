@@ -29,7 +29,7 @@ export function CollectionHomeRedirect() {
     const savedNickname = readStoredCosmoUsername();
     if (savedNickname) {
       router.replace(
-        sectionHref(`/collection/${savedNickname}`, {
+        sectionHref(`/collection/${encodeURIComponent(savedNickname)}`, {
           currentSection: "collect",
         }),
       );

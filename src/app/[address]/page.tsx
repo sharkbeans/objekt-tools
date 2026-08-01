@@ -25,6 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { decodeRouteParam } from "@/lib/route-params";
 import { sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
@@ -108,7 +109,7 @@ export default function PublicProfilePage({
   params: Promise<{ address: string }>;
 }) {
   const { address: rawAddress } = use(params);
-  const decoded = decodeURIComponent(rawAddress);
+  const decoded = decodeRouteParam(rawAddress);
   const router = useRouter();
 
   const hasProfilePrefix = decoded.startsWith("@");

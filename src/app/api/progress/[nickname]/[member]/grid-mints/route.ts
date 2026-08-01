@@ -7,6 +7,7 @@ import {
 import { indexerPool } from "@/lib/db/indexer";
 import { membersByArtist } from "@/lib/filters";
 import { ZERO_ADDRESS } from "@/lib/indexer-constants";
+import { decodeRouteParam } from "@/lib/route-params";
 import { getCachedStaleWhileRevalidate } from "@/lib/server-cache";
 
 type GridMintCountRow = {
@@ -20,7 +21,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ nickname: string; member: string }> },
 ) {
-  const { nickname, member } = await params;
+  const { nickname: rawNickname, member: rawMember } = await params;
+  const nickname = decodeRouteParam(rawNickname);
+  const member = decodeRouteParam(rawMember);
 
   if (!nickname || !validateNickname(nickname)) {
     return NextResponse.json({ error: "Invalid nickname" }, { status: 400 });

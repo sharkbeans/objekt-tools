@@ -7,6 +7,7 @@ import {
 } from "@/lib/cosmo/resolve-nickname";
 import type { ProgressIdentityResponse } from "@/lib/progress/types";
 import { redis } from "@/lib/redis";
+import { decodeRouteParam } from "@/lib/route-params";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ nickname: string }> },
 ) {
-  const { nickname } = await params;
+  const nickname = decodeRouteParam((await params).nickname);
   if (!nickname || !validateNickname(nickname)) {
     return NextResponse.json({ error: "Invalid nickname" }, { status: 400 });
   }
