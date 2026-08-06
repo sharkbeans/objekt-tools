@@ -5,6 +5,10 @@ import { CollectionHomeRedirect } from "@/components/progress/collection-home-re
 import { getSession } from "@/lib/auth-server";
 import { refreshCosmoAccountIfStale } from "@/lib/cosmo/refresh-account";
 import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
+import {
+  UNRESOLVED_WALLET_MARKER,
+  UNRESOLVED_WALLET_PARAM,
+} from "@/lib/cosmo-username-storage";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
 import { sectionHref } from "@/lib/sections";
@@ -14,7 +18,11 @@ export const metadata: Metadata = {
   description: "Open your Cosmo collection progress.",
 };
 
-export default async function ProgressPage() {
+export default async function ProgressPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await getSession();
 
   let linkedNickname: string | null = null;
@@ -53,5 +61,12 @@ export default async function ProgressPage() {
     );
   }
 
-  return <CollectionHomeRedirect />;
+  return (
+    <CollectionHomeRedirect
+      walletUnresolved={
+        (await searchParams)[UNRESOLVED_WALLET_PARAM] ===
+        UNRESOLVED_WALLET_MARKER
+      }
+    />
+  );
 }

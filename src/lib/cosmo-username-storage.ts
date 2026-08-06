@@ -5,6 +5,13 @@ const COSMO_USERNAME_STORAGE_KEYS = [
 ] as const;
 const COSMO_ADDRESS_STORAGE_KEY = "progress-last-address";
 
+// Marker the by-wallet resolver adds when it bounces back to the collection
+// home because the address doesn't map to a live Cosmo nickname. The home
+// screen uses it to drop the stored address instead of redirecting straight
+// back into the same dead end.
+export const UNRESOLVED_WALLET_PARAM = "wallet";
+export const UNRESOLVED_WALLET_MARKER = "unknown";
+
 export function readStoredCosmoUsername(): string | null {
   if (typeof window === "undefined") return null;
 
@@ -20,6 +27,11 @@ export function readStoredCosmoAddress(): string | null {
   if (typeof window === "undefined") return null;
   const value = localStorage.getItem(COSMO_ADDRESS_STORAGE_KEY)?.trim();
   return value && /^0x[0-9a-f]{40}$/i.test(value) ? value.toLowerCase() : null;
+}
+
+export function clearStoredCosmoAddress(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(COSMO_ADDRESS_STORAGE_KEY);
 }
 
 export function storeCosmoUsername(value: string, address?: string): void {

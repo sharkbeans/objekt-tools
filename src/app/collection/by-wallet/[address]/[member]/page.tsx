@@ -1,6 +1,11 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { resolveCurrentNicknameForAddress } from "@/lib/cosmo/resolve-nickname";
+import {
+  UNRESOLVED_WALLET_MARKER,
+  UNRESOLVED_WALLET_PARAM,
+} from "@/lib/cosmo-username-storage";
 import { resolveMemberCasing } from "@/lib/filters";
+import { sectionHref } from "@/lib/sections";
 
 export default async function CollectionWalletMemberRedirectPage({
   params,
@@ -11,7 +16,16 @@ export default async function CollectionWalletMemberRedirectPage({
 }) {
   const { address, member } = await params;
   const resolved = await resolveCurrentNicknameForAddress(address);
-  if (!resolved) notFound();
+  // Same fallback as the address-only route: an unnameable wallet lands on the
+  // parent collection page instead of a 404.
+  if (!resolved) {
+    redirect(
+      sectionHref(
+        `/collection?${UNRESOLVED_WALLET_PARAM}=${UNRESOLVED_WALLET_MARKER}`,
+        { currentSection: "collect" },
+      ),
+    );
+  }
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(await searchParams)) {

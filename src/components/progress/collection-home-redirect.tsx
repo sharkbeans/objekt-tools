@@ -5,18 +5,28 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  clearStoredCosmoAddress,
   readStoredCosmoAddress,
   readStoredCosmoUsername,
 } from "@/lib/cosmo-username-storage";
 import { sectionHref } from "@/lib/sections";
 import { ProgressSearch } from "./progress-search";
 
-export function CollectionHomeRedirect() {
+export function CollectionHomeRedirect({
+  walletUnresolved = false,
+}: {
+  walletUnresolved?: boolean;
+}) {
   const router = useRouter();
   const [checkedStorage, setCheckedStorage] = useState(false);
 
   useEffect(() => {
-    const savedAddress = readStoredCosmoAddress();
+    // The by-wallet resolver bounced us back here because the stored address
+    // no longer maps to a Cosmo nickname. Drop it, otherwise we'd redirect
+    // straight back and ping-pong forever.
+    if (walletUnresolved) clearStoredCosmoAddress();
+
+    const savedAddress = walletUnresolved ? null : readStoredCosmoAddress();
     if (savedAddress) {
       router.replace(
         sectionHref(`/collection/by-wallet/${savedAddress}`, {
@@ -37,7 +47,7 @@ export function CollectionHomeRedirect() {
     }
 
     setCheckedStorage(true);
-  }, [router]);
+  }, [router, walletUnresolved]);
 
   if (!checkedStorage) {
     return (

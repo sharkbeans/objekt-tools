@@ -1,5 +1,10 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { resolveCurrentNicknameForAddress } from "@/lib/cosmo/resolve-nickname";
+import {
+  UNRESOLVED_WALLET_MARKER,
+  UNRESOLVED_WALLET_PARAM,
+} from "@/lib/cosmo-username-storage";
+import { sectionHref } from "@/lib/sections";
 
 export default async function CollectionWalletRedirectPage({
   params,
@@ -10,7 +15,17 @@ export default async function CollectionWalletRedirectPage({
 }) {
   const { address } = await params;
   const resolved = await resolveCurrentNicknameForAddress(address);
-  if (!resolved) notFound();
+  // Cosmo has no wallet -> nickname endpoint, so an address we've never seen
+  // (unlinked, no reverse hint) simply can't be named. Fall back to the parent
+  // collection page rather than dead-ending on a 404.
+  if (!resolved) {
+    redirect(
+      sectionHref(
+        `/collection?${UNRESOLVED_WALLET_PARAM}=${UNRESOLVED_WALLET_MARKER}`,
+        { currentSection: "collect" },
+      ),
+    );
+  }
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(await searchParams)) {
