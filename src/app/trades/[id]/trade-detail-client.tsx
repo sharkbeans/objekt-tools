@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, CopyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type * as React from "react";
 import { use, useEffect, useMemo, useState } from "react";
@@ -17,6 +16,7 @@ import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
 import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
 import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
 import { MatchCard } from "@/components/trades/match-card";
+import { TradeTextCard } from "@/components/trades/trade-text-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,10 +46,8 @@ import {
 import { useCosmoLink } from "@/hooks/use-cosmo-link";
 import { usePerRow } from "@/hooks/use-per-row";
 import { useSession } from "@/lib/auth-client";
-import { compareMembers, compareSeasons } from "@/lib/filter-options";
-import { anyWantLabel } from "@/lib/objekt-label";
-import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
+import { formatTradeText } from "@/lib/trade/trade-text";
 import type { TradePostDTO } from "@/lib/trade/trade-types";
 
 type TradeItem = ObjektImageItem;
@@ -57,89 +55,6 @@ type TradeDetailDTO = TradePostDTO & {
   discordId?: string | null;
   discordUsername?: string | null;
 };
-
-function collectionSortValue(item: TradeItem) {
-  const no = item.collectionNo
-    ? Number.parseInt(stripVariantSuffix(item.collectionNo), 10)
-    : Number.POSITIVE_INFINITY;
-  return Number.isFinite(no) ? no : Number.POSITIVE_INFINITY;
-}
-
-function compareTradeItems(a: TradeItem, b: TradeItem) {
-  const seasonCompare = compareSeasons(a.season ?? "", b.season ?? "");
-  if (seasonCompare !== 0) return seasonCompare;
-  const noCompare = collectionSortValue(a) - collectionSortValue(b);
-  if (noCompare !== 0) return noCompare;
-  return (a.collectionId ?? "").localeCompare(b.collectionId ?? "");
-}
-
-function objektCode(item: TradeItem) {
-  if (item.collectionNo) {
-    const prefix = getSeasonPrefix(item.season);
-    return `${prefix}${stripVariantSuffix(item.collectionNo)}`;
-  }
-  return item.collectionId || "Unknown";
-}
-
-function countTokens(items: TradeItem[]) {
-  const counts = new Map<string, number>();
-  for (const item of [...items].sort(compareTradeItems)) {
-    const code = objektCode(item);
-    counts.set(code, (counts.get(code) ?? 0) + (item.quantity ?? 1));
-  }
-  return [...counts.entries()].map(([code, count]) =>
-    count > 1 ? `${code} x${count}` : code,
-  );
-}
-
-function formatDiscordSection(items: TradeItem[]) {
-  const groups = new Map<string, TradeItem[]>();
-  const anyCounts = new Map<string, number>();
-
-  for (const item of items) {
-    if (item.isAny) {
-      const label = anyWantLabel(item);
-      anyCounts.set(label, (anyCounts.get(label) ?? 0) + (item.quantity ?? 1));
-      continue;
-    }
-    const member = item.member?.trim() || "Unknown";
-    groups.set(member, [...(groups.get(member) ?? []), item]);
-  }
-
-  const lines = [...groups.entries()]
-    .sort(([a], [b]) => compareMembers(a, b))
-    .map(
-      ([member, groupItems]) =>
-        `${member} ${countTokens(groupItems).join(" ")}`,
-    );
-
-  for (const [label, count] of [...anyCounts.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  )) {
-    lines.push(count > 1 ? `${label} x${count}` : label);
-  }
-
-  return lines.length ? lines : ["None"];
-}
-
-function formatDiscordTradeText(
-  trade: Pick<TradeDetailDTO, "haves" | "wants" | "description">,
-  tradeUrl?: string,
-) {
-  const lines = [
-    "Have",
-    ...formatDiscordSection(trade.haves),
-    "",
-    "Want",
-    ...formatDiscordSection(trade.wants),
-  ];
-
-  const notes = trade.description?.trim();
-  if (notes) lines.push("", notes);
-  if (tradeUrl) lines.push("", `Trade: ${tradeUrl}`);
-
-  return lines.join("\n");
-}
 
 export default function TradeDetailClient({
   params,
@@ -305,32 +220,17 @@ export default function TradeDetailClient({
     }
   }, [availabilityData, id, queryClient, router]);
 
-  const discordPreviewText = useMemo(
-    () => (trade ? formatDiscordTradeText(trade) : ""),
+  const tradePreviewText = useMemo(
+    () => (trade ? formatTradeText(trade) : ""),
     [trade],
   );
-  const discordCopyText = useMemo(
+  const tradeCopyText = useMemo(
     () =>
       trade
-        ? formatDiscordTradeText(
-            trade,
-            sectionAbsoluteUrl(`/trades/${trade.id}`),
-          )
+        ? formatTradeText(trade, sectionAbsoluteUrl(`/trades/${trade.id}`))
         : "",
     [trade],
   );
-  const [copiedDiscordText, setCopiedDiscordText] = useState(false);
-
-  async function handleCopyDiscordText() {
-    try {
-      await navigator.clipboard.writeText(discordCopyText);
-      setCopiedDiscordText(true);
-      toast.success("Copied trade text");
-      window.setTimeout(() => setCopiedDiscordText(false), 1500);
-    } catch {
-      toast.error("Failed to copy trade text");
-    }
-  }
 
   if (tradeLoading) {
     return (
@@ -444,30 +344,10 @@ export default function TradeDetailClient({
           </>
         )}
         <CardContent>
-          <div className="rounded-md border border-border bg-muted/30">
-            <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
-              <p className="text-xs font-medium uppercase text-muted-foreground">
-                Trade text
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleCopyDiscordText}
-                className="h-8 gap-2 bg-background/70"
-              >
-                {copiedDiscordText ? (
-                  <CheckIcon className="h-4 w-4" />
-                ) : (
-                  <CopyIcon className="h-4 w-4" />
-                )}
-                {copiedDiscordText ? "Copied" : "Copy"}
-              </Button>
-            </div>
-            <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-sm leading-6 text-foreground">
-              {discordPreviewText}
-            </pre>
-          </div>
+          <TradeTextCard
+            previewText={tradePreviewText}
+            copyText={tradeCopyText}
+          />
         </CardContent>
       </Card>
 

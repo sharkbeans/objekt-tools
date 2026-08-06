@@ -16,6 +16,7 @@ import type {
   PosterTheme,
 } from "@/components/poster/poster-canvas";
 import { MatchCard } from "@/components/trades/match-card";
+import { TradeTextCard } from "@/components/trades/trade-text-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/poster/poster-item-grouping";
 import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
+import { formatTradeText, type TradeTextItem } from "@/lib/trade/trade-text";
 import type { TradePostDTO } from "@/lib/trade/trade-types";
 
 interface StoredItem {
@@ -128,6 +130,20 @@ function storedToPosterData(row: StoredPoster): PosterData {
   };
 }
 
+function storedItemToTextItem(item: StoredItem): TradeTextItem {
+  return {
+    collectionId: item.collectionId ?? "",
+    collectionNo: item.collectionNo,
+    member: item.member,
+    season: item.season,
+    class: item.class,
+    artist: item.artist,
+    isAny: item.isAny,
+    quantity: Math.max(1, item.quantity ?? 1),
+    customLabel: item.freeform ? item.rawLabel : null,
+  };
+}
+
 function totalQuantity(items: StoredItem[]) {
   return items.reduce((sum, item) => sum + Math.max(1, item.quantity ?? 1), 0);
 }
@@ -215,6 +231,38 @@ export default function ListDetailClient({
   );
   const haveImages = useObjektImages(haveItems);
   const wantImages = useObjektImages(wantItems);
+
+  // Built from the stored rows rather than the image items so freeform
+  // entries keep their raw label and the poster's own Have/Want headings
+  // carry through.
+  const tradeTextSource = useMemo(
+    () =>
+      posterRow
+        ? {
+            haves: posterRow.haves.map(storedItemToTextItem),
+            wants: posterRow.wants.map(storedItemToTextItem),
+            description: posterRow.notes,
+            haveTitle: posterRow.haveTitle,
+            wantTitle: posterRow.wantTitle,
+          }
+        : null,
+    [posterRow],
+  );
+  const tradePreviewText = useMemo(
+    () => (tradeTextSource ? formatTradeText(tradeTextSource) : ""),
+    [tradeTextSource],
+  );
+  const tradeCopyText = useMemo(
+    () =>
+      tradeTextSource
+        ? formatTradeText(
+            tradeTextSource,
+            sectionAbsoluteUrl(`/list/${id}`),
+            "List",
+          )
+        : "",
+    [tradeTextSource, id],
+  );
   const gridCols = Math.max(
     autoGridCols(haveItems.length),
     autoGridCols(wantItems.length),
@@ -489,6 +537,10 @@ export default function ListDetailClient({
       )}
     </div>
   );
+  const tradeTextCard =
+    haveItems.length > 0 || wantItems.length > 0 ? (
+      <TradeTextCard previewText={tradePreviewText} copyText={tradeCopyText} />
+    ) : null;
 
   if (!isOwner) {
     return (
@@ -507,6 +559,7 @@ export default function ListDetailClient({
         <div className="space-y-4">
           {listToolbar}
           {haveWantCard}
+          {tradeTextCard}
         </div>
 
         {anonOwner && (
@@ -548,6 +601,7 @@ export default function ListDetailClient({
       <div className="space-y-6">
         {listToolbar}
         {haveWantCard}
+        {tradeTextCard}
 
         <div className="space-y-3">
           <div className="space-y-1">

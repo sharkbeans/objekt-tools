@@ -1,15 +1,17 @@
 import type { PosterData } from "@/components/poster/poster-canvas";
 import type { ResolvedPosterItem } from "@/lib/poster/poster-resolver";
-import { getSeasonPrefix } from "@/lib/season-prefix";
+import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 
+// The trailing A/Z on a collectionNo is the online/offline variant marker.
+// It's noise in a pasted trade list — "CC101" is what people write.
 function itemCode(item: ResolvedPosterItem): string | null {
   if (item.entry) {
-    return `${getSeasonPrefix(item.entry.season)}${item.entry.collectionNo}`;
+    return `${getSeasonPrefix(item.entry.season)}${stripVariantSuffix(item.entry.collectionNo)}`;
   }
   const { parsed } = item;
   if (parsed.freeform || parsed.isAny) return null;
   if (parsed.season && parsed.collectionNo) {
-    return `${getSeasonPrefix(parsed.season)}${parsed.collectionNo}`;
+    return `${getSeasonPrefix(parsed.season)}${stripVariantSuffix(parsed.collectionNo)}`;
   }
   return parsed.raw || null;
 }
@@ -67,7 +69,12 @@ function formatSection(items: ResolvedPosterItem[]): string {
   return [...memberLines.filter(Boolean), ...freeformLines].join("\n");
 }
 
-export function formatPosterAsText(data: PosterData): string {
+/** `listUrl` is appended as a bare trailing line — omit it for unsaved drafts
+ * that have no public URL yet. */
+export function formatPosterAsText(
+  data: PosterData,
+  listUrl?: string | null,
+): string {
   const sections: string[] = [];
 
   if (data.haves.length > 0) {
@@ -82,6 +89,10 @@ export function formatPosterAsText(data: PosterData): string {
 
   if (data.notes?.trim()) {
     sections.push(data.notes.trim());
+  }
+
+  if (listUrl?.trim()) {
+    sections.push(listUrl.trim());
   }
 
   return sections.join("\n\n");

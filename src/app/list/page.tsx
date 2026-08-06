@@ -873,14 +873,17 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
   }, [posterData, groupByMember, groupByNumbers, colsPerRow]);
 
   const handleCopyText = useCallback(async () => {
-    const text = formatPosterAsText(posterData);
+    const text = formatPosterAsText(
+      posterData,
+      editId ? sectionAbsoluteUrl(`/list/${editId}`) : null,
+    );
     try {
       await navigator.clipboard.writeText(text);
       toast.success("Copied to clipboard!");
     } catch {
       toast.error("Failed to copy");
     }
-  }, [posterData]);
+  }, [posterData, editId]);
 
   const doSaveAndShare = useCallback(
     async (data: PosterData) => {
@@ -1584,9 +1587,13 @@ export function CreatePosterPage({ editId: editIdProp }: { editId?: string }) {
                           Download PNG
                         </Button>
                       </div>
+                      {/* The shareable list URL, not the /edit one — this
+                          field exists to be handed to other traders, and an
+                          /edit link 404s (or redirects) for everyone but the
+                          owner. */}
                       <ListLinkField
-                        label="Edit link"
-                        value={sectionAbsoluteUrl(`/list/${editId}/edit`)}
+                        label="Share link"
+                        value={sectionAbsoluteUrl(`/list/${editId}`)}
                       />
                     </>
                   )}
