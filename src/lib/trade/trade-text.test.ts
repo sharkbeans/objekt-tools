@@ -71,7 +71,7 @@ describe("formatTradeText", () => {
     );
   });
 
-  it("appends notes and a labelled link only when given", () => {
+  it("appends notes and the link only when given", () => {
     const source = {
       haves: [item("SeoYeon", "101Z")],
       wants: [],
@@ -90,8 +90,9 @@ describe("formatTradeText", () => {
         "dm me on discord",
       ].join("\n"),
     );
+    // No label: the bare URL sits on the last line.
     assert.equal(
-      formatTradeText(source, "https://objekt.my/list/abc", "List"),
+      formatTradeText(source, "https://objekt.my/list/abc"),
       [
         "Have",
         "SeoYeon CC101",
@@ -101,7 +102,21 @@ describe("formatTradeText", () => {
         "",
         "dm me on discord",
         "",
-        "List: https://objekt.my/list/abc",
+        "https://objekt.my/list/abc",
+      ].join("\n"),
+    );
+    assert.equal(
+      formatTradeText(source, "https://objekt.my/trades/abc", "Trade"),
+      [
+        "Have",
+        "SeoYeon CC101",
+        "",
+        "Want",
+        "None",
+        "",
+        "dm me on discord",
+        "",
+        "Trade: https://objekt.my/trades/abc",
       ].join("\n"),
     );
   });

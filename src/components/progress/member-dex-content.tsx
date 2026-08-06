@@ -376,6 +376,10 @@ export function MemberDexContent({
       return res.json();
     },
     staleTime: 60_000,
+    // Same reasoning as the overview query: the default 5min gcTime drops
+    // this while the user is off looking at another member (or another
+    // collection), so coming back re-runs the ownership scan from scratch.
+    gcTime: 60 * 60_000,
     retry: false,
   });
 

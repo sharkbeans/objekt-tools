@@ -227,7 +227,11 @@ export default function TradeDetailClient({
   const tradeCopyText = useMemo(
     () =>
       trade
-        ? formatTradeText(trade, sectionAbsoluteUrl(`/trades/${trade.id}`))
+        ? formatTradeText(
+            trade,
+            sectionAbsoluteUrl(`/trades/${trade.id}`),
+            "Trade",
+          )
         : "",
     [trade],
   );

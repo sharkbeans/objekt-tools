@@ -94,13 +94,14 @@ export type TradeTextSource = {
 };
 
 /**
- * `url` is appended as a trailing link line — pass it for the copied text and
+ * `url` is appended as a bare trailing line — pass it for the copied text and
  * omit it for the on-screen preview, so the preview stays about the objekts.
+ * `urlLabel` prefixes that line ("Trade: <url>") when given.
  */
 export function formatTradeText(
   source: TradeTextSource,
   url?: string,
-  urlLabel = "Trade",
+  urlLabel?: string,
 ) {
   const lines = [
     source.haveTitle?.trim() || "Have",
@@ -112,7 +113,7 @@ export function formatTradeText(
 
   const notes = source.description?.trim();
   if (notes) lines.push("", notes);
-  if (url) lines.push("", `${urlLabel}: ${url}`);
+  if (url) lines.push("", urlLabel ? `${urlLabel}: ${url}` : url);
 
   return lines.join("\n");
 }

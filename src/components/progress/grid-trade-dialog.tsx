@@ -122,12 +122,38 @@ export function GridTradeDialog({
     [firsts, gridded, target],
   );
 
-  const [selected, setSelected] = useState<Set<string>>(
+  const defaultSelection = useMemo(
     () =>
       new Set(
         rows.filter((r) => r.needed > 0).map((r) => r.collection.collectionId),
       ),
+    [rows],
   );
+
+  const [selected, setSelected] = useState<Set<string>>(defaultSelection);
+  const [touched, setTouched] = useState(false);
+
+  // This dialog mounts with the grid board, which happens as soon as the
+  // grid-mint query resolves — potentially *before* the ownership query. At
+  // that point every FCO reads ownedCount 0, so the default selection would
+  // be all 8 slots and, seeded once via useState, would stay that way even
+  // after the real counts arrive. Re-seed from the live rows until the user
+  // makes a choice of their own.
+  useEffect(() => {
+    if (touched) return;
+    setSelected((prev) =>
+      prev.size === defaultSelection.size &&
+      [...defaultSelection].every((id) => prev.has(id))
+        ? prev
+        : defaultSelection,
+    );
+  }, [defaultSelection, touched]);
+
+  // Closing discards the manual picks, so the next open starts from a default
+  // computed against whatever ownership data has landed by then.
+  useEffect(() => {
+    if (!open) setTouched(false);
+  }, [open]);
 
   // Spare copies across the *whole season*, not just this board's edition —
   // trading away extra 1st-edition FCOs to complete a 2nd-edition grid is the
@@ -151,6 +177,7 @@ export function GridTradeDialog({
   );
 
   const toggle = (id: string) => {
+    setTouched(true);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);

@@ -255,11 +255,7 @@ export default function ListDetailClient({
   const tradeCopyText = useMemo(
     () =>
       tradeTextSource
-        ? formatTradeText(
-            tradeTextSource,
-            sectionAbsoluteUrl(`/list/${id}`),
-            "List",
-          )
+        ? formatTradeText(tradeTextSource, sectionAbsoluteUrl(`/list/${id}`))
         : "",
     [tradeTextSource, id],
   );
