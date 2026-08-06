@@ -28,7 +28,11 @@ import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { EDITION_LABELS, type Edition } from "@/lib/edition";
-import { computeGriddable, getGridSlots } from "@/lib/grid-progress";
+import {
+  computeGriddable,
+  computeOfferableDupes,
+  getGridSlots,
+} from "@/lib/grid-progress";
 import {
   encodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
@@ -125,12 +129,25 @@ export function GridTradeDialog({
       ),
   );
 
+  // Spare copies across the *whole season*, not just this board's edition —
+  // trading away extra 1st-edition FCOs to complete a 2nd-edition grid is the
+  // normal case. Each edition's reserve is computed against its own grid
+  // inside computeOfferableDupes, with this board's edition protected.
+  const offerableDupes = useMemo(
+    () => computeOfferableDupes(seasonCollections, edition),
+    [seasonCollections, edition],
+  );
+
+  // Never offer what this same list is asking for.
   const dupes = useMemo(
     () =>
-      seasonCollections.filter(
-        (c) => c.class === "First" && c.transferableCount >= 2,
-      ),
-    [seasonCollections],
+      offerableDupes.filter((d) => !selected.has(d.collection.collectionId)),
+    [offerableDupes, selected],
+  );
+
+  const dupeCount = useMemo(
+    () => dupes.reduce((sum, d) => sum + d.offerable, 0),
+    [dupes],
   );
 
   const toggle = (id: string) => {
@@ -151,9 +168,9 @@ export function GridTradeDialog({
     // quantity) so the poster's "Combine Duplicates" toggle can actually
     // merge/split them, same as any other multi-copy have.
     const haves = offerDupes
-      ? dupes.flatMap((c) =>
-          Array.from({ length: c.transferableCount - 1 }, () =>
-            makePosterItem(toEntry(c)),
+      ? dupes.flatMap(({ collection, offerable }) =>
+          Array.from({ length: offerable }, () =>
+            makePosterItem(toEntry(collection)),
           ),
         )
       : [];
@@ -290,15 +307,15 @@ export function GridTradeDialog({
           <div>
             <p className="text-sm font-medium">Offer my duplicates</p>
             <p className="text-xs text-muted-foreground">
-              {dupes.length > 0
-                ? `Add ${dupes.length} duplicate FCO${dupes.length === 1 ? "" : "s"} from this season as haves`
+              {dupeCount > 0
+                ? `Add ${dupeCount} duplicate FCO${dupeCount === 1 ? "" : "s"} from this season as haves`
                 : "No duplicate FCOs available to offer this season"}
             </p>
           </div>
           <Switch
             checked={offerDupes}
             onCheckedChange={setOfferDupes}
-            disabled={dupes.length === 0}
+            disabled={dupeCount === 0}
           />
         </div>
 
