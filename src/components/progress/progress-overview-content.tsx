@@ -20,7 +20,7 @@ import { renderProgressCardToCanvas } from "@/lib/progress/progress-card-render"
 import type { ProgressRollup } from "@/lib/progress/types";
 import { cn } from "@/lib/utils";
 import { MemberProgressCard } from "./member-progress-card";
-import { ObjektScanStatus } from "./objekt-scan-status";
+import { ObjektScanStatus, useScanComplete } from "./objekt-scan-status";
 import {
   type ProgressNavigationState,
   ProgressSearch,
@@ -48,7 +48,11 @@ export function ProgressOverviewContent({ nickname, address }: Props) {
   const overviewQuery = useProgressOverview(nickname, address);
   const data = clientReady ? overviewQuery.data : undefined;
   const error = clientReady ? overviewQuery.error : null;
-  const isLoading = !clientReady || overviewQuery.isLoading;
+  // Gate the scan status on clientReady so a warm cache resolves straight to
+  // the grid — the completion check should only pay off an actual wait.
+  const scan = useScanComplete(
+    clientReady && (overviewQuery.isLoading || !data),
+  );
 
   useEffect(() => {
     if (!data?.nickname) return;
@@ -303,78 +307,101 @@ export function ProgressOverviewContent({ nickname, address }: Props) {
                   ? "Too many requests. Try again later."
                   : "Failed to load collection data."}
             </div>
-          ) : isLoading || !data ? (
-            <div className="space-y-4">
-              <ObjektScanStatus
-                label={`Matching ${nickname}'s owned objekts…`}
-                longWait
-              />
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
-                  <div
-                    key={id}
-                    className="rounded-lg border border-border bg-card p-3 space-y-2"
-                  >
-                    <div className="flex gap-3">
-                      <div className="h-13 w-13 bg-muted animate-pulse rounded-full" />
-                      <div className="flex-1 space-y-1.5">
-                        <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                        <div className="h-3 w-12 bg-muted animate-pulse rounded" />
-                      </div>
-                    </div>
-                    <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
-                  </div>
-                ))}
-              </div>
-            </div>
           ) : (
-            <>
-              {[...artistGroups.entries()].map(([artist, { real, others }]) => (
-                <div key={artist} className="space-y-3">
-                  {showArtistLabel && (
-                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                      {artist === "artms" ? "ARTMS" : artist}
-                    </h2>
+            <div>
+              {/* Outlives the skeletons on purpose: the grid swaps in the
+                  moment data lands, and the check draws over it before the
+                  row collapses away. */}
+              {scan.visible && (
+                <div
+                  className={cn(
+                    "t-collapse-out",
+                    scan.exiting && "is-collapsed",
                   )}
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {[...real.entries()].map(([member, rollups]) => (
-                      <MemberProgressCard
-                        key={member}
-                        nickname={data.nickname}
-                        member={member}
-                        artist={artist}
-                        rollups={rollups}
-                        imageUrl={memberImages[`${artist}|${member}`]}
-                      />
-                    ))}
+                >
+                  <div>
+                    {/* The gap to the grid sits inside the clipped child so
+                        it collapses with the row instead of leaving a hole. */}
+                    <ObjektScanStatus
+                      className="pb-4"
+                      label={`Matching ${nickname}'s owned objekts…`}
+                      done={scan.done}
+                      longWait
+                    />
                   </div>
-                  {showOthers && others.size > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {[...others.entries()].map(([member, rollups]) => (
-                        <MemberProgressCard
-                          key={member}
-                          nickname={data.nickname}
-                          member={member}
-                          artist={artist}
-                          rollups={rollups}
-                          imageUrl={memberImages[`${artist}|${member}`]}
-                        />
-                      ))}
+                </div>
+              )}
+
+              {!data ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {Array.from({ length: 8 }, (_, i) => `sk-${i}`).map((id) => (
+                    <div
+                      key={id}
+                      className="rounded-lg border border-border bg-card p-3 space-y-2"
+                    >
+                      <div className="flex gap-3">
+                        <div className="h-13 w-13 bg-muted animate-pulse rounded-full" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                          <div className="h-3 w-12 bg-muted animate-pulse rounded" />
+                        </div>
+                      </div>
+                      <div className="h-2 w-full bg-muted animate-pulse rounded-full" />
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="t-reveal-in space-y-4">
+                  {[...artistGroups.entries()].map(
+                    ([artist, { real, others }]) => (
+                      <div key={artist} className="space-y-3">
+                        {showArtistLabel && (
+                          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                            {artist === "artms" ? "ARTMS" : artist}
+                          </h2>
+                        )}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {[...real.entries()].map(([member, rollups]) => (
+                            <MemberProgressCard
+                              key={member}
+                              nickname={data.nickname}
+                              member={member}
+                              artist={artist}
+                              rollups={rollups}
+                              imageUrl={memberImages[`${artist}|${member}`]}
+                            />
+                          ))}
+                        </div>
+                        {showOthers && others.size > 0 && (
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {[...others.entries()].map(([member, rollups]) => (
+                              <MemberProgressCard
+                                key={member}
+                                nickname={data.nickname}
+                                member={member}
+                                artist={artist}
+                                rollups={rollups}
+                                imageUrl={memberImages[`${artist}|${member}`]}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                  )}
+
+                  {hasOthers && (
+                    <button
+                      type="button"
+                      onClick={() => setShowOthers((v) => !v)}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showOthers ? "Hide others" : "Show others"}
+                    </button>
                   )}
                 </div>
-              ))}
-
-              {hasOthers && (
-                <button
-                  type="button"
-                  onClick={() => setShowOthers((v) => !v)}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showOthers ? "Hide others" : "Show others"}
-                </button>
               )}
-            </>
+            </div>
           )}
         </div>
 

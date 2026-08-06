@@ -59,7 +59,7 @@ import type {
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 import { GridSection } from "./grid-section";
-import { ObjektScanStatus } from "./objekt-scan-status";
+import { ObjektScanStatus, useScanComplete } from "./objekt-scan-status";
 import type { ProgressNavigationState } from "./progress-search";
 import { ProgressSearch } from "./progress-search";
 import { SeasonSection } from "./season-section";
@@ -837,6 +837,11 @@ export function MemberDexContent({
   const effectiveHasEditions = hasEditions || guessedHasEditions;
   const displayTotals =
     displayOwnershipLoaded && tradabilityLoaded ? totals : earlyTotals;
+  // Ownership and totals are two fetches but one perceived scan, so they share
+  // a single status line and resolve into a single check.
+  const scan = useScanComplete(
+    !ownershipError && (!displayOwnershipLoaded || !displayTotals),
+  );
 
   const [sharing, setSharing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -1214,19 +1219,25 @@ export function MemberDexContent({
           <p className="text-sm text-amber-600 dark:text-amber-400">
             Ownership temporarily unavailable
           </p>
-        ) : !displayOwnershipLoaded ? (
-          <ObjektScanStatus compact label="Matching owned objekts…" longWait />
-        ) : !displayTotals ? (
+        ) : scan.visible && !scan.exiting ? (
+          // This slot has no skeleton to overlap — the count replaces the
+          // status outright, so hand over as soon as the check has drawn
+          // rather than sitting on a finished check through the exit phase.
           <ObjektScanStatus
             compact
-            label="Checking collection totals…"
+            label={
+              displayOwnershipLoaded
+                ? "Checking collection totals…"
+                : "Matching owned objekts…"
+            }
+            done={scan.done}
             longWait
           />
-        ) : (
+        ) : displayTotals ? (
           <p className="text-muted-foreground">
             {displayTotals.owned}/{displayTotals.total} collected
           </p>
-        )}
+        ) : null}
       </div>
 
       {!switchingTo && ownershipError && (
