@@ -36,6 +36,7 @@ export const SECTION_IDS = Object.keys(SECTIONS) as SectionId[];
 // section host, "/" is that section's home.
 const ROOT_ONLY_PREFIXES = [
   "/notifications",
+  "/match",
   "/link",
   "/proofshot",
   "/spin",
