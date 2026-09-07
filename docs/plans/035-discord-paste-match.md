@@ -312,6 +312,66 @@ to surface mutual 1:1s.
 
 Per "Dedupe" and "Rate limits" above.
 
+## Progress (branch `proto/discord-paste-match`)
+
+Prototype built 2026-09-07. Steps 1–5 are done and pushed; step 6 is partly
+done (localStorage dedupe and append-paste ship; the signed-in DB half does
+not). All four gates green at every checkpoint: 148 tests, lint, typecheck,
+build.
+
+| Step | State | Where |
+| --- | --- | --- |
+| 1 — section-wipe + item gaps | DONE | `src/lib/paste-parser.ts` |
+| 2 — quantity/range gaps | DONE | same, `normalizeItemLine` |
+| 3 — transcript splitter | DONE | `src/lib/discord/transcript.ts` |
+| 4 — link → verified inventory | DONE | `src/lib/discord/verify.ts` |
+| 5 — paste → pile → pick UI | DONE | `src/app/match/` (route `/match`) |
+| 6 — dedupe + append-paste | PARTIAL | localStorage only; no DB, no auth tier |
+
+### Measured against the real 12-message sample
+
+| | Before | After |
+| --- | --- | --- |
+| Messages yielding items | 8 / 12 | 10 / 12 |
+| Items parsed | 162 | 283 |
+| Supply index (searchable objekts) | 225 | **4,658** |
+
+Live verification of the 5 linked posters:
+
+```
+wangsss           4348 on-chain | claims   0
+19정하연             623 on-chain | claims   2 →  2 confirmed,  0 stale
+acin              1916 on-chain | claims  72 → 65 confirmed,  7 stale
+Friendly            77 on-chain | claims  44 → 42 confirmed,  2 stale
+정하연의새우학살교실   467 on-chain | claims   0
+```
+
+Stale-claim detection is real and useful: acin's typed list is 7 objekts out
+of date, Friendly's 2. Neither is dishonest — lists go stale — but a trader
+seeing "2 listed objekts no longer in their inventory" learns something no
+indexer tells them.
+
+The link-only correction is now proven, not argued: goatyubin parses to zero
+items and is the top supplier for most search queries once verified.
+
+### Answered from the open questions
+
+- **Where does it live?** `/match`, registered root-only in `sections.ts`.
+  Revisit if it should sit under the trade host instead.
+- **Verification depth?** Whole transferable inventory, indexed for search
+  rather than rendered — 4,348 items cannot go in a browsable pile.
+
+### Still open
+
+- Range expansion semantics (endpoints vs full range) — currently expands.
+- Whether the shift+click selection gesture works in Discord's clients.
+- Whether "Claimed" (unverifiable) posters should be shown once verified ones
+  exist.
+- Objekt images in the pile: needs `/api/objekts/search` resolution per item,
+  skipped to keep the first pass network-free.
+- The signed-in half of step 6: DB-backed seen-hashes and the 60/min
+  verification tier.
+
 ## Open questions for the repo owner
 
 1. **Range expansion** — expand `E317 - 320` to four items, or keep endpoints?
