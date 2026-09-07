@@ -38,7 +38,11 @@ export interface SupplyEntry {
  * ("cc301") alongside the full season name, because that is what traders
  * actually type — nobody searches "cream02 301".
  */
-function label(entry: SupplyEntry): string {
+function label(entry: {
+  member: string;
+  season: string;
+  collectionNo: string;
+}): string {
   const prefix = getSeasonPrefix(entry.season);
   return [
     entry.member,
@@ -48,6 +52,15 @@ function label(entry: SupplyEntry): string {
   ]
     .join(" ")
     .toLowerCase();
+}
+
+/** Split a query into terms. Order-independent, so "cc301 nien" also works. */
+function queryTerms(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -130,11 +143,7 @@ export function searchSupply(
   query: string,
   limit = 60,
 ): SupplyEntry[] {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
+  const terms = queryTerms(query);
   if (terms.length === 0) return [];
 
   const hits: SupplyEntry[] = [];
@@ -154,6 +163,81 @@ export function searchSupply(
       if (av !== bv) return av - bv;
       return a.suppliers.length - b.suppliers.length;
     })
+    .slice(0, limit);
+}
+
+export interface DemandEntry {
+  key: string;
+  member: string;
+  season: string;
+  collectionNo: string;
+  /** Posters asking for this objekt. */
+  wanters: TranscriptMessage[];
+}
+
+/**
+ * The mirror of the supply index: who in this paste is *asking* for objekt X.
+ *
+ * A trader arrives holding a spare and wanting to know who will take it, which
+ * is a demand question. Indexing only supply answers the opposite question and
+ * — worse — answers it in a shape that reads like a match ("lynnie has one")
+ * when the viewer was looking for a taker.
+ *
+ * Unlike supply, demand is never chain-verifiable: a want is an intention, not
+ * a holding. There is deliberately no "verified" source here.
+ */
+export function buildDemandIndex(
+  messages: TranscriptMessage[],
+): Map<string, DemandEntry> {
+  const index = new Map<string, DemandEntry>();
+
+  for (const message of messages) {
+    for (const item of message.wants) {
+      // ANY-filter wants ("Any Xinyu CC fco") name no single objekt, so they
+      // cannot be keyed. Skipping them undercounts rather than inventing a hit.
+      if (item.isAny) continue;
+      const key = objektKey(item);
+      if (!key || !item.member) continue;
+      let entry = index.get(key);
+      if (!entry) {
+        entry = {
+          key,
+          member: item.member,
+          season: item.season,
+          collectionNo: stripVariantSuffix(item.collectionNo),
+          wanters: [],
+        };
+        index.set(key, entry);
+      }
+      if (!entry.wanters.includes(message)) entry.wanters.push(message);
+    }
+  }
+
+  return index;
+}
+
+/** Free-text search over demand. Same term handling as `searchSupply`. */
+export function searchDemand(
+  index: ReadonlyMap<string, DemandEntry>,
+  query: string,
+  limit = 60,
+): DemandEntry[] {
+  const terms = queryTerms(query);
+  if (terms.length === 0) return [];
+
+  const hits: DemandEntry[] = [];
+  for (const entry of index.values()) {
+    const haystack = label(entry);
+    if (terms.every((term) => haystack.includes(term))) {
+      hits.push(entry);
+      if (hits.length >= limit * 4) break;
+    }
+  }
+
+  // Most-wanted first: the objekt several people are asking for is the one
+  // worth acting on.
+  return hits
+    .sort((a, b) => b.wanters.length - a.wanters.length)
     .slice(0, limit);
 }
 

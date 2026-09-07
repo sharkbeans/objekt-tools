@@ -148,6 +148,9 @@ export function Navbar({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem asChild>
+                    <Link href={href("/match")}>Match from Discord</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <Link href={href("/objekt-maker")}>Objektify</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
@@ -323,6 +326,7 @@ function MobileNav({
   const href = (internal: string) =>
     sectionHref(internal, currentSection ? { currentSection } : undefined);
   const isToolsRoute =
+    pathname.startsWith("/match") ||
     pathname.startsWith("/objekt-maker") ||
     pathname.startsWith("/proofshot") ||
     pathname.startsWith("/spin") ||
@@ -455,6 +459,14 @@ function MobileNav({
             </button>
             {toolsOpen && (
               <div id="mobile-tools-nav" className="mt-1 space-y-1">
+                <MobileNavLink
+                  href={href("/match")}
+                  onClick={() => setOpen(false)}
+                  className="pl-8"
+                >
+                  <ArrowLeftRightIcon className="size-4" />
+                  Match from Discord
+                </MobileNavLink>
                 <MobileNavLink
                   href={href("/objekt-maker")}
                   onClick={() => setOpen(false)}

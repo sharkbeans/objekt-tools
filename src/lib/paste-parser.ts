@@ -147,24 +147,31 @@ function stripDiscordFormatting(line: string): string {
  * Extra words (FCO, DCO, "Ever", etc.) are ignored.
  * Returns hasOneToOne=true if "1:1" appears in the header.
  */
-function isSectionHeader(
-  line: string,
-): { section: "have" | "want"; hasOneToOne: boolean } | null {
+function isSectionHeader(line: string): {
+  section: "have" | "want";
+  hasOneToOne: boolean;
+  /**
+   * Whatever follows the header keyword on the same line. Traders often write
+   * the whole trade on one line each ("Have: Shion bb306" / "Want Lynn bb305");
+   * discarding the remainder loses the entire post.
+   */
+  rest: string;
+} | null {
   const stripped = stripDiscordFormatting(line);
   const lower = stripped.toLowerCase();
 
   // Single-letter shorthands [H], [W]
-  if (lower === "h") return { section: "have", hasOneToOne: false };
-  if (lower === "w") return { section: "want", hasOneToOne: false };
+  if (lower === "h") return { section: "have", hasOneToOne: false, rest: "" };
+  if (lower === "w") return { section: "want", hasOneToOne: false, rest: "" };
 
-  let section: "have" | "want" | null = null;
-  if (/^(have|haves|wts)\b/i.test(lower)) section = "have";
-  else if (/^(want|wants|wtb)\b/i.test(lower)) section = "want";
+  const match = stripped.match(/^(have|haves|wts|want|wants|wtb)\b[\s:]*/i);
+  if (!match) return null;
 
-  if (!section) return null;
-
+  const section: "have" | "want" = /^(have|haves|wts)$/i.test(match[1])
+    ? "have"
+    : "want";
   const hasOneToOne = /\b1:1\b/.test(stripped);
-  return { section, hasOneToOne };
+  return { section, hasOneToOne, rest: stripped.slice(match[0].length).trim() };
 }
 
 function isIgnorableTradeIntentLine(line: string): boolean {
@@ -426,7 +433,7 @@ export function parsePastedTrade(text: string): ParseResult {
   const extractedNoteFragments = new Set<string>();
 
   for (const line of lines) {
-    const trimmed = line.trim();
+    let trimmed = line.trim();
 
     // Skip URLs — they appear as context links in trade posts, not as items
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://"))
@@ -440,7 +447,10 @@ export function parsePastedTrade(text: string): ParseResult {
       if (headerResult.hasOneToOne) extractedNoteFragments.add("1:1");
       trailingUnmatched.length = 0;
       inFooter = false;
-      continue;
+      // "Have: Shion bb306" puts the header and the item on one line. Fall
+      // through with the remainder instead of discarding it.
+      if (!headerResult.rest) continue;
+      trimmed = headerResult.rest;
     }
 
     // Once in footer, collect everything (including blanks) as trailing notes

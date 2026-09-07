@@ -6,7 +6,13 @@ import {
   buildVerification,
   type VerificationState,
 } from "@/lib/discord/verify";
-import { buildSupplyIndex, searchSupply, suppliersForPicks } from "./supply";
+import {
+  buildDemandIndex,
+  buildSupplyIndex,
+  searchDemand,
+  searchSupply,
+  suppliersForPicks,
+} from "./supply";
 
 function owned(
   member: string,
@@ -139,5 +145,57 @@ describe("suppliersForPicks", () => {
       found.map((e) => e.key),
       ["nien|cream02|301"],
     );
+  });
+});
+
+// The mirror question: a trader holding a spare wants to know who will take
+// it. Answering only the supply half returns the opposite of what they asked.
+const DEMAND = parseTranscript(`alice — 3:41 PM
+Have
+Seoyeon CC101
+Want
+Jiyeon CC102
+bob — 3:44 PM
+Want
+Jiyeon CC102
+Any Xinyu CC fco`);
+
+describe("buildDemandIndex", () => {
+  it("indexes every poster asking for an objekt", () => {
+    const index = buildDemandIndex(DEMAND);
+    const entry = [...index.values()].find((e) => e.collectionNo === "102");
+    assert.deepEqual(
+      entry?.wanters.map((m) => m.author),
+      ["alice", "bob"],
+    );
+  });
+
+  it("leaves ANY-filter wants out rather than inventing a hit", () => {
+    const index = buildDemandIndex(DEMAND);
+    assert.ok([...index.values()].every((e) => e.member !== null));
+    assert.equal(index.size, 1);
+  });
+
+  it("does not confuse a poster's haves with their wants", () => {
+    const index = buildDemandIndex(DEMAND);
+    assert.equal(
+      [...index.values()].some((e) => e.collectionNo === "101"),
+      false,
+    );
+  });
+});
+
+describe("searchDemand", () => {
+  it("finds takers for a spare, in either term order", () => {
+    const index = buildDemandIndex(DEMAND);
+    for (const query of ["jiyeon cc102", "cc102 jiyeon", "jiyeon 102"]) {
+      const hits = searchDemand(index, query);
+      assert.equal(hits.length, 1, query);
+      assert.equal(hits[0].wanters.length, 2, query);
+    }
+  });
+
+  it("returns nothing for an objekt nobody asked for", () => {
+    assert.deepEqual(searchDemand(buildDemandIndex(DEMAND), "nien cc301"), []);
   });
 });

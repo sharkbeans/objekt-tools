@@ -1,6 +1,5 @@
-import type { OwnedEntry } from "@/lib/cosmo-inventory";
 import type { TranscriptMessage } from "@/lib/discord/transcript";
-import type { ParsedItem } from "@/lib/paste-parser";
+import { type ParsedItem, parsePastedTrade } from "@/lib/paste-parser";
 import { stripVariantSuffix } from "@/lib/season-prefix";
 
 /**
@@ -37,12 +36,22 @@ export function objektKey(item: ObjektKeyParts): string | null {
 
 export interface OwnedIndex {
   /** key → every copy the viewer holds, so spares are visible. */
-  byKey: Map<string, OwnedEntry[]>;
+  byKey: Map<string, ObjektKeyParts[]>;
   total: number;
 }
 
-export function indexOwned(entries: OwnedEntry[]): OwnedIndex {
-  const byKey = new Map<string, OwnedEntry[]>();
+/**
+ * Index what the viewer can offer.
+ *
+ * Takes bare key parts rather than chain rows so the same index serves both
+ * sources: an inventory loaded from a Cosmo nickname, and a handful of spares
+ * the viewer simply typed in. A trader who will not link Cosmo still has to be
+ * able to say "I have JiYeon CC102" — that is the whole of their side of the
+ * trade, and requiring a chain lookup to express it locks them out of the one
+ * panel that answers their question.
+ */
+export function indexOwned(entries: ObjektKeyParts[]): OwnedIndex {
+  const byKey = new Map<string, ObjektKeyParts[]>();
   for (const entry of entries) {
     const key = objektKey(entry);
     if (!key) continue;
@@ -54,10 +63,24 @@ export function indexOwned(entries: OwnedEntry[]): OwnedIndex {
 }
 
 export interface WantHit {
+  /** Objekt key. Unique within a poster, so it doubles as a render key. */
+  key: string;
   /** The counterparty's want line that the viewer can satisfy. */
   want: ParsedItem;
   /** Copies the viewer holds. Length > 1 means they can trade a spare. */
-  owned: OwnedEntry[];
+  owned: ObjektKeyParts[];
+}
+
+/**
+ * Parse the spares a viewer typed by hand into matchable items.
+ *
+ * `parsePastedTrade` is section-driven, so a bare list of objekts is given the
+ * HAVE header it would otherwise be missing. Everything typed here is by
+ * definition a have.
+ */
+export function parseOffering(text: string): ParsedItem[] {
+  if (!text.trim()) return [];
+  return parsePastedTrade(`HAVE\n${text}`).haves;
 }
 
 export interface MatchedPoster {
@@ -66,6 +89,8 @@ export interface MatchedPoster {
   theyWantYouHave: WantHit[];
   /** Their haves, offered as a pile for the viewer to pick from. */
   theyHave: ParsedItem[];
+  /** Their haves the viewer has picked — the return leg of the swap. */
+  theyHaveYouPicked: ParsedItem[];
   /** True once the viewer has picked something from this poster's haves. */
   isMutual: boolean;
 }
@@ -84,28 +109,33 @@ export function matchTranscript(
 
   for (const message of messages) {
     const theyWantYouHave: WantHit[] = [];
+    // Deduped by objekt: traders repeat a want across lines ("Xinyu CC202" in
+    // one block and again in another), and listing it twice both misleads the
+    // viewer about demand and produces colliding render keys.
+    const seenWant = new Set<string>();
     for (const want of message.wants) {
       // ANY-filter wants ("Any Xinyu CC fco") have no single collection to key
       // on. Skipping them undercounts rather than inventing a false match.
       if (want.isAny) continue;
       const key = objektKey(want);
-      if (!key) continue;
+      if (!key || seenWant.has(key)) continue;
       const held = owned.byKey.get(key);
-      if (held && held.length > 0) theyWantYouHave.push({ want, owned: held });
+      if (!held || held.length === 0) continue;
+      seenWant.add(key);
+      theyWantYouHave.push({ key, want, owned: held });
     }
 
-    const isMutual =
-      theyWantYouHave.length > 0 &&
-      message.haves.some((have) => {
-        const key = objektKey(have);
-        return key !== null && picked.has(key);
-      });
+    const theyHaveYouPicked = message.haves.filter((have) => {
+      const key = objektKey(have);
+      return key !== null && picked.has(key);
+    });
 
     results.push({
       message,
       theyWantYouHave,
       theyHave: message.haves,
-      isMutual,
+      theyHaveYouPicked,
+      isMutual: theyWantYouHave.length > 0 && theyHaveYouPicked.length > 0,
     });
   }
 
