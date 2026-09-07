@@ -179,6 +179,30 @@ function parseQuantityToken(token: string): number | null {
 }
 
 /**
+ * Normalise the shapes real Discord trade posts use that plain whitespace
+ * tokenisation would otherwise mangle. Applied per line before splitting.
+ *
+ *   "Sohyun D102 (×2)"        → "(x2)"     U+00D7 is common on mobile keyboards
+ *   "Shion cc109x4 cc111"     → "cc109 x4" attached quantity, else the item is lost
+ *   "Lynn E317 - 320 E347"    → "E317-320" spaced range; the range expander
+ *                                          already handles the unspaced form
+ */
+function normalizeItemLine(line: string): string {
+  return (
+    line
+      // Multiplication sign → ASCII x, so x3 / (x3) parse identically.
+      .replace(/×/g, "x")
+      // Collapse spaces around a range separator between two collection codes.
+      .replace(
+        /([A-Za-z]{0,3}\d{3}[azAZ]?)\s*[-~]\s*([A-Za-z]{0,3}\d{3}[azAZ]?)/g,
+        "$1-$2",
+      )
+      // Detach a trailing quantity fused onto a collection code.
+      .replace(/([A-Za-z]{1,3}\d{3}[azAZ]?)x(\d+)\b/gi, "$1 x$2")
+  );
+}
+
+/**
  * Parse a single line within a section.
  * Returns items, errors, and any note fragments (e.g. "1:1") extracted mid-line.
  */
@@ -192,7 +216,7 @@ function parseLine(
   noteFragments: string[];
   explicitMember: string | null | undefined;
 } {
-  let trimmed = stripDiscordFormatting(line);
+  let trimmed = normalizeItemLine(stripDiscordFormatting(line));
   if (!trimmed)
     return {
       items: [],
@@ -269,7 +293,7 @@ function parseLine(
       }
 
       // ── Parenthetical quantity: (4), (13) — no # prefix ─────────────────
-      const parenQtyMatch = token.match(/^\((\d+)\)$/);
+      const parenQtyMatch = token.match(/^\(x?(\d+)\)$/i);
       if (parenQtyMatch) {
         if (items.length > 0)
           items[items.length - 1].quantity = parseInt(parenQtyMatch[1], 10);
@@ -388,6 +412,11 @@ export function parsePastedTrade(text: string): ParseResult {
 
   let currentSection: "have" | "want" | null = null;
   let lastMember: string | null = null; // inherited across lines within a section
+  // Whether the current section has produced at least one item yet. Prose that
+  // appears *before* the first item ("Mostly Lynn", "Rare objekt list", a sale
+  // blurb) is a note, not the end of the list — only a blank stretch *after*
+  // real items means we've reached the footer.
+  let sectionHasItems = false;
 
   const preambleLines: string[] = [];
   const trailingUnmatched: string[] = [];
@@ -407,6 +436,7 @@ export function parsePastedTrade(text: string): ParseResult {
     if (headerResult) {
       currentSection = headerResult.section;
       lastMember = null; // reset member inheritance on section change
+      sectionHasItems = false;
       if (headerResult.hasOneToOne) extractedNoteFragments.add("1:1");
       trailingUnmatched.length = 0;
       inFooter = false;
@@ -441,9 +471,15 @@ export function parsePastedTrade(text: string): ParseResult {
     if (items.length > 0) {
       trailingUnmatched.length = 0;
       inFooter = false; // reset — subsection labels between items no longer kill parsing
-    } else {
+      sectionHasItems = true;
+    } else if (sectionHasItems) {
       inFooter = true;
       trailingUnmatched.push(trimmed);
+    } else {
+      // Prose before this section's first item — a WTS blurb, a subsection
+      // label, a price note. Keep it as a note and keep scanning; entering
+      // footer mode here would swallow the entire list that follows.
+      preambleLines.push(trimmed);
     }
 
     if (currentSection === "have") haves.push(...items);
