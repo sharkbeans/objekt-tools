@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CollectionHomeRedirect } from "@/components/progress/collection-home-redirect";
-import { CollectorDirectory } from "@/components/progress/collector-directory";
 import { getSession } from "@/lib/auth-server";
 import { refreshCosmoAccountIfStale } from "@/lib/cosmo/refresh-account";
 import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
@@ -63,14 +62,11 @@ export default async function ProgressPage({
   }
 
   return (
-    <>
-      <CollectionHomeRedirect
-        walletUnresolved={
-          (await searchParams)[UNRESOLVED_WALLET_PARAM] ===
-          UNRESOLVED_WALLET_MARKER
-        }
-      />
-      <CollectorDirectory />
-    </>
+    <CollectionHomeRedirect
+      walletUnresolved={
+        (await searchParams)[UNRESOLVED_WALLET_PARAM] ===
+        UNRESOLVED_WALLET_MARKER
+      }
+    />
   );
 }
