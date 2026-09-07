@@ -24,6 +24,11 @@ import {
   summarize,
 } from "@/lib/discord/match";
 import {
+  buildSupplyIndex,
+  type SupplyEntry,
+  searchSupply,
+} from "@/lib/discord/supply";
+import {
   mergeTranscripts,
   parseTranscript,
   type TranscriptMessage,
@@ -64,6 +69,7 @@ export function MatchClient() {
     new Map(),
   );
   const [verifying, setVerifying] = useState(false);
+  const [supplyQuery, setSupplyQuery] = useState("");
 
   // Restore the session — pastes, nickname and picks all survive a reload
   // without an account. localStorage only; nothing leaves the browser.
@@ -194,6 +200,16 @@ export function MatchClient() {
     [messages, ownedIndex, picked],
   );
   const pile = useMemo(() => buildPile(messages), [messages]);
+  // Supply spans typed lists *and* verified inventories, so a link-only poster
+  // holding thousands of objekts becomes searchable instead of invisible.
+  const supplyIndex = useMemo(
+    () => buildSupplyIndex(messages, verified),
+    [messages, verified],
+  );
+  const supplyHits = useMemo(
+    () => searchSupply(supplyIndex, supplyQuery),
+    [supplyIndex, supplyQuery],
+  );
   const summary = useMemo(() => summarize(messages), [messages]);
   const wantYouHaveCount = matched.filter(
     (m) => m.theyWantYouHave.length > 0,
@@ -327,6 +343,65 @@ export function MatchClient() {
               </Button>
             )}
           </div>
+
+          {/* Supply lookup — the question traders actually arrive with */}
+          <section className="space-y-2 rounded-lg border border-border bg-card p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-bold">Who has it?</h2>
+              <p className="text-xs text-muted-foreground">
+                Searches {supplyIndex.size.toLocaleString()} objekts across
+                typed lists and verified inventories.
+              </p>
+            </div>
+            <Input
+              value={supplyQuery}
+              onChange={(e) => setSupplyQuery(e.target.value)}
+              placeholder="e.g. nien cc301"
+            />
+            {supplyQuery.trim() && (
+              <div className="space-y-1.5 pt-1">
+                {supplyHits.length === 0 ? (
+                  <p className="py-3 text-sm text-muted-foreground">
+                    Nobody in this paste has that.
+                  </p>
+                ) : (
+                  supplyHits.map((entry: SupplyEntry) => (
+                    <div
+                      key={entry.key}
+                      className="flex flex-wrap items-center gap-2 rounded border border-border/60 px-2.5 py-1.5 text-xs"
+                    >
+                      <span className="font-medium">
+                        {entry.member} {entry.collectionNo}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {entry.season}
+                      </span>
+                      <span className="ml-auto flex flex-wrap gap-1.5">
+                        {entry.suppliers.map((sup) => (
+                          <span
+                            key={`${entry.key}-${sup.message.key}`}
+                            className={`rounded px-1.5 py-0.5 ${
+                              sup.source === "verified"
+                                ? "bg-emerald-600/15 text-emerald-400"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                            title={
+                              sup.source === "verified"
+                                ? "Confirmed on-chain"
+                                : "Self-reported in their post"
+                            }
+                          >
+                            {sup.message.author}
+                            {sup.copies > 1 && ` ×${sup.copies}`}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
 
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Panel 1 — who wants what you own */}
