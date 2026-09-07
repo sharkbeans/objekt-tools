@@ -9,7 +9,7 @@ import {
   ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,13 @@ import {
   type VerificationState,
   verifySequentially,
 } from "@/lib/discord/verify";
+import {
+  encodeGridTradeStash,
+  GRID_TRADE_HASH_PARAM,
+} from "@/lib/grid-trade-stash";
 import { formatShortLabel } from "@/lib/objekt-label";
+import { resolveForPoster } from "@/lib/poster/poster-resolver";
+import { sectionHref } from "@/lib/sections";
 
 const STORAGE_KEY = "match:transcript:v1";
 const NICK_KEY = "match:nickname:v1";
@@ -70,6 +76,7 @@ export function MatchClient() {
   );
   const [verifying, setVerifying] = useState(false);
   const [supplyQuery, setSupplyQuery] = useState("");
+  const [building, setBuilding] = useState(false);
 
   // Restore the session — pastes, nickname and picks all survive a reload
   // without an account. localStorage only; nothing leaves the browser.
@@ -194,12 +201,47 @@ export function MatchClient() {
     }
   }, [linkedNicknames, messages, verified]);
 
+  /**
+   * Close the loop: turn the viewer's picks into a real objekt.my list.
+   *
+   * Reuses the grid board's existing hand-off channel (/list?prefill=grid
+   * with the draft in the URL fragment) rather than inventing a second one —
+   * the fragment survives a cross-origin hop when section subdomains are on,
+   * and never reaches the server. Only wants are prefilled; the list builder
+   * already auto-imports haves from the linked Cosmo account.
+   */
+  const handleBuildList = useCallback(async () => {
+    const wanted = pileRef.current.filter((e) => picked.has(e.key));
+    if (wanted.length === 0) return;
+    setBuilding(true);
+    try {
+      const wants = await resolveForPoster(wanted.map((e) => e.item));
+      const stash = encodeGridTradeStash({
+        username: "",
+        cosmoId: nickname.trim(),
+        haves: [],
+        wants,
+        date: new Date().toLocaleDateString("en-GB"),
+        haveTitle: "Have",
+        wantTitle: "Want",
+      });
+      window.location.href = `${sectionHref("/list", {
+        currentSection: undefined,
+      })}?prefill=grid#${GRID_TRADE_HASH_PARAM}=${stash}`;
+    } catch {
+      toast.error("Could not build the list draft. Try again.");
+      setBuilding(false);
+    }
+  }, [picked, nickname]);
+
   const ownedIndex = useMemo(() => indexOwned(owned), [owned]);
   const matched = useMemo(
     () => matchTranscript(messages, ownedIndex, picked),
     [messages, ownedIndex, picked],
   );
   const pile = useMemo(() => buildPile(messages), [messages]);
+  const pileRef = useRef(pile);
+  pileRef.current = pile;
   // Supply spans typed lists *and* verified inventories, so a link-only poster
   // holding thousands of objekts becomes searchable instead of invisible.
   const supplyIndex = useMemo(
@@ -531,6 +573,26 @@ export function MatchClient() {
                   Pick what you want — no want list needed. Scarcest first.
                 </p>
               </div>
+
+              {picked.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
+                  <p className="text-xs">
+                    <span className="font-medium">{picked.size} picked.</span>{" "}
+                    Turn them into a list others can match against.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="ml-auto"
+                    onClick={handleBuildList}
+                    disabled={building}
+                  >
+                    {building ? (
+                      <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    Build my list
+                  </Button>
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-1.5">
                 {pile.map((entry) => {
