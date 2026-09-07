@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  AlertTriangleIcon,
   CheckCircle2Icon,
   ClipboardPasteIcon,
   Loader2Icon,
   SearchIcon,
+  ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -26,6 +28,12 @@ import {
   parseTranscript,
   type TranscriptMessage,
 } from "@/lib/discord/transcript";
+import {
+  buildVerification,
+  suppliesPicked,
+  type VerificationState,
+  verifySequentially,
+} from "@/lib/discord/verify";
 import { formatShortLabel } from "@/lib/objekt-label";
 
 const STORAGE_KEY = "match:transcript:v1";
@@ -50,6 +58,12 @@ export function MatchClient() {
   const [owned, setOwned] = useState<OwnedEntry[]>([]);
   const [loadingInv, setLoadingInv] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Verification results keyed by Cosmo nickname, so two posters sharing a
+  // link are only fetched once.
+  const [verified, setVerified] = useState<Map<string, VerificationState>>(
+    new Map(),
+  );
+  const [verifying, setVerifying] = useState(false);
 
   // Restore the session — pastes, nickname and picks all survive a reload
   // without an account. localStorage only; nothing leaves the browser.
@@ -115,6 +129,64 @@ export function MatchClient() {
       setLoadingInv(false);
     }
   }, [nickname]);
+
+  const linkedNicknames = useMemo(
+    () => [
+      ...new Set(messages.flatMap((m) => (m.nickname ? [m.nickname] : []))),
+    ],
+    [messages],
+  );
+
+  const handleVerifyAll = useCallback(async () => {
+    const pending = linkedNicknames.filter(
+      (n) => verified.get(n)?.status !== "verified",
+    );
+    if (pending.length === 0) return;
+    setVerifying(true);
+
+    // Claims are indexed per nickname so each fetch can be checked against
+    // whatever that trader typed.
+    const claimsByNickname = new Map(
+      messages
+        .filter((m) => m.nickname)
+        .map((m) => [m.nickname as string, m.haves]),
+    );
+
+    const { completed, rateLimited } = await verifySequentially(
+      pending,
+      (nickname, result) => {
+        setVerified((prev) => {
+          const next = new Map(prev);
+          if (result.ok) {
+            next.set(
+              nickname,
+              buildVerification(
+                claimsByNickname.get(nickname) ?? [],
+                result.inventory,
+              ),
+            );
+          } else {
+            next.set(nickname, {
+              status: result.rateLimited ? "rate-limited" : "failed",
+              ...(result.rateLimited ? {} : { reason: result.reason }),
+            } as VerificationState);
+          }
+          return next;
+        });
+      },
+    );
+
+    setVerifying(false);
+    if (rateLimited) {
+      toast.warning(
+        `Verified ${completed} of ${pending.length}. Cosmo lookups are capped at 10/min when signed out — sign in to verify the rest.`,
+      );
+    } else {
+      toast.success(
+        `Verified ${completed} trader${completed === 1 ? "" : "s"}`,
+      );
+    }
+  }, [linkedNicknames, messages, verified]);
 
   const ownedIndex = useMemo(() => indexOwned(owned), [owned]);
   const matched = useMemo(
@@ -238,6 +310,22 @@ export function MatchClient() {
                 {wantYouHaveCount} traders want something you own
               </span>
             )}
+            {linkedNicknames.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-auto rounded-full px-3 py-1.5 text-xs"
+                onClick={handleVerifyAll}
+                disabled={verifying}
+              >
+                {verifying ? (
+                  <Loader2Icon className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <ShieldCheckIcon className="mr-1.5 h-3 w-3" />
+                )}
+                Verify {linkedNicknames.length} linked
+              </Button>
+            )}
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -280,6 +368,47 @@ export function MatchClient() {
                         </span>
                       )}
                     </div>
+                    {(() => {
+                      const v = message.nickname
+                        ? verified.get(message.nickname)
+                        : undefined;
+                      if (!v) return null;
+                      if (v.status === "rate-limited")
+                        return (
+                          <p className="mb-2 text-[11px] text-amber-400">
+                            Not verified — Cosmo lookup limit reached.
+                          </p>
+                        );
+                      if (v.status === "failed")
+                        return (
+                          <p className="mb-2 text-[11px] text-muted-foreground">
+                            Could not verify: {v.reason}
+                          </p>
+                        );
+                      if (v.status !== "verified") return null;
+                      const supplies = suppliesPicked(v.index, picked);
+                      return (
+                        <div className="mb-2 space-y-1 rounded border border-emerald-600/30 bg-emerald-600/5 p-2">
+                          <p className="text-[11px] text-emerald-400">
+                            <ShieldCheckIcon className="mr-1 inline h-3 w-3" />
+                            Holds {v.inventory.length} tradable objekts on-chain
+                          </p>
+                          {v.stale.length > 0 && (
+                            <p className="text-[11px] text-amber-400">
+                              <AlertTriangleIcon className="mr-1 inline h-3 w-3" />
+                              {v.stale.length} listed objekt
+                              {v.stale.length === 1 ? "" : "s"} no longer in
+                              their inventory
+                            </p>
+                          )}
+                          {supplies.length > 0 && (
+                            <p className="text-[11px] font-medium text-emerald-300">
+                              Can supply {supplies.length} of your picks
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                       They want, you have
                     </p>
