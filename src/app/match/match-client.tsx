@@ -92,6 +92,9 @@ const NICK_KEY = "match:nickname:v1";
 const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
 const PICKED_KEY = "match:picked:v1";
+const COLS_KEY = "match:columns:v1";
+const COLUMN_CHOICES = [3, 4, 5, 6, 7, 8] as const;
+const DEFAULT_COLUMNS = 5;
 const EMPTY_KEYS = new Set<string>();
 const MODES = [
   {
@@ -213,6 +216,7 @@ export function MatchClient() {
   const [building, setBuilding] = useState(false);
   const [sort, setSort] = useState<"popular" | "member" | "price">("popular");
   const [listLimit, setListLimit] = useState(12);
+  const [columns, setColumns] = useState<number>(DEFAULT_COLUMNS);
   const importStarted = useRef(new Set<string>());
   const generation = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -226,6 +230,9 @@ export function MatchClient() {
       setOffering(localStorage.getItem(OFFERING_KEY) ?? "");
       setWanting(localStorage.getItem(WANTING_KEY) ?? "");
       setNickname(localStorage.getItem(NICK_KEY) ?? "");
+      const savedCols = Number(localStorage.getItem(COLS_KEY));
+      if (COLUMN_CHOICES.some((choice) => choice === savedCols))
+        setColumns(savedCols);
       const oldPicks: unknown = JSON.parse(
         localStorage.getItem(PICKED_KEY) ?? "[]",
       );
@@ -256,10 +263,11 @@ export function MatchClient() {
       localStorage.setItem(OFFERING_KEY, offering);
       localStorage.setItem(WANTING_KEY, wanting);
       localStorage.setItem(NICK_KEY, nickname);
+      localStorage.setItem(COLS_KEY, String(columns));
     } catch {
       /* Keep the in-memory lists usable. */
     }
-  }, [ready, offering, wanting, nickname]);
+  }, [ready, offering, wanting, nickname, columns]);
 
   const addPaste = useCallback((text: string) => {
     const parsed = analyzeTranscript(text);
@@ -684,6 +692,21 @@ export function MatchClient() {
             ))}
           </fieldset>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <label className="flex items-center gap-2" htmlFor="desk-columns">
+              Per row
+              <select
+                id="desk-columns"
+                value={columns}
+                onChange={(event) => setColumns(Number(event.target.value))}
+                className="rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
+              >
+                {COLUMN_CHOICES.map((choice) => (
+                  <option key={choice} value={choice}>
+                    {choice}
+                  </option>
+                ))}
+              </select>
+            </label>
             <span>{messages.length.toLocaleString()} pasted posts</span>
             {messages.length > 0 ? (
               <button
@@ -857,6 +880,7 @@ export function MatchClient() {
                     `${card.posts.length} ${mode === "sell" ? "buying" : "want this"}`
                   }
                   emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
+                  columns={columns}
                 />
               )}
             </>
@@ -948,6 +972,7 @@ export function MatchClient() {
                       ? "No listed sale cards match. Remove a selection, open a linked list below, or add WTS posts."
                       : "No offers connect these selections yet. Remove a card, open a linked list below, or add more posts."
                   }
+                  columns={columns}
                 />
               )}
             </>
