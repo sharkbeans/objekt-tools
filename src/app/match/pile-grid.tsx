@@ -275,10 +275,6 @@ function ObjektDialog({
               {entry.item.season} — {entry.offeredBy.length} offering,{" "}
               {demand?.wanters.length ?? 0} looking for it in this paste.
             </DialogDescription>
-            <p className="text-sm text-muted-foreground">
-              Copy a Discord name below, then paste it into Discord search to
-              contact that trader.
-            </p>
           </div>
         </DialogHeader>
 

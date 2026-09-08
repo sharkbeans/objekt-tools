@@ -1,21 +1,18 @@
 "use client";
 
 import {
-  AlertTriangleIcon,
-  ArrowRightIcon,
-  CheckCircle2Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
+  ArrowDownIcon,
+  ArrowLeftRightIcon,
   ClipboardPasteIcon,
   Loader2Icon,
-  SearchIcon,
-  ShieldCheckIcon,
-  Trash2Icon,
+  PlusIcon,
+  ShoppingBagIcon,
+  TagIcon,
+  XIcon,
 } from "lucide-react";
 import {
   type ChangeEvent,
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -32,39 +29,37 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { OwnedEntry } from "@/lib/cosmo-inventory";
-import { fetchInventoryByNickname } from "@/lib/cosmo-inventory";
-import { INTENT_LABEL, type TradeIntent } from "@/lib/discord/intent";
 import {
-  buildPile,
+  fetchInventoryByNickname,
+  type OwnedEntry,
+} from "@/lib/cosmo-inventory";
+import {
   indexOwned,
   matchTranscript,
   objektKey,
   parseOffering,
-  summarize,
 } from "@/lib/discord/match";
-import { askingPrice, bidPrice, formatPrice } from "@/lib/discord/price";
+import { askingPrice, formatPrice } from "@/lib/discord/price";
 import {
-  buildDemandIndex,
-  buildSupplyIndex,
-  type DemandEntry,
-  type SupplyEntry,
-  searchDemand,
-  searchSupply,
-} from "@/lib/discord/supply";
+  collectDeskCards,
+  type DeskCard,
+  type DeskMode,
+  type DeskPost,
+  deskLabel,
+  indexDeskPosts,
+  keyedItems,
+  selectDeskPosts,
+} from "@/lib/discord/trade-desk";
 import {
   analyzeTranscript,
   mergeTranscripts,
@@ -72,9 +67,8 @@ import {
 } from "@/lib/discord/transcript";
 import {
   buildVerification,
-  suppliesPicked,
+  fetchInventoryForVerification,
   type VerificationState,
-  verifySequentially,
 } from "@/lib/discord/verify";
 import {
   type ExternalListImport,
@@ -85,65 +79,64 @@ import {
   encodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
-import { formatShortLabel } from "@/lib/objekt-label";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { resolveForPoster } from "@/lib/poster/poster-resolver";
+import { stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionHref } from "@/lib/sections";
-import { PileGrid } from "./pile-grid";
-import { matchesPileQuery, PileSearch, parsePileQuery } from "./pile-search";
-import { CopyDiscordHandle, PostDialog } from "./post-dialog";
+import { ContactResults } from "./desk-contacts";
+import { DeskGrid } from "./desk-grid";
+import { PostDialog } from "./post-dialog";
 
-const STORAGE_KEY = "match:transcript:v1";
 const RAW_KEY = "match:raw:v1";
 const NICK_KEY = "match:nickname:v1";
-const PICKED_KEY = "match:picked:v1";
 const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
+const PICKED_KEY = "match:picked:v1";
+const EMPTY_KEYS = new Set<string>();
+const MODES = [
+  {
+    id: "trade",
+    label: "Trade",
+    icon: ArrowLeftRightIcon,
+    hint: "Choose what you can give or what you want. The other side shows cards connected through the same trader.",
+  },
+  {
+    id: "buy",
+    label: "Buy",
+    icon: ShoppingBagIcon,
+    hint: "Pick cards for sale on the right, compare sellers below, then copy a Discord name to contact them.",
+  },
+  {
+    id: "sell",
+    label: "Sell",
+    icon: TagIcon,
+    hint: "Pick your cards on the left to see who is looking to buy them, with bids where stated.",
+  },
+] as const;
 
-// Shown from the empty state so a first-time visitor can see what a result
-// looks like before going to fetch a real paste.
-const SAMPLE_PASTE = `haerin.exe — 3:44 PM
-Have
-SeoYeon CC101 CC112
-Mayu CC103 CC104
-
-Want
-JiYeon CC102
-Xinyu CC101 CC102
-bunny — Yesterday at 11:20 PM
-WTS ALL
-Mostly Lynn
-
-Lynn C319 C323 D301
-JiWoo D325
-
-https://apollo.cafe/@bunnyobjekt?transferable=true
-yeonji_stan — 3:52 PM
+const SAMPLE = `haerin.exe — 3:44 PM
 HAVE
-SeoYeon CC101
-ChaeYeon CC104
-
+SeoYeon CC101 CC112
+Mayu CC103
 WANT
 JiYeon CC102
-Nien CC301`;
+Xinyu CC101
+yeonji_stan — 3:52 PM
+HAVE
+ChaeYeon CC104
+WANT
+Nien CC301
+Chiruka — 4:01 PM
+WTS
+SeoYeon CC101 $3
+Mayu CC103 $5
+PayPal or Wise
+ezilama — 4:02 PM
+WTB
+JiYeon CC102 $4
+Xinyu CC101 $2`;
 
-type PileSortId = "scarcest" | "cheapest" | "priciest" | "member";
-
-const PILE_SORTS: { id: PileSortId; label: string }[] = [
-  { id: "scarcest", label: "Scarcest" },
-  { id: "cheapest", label: "Cheapest" },
-  { id: "priciest", label: "Priciest" },
-  { id: "member", label: "Member" },
-];
-
-// Match cards contain two chip groups and can be much taller than pile tiles.
-// A smaller page keeps a full-channel import scannable instead of creating one
-// enormous column.
-const MATCH_PAGE_SIZE = 12;
-const MATCH_WANT_CHIP_LIMIT = 6;
-const MATCH_OFFER_CHIP_LIMIT = 8;
-
-type LinkedListImportState =
+type ImportState =
   | { status: "loading"; links: ExternalListLink[] }
   | {
       status: "loaded";
@@ -152,504 +145,441 @@ type LinkedListImportState =
       errors: { link: ExternalListLink; message: string }[];
     };
 
-function isQuotaExceededError(error: unknown): boolean {
-  return (
-    error instanceof DOMException &&
-    (error.name === "QuotaExceededError" || error.code === 22)
-  );
+function toggle(set: Set<string>, key: string) {
+  const next = new Set(set);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
 }
 
-function itemLabel(item: {
-  member: string | null;
-  season: string;
-  collectionNo: string;
+function SelectionTray({
+  selected,
+  items,
+  onToggle,
+  empty,
+}: {
+  selected: ReadonlySet<string>;
+  items: ReadonlyMap<string, ParsedItem>;
+  onToggle: (key: string) => void;
+  empty: string;
 }) {
-  return formatShortLabel({
-    member: item.member,
-    season: item.season,
-    collectionNo: item.collectionNo,
-    collectionId: "",
-  });
-}
-
-/** Merge a public list into a paste without changing the raw pasted source. */
-function mergeImportedHaves(
-  haves: ParsedItem[],
-  imported: ExternalListImport[],
-): ParsedItem[] {
-  const merged: ParsedItem[] = [];
-  const seen = new Set<string>();
-  for (const item of [
-    ...haves,
-    ...imported.flatMap((list) => list.items.map(externalItemToParsed)),
-  ]) {
-    const key = objektKey(item);
-    // Keep unkeyed source items too: even if they cannot match, their raw
-    // text may be useful in the post dialog.
-    if (!key) {
-      merged.push(item);
-      continue;
-    }
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(item);
-  }
-  return merged;
-}
-
-async function fetchLinkedList(
-  link: ExternalListLink,
-): Promise<ExternalListImport> {
-  const response = await fetch(
-    `/api/external-lists?url=${encodeURIComponent(link.url)}`,
+  return (
+    <div className="flex max-h-28 min-h-12 flex-wrap items-center gap-2 overflow-y-auto rounded-lg bg-muted/50 p-2">
+      {selected.size === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        [...selected].map((key) => {
+          const item = items.get(key);
+          const label = item ? deskLabel(item) : key.split("|").join(" ");
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-label={`Remove ${label}`}
+              onClick={() => onToggle(key)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-sm text-primary"
+            >
+              {label}
+              <XIcon className="size-3.5" />
+            </button>
+          );
+        })
+      )}
+    </div>
   );
-  const data: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message =
-      data &&
-      typeof data === "object" &&
-      "error" in data &&
-      typeof data.error === "string"
-        ? data.error
-        : "Could not import this linked list.";
-    throw new Error(message);
-  }
-  return data as ExternalListImport;
-}
-
-/**
- * "Verified" is reserved for a claim actually checked against the chain.
- * A profile link only means the poster *can* be checked, which is a different
- * and much weaker statement — spending the stronger word on it gives away the
- * one thing this tool has that an indexer does not.
- */
-function tierBadge(tier: TranscriptMessage["tier"], chainChecked: boolean) {
-  if (chainChecked)
-    return (
-      <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
-        <ShieldCheckIcon className="mr-1 h-3 w-3" />
-        Chain-checked
-      </Badge>
-    );
-  if (tier === "verified")
-    return (
-      <Badge variant="outline" title="Profile link posted — not checked yet">
-        Linked
-      </Badge>
-    );
-  if (tier === "claimed")
-    return (
-      <Badge variant="secondary" title="Self-reported — cannot be checked">
-        Typed list
-      </Badge>
-    );
-  return <Badge variant="outline">No list</Badge>;
 }
 
 export function MatchClient() {
+  const [mode, setMode] = useState<DeskMode>("trade");
   const [raw, setRaw] = useState("");
   const [storedRaw, setStoredRaw] = useState("");
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
-  const [nickname, setNickname] = useState("");
-  const [owned, setOwned] = useState<OwnedEntry[]>([]);
   const [offering, setOffering] = useState("");
   const [wanting, setWanting] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [owned, setOwned] = useState<OwnedEntry[]>([]);
   const [loadingInv, setLoadingInv] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  // Verification results keyed by Cosmo nickname, so two posters sharing a
-  // link are only fetched once.
+  const [give, setGive] = useState<Set<string>>(new Set());
+  const [get, setGet] = useState<Set<string>>(new Set());
+  const [savedPicks, setSavedPicks] = useState<string[]>([]);
+  const [ready, setReady] = useState(false);
+  const [editor, setEditor] = useState<"mine" | "paste" | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [openPost, setOpenPost] = useState<string | null>(null);
+  const [imports, setImports] = useState<Map<string, ImportState>>(new Map());
   const [verified, setVerified] = useState<Map<string, VerificationState>>(
     new Map(),
   );
-  // Imported data is session-only. The small raw Discord paste remains the
-  // persistent source of truth; opening the post again refreshes its public
-  // list instead of permanently storing hundreds of CDN URLs in localStorage.
-  const [linkedImports, setLinkedImports] = useState<
-    Map<string, LinkedListImportState>
-  >(new Map());
-  const [verifying, setVerifying] = useState(false);
-  const [lookupQuery, setLookupQuery] = useState("");
-  const [pileFilter, setPileFilter] = useState("");
-  const deferredPileFilter = useDeferredValue(pileFilter);
-  const [pileSort, setPileSort] = useState<PileSortId>("scarcest");
-  const [intentFilter, setIntentFilter] = useState<TradeIntent | "all">("all");
   const [building, setBuilding] = useState(false);
-  const [openPost, setOpenPost] = useState<string | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [matchPage, setMatchPage] = useState(0);
-  const importFileRef = useRef<HTMLInputElement>(null);
-  const linkedImportStarted = useRef<Set<string>>(new Set());
-  const linkedImportGeneration = useRef(0);
-  const hydrated = useRef(false);
-  // The ref distinguishes the post-hydration render from the initial empty
-  // render; this state makes that distinction observable to the write effects.
-  const [hydrationComplete, setHydrationComplete] = useState(false);
-
-  /**
-   * Drop every pasted post and everything derived from it.
-   *
-   * Picks, chain-check results and the filters all describe posts that are
-   * about to stop existing, so they go too — leaving them behind means a stale
-   * filter silently hiding the next paste. What the viewer typed about
-   * *themselves* (spares, nickname) is not a paste and survives, so they can
-   * clear a channel and start on another without re-entering their own side.
-   */
-  const clearAllPastes = useCallback(() => {
-    setMessages([]);
-    setStoredRaw("");
-    setPicked(new Set());
-    setVerified(new Map());
-    setLinkedImports(new Map());
-    linkedImportStarted.current.clear();
-    linkedImportGeneration.current++;
-    setIntentFilter("all");
-    setPileFilter("");
-    setPileSort("scarcest");
-    setLookupQuery("");
-    setOpenPost(null);
-    setConfirmClear(false);
-    try {
-      localStorage.removeItem(RAW_KEY);
-    } catch {
-      // Storage can be disabled; state is already cleared for this session.
-    }
-    toast.success("Cleared every pasted post");
-  }, []);
-
-  // Restore the session — pastes, spares and picks all survive a reload
-  // without an account. localStorage only; nothing leaves the browser.
-  useEffect(() => {
-    try {
-      const savedRaw = localStorage.getItem(RAW_KEY);
-      // Parsed message JSON can exceed localStorage quota. Remove the old
-      // format once so it cannot keep consuming space beside the raw source.
-      localStorage.removeItem(STORAGE_KEY);
-      if (savedRaw) {
-        setStoredRaw(savedRaw);
-        setMessages(analyzeTranscript(savedRaw).messages);
-      }
-      const nick = localStorage.getItem(NICK_KEY);
-      if (nick) setNickname(nick);
-      const picks = localStorage.getItem(PICKED_KEY);
-      if (picks) setPicked(new Set(JSON.parse(picks)));
-      const spares = localStorage.getItem(OFFERING_KEY);
-      if (spares) setOffering(spares);
-      const wants = localStorage.getItem(WANTING_KEY);
-      if (wants) setWanting(wants);
-    } catch {
-      // Corrupt or unavailable storage — start clean rather than crash.
-    } finally {
-      hydrated.current = true;
-      setHydrationComplete(true);
-    }
-  }, []);
+  const [sort, setSort] = useState<"popular" | "member" | "price">("popular");
+  const [listLimit, setListLimit] = useState(12);
+  const importStarted = useRef(new Set<string>());
+  const generation = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!hydrated.current || !hydrationComplete) return;
+    try {
+      const savedRaw = localStorage.getItem(RAW_KEY) ?? "";
+      setStoredRaw(savedRaw);
+      setMessages(analyzeTranscript(savedRaw).messages);
+      setOffering(localStorage.getItem(OFFERING_KEY) ?? "");
+      setWanting(localStorage.getItem(WANTING_KEY) ?? "");
+      setNickname(localStorage.getItem(NICK_KEY) ?? "");
+      const oldPicks: unknown = JSON.parse(
+        localStorage.getItem(PICKED_KEY) ?? "[]",
+      );
+      if (Array.isArray(oldPicks))
+        setSavedPicks(
+          oldPicks.filter((key): key is string => typeof key === "string"),
+        );
+      localStorage.removeItem("match:transcript:v1");
+    } catch {
+      /* A disabled or full store still allows a session. */
+    }
+    setReady(true);
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
     try {
       if (storedRaw) localStorage.setItem(RAW_KEY, storedRaw);
       else localStorage.removeItem(RAW_KEY);
-    } catch (error) {
-      if (isQuotaExceededError(error)) {
-        toast.error(
-          "This import is too large to keep after a reload. Your current results are still available until you leave this page.",
-        );
-      }
+    } catch {
+      toast.warning(
+        "This paste is available for this session, but is too large to save in your browser.",
+      );
     }
-  }, [hydrationComplete, storedRaw]);
-
+  }, [ready, storedRaw]);
   useEffect(() => {
-    if (!hydrated.current || !hydrationComplete) return;
-    try {
-      localStorage.setItem(PICKED_KEY, JSON.stringify([...picked]));
-    } catch {}
-  }, [hydrationComplete, picked]);
-
-  useEffect(() => {
-    if (!hydrated.current || !hydrationComplete) return;
+    if (!ready) return;
     try {
       localStorage.setItem(OFFERING_KEY, offering);
-    } catch {}
-  }, [hydrationComplete, offering]);
-
-  useEffect(() => {
-    if (!hydrated.current || !hydrationComplete) return;
-    try {
       localStorage.setItem(WANTING_KEY, wanting);
-    } catch {}
-  }, [hydrationComplete, wanting]);
+      localStorage.setItem(NICK_KEY, nickname);
+    } catch {
+      /* Keep the in-memory lists usable. */
+    }
+  }, [ready, offering, wanting, nickname]);
 
-  const addPaste = useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-      const {
-        messages: incoming,
-        orphanLines,
-        headerless,
-      } = analyzeTranscript(text);
-
-      if (incoming.length === 0) {
-        toast.error(
-          headerless
-            ? "Couldn't read a trade list out of that. Paste the message text itself, or include the name/time line above each post."
-            : 'No trade posts found. Include the name/time line above each message (e.g. "trader — 3:41 PM").',
-        );
-        return;
-      }
-
-      // Toasts stay out of the state updater: React invokes updaters twice in
-      // development, which fired every one of these messages twice.
-      const merged = mergeTranscripts(messages, incoming);
-      const added = merged.length - messages.length;
-      setMessages(merged);
-      // Keep the compact source, not the expanded parsed objects. On reload it
-      // is parsed as one transcript, which also gives exact reposts a repeat
-      // count instead of the current-session last-paste-wins merge behavior.
-      setStoredRaw((previous) => (previous ? `${previous}\n${text}` : text));
-      setRaw("");
-
-      if (added > 0) {
-        toast.success(`Added ${added} new post${added === 1 ? "" : "s"}`);
-      } else {
-        toast.info("No new posts — all of those were already pasted");
-      }
-      if (headerless) {
-        toast.info("No name/time lines found — read as one trader's list.");
-      }
-      if (orphanLines > 0) {
-        toast.warning(
-          `Ignored ${orphanLines} line${orphanLines === 1 ? "" : "s"} above the first post — start your selection at a name/time line.`,
-        );
-      }
-    },
-    [messages],
-  );
-
-  const importTextFiles = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const input = event.currentTarget;
-      const files = Array.from(input.files ?? []);
-      try {
-        const texts = await Promise.all(files.map((file) => file.text()));
-        addPaste(texts.join("\n"));
-      } catch {
-        toast.error("Could not read the selected text files. Try again.");
-      } finally {
-        // Let choosing the same file again fire change after a correction.
-        input.value = "";
-      }
-    },
-    [addPaste],
-  );
-
-  const loadInventory = useCallback(async () => {
-    const nick = nickname.trim();
-    if (!nick) return;
+  const addPaste = useCallback((text: string) => {
+    const parsed = analyzeTranscript(text);
+    if (!parsed.messages.length) {
+      toast.error(
+        "No trade posts found. Include the message text and Discord name/time lines when available.",
+      );
+      return;
+    }
+    setMessages((previous) => mergeTranscripts(previous, parsed.messages));
+    // Keep a headerless chunk separate from earlier named posts on reload.
+    const source = parsed.headerless ? `Unknown poster — 00:00\n${text}` : text;
+    setStoredRaw((previous) => (previous ? `${previous}\n${source}` : source));
+    setRaw("");
+    setEditor(null);
+    if (parsed.orphanLines)
+      toast.warning(
+        `Ignored ${parsed.orphanLines} lines above the first Discord name.`,
+      );
+    toast.success(`Read ${parsed.messages.length} posts. Matching updated.`);
+  }, []);
+  const importFiles = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const files = Array.from(input.files ?? []);
+    try {
+      addPaste(
+        (await Promise.all(files.map((file) => file.text()))).join("\n"),
+      );
+    } catch {
+      toast.error("Could not read those text files.");
+    } finally {
+      input.value = "";
+    }
+  };
+  const loadInventory = async () => {
+    if (!nickname.trim()) return;
     setLoadingInv(true);
     try {
-      const entries = await fetchInventoryByNickname(nick);
+      const entries = await fetchInventoryByNickname(nickname.trim());
       setOwned(entries);
-      localStorage.setItem(NICK_KEY, nick);
-      toast.success(`Loaded ${entries.length} objekts for @${nick}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load");
+      setGive(new Set());
+      setEditor(null);
+      toast.success(`Loaded ${entries.length} objekts for ${nickname.trim()}.`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not load inventory.",
+      );
     } finally {
       setLoadingInv(false);
     }
-  }, [nickname]);
+  };
 
-  const linkedNicknames = useMemo(
-    () => [
-      ...new Set(messages.flatMap((m) => (m.nickname ? [m.nickname] : []))),
-    ],
-    [messages],
-  );
-
-  const handleVerifyAll = useCallback(async () => {
-    const pending = linkedNicknames.filter(
-      (n) => verified.get(n)?.status !== "verified",
-    );
-    if (pending.length === 0) return;
-    setVerifying(true);
-
-    // Claims are indexed per nickname so each fetch can be checked against
-    // whatever that trader typed.
-    const claimsByNickname = new Map(
-      messages
-        .filter((m) => m.nickname)
-        .map((m) => [m.nickname as string, m.haves]),
-    );
-
-    const { completed, rateLimited } = await verifySequentially(
-      pending,
-      (nickname, result) => {
-        setVerified((prev) => {
-          const next = new Map(prev);
-          if (result.ok) {
-            next.set(
-              nickname,
-              buildVerification(
-                claimsByNickname.get(nickname) ?? [],
-                result.inventory,
-              ),
-            );
-          } else {
-            next.set(nickname, {
-              status: result.rateLimited ? "rate-limited" : "failed",
-              ...(result.rateLimited ? {} : { reason: result.reason }),
-            } as VerificationState);
-          }
-          return next;
-        });
-      },
-    );
-
-    setVerifying(false);
-    if (rateLimited) {
-      toast.warning(
-        `Chain-checked ${completed} of ${pending.length}. Cosmo lookups are capped at 10/min when signed out — sign in to check the rest.`,
-      );
-    } else if (completed === 0) {
-      toast.error(
-        "Could not chain-check anyone — see the reasons on each trader below.",
-      );
-    } else {
-      toast.success(
-        `Chain-checked ${completed} trader${completed === 1 ? "" : "s"}`,
-      );
-    }
-  }, [linkedNicknames, messages, verified]);
-
-  // Your side of the trade comes from either source, or both: an inventory
-  // read from the chain, and spares typed by hand. Wants stay separate so a
-  // trader can also start by looking for an objekt without offering one.
-  const offeringItems = useMemo(() => parseOffering(offering), [offering]);
-  const wantingItems = useMemo(() => parseOffering(wanting), [wanting]);
-  const ownedIndex = useMemo(
-    () => indexOwned([...owned, ...offeringItems]),
-    [owned, offeringItems],
-  );
-  const hasOffer = ownedIndex.total > 0;
-  const typedWantKeys = useMemo(
+  const mine = useMemo(
     () =>
-      new Set(
-        wantingItems
-          .map((item) => objektKey(item))
-          .filter((key): key is string => key !== null),
-      ),
-    [wantingItems],
+      keyedItems([
+        ...owned.map(
+          (item): ParsedItem => ({
+            member: item.member,
+            season: item.season,
+            collectionNo: stripVariantSuffix(item.collectionNo),
+            raw: item.collectionId,
+          }),
+        ),
+        ...parseOffering(offering),
+      ]),
+    [owned, offering],
   );
-  const wantedKeys = useMemo(
-    () => new Set([...typedWantKeys, ...picked]),
-    [typedWantKeys, picked],
+  const savedWants = useMemo(
+    () => keyedItems(parseOffering(wanting)),
+    [wanting],
   );
-  const hasWant = wantedKeys.size > 0;
-
-  const enrichedMessages = useMemo(
+  const enriched = useMemo(
     () =>
       messages.map((message) => {
-        const state = linkedImports.get(message.key);
-        if (state?.status !== "loaded" || state.imports.length === 0)
-          return message;
+        const state = imports.get(message.key);
+        if (state?.status !== "loaded") return message;
         return {
           ...message,
-          haves: mergeImportedHaves(message.haves, state.imports),
+          haves: [
+            ...keyedItems([
+              ...message.haves,
+              ...state.imports.flatMap((list) =>
+                list.items.map(externalItemToParsed),
+              ),
+            ]).values(),
+          ],
         };
       }),
-    [linkedImports, messages],
+    [messages, imports],
   );
-
-  // Prefer the artwork supplied by the linked public list. The grid still
-  // falls back to our resolver for ordinary typed posts or cards without a
-  // public thumbnail.
-  const linkedImages = useMemo(() => {
-    const images = new Map<string, string>();
-    for (const state of linkedImports.values()) {
-      if (state.status !== "loaded") continue;
-      for (const list of state.imports) {
-        for (const item of list.items) {
-          const key = objektKey(externalItemToParsed(item));
-          if (key && item.imageUrl && !images.has(key)) {
-            images.set(key, item.imageUrl);
-          }
-        }
-      }
-    }
-    return images;
-  }, [linkedImports]);
-
-  // Import only after the user opens a specific post. This keeps a 1,300-post
-  // transcript fast and avoids fetching a stranger's list merely because it
-  // happened to appear in a paste.
-  useEffect(() => {
-    if (!openPost) return;
-    const message = messages.find((candidate) => candidate.key === openPost);
-    if (!message || message.listLinks.length === 0) return;
-    if (linkedImportStarted.current.has(message.key)) return;
-
-    linkedImportStarted.current.add(message.key);
-    const generation = linkedImportGeneration.current;
-    setLinkedImports((previous) => {
-      if (previous.has(message.key)) return previous;
-      const next = new Map(previous);
-      next.set(message.key, { status: "loading", links: message.listLinks });
-      return next;
-    });
-
-    void Promise.allSettled(message.listLinks.map(fetchLinkedList)).then(
-      (results) => {
-        if (generation !== linkedImportGeneration.current) return;
-        const imports: ExternalListImport[] = [];
-        const errors: { link: ExternalListLink; message: string }[] = [];
-        results.forEach((result, index) => {
-          const link = message.listLinks[index];
-          if (!link) return;
-          if (result.status === "fulfilled") imports.push(result.value);
-          else {
-            errors.push({
-              link,
-              message:
-                result.reason instanceof Error
-                  ? result.reason.message
-                  : "Could not import this linked list.",
-            });
-          }
-        });
-        setLinkedImports((previous) => {
-          const next = new Map(previous);
-          next.set(message.key, {
-            status: "loaded",
-            links: message.listLinks,
-            imports,
-            errors,
+  const indexed = useMemo(() => indexDeskPosts(enriched), [enriched]);
+  const allTheirItems = useMemo(() => {
+    const items = new Map(savedWants);
+    for (const post of indexed)
+      for (const [key, item] of post.haves) items.set(key, item);
+    return items;
+  }, [indexed, savedWants]);
+  const activeGive = useMemo(
+    () => new Set([...give].filter((key) => mine.has(key))),
+    [give, mine],
+  );
+  const candidates = useMemo(
+    () => selectDeskPosts(indexed, mode, activeGive, get),
+    [indexed, mode, activeGive, get],
+  );
+  const offered = useMemo(
+    () => collectDeskCards(candidates, "haves"),
+    [candidates],
+  );
+  const demanded = useMemo(
+    () => collectDeskCards(candidates, "wants"),
+    [candidates],
+  );
+  const myCards = useMemo(
+    () =>
+      [...mine]
+        .flatMap(([key, item]): DeskCard[] => {
+          const posts = demanded.get(key)?.posts ?? [];
+          if (
+            mode === "trade" &&
+            get.size > 0 &&
+            posts.length === 0 &&
+            !activeGive.has(key)
+          )
+            return [];
+          return [{ key, item, posts }];
+        })
+        .sort(
+          (a, b) =>
+            Number(activeGive.has(b.key)) - Number(activeGive.has(a.key)) ||
+            b.posts.length - a.posts.length ||
+            deskLabel(a.item).localeCompare(deskLabel(b.item)),
+        ),
+    [mine, demanded, activeGive, get, mode],
+  );
+  const theirCards = useMemo(
+    () =>
+      [...offered.values()].sort((a, b) => {
+        if (sort === "member")
+          return deskLabel(a.item).localeCompare(deskLabel(b.item), undefined, {
+            numeric: true,
           });
-          return next;
-        });
-      },
+        if (sort === "price" && mode === "buy") {
+          const price = (card: DeskCard) =>
+            Math.min(
+              ...card.posts.map(
+                (post) =>
+                  askingPrice(post.message.pricing, card.key)?.amount ??
+                  Number.POSITIVE_INFINITY,
+              ),
+            );
+          const pa = price(a);
+          const pb = price(b);
+          if (pa !== pb) return pa < pb ? -1 : 1;
+        }
+        return (
+          b.posts.length - a.posts.length ||
+          deskLabel(a.item).localeCompare(deskLabel(b.item))
+        );
+      }),
+    [offered, sort, mode],
+  );
+  const contactPosts = useMemo(
+    () =>
+      candidates
+        .filter((post) => {
+          if (mode === "buy") return post.haves.size > 0;
+          if (mode === "sell")
+            return [...post.wants.keys()].some((key) => mine.has(key));
+          if (activeGive.size || get.size) return true;
+          return [...post.wants.keys()].some((key) => mine.has(key));
+        })
+        .sort((a, b) => {
+          const score = (post: DeskPost) =>
+            [...post.wants.keys()].filter((key) => mine.has(key)).length;
+          return score(b) - score(a);
+        }),
+    [candidates, mine, mode, activeGive, get],
+  );
+  const linkedPosts = useMemo(
+    () => indexed.filter((post) => post.message.listLinks.length > 0),
+    [indexed],
+  );
+  const images = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of owned) {
+      const key = objektKey(item);
+      if (key && item.thumbnailImage) map.set(key, item.thumbnailImage);
+    }
+    for (const state of imports.values())
+      if (state.status === "loaded")
+        for (const list of state.imports)
+          for (const item of list.items) {
+            const key = objektKey(item);
+            if (key && item.imageUrl) map.set(key, item.imageUrl);
+          }
+    return map;
+  }, [owned, imports]);
+
+  // Fetch only after opening a post. Clearing the paste invalidates pending work.
+  useEffect(() => {
+    const message = messages.find((post) => post.key === openPost);
+    if (!message?.listLinks.length || importStarted.current.has(message.key))
+      return;
+    importStarted.current.add(message.key);
+    const version = generation.current;
+    setImports((previous) =>
+      new Map(previous).set(message.key, {
+        status: "loading",
+        links: message.listLinks,
+      }),
     );
+    void Promise.allSettled(
+      message.listLinks.map(async (link) => {
+        const response = await fetch(
+          `/api/external-lists?url=${encodeURIComponent(link.url)}`,
+        );
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error ?? "Could not import list.");
+        return data as ExternalListImport;
+      }),
+    ).then((results) => {
+      if (generation.current !== version) return;
+      const loaded: ExternalListImport[] = [];
+      const errors: { link: ExternalListLink; message: string }[] = [];
+      results.forEach((result, i) => {
+        if (result.status === "fulfilled") loaded.push(result.value);
+        else
+          errors.push({
+            link: message.listLinks[i],
+            message:
+              result.reason instanceof Error
+                ? result.reason.message
+                : "Could not import list.",
+          });
+      });
+      setImports((previous) =>
+        new Map(previous).set(message.key, {
+          status: "loaded",
+          links: message.listLinks,
+          imports: loaded,
+          errors,
+        }),
+      );
+    });
   }, [messages, openPost]);
 
-  /**
-   * Close the loop: turn the trader's typed wants and pile picks into a real
-   * objekt.my list. The import is just the matching source; this remains the
-   * trader's own list, so it should not discard wants typed before the paste.
-   */
-  const handleBuildList = useCallback(async () => {
-    const wantByKey = new Map<string, (typeof wantingItems)[number]>();
-    for (const item of [
-      ...wantingItems,
-      ...pileRef.current
-        .filter((entry) => picked.has(entry.key))
-        .map((entry) => entry.item),
-    ]) {
-      const key = objektKey(item);
-      if (key) wantByKey.set(key, item);
+  const checkInventory = async (post: DeskPost) => {
+    const nick = post.message.nickname;
+    if (!nick || verified.get(nick)?.status === "pending") return;
+    const version = generation.current;
+    setVerified((prev) => new Map(prev).set(nick, { status: "pending" }));
+    try {
+      const inventory = await fetchInventoryForVerification(nick);
+      if (version === generation.current)
+        setVerified((prev) =>
+          new Map(prev).set(
+            nick,
+            buildVerification(post.message.haves, inventory),
+          ),
+        );
+    } catch (error) {
+      if (version === generation.current)
+        setVerified((prev) =>
+          new Map(prev).set(nick, {
+            status: "failed",
+            reason:
+              error instanceof Error
+                ? error.message
+                : "Could not check inventory.",
+          }),
+        );
     }
-    const wanted = [...wantByKey.values()];
-    if (wanted.length === 0) return;
+  };
+  const clearPastes = () => {
+    generation.current++;
+    importStarted.current.clear();
+    setMessages([]);
+    setStoredRaw("");
+    setImports(new Map());
+    setVerified(new Map());
+    setGive(new Set());
+    setGet(new Set());
+    setSavedPicks([]);
+    setOpenPost(null);
+    setConfirmClear(false);
+    try {
+      localStorage.removeItem(PICKED_KEY);
+    } catch {
+      /* Session already cleared. */
+    }
+  };
+  const changeMode = (next: DeskMode) => {
+    setMode(next);
+    setGive(new Set());
+    setGet(new Set());
+    setSort(next === "buy" ? "price" : "popular");
+  };
+  const toggleGive = (key: string) =>
+    setGive((previous) => toggle(previous, key));
+  const toggleGet = (key: string) =>
+    setGet((previous) => toggle(previous, key));
+  const useSavedWants = () => {
+    setGet(
+      new Set([
+        ...savedWants.keys(),
+        ...savedPicks.filter((key) => allTheirItems.has(key)),
+      ]),
+    );
+    setEditor(null);
+  };
+  const saveSelection = async () => {
+    const items = [...get].flatMap((key) =>
+      allTheirItems.get(key) ? [allTheirItems.get(key) as ParsedItem] : [],
+    );
+    if (!items.length) return;
     setBuilding(true);
     try {
-      const wants = await resolveForPoster(wanted);
+      const wants = await resolveForPoster(items);
       const stash = encodeGridTradeStash({
         username: "",
         cosmoId: nickname.trim(),
@@ -659,991 +589,623 @@ export function MatchClient() {
         haveTitle: "Have",
         wantTitle: "Want",
       });
-      window.location.href = `${sectionHref("/list", {
-        currentSection: undefined,
-      })}?prefill=grid#${GRID_TRADE_HASH_PARAM}=${stash}`;
+      window.location.href = `${sectionHref("/list")}?prefill=grid#${GRID_TRADE_HASH_PARAM}=${stash}`;
     } catch {
-      toast.error("Could not build the list draft. Try again.");
+      toast.error("Could not create the list draft.");
       setBuilding(false);
     }
-  }, [nickname, picked, wantingItems]);
-
-  // Intent is a filter over the same posts, not a separate tool: a quarter of
-  // a real channel is selling rather than swapping, and several posts are both
-  // at once, so splitting them into sections would duplicate or hide them.
-  const shown = useMemo(
-    () =>
-      intentFilter === "all"
-        ? enrichedMessages
-        : enrichedMessages.filter((m) =>
-            m.intent.intents.includes(intentFilter),
-          ),
-    [enrichedMessages, intentFilter],
-  );
-
-  const matched = useMemo(
-    () => matchTranscript(shown, ownedIndex, wantedKeys),
-    [shown, ownedIndex, wantedKeys],
-  );
-  const listMatches = useMemo(
-    () =>
-      matched.filter(
-        (match) =>
-          match.theyWantYouHave.length > 0 ||
-          match.theyHaveYouWant.length > 0 ||
-          match.message.listLinks.length > 0,
-      ),
-    [matched],
-  );
-  const matchPageCount = Math.max(
-    1,
-    Math.ceil(listMatches.length / MATCH_PAGE_SIZE),
-  );
-  const safeMatchPage = Math.min(matchPage, matchPageCount - 1);
-  const visibleMatches = useMemo(
-    () =>
-      listMatches.slice(
-        safeMatchPage * MATCH_PAGE_SIZE,
-        (safeMatchPage + 1) * MATCH_PAGE_SIZE,
-      ),
-    [listMatches, safeMatchPage],
-  );
-  useEffect(() => {
-    setMatchPage((page) => (page >= matchPageCount ? 0 : page));
-  }, [matchPageCount]);
-
-  const pile = useMemo(() => buildPile(shown), [shown]);
-  const pileRef = useRef(pile);
-  pileRef.current = pile;
-  const visiblePile = useMemo(() => {
-    const query = parsePileQuery(deferredPileFilter);
-    const filtered =
-      deferredPileFilter.trim().length === 0
-        ? pile
-        : pile.filter((entry) => matchesPileQuery(entry, query));
-
-    if (pileSort === "scarcest") return filtered;
-
-    // Resolve each price once before sorting. Calling askingPrice in the
-    // comparator turns an n log n sort of a large pile into hundreds of
-    // thousands of price parses.
-    const sorted = filtered.map((entry) => {
-      const asks = entry.offeredBy
-        .map((message) => askingPrice(message.pricing, entry.key))
-        .filter((price) => price !== null);
-      return {
-        entry,
-        price:
-          asks.length > 0
-            ? Math.min(...asks.map((price) => price.amount))
-            : null,
-      };
-    });
-    if (pileSort === "member") {
-      sorted.sort((a, b) =>
-        itemLabel(a.entry.item).localeCompare(
-          itemLabel(b.entry.item),
-          undefined,
-          {
-            numeric: true,
-          },
-        ),
-      );
-      return sorted.map(({ entry }) => entry);
-    }
-
-    sorted.sort((a, b) => {
-      const pa = a.price;
-      const pb = b.price;
-      if (pa === null && pb === null) return 0;
-      if (pa === null) return 1;
-      if (pb === null) return -1;
-      return pileSort === "cheapest" ? pa - pb : pb - pa;
-    });
-    return sorted.map(({ entry }) => entry);
-  }, [deferredPileFilter, pile, pileSort]);
-
-  // Supply spans typed lists *and* verified inventories, so a link-only poster
-  // holding thousands of objekts becomes searchable instead of invisible.
-  const supplyIndex = useMemo(
-    () => buildSupplyIndex(shown, verified),
-    [shown, verified],
-  );
-  const demandIndex = useMemo(() => buildDemandIndex(shown), [shown]);
-
-  /**
-   * One lookup, both directions. A trader holding a spare is asking a demand
-   * question ("who will take this?"); answering only the supply half returns
-   * the opposite of what they wanted in a shape that reads like a match.
-   */
-  const lookupRows = useMemo(() => {
-    const q = lookupQuery.trim();
-    if (!q) return [];
-    const rows = new Map<
-      string,
-      {
-        key: string;
-        member: string;
-        season: string;
-        collectionNo: string;
-        suppliers: SupplyEntry["suppliers"];
-        wanters: DemandEntry["wanters"];
-      }
-    >();
-    for (const s of searchSupply(supplyIndex, q)) {
-      rows.set(s.key, { ...s, wanters: [] });
-    }
-    for (const d of searchDemand(demandIndex, q)) {
-      const row = rows.get(d.key);
-      if (row) row.wanters = d.wanters;
-      else rows.set(d.key, { ...d, suppliers: [] });
-    }
-    return [...rows.values()];
-  }, [lookupQuery, supplyIndex, demandIndex]);
-
-  const summary = useMemo(() => summarize(shown), [shown]);
-  const wantYouHaveCount = useMemo(
-    () => matched.filter((match) => match.theyWantYouHave.length > 0).length,
-    [matched],
-  );
-  const haveWhatYouWantCount = useMemo(
-    () => matched.filter((match) => match.theyHaveYouWant.length > 0).length,
-    [matched],
-  );
-
-  const verifyStats = useMemo(() => {
-    let checked = 0;
-    let failed = 0;
-    let limited = 0;
-    for (const nick of linkedNicknames) {
-      const state = verified.get(nick);
-      if (!state) continue;
-      if (state.status === "verified") checked++;
-      else if (state.status === "rate-limited") limited++;
-      else if (state.status === "failed") failed++;
-    }
-    return { checked, failed, limited };
-  }, [linkedNicknames, verified]);
-
-  const togglePick = (key: string) =>
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  };
+  const focusedMatch = useMemo(() => {
+    const message = enriched.find((post) => post.key === openPost);
+    if (!message) return null;
+    const offeredMine =
+      mode === "buy"
+        ? []
+        : [...mine]
+            .filter(([key]) => activeGive.size === 0 || activeGive.has(key))
+            .map(([, item]) => item);
+    return matchTranscript(
+      [message],
+      indexOwned(offeredMine),
+      mode === "sell" ? EMPTY_KEYS : get,
+    )[0];
+  }, [enriched, openPost, mine, activeGive, get, mode]);
+  const selectionCount = activeGive.size + get.size;
+  const contactTitle =
+    mode === "sell"
+      ? "Buyers for your objekts"
+      : mode === "buy"
+        ? "Sellers to contact"
+        : "Traders to contact";
+  const contactProps = {
+    posts: contactPosts,
+    mode,
+    mine,
+    give: activeGive,
+    get,
+    onOpen: setOpenPost,
+    onChoose: (left: string[], right: string[]) => {
+      setGive(new Set(left));
+      setGet(new Set(right));
+    },
+    onCheck: checkInventory,
+    verified,
+  };
+  const priceCaption = (card: DeskCard) => {
+    if (mode !== "buy")
+      return `${card.posts.length} trader${card.posts.length === 1 ? "" : "s"}`;
+    const prices = card.posts
+      .flatMap((post) => {
+        const price = askingPrice(post.message.pricing, card.key);
+        return price ? [price] : [];
+      })
+      .sort((a, b) => a.amount - b.amount);
+    return prices[0] ? `From ${formatPrice(prices[0])}` : "Ask for price";
+  };
 
   return (
-    <div className="mx-auto w-full max-w-[120rem] space-y-6 px-1 pb-16 sm:px-4">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">Match from a Discord paste</h1>
-        <p className="text-sm text-muted-foreground">
-          Start with your haves and wants, then compare them with copied Discord
-          posts. objekt.my never touches Discord.
-        </p>
+    <div className="mx-auto w-full max-w-[100rem] space-y-5 px-1 pb-12 sm:px-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Find your next trade
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your collection. Their posts. The people who connect them.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setEditor("mine")}>
+            My lists
+          </Button>
+          <Button onClick={() => setEditor("paste")}>
+            <ClipboardPasteIcon className="size-4" />
+            {messages.length ? "Add posts" : "Paste Discord posts"}
+          </Button>
+        </div>
       </header>
-
-      {/* Set the trader's list before importing the source to match against. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        <div className="order-2 space-y-2">
-          <input
-            ref={importFileRef}
-            type="file"
-            multiple
-            accept=".txt,text/plain"
-            className="hidden"
-            onChange={importTextFiles}
-          />
-          <Textarea
-            value={raw}
-            onChange={(e) => setRaw(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                e.preventDefault();
-                addPaste(raw);
-              }
-            }}
-            rows={8}
-            placeholder={
-              "Paste Discord messages here, including the name/time lines:\n\ntraderA — 3:41 PM\nHAVE\nSeoyeon cc112\n..."
-            }
-            className="font-mono text-xs"
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => addPaste(raw)} disabled={!raw.trim()}>
-              <ClipboardPasteIcon className="mr-1.5 h-4 w-4" />
-              Add paste
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => importFileRef.current?.click()}
-            >
-              Import .txt files
-            </Button>
-            {messages.length > 0 && (
-              <Button variant="ghost" onClick={() => setConfirmClear(true)}>
-                <Trash2Icon className="mr-1.5 h-4 w-4" />
-                Clear all {messages.length}
+      <section className="space-y-3" aria-label="Trading mode">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <fieldset
+            className="inline-flex rounded-xl border bg-muted/50 p-1"
+            aria-label="Choose Trade, Buy or Sell"
+          >
+            {MODES.map(({ id, label, icon: Icon }) => (
+              <Button
+                key={id}
+                variant={mode === id ? "default" : "ghost"}
+                aria-pressed={mode === id}
+                onClick={() => changeMode(id)}
+                className="min-w-24 rounded-lg"
+              >
+                <Icon className="size-4" />
+                {label}
               </Button>
+            ))}
+          </fieldset>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <span>{messages.length.toLocaleString()} pasted posts</span>
+            {messages.length > 0 ? (
+              <button
+                type="button"
+                className="underline underline-offset-4 hover:text-foreground"
+                onClick={() => setConfirmClear(true)}
+              >
+                Clear posts
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="underline underline-offset-4 hover:text-foreground"
+                onClick={() => {
+                  if (!mine.size)
+                    setOffering("JiYeon CC102\nXinyu CC101\nNien CC301");
+                  addPaste(SAMPLE);
+                }}
+              >
+                Try a sample
+              </button>
             )}
-            <p className="text-xs text-muted-foreground">
-              Ctrl+Enter to add. Click blank space in Discord's message area,
-              then Ctrl+A — it grabs every message Discord has loaded, which
-              beats dragging. Scroll up and repeat; duplicates are dropped
-              automatically.
-            </p>
           </div>
         </div>
-
-        {/* The trader's list comes first; the paste is only the source to
-            compare against. Either tab is useful on its own. */}
-        <Card className="order-1 h-fit">
-          <CardHeader>
-            <CardTitle className="text-base">Your trade list</CardTitle>
-            <CardDescription>
-              Add haves and wants first, then match them against this paste.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="have">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="have">
-                  Have{offeringItems.length > 0 && ` (${offeringItems.length})`}
-                </TabsTrigger>
-                <TabsTrigger value="want">
-                  Want{wantingItems.length > 0 && ` (${wantingItems.length})`}
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="have" className="space-y-3 pt-3">
-                <Textarea
-                  value={offering}
-                  onChange={(e) => setOffering(e.target.value)}
-                  rows={4}
-                  placeholder={"JiYeon CC102\nSeoYeon CC114 CC115"}
-                  className="font-mono text-xs"
-                />
-                {offeringItems.length > 0 && (
-                  <p className="text-xs text-emerald-500">
-                    {offeringItems.length} objekt
-                    {offeringItems.length === 1 ? "" : "s"} recognised
+        <p className="text-sm text-muted-foreground">
+          {MODES.find((entry) => entry.id === mode)?.hint}
+        </p>
+      </section>
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
+        aria-live="polite"
+      >
+        <p className="text-sm">
+          <span className="font-semibold">
+            {contactPosts.length}{" "}
+            {mode === "buy" ? "seller" : mode === "sell" ? "buyer" : "trade"}{" "}
+            post{contactPosts.length === 1 ? "" : "s"}
+          </span>
+          {selectionCount
+            ? " match your selections"
+            : mode === "buy"
+              ? " with cards for sale"
+              : " want cards you have"}
+          .{" "}
+          {selectionCount > 1 && (
+            <span className="text-muted-foreground">
+              Each post must match every selected card.
+            </span>
+          )}
+        </p>
+        <div className="flex gap-2">
+          {selectionCount > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setGive(new Set());
+                setGet(new Set());
+              }}
+            >
+              Clear selections
+            </Button>
+          )}
+          {mode !== "sell" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                resultsRef.current?.scrollIntoView({ block: "start" })
+              }
+            >
+              See {mode === "buy" ? "sellers" : "traders"}
+              <ArrowDownIcon className="size-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="grid items-start gap-4 md:grid-cols-2">
+        <section
+          className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+          aria-label={mode === "buy" ? "Buying list" : "My objekts"}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
+                {mode === "buy" ? "Your selection" : "Your side"}
+              </p>
+              <h2 className="mt-1 text-lg font-semibold">
+                {mode === "buy"
+                  ? "I want to buy"
+                  : mode === "sell"
+                    ? "I want to sell"
+                    : "My objekts"}
+              </h2>
+            </div>
+            {mode !== "buy" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditor("mine")}
+              >
+                <PlusIcon className="size-4" />
+                {mine.size ? "Edit" : "Add objekts"}
+              </Button>
+            )}
+          </div>
+          {mode === "buy" ? (
+            <>
+              <SelectionTray
+                selected={get}
+                items={allTheirItems}
+                onToggle={toggleGet}
+                empty="Choose cards for sale on the right →"
+              />
+              <div className="space-y-3 rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+                <p>You don’t need to offer any objekts to buy.</p>
+                <p>
+                  Compare the prices under each seller, then use their Discord
+                  name button to copy their username and arrange the purchase.
+                </p>
+              </div>
+              {(savedWants.size > 0 || savedPicks.length > 0) && (
+                <Button variant="outline" onClick={useSavedWants}>
+                  Use my saved wants
+                </Button>
+              )}
+              {get.size > 0 && (
+                <Button
+                  variant="ghost"
+                  disabled={building}
+                  onClick={saveSelection}
+                >
+                  {building ? "Building…" : "Save selection as a list"}
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <SelectionTray
+                selected={activeGive}
+                items={mine}
+                onToggle={toggleGive}
+                empty={
+                  mode === "sell"
+                    ? "Select a card to find cash buyers"
+                    : "Select a card to see what you could get"
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {mode === "trade" && get.size
+                  ? "Showing your cards wanted by traders who have your selection."
+                  : "Cards with interested people appear first."}
+              </p>
+              {mine.size === 0 ? (
+                <div className="space-y-3 py-12 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Load your Cosmo inventory or type the cards you’re offering.
                   </p>
-                )}
-
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="h-px flex-1 bg-border" />
-                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    or load your inventory
-                  </span>
-                  <span className="h-px flex-1 bg-border" />
+                  <Button onClick={() => setEditor("mine")}>
+                    Add my objekts
+                  </Button>
                 </div>
+              ) : (
+                <DeskGrid
+                  cards={myCards}
+                  selected={activeGive}
+                  onToggle={toggleGive}
+                  images={images}
+                  side="mine"
+                  caption={(card) =>
+                    `${card.posts.length} ${mode === "sell" ? "buying" : "want this"}`
+                  }
+                  emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
+                />
+              )}
+            </>
+          )}
+        </section>
+        <section
+          className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+          aria-label={mode === "sell" ? "Cash buyers" : "Their objekts"}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                From your Discord paste
+              </p>
+              <h2 className="mt-1 text-lg font-semibold">
+                {mode === "sell"
+                  ? contactTitle
+                  : mode === "buy"
+                    ? "Objekts for sale"
+                    : "Their objekts"}
+              </h2>
+            </div>
+            {mode !== "sell" && (
+              <select
+                aria-label="Sort their objekts"
+                value={sort}
+                onChange={(event) => setSort(event.target.value as typeof sort)}
+                className="rounded-md border bg-background px-2 py-1.5 text-sm"
+              >
+                <option value="popular">Most offers</option>
+                <option value="member">Member</option>
+                {mode === "buy" && <option value="price">Lowest price</option>}
+              </select>
+            )}
+          </div>
+          {mode === "sell" ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Cash buyers only. Copy a name to contact them in Discord.
+              </p>
+              <ContactResults {...contactProps} />
+            </>
+          ) : (
+            <>
+              {mode === "trade" && (
+                <SelectionTray
+                  selected={get}
+                  items={allTheirItems}
+                  onToggle={toggleGet}
+                  empty="Select a card to see what they want from you"
+                />
+              )}
+              {mode === "trade" &&
+                (savedWants.size > 0 || savedPicks.length > 0) && (
+                  <button
+                    type="button"
+                    className="text-xs text-primary underline underline-offset-4"
+                    onClick={useSavedWants}
+                  >
+                    Use my saved wants
+                  </button>
+                )}
+              <p className="text-xs text-muted-foreground">
+                {mode === "buy"
+                  ? "Asking prices appear on each card. Select one to compare its sellers below."
+                  : activeGive.size
+                    ? "Only offers from traders who want your selected cards."
+                    : "Choose either side to start. Offers update as you select cards."}
+              </p>
+              {messages.length === 0 ? (
+                <div className="space-y-3 py-12 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Paste the trade channel or import your text files.
+                  </p>
+                  <Button onClick={() => setEditor("paste")}>
+                    Import Discord posts
+                  </Button>
+                </div>
+              ) : (
+                <DeskGrid
+                  cards={theirCards}
+                  selected={get}
+                  onToggle={toggleGet}
+                  images={images}
+                  side="theirs"
+                  caption={priceCaption}
+                  emptyText={
+                    mode === "buy"
+                      ? "No listed sale cards match. Remove a selection, open a linked list below, or add WTS posts."
+                      : "No offers connect these selections yet. Remove a card, open a linked list below, or add more posts."
+                  }
+                />
+              )}
+            </>
+          )}
+          {linkedPosts.length > 0 && (
+            <details className="rounded-lg border bg-background px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium">
+                {linkedPosts.length} linked post
+                {linkedPosts.length === 1 ? "" : "s"} to explore
+              </summary>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Open a post to import its Objekt.top or Apollo cards. These
+                lists may reveal more matches.
+              </p>
+              <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                {linkedPosts.slice(0, listLimit).map((post) => (
+                  <button
+                    type="button"
+                    key={post.message.key}
+                    onClick={() => setOpenPost(post.message.key)}
+                    className="flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-muted"
+                  >
+                    <span className="truncate">{post.message.author}</span>
+                    <span className="shrink-0 text-xs text-primary">
+                      {imports.get(post.message.key)?.status === "loaded"
+                        ? "View post"
+                        : "Open & import"}
+                    </span>
+                  </button>
+                ))}
+                {linkedPosts.length > listLimit && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setListLimit((limit) => limit + 12)}
+                  >
+                    Show more linked posts
+                  </Button>
+                )}
+              </div>
+            </details>
+          )}
+        </section>
+      </div>
+      {mode !== "sell" && (
+        <section
+          ref={resultsRef}
+          className="scroll-mt-20 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+          aria-label={contactTitle}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold">
+                {contactTitle}{" "}
+                <span className="text-muted-foreground">
+                  ({contactPosts.length})
+                </span>
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {mode === "buy"
+                  ? "Prices belong to each seller. Copy their name to arrange the purchase in Discord."
+                  : "Each result connects one trader’s offers and wants. Copy their name to discuss the trade; ratios and conditions are in the post."}
+              </p>
+            </div>
+            {mode === "trade" && get.size > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={building}
+                onClick={saveSelection}
+              >
+                Save wants as a list
+              </Button>
+            )}
+          </div>
+          <ContactResults {...contactProps} />
+        </section>
+      )}
 
+      <Dialog
+        open={editor !== null}
+        onOpenChange={(open) => !open && setEditor(null)}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editor === "mine" ? "Your trade lists" : "Import Discord posts"}
+            </DialogTitle>
+            <DialogDescription>
+              {editor === "mine"
+                ? "Add the cards you can offer. Your typed lists stay in this browser."
+                : "Paste message text with the Discord name/time lines, or import several text files. Repeated posts are combined."}
+            </DialogDescription>
+          </DialogHeader>
+          {editor === "mine" ? (
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <label htmlFor="cosmo-nickname" className="text-sm font-medium">
+                  Load my Cosmo inventory
+                </label>
                 <div className="flex gap-2">
                   <Input
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && loadInventory()}
+                    id="cosmo-nickname"
                     placeholder="Cosmo nickname"
+                    value={nickname}
+                    onChange={(event) => setNickname(event.target.value)}
+                    onKeyDown={(event) =>
+                      event.key === "Enter" && void loadInventory()
+                    }
                   />
                   <Button
-                    variant="outline"
-                    onClick={loadInventory}
                     disabled={loadingInv || !nickname.trim()}
+                    onClick={loadInventory}
                   >
                     {loadingInv ? (
-                      <Loader2Icon className="h-4 w-4 animate-spin" />
+                      <Loader2Icon className="size-4 animate-spin" />
                     ) : (
-                      <SearchIcon className="h-4 w-4" />
+                      "Load"
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Read from the chain. No sign-in; kept in this browser only.
-                </p>
                 {owned.length > 0 && (
-                  <p className="text-xs text-emerald-500">
-                    {owned.length} objekts loaded
+                  <p className="text-xs text-muted-foreground">
+                    {owned.length} loaded ·{" "}
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => {
+                        setOwned([]);
+                        setGive(new Set());
+                      }}
+                    >
+                      Remove loaded inventory
+                    </button>
                   </p>
                 )}
-              </TabsContent>
-
-              <TabsContent value="want" className="space-y-3 pt-3">
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="my-haves" className="text-sm font-medium">
+                  Or type what I have
+                </label>
                 <Textarea
-                  value={wanting}
-                  onChange={(e) => setWanting(e.target.value)}
-                  rows={6}
-                  placeholder={"SeoYeon CC101\nNien CC301"}
-                  className="font-mono text-xs"
+                  id="my-haves"
+                  rows={5}
+                  placeholder={"JiYeon CC102\nXinyu CC101\nNien CC301"}
+                  value={offering}
+                  onChange={(event) => setOffering(event.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  One line or a compact list is enough. We only look for these
-                  objekts in the imported posts.
+                  {mine.size} distinct cards available to select on your side.
                 </p>
-                {wantingItems.length > 0 && (
-                  <p className="text-xs text-emerald-500">
-                    {wantingItems.length} objekt
-                    {wantingItems.length === 1 ? "" : "s"} recognised
-                  </p>
-                )}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </div>
-
-      {messages.length === 0 ? (
-        <div className="space-y-4 rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm font-medium">Paste some trade posts to start</p>
-          <div className="mx-auto max-w-md space-y-1.5 text-left text-xs text-muted-foreground">
-            <p>
-              1. In your trade channel, click blank space in the message area,
-              then Ctrl+A and Ctrl+C. That takes everything Discord has loaded —
-              dragging across a scroll silently loses most of it.
-            </p>
-            <p>
-              2. Paste it above and add it. Scroll up in Discord to load more,
-              then repeat — duplicates are dropped automatically.
-            </p>
-            <p>
-              3. Add your haves and wants above. The paste is only used to find
-              matching traders.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => addPaste(SAMPLE_PASTE)}
-          >
-            Try it with a sample paste
-          </Button>
-        </div>
-      ) : (
-        <>
-          {/* Summary */}
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="rounded-full border border-border bg-card px-3 py-1.5">
-              {summary.posters} posters
-            </span>
-            <span className="rounded-full border border-border bg-card px-3 py-1.5">
-              {summary.verified} linked
-            </span>
-            <span className="rounded-full border border-border bg-card px-3 py-1.5">
-              {summary.claimed} typed lists
-            </span>
-            <span className="rounded-full border border-border bg-card px-3 py-1.5">
-              {summary.haveItems} haves · {summary.wantItems} wants
-            </span>
-            {verifyStats.checked > 0 && (
-              <span className="rounded-full border border-emerald-600/50 bg-emerald-600/10 px-3 py-1.5 text-emerald-400">
-                {verifyStats.checked} chain-checked
-              </span>
-            )}
-            {verifyStats.limited > 0 && (
-              <span className="rounded-full border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-amber-400">
-                {verifyStats.limited} hit the lookup limit
-              </span>
-            )}
-            {verifyStats.failed > 0 && (
-              <span className="rounded-full border border-border bg-card px-3 py-1.5 text-muted-foreground">
-                {verifyStats.failed} could not be checked
-              </span>
-            )}
-            {hasOffer && (
-              <span className="rounded-full border border-emerald-600/50 bg-emerald-600/10 px-3 py-1.5 font-medium text-emerald-400">
-                {wantYouHaveCount} trader{wantYouHaveCount === 1 ? "" : "s"}{" "}
-                {wantYouHaveCount === 1 ? "wants" : "want"} something you have
-              </span>
-            )}
-            {hasWant && (
-              <span className="rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 font-medium text-primary">
-                {haveWhatYouWantCount} trader
-                {haveWhatYouWantCount === 1 ? "" : "s"}{" "}
-                {haveWhatYouWantCount === 1 ? "has" : "have"} something you want
-              </span>
-            )}
-            {linkedNicknames.length > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-auto rounded-full px-3 py-1.5 text-xs"
-                onClick={handleVerifyAll}
-                disabled={verifying}
-              >
-                {verifying ? (
-                  <Loader2Icon className="mr-1.5 h-3 w-3 animate-spin" />
-                ) : (
-                  <ShieldCheckIcon className="mr-1.5 h-3 w-3" />
-                )}
-                Chain-check {linkedNicknames.length} linked
-              </Button>
-            )}
-          </div>
-
-          {/* Intent filter. A trade channel is not only trades: in a real
-              sample a quarter of posts were sales and several were a sale and
-              a swap at once, so this filters the same posts rather than
-              splitting them into a separate section. */}
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Showing</span>
-            {(["all", "wtt", "wts", "wtb"] as const).map((option) => {
-              const count =
-                option === "all"
-                  ? messages.length
-                  : messages.filter((m) => m.intent.intents.includes(option))
-                      .length;
-              return (
-                <button
-                  type="button"
-                  key={option}
-                  onClick={() => setIntentFilter(option)}
-                  className={`rounded-full border px-3 py-1.5 transition-colors ${
-                    intentFilter === option
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card hover:border-primary/50"
-                  }`}
-                >
-                  {option === "all" ? "Everything" : INTENT_LABEL[option]}{" "}
-                  <span className="opacity-60">{count}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Two-way lookup — the question traders actually arrive with */}
-          <Card>
-            <CardHeader className="gap-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <CardTitle>Who has it — who wants it?</CardTitle>
-                <CardDescription>
-                  {supplyIndex.size.toLocaleString()} on offer ·{" "}
-                  {demandIndex.size.toLocaleString()} asked for
-                </CardDescription>
               </div>
-              <Input
-                value={lookupQuery}
-                onChange={(e) => setLookupQuery(e.target.value)}
-                placeholder="e.g. nien cc301"
-              />
-            </CardHeader>
-            {lookupQuery.trim() && (
-              <CardContent>
-                <div className="space-y-1.5 pt-1">
-                  {lookupRows.length === 0 ? (
-                    <p className="py-3 text-sm text-muted-foreground">
-                      Nobody in this paste has or wants that.
-                    </p>
-                  ) : (
-                    lookupRows.map((row) => (
-                      <div
-                        key={row.key}
-                        className="space-y-1.5 rounded-md border border-border/60 px-3 py-2 text-sm"
-                      >
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          <span className="font-medium">
-                            {row.member} {row.collectionNo}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {row.season}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="w-14 shrink-0 text-muted-foreground text-xs uppercase tracking-wide">
-                            Has
-                          </span>
-                          {row.suppliers.length === 0 ? (
-                            <span className="text-muted-foreground">
-                              nobody
-                            </span>
-                          ) : (
-                            row.suppliers.map((sup) => (
-                              <span
-                                key={`h-${row.key}-${sup.message.key}`}
-                                className={`rounded px-1.5 py-0.5 ${
-                                  sup.source === "verified"
-                                    ? "bg-emerald-600/15 text-emerald-400"
-                                    : "bg-muted text-muted-foreground"
-                                }`}
-                                title={
-                                  sup.source === "verified"
-                                    ? "Confirmed on-chain"
-                                    : "Self-reported in their post"
-                                }
-                              >
-                                {sup.message.author}
-                                {sup.copies > 1 && ` ×${sup.copies}`}
-                                {(() => {
-                                  const ask = askingPrice(
-                                    sup.message.pricing,
-                                    row.key,
-                                  );
-                                  return ask ? (
-                                    <span className="ml-1 font-medium text-emerald-400">
-                                      {" "}
-                                      {formatPrice(ask)}
-                                    </span>
-                                  ) : null;
-                                })()}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="w-14 shrink-0 text-muted-foreground text-xs uppercase tracking-wide">
-                            Wants
-                          </span>
-                          {row.wanters.length === 0 ? (
-                            <span className="text-muted-foreground">
-                              nobody
-                            </span>
-                          ) : (
-                            row.wanters.map((msg) => (
-                              <span
-                                key={`w-${row.key}-${msg.key}`}
-                                className="rounded bg-primary/15 px-1.5 py-0.5 text-primary"
-                                title="Asked for it in their post"
-                              >
-                                {msg.author}
-                                {(() => {
-                                  const bid = bidPrice(msg.pricing, row.key);
-                                  return bid ? (
-                                    <span className="ml-1 font-medium">
-                                      {" "}
-                                      pays {formatPrice(bid)}
-                                    </span>
-                                  ) : null;
-                                })()}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]">
-            {/* Panel 1 — every overlap with the trader's own list. */}
-            <Card className="h-fit">
-              <CardHeader>
-                <CardTitle>Matches from this paste</CardTitle>
-                <CardDescription>
-                  {hasOffer || hasWant
-                    ? `${listMatches.length.toLocaleString()} matching trader${listMatches.length === 1 ? "" : "s"}, with linked lists ready to import when opened.`
-                    : "Add haves or wants above, or open a linked list to import its cards."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {visibleMatches.map((match) => {
-                  const {
-                    message,
-                    theyHaveYouWant,
-                    theyWantYouHave,
-                    theyHave,
-                    isMutual,
-                  } = match;
-                  const state = message.nickname
-                    ? verified.get(message.nickname)
-                    : undefined;
-                  const linkedState = linkedImports.get(message.key);
-                  // Keyed and deduped: a trader who listed the same objekt
-                  // twice should still get one chip, and the key is what a
-                  // pick is recorded against.
-                  const theirOffer = [
-                    ...new Map(
-                      theyHave.flatMap((item) => {
-                        const key = objektKey(item);
-                        return key ? [[key, { key, item }] as const] : [];
-                      }),
-                    ).values(),
-                  ];
-                  return (
-                    // The card opens the full post. It carries the button role
-                    // rather than being a <button>, because the pick chips
-                    // inside it are buttons and nesting them is invalid HTML.
-                    // Chips stop propagation so picking never doubles as
-                    // opening.
-                    // biome-ignore lint/a11y/useSemanticElements: see above
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      key={message.key}
-                      onClick={() => setOpenPost(message.key)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setOpenPost(message.key);
-                        }
-                      }}
-                      className={`w-full cursor-pointer rounded-lg border p-3 text-left transition-colors ${
-                        isMutual
-                          ? "border-emerald-600/60 bg-emerald-600/5 hover:border-emerald-600"
-                          : "border-border bg-card hover:border-primary/50"
-                      }`}
-                    >
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <CopyDiscordHandle name={message.author} />
-                        {tierBadge(message.tier, state?.status === "verified")}
-                        {isMutual && (
-                          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
-                            <CheckCircle2Icon className="mr-1 h-3 w-3" />
-                            Mutual
-                          </Badge>
-                        )}
-                        {message.intent.intents.map((i) => (
-                          <Badge key={i} variant="outline">
-                            {INTENT_LABEL[i]}
-                          </Badge>
-                        ))}
-                        {message.listLinks.length > 0 && (
-                          <Badge
-                            variant="outline"
-                            className="border-primary/50 text-primary"
-                          >
-                            {linkedState?.status === "loading"
-                              ? "Importing linked list"
-                              : linkedState?.status === "loaded"
-                                ? `${linkedState.imports.reduce((count, list) => count + list.items.length, 0)} imported`
-                                : `${message.listLinks.length} linked list${message.listLinks.length === 1 ? "" : "s"}`}
-                          </Badge>
-                        )}
-                      </div>
-
-                      {message.listLinks.length > 0 && !linkedState && (
-                        <p className="mb-2 text-xs text-primary/85">
-                          Open this post to import its linked cards and match
-                          them visually.
-                        </p>
-                      )}
-
-                      {state && state.status !== "verified" && (
-                        <p
-                          className={`mb-2 text-[11px] ${
-                            state.status === "rate-limited"
-                              ? "text-amber-400"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          {state.status === "rate-limited"
-                            ? "Not chain-checked — Cosmo lookup limit reached."
-                            : state.status === "failed"
-                              ? `Could not chain-check: ${state.reason}`
-                              : "Not chain-checked yet."}
-                        </p>
-                      )}
-                      {state?.status === "verified" && (
-                        <div className="mb-2 space-y-1 rounded border border-emerald-600/30 bg-emerald-600/5 p-2">
-                          <p className="text-[11px] text-emerald-400">
-                            <ShieldCheckIcon className="mr-1 inline h-3 w-3" />
-                            Holds {state.inventory.length} tradable objekts
-                            on-chain
-                          </p>
-                          {state.stale.length > 0 && (
-                            <p className="text-[11px] text-amber-400">
-                              <AlertTriangleIcon className="mr-1 inline h-3 w-3" />
-                              {state.stale.length} listed objekt
-                              {state.stale.length === 1 ? "" : "s"} no longer in
-                              their inventory
-                            </p>
-                          )}
-                          {suppliesPicked(state.index, wantedKeys).length >
-                            0 && (
-                            <p className="text-[11px] font-medium text-emerald-300">
-                              Can supply{" "}
-                              {suppliesPicked(state.index, wantedKeys).length}{" "}
-                              of your wants
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      <div
-                        className={`mb-3 grid gap-2 ${
-                          theyWantYouHave.length > 0 &&
-                          theyHaveYouWant.length > 0
-                            ? "sm:grid-cols-2"
-                            : "grid-cols-1"
-                        }`}
-                      >
-                        {theyWantYouHave.length > 0 && (
-                          <section className="rounded-md border border-emerald-600/40 bg-emerald-600/10 p-2.5">
-                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-300">
-                              You give
-                            </p>
-                            <p className="mb-2 text-xs text-muted-foreground">
-                              They are looking for these from you
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {theyWantYouHave
-                                .slice(0, MATCH_WANT_CHIP_LIMIT)
-                                .map((hit) => (
-                                  <span
-                                    key={`${message.key}-w-${hit.key}`}
-                                    className="rounded border border-emerald-600/40 bg-background/40 px-2.5 py-1.5 text-sm"
-                                  >
-                                    {itemLabel(hit.want)}
-                                    {hit.owned.length > 1 && (
-                                      <span className="ml-1 text-emerald-400">
-                                        ×{hit.owned.length}
-                                      </span>
-                                    )}
-                                  </span>
-                                ))}
-                              {theyWantYouHave.length >
-                                MATCH_WANT_CHIP_LIMIT && (
-                                <span className="self-center text-sm text-muted-foreground">
-                                  +
-                                  {theyWantYouHave.length -
-                                    MATCH_WANT_CHIP_LIMIT}{" "}
-                                  more
-                                </span>
-                              )}
-                            </div>
-                          </section>
-                        )}
-
-                        {theyHaveYouWant.length > 0 && (
-                          <section className="rounded-md border border-primary/40 bg-primary/10 p-2.5">
-                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
-                              You get
-                            </p>
-                            <p className="mb-2 text-xs text-muted-foreground">
-                              They are offering these to you
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {theyHaveYouWant
-                                .slice(0, MATCH_WANT_CHIP_LIMIT)
-                                .map((item) => (
-                                  <span
-                                    key={`${message.key}-h-${objektKey(item)}`}
-                                    className="rounded border border-primary/40 bg-background/40 px-2.5 py-1.5 text-sm"
-                                  >
-                                    {itemLabel(item)}
-                                  </span>
-                                ))}
-                              {theyHaveYouWant.length >
-                                MATCH_WANT_CHIP_LIMIT && (
-                                <span className="self-center text-sm text-muted-foreground">
-                                  +
-                                  {theyHaveYouWant.length -
-                                    MATCH_WANT_CHIP_LIMIT}{" "}
-                                  more
-                                </span>
-                              )}
-                            </div>
-                          </section>
-                        )}
-                      </div>
-
-                      {/* The return leg, in the same card: without it the
-                          viewer has to go hunting for what this trader offers,
-                          which is the scrolling the tool exists to remove. */}
-                      {theirOffer.length > 0 && (
-                        <>
-                          <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
-                            Other cards they listed — click to add to your wants
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {theirOffer
-                              .slice(0, MATCH_OFFER_CHIP_LIMIT)
-                              .map(({ key, item }) => (
-                                <button
-                                  type="button"
-                                  key={`${message.key}-h-${key}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    togglePick(key);
-                                  }}
-                                  className={`rounded border px-2.5 py-1.5 text-sm transition-colors ${
-                                    picked.has(key)
-                                      ? "border-primary bg-primary text-primary-foreground"
-                                      : "border-border bg-card hover:border-primary/50"
-                                  }`}
-                                >
-                                  {itemLabel(item)}
-                                </button>
-                              ))}
-                            {theirOffer.length > MATCH_OFFER_CHIP_LIMIT && (
-                              <span className="self-center text-sm text-muted-foreground">
-                                +{theirOffer.length - MATCH_OFFER_CHIP_LIMIT}{" "}
-                                more
-                              </span>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {matchPageCount > 1 && (
-                  <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={safeMatchPage === 0}
-                      onClick={() => setMatchPage(safeMatchPage - 1)}
-                    >
-                      <ChevronLeftIcon className="h-4 w-4" />
-                    </Button>
-                    <span className="text-muted-foreground">
-                      {safeMatchPage * MATCH_PAGE_SIZE + 1}–
-                      {Math.min(
-                        (safeMatchPage + 1) * MATCH_PAGE_SIZE,
-                        listMatches.length,
-                      )}{" "}
-                      of {listMatches.length.toLocaleString()}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={safeMatchPage >= matchPageCount - 1}
-                      onClick={() => setMatchPage(safeMatchPage + 1)}
-                    >
-                      <ChevronRightIcon className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-
-                {hasOffer || hasWant ? (
-                  listMatches.length === 0 && (
-                    <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-                      Nothing in this paste overlaps your list. Try adding more
-                      of the channel or adjusting your haves and wants.
-                    </p>
-                  )
-                ) : (
-                  <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-                    Add haves or wants above to see matching traders here.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Panel 2 — the pile */}
-            <Card>
-              <CardHeader className="gap-3">
-                <div>
-                  <CardTitle>
-                    What they have{" "}
-                    <span className="font-normal text-muted-foreground text-sm">
-                      ({pile.length.toLocaleString()})
-                    </span>
-                  </CardTitle>
-                  <CardDescription>
-                    Browse the paste and add extra wants to your match.
-                  </CardDescription>
-                </div>
-
-                <PileSearch
-                  value={pileFilter}
-                  onChange={setPileFilter}
-                  count={pile.length}
+              <details className="rounded-lg border p-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  My saved wants (optional)
+                </summary>
+                <label
+                  htmlFor="my-wants"
+                  className="mt-3 block text-sm text-muted-foreground"
+                >
+                  Save cards to compare later, or select them from the
+                  right-hand grid.
+                </label>
+                <Textarea
+                  id="my-wants"
+                  className="mt-2"
+                  rows={4}
+                  placeholder="SeoYeon CC101"
+                  value={wanting}
+                  onChange={(event) => setWanting(event.target.value)}
                 />
-
-                <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                  <span className="text-muted-foreground">Sort</span>
-                  {PILE_SORTS.map((option) => (
-                    <Button
-                      key={option.id}
-                      type="button"
-                      size="sm"
-                      variant={pileSort === option.id ? "default" : "outline"}
-                      onClick={() => setPileSort(option.id)}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                  <span className="ml-auto text-muted-foreground text-xs">
-                    {visiblePile.length.toLocaleString()} shown
-                  </span>
-                </div>
-              </CardHeader>
-
-              <CardContent>
-                {visiblePile.length === 0 ? (
-                  <p className="py-10 text-center text-muted-foreground text-sm">
-                    Nothing here matches that search.
-                  </p>
-                ) : (
-                  <PileGrid
-                    entries={visiblePile}
-                    picked={picked}
-                    onToggle={togglePick}
-                    demand={demandIndex}
-                    verified={verified}
-                    imageUrls={linkedImages}
-                  />
-                )}
-              </CardContent>
-
-              {/* The list hand-off is a side road, not the point of the page:
-                  one quiet line under the grid rather than a banner above it. */}
-              {hasWant && (
-                <CardFooter className="justify-between gap-2 border-border/60 border-t pt-4 text-muted-foreground text-sm">
-                  <span>
-                    {wantedKeys.size} want{wantedKeys.size === 1 ? "" : "s"}
-                  </span>
+                {mode !== "sell" && savedWants.size > 0 && (
                   <Button
+                    className="mt-2"
+                    variant="outline"
                     size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={handleBuildList}
-                    disabled={building}
+                    onClick={useSavedWants}
                   >
-                    {building ? (
-                      <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : null}
-                    Save wants as a list
-                    <ArrowRightIcon className="ml-1 h-3.5 w-3.5" />
+                    Select these wants
                   </Button>
-                </CardFooter>
-              )}
-            </Card>
-          </div>
-
-          <PostDialog
-            match={matched.find((m) => m.message.key === openPost) ?? null}
-            verification={(() => {
-              const nick = matched.find((m) => m.message.key === openPost)
-                ?.message.nickname;
-              return nick ? verified.get(nick) : undefined;
-            })()}
-            picked={picked}
-            onToggle={togglePick}
-            linkedImport={openPost ? linkedImports.get(openPost) : undefined}
-            onOpenChange={(open) => !open && setOpenPost(null)}
-          />
-
-          {/* Confirmed, because a paste pile is accumulated work — often many
-              append-pastes across a session — and there is no undo. */}
-          <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Clear all {messages.length} pasted post
-                  {messages.length === 1 ? "" : "s"}?
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  This also drops your {picked.size} pick
-                  {picked.size === 1 ? "" : "s"}, any chain-check results, and
-                  the current filters. Your own spares and Cosmo nickname are
-                  kept. This cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={clearAllPastes}>
-                  Clear everything
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </>
-      )}
+                )}
+              </details>
+              <Button className="w-full" onClick={() => setEditor(null)}>
+                Done — show my cards
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Textarea
+                aria-label="Discord posts"
+                rows={9}
+                placeholder={
+                  "trader — 3:41 PM\nHAVE\nSeoYeon CC101\nWANT\nJiYeon CC102"
+                }
+                value={raw}
+                onChange={(event) => setRaw(event.target.value)}
+              />
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".txt,.text,.md,text/plain"
+                multiple
+                className="hidden"
+                onChange={importFiles}
+                aria-label="Import text files"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={!raw.trim()} onClick={() => addPaste(raw)}>
+                  <ClipboardPasteIcon className="size-4" />
+                  Add posts
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => inputRef.current?.click()}
+                >
+                  Import text files
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your pasted text stays in this browser. Linked public lists load
+                when you open their post.
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <PostDialog
+        match={focusedMatch}
+        mode={mode}
+        verification={
+          focusedMatch?.message.nickname
+            ? verified.get(focusedMatch.message.nickname)
+            : undefined
+        }
+        picked={get}
+        onToggle={toggleGet}
+        linkedImport={openPost ? imports.get(openPost) : undefined}
+        onOpenChange={(open) => !open && setOpenPost(null)}
+      />
+      <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Clear {messages.length} pasted posts?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the pasted posts, imported lists and current
+              selections. Your own typed haves and wants are kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep posts</AlertDialogCancel>
+            <AlertDialogAction onClick={clearPastes}>
+              Clear posts
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
