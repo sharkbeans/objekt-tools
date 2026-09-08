@@ -93,8 +93,8 @@ const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
 const PICKED_KEY = "match:picked:v1";
 const COLS_KEY = "match:columns:v1";
-const COLUMN_CHOICES = [3, 4, 5, 6, 7, 8] as const;
-const DEFAULT_COLUMNS = 5;
+const COLUMN_CHOICES = [4, 5, 6, 7, 8, 10, 12] as const;
+const DEFAULT_COLUMNS = 8;
 const EMPTY_KEYS = new Set<string>();
 const MODES = [
   {

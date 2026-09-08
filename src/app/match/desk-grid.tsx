@@ -144,9 +144,11 @@ export function DeskGrid({
                     )}
                   </div>
                   <div className="space-y-1 p-2">
-                    <p className="text-sm font-medium leading-tight">{label}</p>
+                    <p className="line-clamp-2 min-h-[2.25rem] text-sm font-medium leading-tight">
+                      {label}
+                    </p>
                     <p
-                      className={`text-xs leading-tight ${card.posts.length > 0 ? "text-primary" : "text-muted-foreground"}`}
+                      className={`truncate text-xs leading-tight ${card.posts.length > 0 ? "text-primary" : "text-muted-foreground"}`}
                     >
                       {caption(card)}
                     </p>
