@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseTranscript } from "@/lib/discord/transcript";
-import {
-  buildPile,
-  indexOwned,
-  matchTranscript,
-  objektKey,
-  parseOffering,
-} from "./match";
+import { indexOwned, matchTranscript, objektKey, parseOffering } from "./match";
 
 // yeonji_stan is the exact 1:1 for a viewer holding a spare JiYeon CC102:
 // they want it, and they hold the SeoYeon CC101 the viewer is after.
@@ -86,22 +80,6 @@ describe("matching against typed spares", () => {
         .filter((match) => match.theyHaveYouWant.length > 0)
         .map((match) => match.message.author),
       ["yeonji_stan"],
-    );
-  });
-});
-
-describe("buildPile", () => {
-  it("credits every poster offering the same objekt", () => {
-    const doubled = parseTranscript(`${TRANSCRIPT}
-someone_else — 4:02 PM
-Have
-Seoyeon CC101`);
-    const entry = buildPile(doubled).find(
-      (e) => e.item.collectionNo === "101" && e.item.member === "SeoYeon",
-    );
-    assert.deepEqual(
-      entry?.offeredBy.map((m) => m.author),
-      ["yeonji_stan", "someone_else"],
     );
   });
 });

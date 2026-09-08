@@ -91,6 +91,25 @@ JiYeon CC102`),
       0,
     );
   });
+  it("credits every post offering the same objekt", () => {
+    const shared = indexDeskPosts(
+      parseTranscript(`Alice — 3:41 PM
+HAVE
+Mayu CC103
+WANT
+JiYeon CC102
+Carol — 4:02 PM
+HAVE
+Mayu CC103
+WANT
+JiYeon CC102`),
+    );
+    const card = collectDeskCards(shared, "haves").get(mayu);
+    assert.deepEqual(
+      card?.posts.map((p) => p.message.author),
+      ["Alice", "Carol"],
+    );
+  });
   it("buy shows sellers without requiring an inventory or a return leg", () => {
     assert.deepEqual(
       selectDeskPosts(posts, "buy", new Set([jiyeon]), new Set([mayu])).map(
