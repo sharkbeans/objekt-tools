@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { type DeskCard, deskLabel } from "@/lib/discord/trade-desk";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { resolveForPoster } from "@/lib/poster/poster-resolver";
-import { matchesPileQuery, parsePileQuery } from "./pile-search";
+import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
 
 const PAGE_SIZE = 12;
 // Share resolved art across both grids and result cards. Each mounted grid
@@ -48,13 +48,8 @@ export function DeskGrid({
   const [page, setPage] = useState(0);
   const [resolved, setResolved] = useState<Map<string, string>>(new Map());
   const filtered = useMemo(() => {
-    const parsed = parsePileQuery(query);
-    return cards.filter((card) =>
-      matchesPileQuery(
-        { key: card.key, item: card.item, offeredBy: [] },
-        parsed,
-      ),
-    );
+    const parsed = parseDeskQuery(query);
+    return cards.filter((card) => matchesDeskQuery(card.item, parsed));
   }, [cards, query]);
   // A changed pool starts at its first page. Selection trays remain visible
   // outside the grid even when a search hides a selected collection.
