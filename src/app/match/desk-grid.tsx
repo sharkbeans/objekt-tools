@@ -2,7 +2,7 @@
 
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type DeskCard, deskLabel } from "@/lib/discord/trade-desk";
@@ -10,7 +10,7 @@ import type { ParsedItem } from "@/lib/paste-parser";
 import { resolveForPoster } from "@/lib/poster/poster-resolver";
 import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
 
-const PAGE_SIZE = 12;
+const ROWS_PER_PAGE = 3;
 // Share resolved art across both grids and result cards. Each mounted grid
 // resolves at most one page, with four lookups in flight at a time.
 const artCache = new Map<string, Promise<string | null>>();
@@ -35,6 +35,7 @@ export function DeskGrid({
   side,
   caption,
   emptyText,
+  columns,
 }: {
   cards: DeskCard[];
   selected: ReadonlySet<string>;
@@ -43,6 +44,7 @@ export function DeskGrid({
   side: "mine" | "theirs";
   caption: (card: DeskCard) => string;
   emptyText: string;
+  columns: number;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -58,11 +60,12 @@ export function DeskGrid({
     setLastCards(cards);
     setPage(0);
   }
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageSize = columns * ROWS_PER_PAGE;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
   const visible = useMemo(
-    () => filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
-    [filtered, safePage],
+    () => filtered.slice(safePage * pageSize, (safePage + 1) * pageSize),
+    [filtered, safePage, pageSize],
   );
   useEffect(() => {
     let active = true;
@@ -103,7 +106,10 @@ export function DeskGrid({
               : emptyText}
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+          <div
+            className="grid gap-3 [grid-template-columns:repeat(3,minmax(0,1fr))] sm:[grid-template-columns:repeat(var(--desk-cols),minmax(0,1fr))]"
+            style={{ "--desk-cols": columns } as CSSProperties}
+          >
             {visible.map((card) => {
               const label = deskLabel(card.item);
               const chosen = selected.has(card.key);
@@ -117,13 +123,13 @@ export function DeskGrid({
                   onClick={() => onToggle(card.key)}
                   className={`overflow-hidden rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${chosen ? "border-primary bg-primary/10 ring-2 ring-primary" : "border-border bg-background hover:border-primary/70"}`}
                 >
-                  <div className="relative aspect-[3/4] bg-muted">
+                  <div className="relative aspect-[11/17] bg-muted">
                     {url ? (
                       <Image
                         src={url}
                         alt=""
                         fill
-                        sizes="(min-width: 768px) 150px, 30vw"
+                        sizes={`(min-width: 768px) ${Math.round(46 / columns)}vw, 30vw`}
                         className="object-cover"
                       />
                     ) : (
