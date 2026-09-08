@@ -87,6 +87,39 @@ YooYeon CC201 CC202 (price / 4$)`);
     assert.equal(p.qyop, false);
     assert.equal(askingPrice(p, "sullin|atom02|372"), null);
   });
+
+  it("keeps a two-line tier list working as a headline price", () => {
+    const p = price("WTS\nSeoyeon d101\nEach $2.3\n3rd $2.6");
+    assert.equal(p.fallback?.amount, 2.3);
+  });
+
+  it("refuses to pick a headline price out of a per-season price sheet", () => {
+    // A real 428-objekt post opened with "SCO 1st $19" and then listed a dozen
+    // more tiers. Taking the first unattached price priced every objekt in the
+    // post at $19 when most were asking $2 — a confident, wrong number is
+    // worse for a trader than no number.
+    const p = price(`WTS
+Seoyeon C101 C102
+ATOM01
+SCO 1st $19
+BINARY
+SCO 1st/2nd $18
+CREAM
+SCO 1st/2nd $15
+DIVINE
+SCO 1st/2nd $11
+ATOM02
+SCO 1st $6`);
+    assert.equal(p.fallback, null);
+    assert.equal(askingPrice(p, "seoyeon|cream01|101"), null);
+  });
+
+  it("reads the fullwidth ＄ CJK keyboards emit", () => {
+    // "Each fco 2.5 ＄（Seoyoen's 4＄）" — without this a whole post's prices
+    // silently read as absent.
+    const p = price("Have\nSeoyeon C101 C102\nEach fco 2.5＄");
+    assert.equal(p.fallback?.amount, 2.5);
+  });
 });
 
 describe("ANY lines", () => {

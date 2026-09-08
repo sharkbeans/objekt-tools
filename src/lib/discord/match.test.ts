@@ -55,7 +55,7 @@ describe("matching against typed spares", () => {
     );
   });
 
-  it("marks the swap mutual once the return leg is picked", () => {
+  it("marks the swap mutual once the return leg is on the want list", () => {
     const owned = indexOwned(parseOffering("Jiyeon CC102"));
     const wanted = objektKey({
       member: "SeoYeon",
@@ -67,8 +67,25 @@ describe("matching against typed spares", () => {
     assert.equal(top.message.author, "yeonji_stan");
     assert.equal(top.isMutual, true);
     assert.deepEqual(
-      top.theyHaveYouPicked.map((i) => i.collectionNo),
+      top.theyHaveYouWant.map((i) => i.collectionNo),
       ["101"],
+    );
+  });
+
+  it("finds a supplier from a want list without a spare", () => {
+    const wanted = objektKey({
+      member: "SeoYeon",
+      season: "Cream02",
+      collectionNo: "101",
+    });
+    assert.ok(wanted);
+
+    const hits = matchTranscript(messages, indexOwned([]), new Set([wanted]));
+    assert.deepEqual(
+      hits
+        .filter((match) => match.theyHaveYouWant.length > 0)
+        .map((match) => match.message.author),
+      ["yeonji_stan"],
     );
   });
 });

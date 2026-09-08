@@ -79,6 +79,19 @@ const PAYMENT_RAILS: [RegExp, string][] = [
   [/\bina\s*bank\b/i, "INA bank"],
 ];
 
+/**
+ * Fold the fullwidth forms CJK keyboards produce into their ASCII equivalents.
+ * "Each fco 2.5 ＄（Seoyoen's 4＄）" is a priced post; without this it reads as
+ * having no price at all.
+ */
+function normalizeWidth(line: string): string {
+  return line
+    .replace(/＄/g, "$")
+    .replace(/（/g, "(")
+    .replace(/）/g, ")")
+    .replace(/：/g, ":");
+}
+
 function parseAmount(text: string): number | null {
   const n = Number.parseFloat(text.replace(",", "."));
   return Number.isFinite(n) ? n : null;
@@ -129,8 +142,20 @@ export function extractPricing(
   const members = new Set(memberNames.map((n) => n.toLowerCase()));
   const byKey: Record<string, PriceTag[]> = {};
   const wantByKey: Record<string, PriceTag[]> = {};
-  let fallback: PriceTag | null = null;
   let section: "have" | "want" = "have";
+
+  // Unattached prices, in the order written. One or two of these is a headline
+  // ("Each $2.3", "3rd $2.6"). A long run of them is a per-season price sheet —
+  //
+  //   🟨 ATOM01
+  //   SCO 1st $19
+  //   🟥 CREAM
+  //   309 $40 • 318 $28
+  //   Any other $4.5
+  //
+  // — where no single figure governs the post. Taking the first anyway priced
+  // one real 428-objekt post at $19 an objekt, most of which were asking $2.
+  const headlines: PriceTag[] = [];
 
   const payment = PAYMENT_RAILS.flatMap(([re, label]) =>
     re.test(body) ? [label] : [],
@@ -138,7 +163,7 @@ export function extractPricing(
 
   let lastMember: string | null = null;
   for (const raw of body.split("\n")) {
-    const line = raw.trim();
+    const line = normalizeWidth(raw.trim());
     if (!line || line.startsWith("http")) continue;
 
     // Which side of the post are we on? A price under WANT is what they will
@@ -166,15 +191,15 @@ export function extractPricing(
     const codes = codesOnLine(tokens);
 
     // A price with no objekt on the line is a statement about the whole post
-    // ("Each $2.3", "WTS SCO 2$ each"). Keep the first — later lines are
-    // usually tier variations ("3rd 3$") rather than a new headline price.
+    // ("Each $2.3", "WTS SCO 2$ each"). Collect them all; which one (if any)
+    // governs the post is decided below, once we know how many there were.
     if (codes.length === 0 || !lastMember) {
-      if (!fallback && section === "have") {
-        fallback = {
+      if (section === "have") {
+        headlines.push({
           amount: prices[0].amount,
           raw: prices[0].raw,
           scope: "post",
-        };
+        });
       }
       continue;
     }
@@ -213,6 +238,11 @@ export function extractPricing(
       }
     }
   }
+
+  // Three or more unattached prices means a tier list or a price sheet, not a
+  // post-wide asking price. Better no fallback than a confidently wrong one.
+  const fallback =
+    headlines.length > 0 && headlines.length < 3 ? headlines[0] : null;
 
   return { byKey, wantByKey, fallback, qyop: QYOP.test(body), payment };
 }

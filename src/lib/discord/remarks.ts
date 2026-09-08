@@ -33,7 +33,10 @@ const COLLECTION_TOKEN = /^[A-Za-z]{0,3}\d{3}[azAZ]?$/;
 const RANGE_TOKEN = /^[a-z]{0,3}\d{3}[az]?-[a-z]{0,3}\d{3}[az]?$/i;
 const PRICE_ONLY = /^(?:\$\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\$)$/;
 const SECTION_WORD = /^(have|haves|want|wants|wts|wtb|wtt)$/;
-const SEPARATOR = /^[-~:/&+*]+$/;
+// Bullets and pipes group a line ("Seoyeon: <fcos> • <dcos>") rather than
+// qualify it. Left in, every objekt on such a line carried a "•" remark — 413
+// of them in one post of the sample.
+const SEPARATOR = /^[-~:/&+*•·|>]+$/;
 
 const SEASON_PREFIXES = new Set(
   Object.keys(seasonPrefixMap).map((p) => p.toLowerCase()),

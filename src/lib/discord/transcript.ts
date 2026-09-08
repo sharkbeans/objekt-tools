@@ -1,8 +1,14 @@
 import { classifyIntent, type IntentSignals } from "@/lib/discord/intent";
 import { extractPricing, type PostPricing } from "@/lib/discord/price";
 import { extractRemarks } from "@/lib/discord/remarks";
+import {
+  type ExternalListLink,
+  extractExternalListLinks,
+} from "@/lib/external-list";
 import { membersByArtist } from "@/lib/filters";
 import { parsePastedTrade } from "@/lib/paste-parser";
+
+export { extractExternalListLinks } from "@/lib/external-list";
 
 const ALL_MEMBERS = Object.values(membersByArtist).flat();
 
@@ -39,7 +45,24 @@ const TIME = String.raw`\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp]\.?[Mm]\.?)?`;
 const WHEN = String.raw`(?:(?:Today|Yesterday)\s+at\s+|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4},?\s+|\d{4}-\d{2}-\d{2},?\s+)?${TIME}`;
 // The separator must be surrounded by whitespace, which keeps item lines like
 // "Lynn E317 - 320" from being mistaken for headers (no "H:MM" follows).
-const AUTHOR_LINE = new RegExp(String.raw`^(.*?),?\s+[—–-]\s+${WHEN}\s*$`, "i");
+const AUTHOR_LINE = new RegExp(
+  String.raw`^(.*?),?\s+[—–-]\s+(${WHEN})\s*$`,
+  "i",
+);
+
+// Discrub (a Discord export extension) writes a different header:
+//
+//   @Kira0211 (09/08/2026 10:55 AM)
+//
+// Without this the entire export has no message boundaries at all and collapses
+// into one anonymous poster — a 2,900-message file parses as 13,696 objekts
+// owned by nobody, which is worse than not importing it. The name is captured
+// lazily because 55 of 420 authors in a real export have spaces in it
+// ("@밤이의 불씨", "@alexander uwu"); only the trailing timestamp is a reliable anchor.
+const DISCRUB_AUTHOR_LINE = new RegExp(
+  String.raw`^@(.*?)\s+\((${WHEN})\)\s*$`,
+  "i",
+);
 
 /** Author shown for a paste that carries no header line at all. */
 export const UNKNOWN_AUTHOR = "Unknown poster";
@@ -69,6 +92,8 @@ export interface TranscriptMessage {
   nickname: string | null;
   /** Which site the nickname came from, for attribution in the UI. */
   nicknameSource: "apollo.cafe" | "objekt.top" | "objekt.my" | null;
+  /** Public list links that can be imported as this poster's offers on demand. */
+  listLinks: ExternalListLink[];
   tier: PosterTier;
   haves: ReturnType<typeof parsePastedTrade>["haves"];
   wants: ReturnType<typeof parsePastedTrade>["wants"];
@@ -82,6 +107,14 @@ export interface TranscriptMessage {
   remarks: Record<string, string[]>;
   /** Prices, payment rails and QYOP for this post. */
   pricing: PostPricing;
+  /** When Discord says it was posted. Null for a headerless paste. */
+  time: MessageTime | null;
+  /**
+   * How many times this exact list appeared in the paste. Traders bump their
+   * post every few minutes, so a repeated list is a sign of an active seller,
+   * not a duplicate to hide.
+   */
+  repeats: number;
   /** Stable id for "already seen this post" suppression. */
   key: string;
 }
@@ -134,8 +167,51 @@ export function extractProfileLink(
   };
 }
 
+/**
+ * When a message was posted, exactly as Discord rendered it.
+ *
+ * Only the *text* is trustworthy. Discord renders "7:47 AM" with no date for
+ * anything recent and no timezone ever, so this cannot be turned into an
+ * absolute instant — but it does not need to be. What it gives, for free and
+ * from a string already being matched, is **order and freshness**:
+ *
+ *   - a trader who reposted at 8:26 has a fresher list than their 7:50 post
+ *   - "Yesterday at" / a date prefix marks a list old enough to be stale
+ *   - reposts within one paste are recognisable as the same trader refreshing
+ *
+ * `dated` is the honest flag: false means the paste showed a clock time only,
+ * so the message is from the reader's current day and nothing more is known.
+ */
+export interface MessageTime {
+  /** Verbatim, e.g. "7:47 AM", "Yesterday at 3:41 PM", "09/05/2026 3:41 PM". */
+  raw: string;
+  /** Minutes past midnight, for ordering within a day. Null if unparseable. */
+  minutes: number | null;
+  /** True when the header carried a date or Today/Yesterday, not just a clock. */
+  dated: boolean;
+}
+
+/** Parse the rendered timestamp into what can honestly be read from it. */
+export function parseMessageTime(raw: string): MessageTime {
+  const clock = raw.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp])?/);
+  let minutes: number | null = null;
+  if (clock) {
+    let h = Number.parseInt(clock[1], 10);
+    const m = Number.parseInt(clock[2], 10);
+    const half = clock[3]?.toLowerCase();
+    if (half === "p" && h !== 12) h += 12;
+    if (half === "a" && h === 12) h = 0;
+    minutes = h * 60 + m;
+  }
+  return {
+    raw: raw.trim(),
+    minutes,
+    dated: /today|yesterday|\d{1,2}[/.-]\d{1,2}|\d{4}-\d{2}-\d{2}/i.test(raw),
+  };
+}
+
 export interface SplitResult {
-  blocks: { author: string; body: string }[];
+  blocks: { author: string; body: string; time: MessageTime | null }[];
   /**
    * Non-empty lines above the first recognised header. They belong to a
    * message whose header was cut off by the selection, so there is no author
@@ -147,13 +223,21 @@ export interface SplitResult {
 
 /** Split a raw transcript into message blocks, keeping what was discarded. */
 export function splitTranscript(transcript: string): SplitResult {
-  const blocks: { author: string; lines: string[] }[] = [];
+  const blocks: {
+    author: string;
+    lines: string[];
+    time: MessageTime | null;
+  }[] = [];
   let orphanLines = 0;
 
   for (const line of transcript.split("\n")) {
-    const match = line.match(AUTHOR_LINE);
+    const match = line.match(AUTHOR_LINE) ?? line.match(DISCRUB_AUTHOR_LINE);
     if (match) {
-      blocks.push({ author: match[1].trim(), lines: [] });
+      blocks.push({
+        author: match[1].trim(),
+        lines: [],
+        time: parseMessageTime(match[2]),
+      });
       continue;
     }
     if (blocks.length > 0) blocks[blocks.length - 1].lines.push(line);
@@ -169,7 +253,7 @@ export function splitTranscript(transcript: string): SplitResult {
         if (!last.trim() || isEmbedChrome(last)) lines.pop();
         else break;
       }
-      return { author: b.author, body: lines.join("\n").trim() };
+      return { author: b.author, body: lines.join("\n").trim(), time: b.time };
     }),
     orphanLines,
   };
@@ -178,7 +262,7 @@ export function splitTranscript(transcript: string): SplitResult {
 /** Split a raw transcript into message blocks. Exported for testing. */
 export function splitMessages(
   transcript: string,
-): { author: string; body: string }[] {
+): { author: string; body: string; time: MessageTime | null }[] {
   return splitTranscript(transcript).blocks;
 }
 
@@ -211,10 +295,10 @@ export function analyzeTranscript(transcript: string): TranscriptAnalysis {
   // as a trade list, so genuinely unusable text still reports a clear failure.
   if (blocks.length === 0 && transcript.trim()) {
     const messages = collect([
-      { author: UNKNOWN_AUTHOR, body: transcript.trim() },
+      { author: UNKNOWN_AUTHOR, body: transcript.trim(), time: null },
     ]);
     const usable = messages.some(
-      (m) => m.haves.length > 0 || m.wants.length > 0,
+      (m) => m.haves.length > 0 || m.wants.length > 0 || m.listLinks.length > 0,
     );
     return {
       messages: usable ? messages : [],
@@ -232,34 +316,43 @@ export function parseTranscript(transcript: string): TranscriptMessage[] {
 }
 
 function collect(
-  blocks: { author: string; body: string }[],
+  blocks: { author: string; body: string; time: MessageTime | null }[],
 ): TranscriptMessage[] {
-  const seen = new Set<string>();
+  const byKey = new Map<string, TranscriptMessage>();
   const out: TranscriptMessage[] = [];
 
-  for (const { author, body } of blocks) {
+  for (const { author, body, time } of blocks) {
     if (!body) continue;
     const key = messageKey(author, body);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const already = byKey.get(key);
+    if (already) {
+      // Same list posted again. Count the bump and keep the latest timestamp,
+      // so "posted 4x, last at 8:26" survives instead of the first sighting.
+      already.repeats++;
+      if (time && (!already.time || after(time, already.time)))
+        already.time = time;
+      continue;
+    }
 
     const parsed = parsePastedTrade(body);
     const link = extractProfileLink(body);
+    const listLinks = extractExternalListLinks(body);
     const hasItems = parsed.haves.length > 0 || parsed.wants.length > 0;
 
     // A profile link outranks a typed list: it resolves to on-chain inventory,
     // so the claim can actually be verified rather than taken at face value.
     const tier: PosterTier = link
       ? "verified"
-      : hasItems
+      : hasItems || listLinks.length > 0
         ? "claimed"
         : "contactless";
 
-    out.push({
+    const message: TranscriptMessage = {
       author,
       body,
       nickname: link?.nickname ?? null,
       nicknameSource: link?.source ?? null,
+      listLinks,
       tier,
       haves: parsed.haves,
       wants: parsed.wants,
@@ -267,11 +360,21 @@ function collect(
       intent: classifyIntent(body, parsed),
       remarks: Object.fromEntries(extractRemarks(body, ALL_MEMBERS)),
       pricing: extractPricing(body, ALL_MEMBERS),
+      time,
+      repeats: 1,
       key,
-    });
+    };
+    byKey.set(key, message);
+    out.push(message);
   }
 
   return out;
+}
+
+/** True when `a` was rendered later than `b`. Same-day clock times only. */
+function after(a: MessageTime, b: MessageTime): boolean {
+  if (a.minutes === null || b.minutes === null) return false;
+  return a.minutes > b.minutes;
 }
 
 /**

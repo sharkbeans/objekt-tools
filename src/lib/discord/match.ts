@@ -89,21 +89,20 @@ export interface MatchedPoster {
   theyWantYouHave: WantHit[];
   /** Their haves, offered as a pile for the viewer to pick from. */
   theyHave: ParsedItem[];
-  /** Their haves the viewer has picked — the return leg of the swap. */
-  theyHaveYouPicked: ParsedItem[];
-  /** True once the viewer has picked something from this poster's haves. */
+  /** Their haves that appear on the viewer's want list — the return leg. */
+  theyHaveYouWant: ParsedItem[];
+  /** True when both sides of the proposed swap overlap. */
   isMutual: boolean;
 }
 
 /**
- * `picked` is the set of objekt keys the viewer has selected from the pile.
- * Wants are expressed by picking, not by pre-registering a want list — which
- * is what lets the tool be useful before the viewer has told it anything.
+ * `wantedKeys` is the viewer's want list. It can contain haves chosen from the
+ * imported pile as well as wants they typed before importing the paste.
  */
 export function matchTranscript(
   messages: TranscriptMessage[],
   owned: OwnedIndex,
-  picked: ReadonlySet<string> = new Set(),
+  wantedKeys: ReadonlySet<string> = new Set(),
 ): MatchedPoster[] {
   const results: MatchedPoster[] = [];
 
@@ -125,17 +124,20 @@ export function matchTranscript(
       theyWantYouHave.push({ key, want, owned: held });
     }
 
-    const theyHaveYouPicked = message.haves.filter((have) => {
+    const seenHave = new Set<string>();
+    const theyHaveYouWant = message.haves.filter((have) => {
       const key = objektKey(have);
-      return key !== null && picked.has(key);
+      if (!key || seenHave.has(key) || !wantedKeys.has(key)) return false;
+      seenHave.add(key);
+      return true;
     });
 
     results.push({
       message,
       theyWantYouHave,
       theyHave: message.haves,
-      theyHaveYouPicked,
-      isMutual: theyWantYouHave.length > 0 && theyHaveYouPicked.length > 0,
+      theyHaveYouWant,
+      isMutual: theyWantYouHave.length > 0 && theyHaveYouWant.length > 0,
     });
   }
 

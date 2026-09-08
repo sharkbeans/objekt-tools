@@ -19,7 +19,7 @@ import type { DemandEntry } from "@/lib/discord/supply";
 import type { VerificationState } from "@/lib/discord/verify";
 import { formatShortLabel } from "@/lib/objekt-label";
 import { resolveForPoster } from "@/lib/poster/poster-resolver";
-import { DiscordHandle } from "./post-dialog";
+import { CopyDiscordHandle } from "./post-dialog";
 
 /**
  * Resolving an objekt to its artwork costs a request per distinct collection,
@@ -27,6 +27,7 @@ import { DiscordHandle } from "./post-dialog";
  * runs to thousands of distinct objekts.
  */
 const PAGE_SIZE = 50;
+const EMPTY_IMAGES = new Map<string, string>();
 
 interface PileGridProps {
   entries: PileEntry[];
@@ -34,6 +35,8 @@ interface PileGridProps {
   onToggle: (key: string) => void;
   demand: ReadonlyMap<string, DemandEntry>;
   verified: ReadonlyMap<string, VerificationState>;
+  /** Artwork supplied by a public linked list, keyed by collection identity. */
+  imageUrls?: ReadonlyMap<string, string>;
 }
 
 export function PileGrid({
@@ -42,6 +45,7 @@ export function PileGrid({
   onToggle,
   demand,
   verified,
+  imageUrls = EMPTY_IMAGES,
 }: PileGridProps) {
   const [page, setPage] = useState(0);
   const [images, setImages] = useState<Map<string, string>>(new Map());
@@ -68,7 +72,9 @@ export function PileGrid({
     // Keyed on *attempted*, not resolved: not every objekt has artwork, and
     // keying on the result map meant those were re-requested on every render —
     // an unbounded fetch loop rather than one pass per page.
-    const missing = visible.filter((e) => !attempted.current.has(e.key));
+    const missing = visible.filter(
+      (entry) => !attempted.current.has(entry.key) && !imageUrls.has(entry.key),
+    );
     if (missing.length === 0) return;
     for (const entry of missing) attempted.current.add(entry.key);
 
@@ -96,7 +102,7 @@ export function PileGrid({
         // is the part a trader actually needs.
       })
       .finally(() => setLoading(false));
-  }, [visible]);
+  }, [imageUrls, visible]);
 
   const detail = detailKey
     ? (entries.find((e) => e.key === detailKey) ?? null)
@@ -107,7 +113,7 @@ export function PileGrid({
       <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
         {visible.map((entry) => {
           const isPicked = picked.has(entry.key);
-          const url = images.get(entry.key);
+          const url = imageUrls.get(entry.key) ?? images.get(entry.key);
           const asks = entry.offeredBy
             .map((m) => askingPrice(m.pricing, entry.key))
             .filter((p) => p !== null);
@@ -186,6 +192,7 @@ export function PileGrid({
       {detail && (
         <ObjektDialog
           entry={detail}
+          imageUrl={imageUrls.get(detail.key) ?? images.get(detail.key) ?? null}
           demand={demand.get(detail.key)}
           verified={verified}
           onOpenChange={(open) => !open && setDetailKey(null)}
@@ -231,11 +238,13 @@ export function PileGrid({
  */
 function ObjektDialog({
   entry,
+  imageUrl,
   demand,
   verified,
   onOpenChange,
 }: {
   entry: PileEntry;
+  imageUrl: string | null;
   demand: DemandEntry | undefined;
   verified: ReadonlyMap<string, VerificationState>;
   onOpenChange: (open: boolean) => void;
@@ -249,17 +258,32 @@ function ObjektDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{label}</DialogTitle>
-          <DialogDescription>
-            {entry.item.season} — {entry.offeredBy.length} offering,{" "}
-            {demand?.wanters.length ?? 0} looking for it in this paste.
-          </DialogDescription>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader className="gap-4 text-left sm:flex-row sm:items-start">
+          {imageUrl ? (
+            <div className="relative aspect-photocard w-28 shrink-0 overflow-hidden rounded-md border border-border bg-muted sm:w-36">
+              <Image src={imageUrl} alt={label} fill className="object-cover" />
+            </div>
+          ) : (
+            <div className="flex aspect-photocard w-28 shrink-0 items-center justify-center rounded-md border border-dashed border-border bg-muted p-2 text-center text-xs text-muted-foreground sm:w-36">
+              Reference image unavailable
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <DialogTitle className="text-2xl">{label}</DialogTitle>
+            <DialogDescription className="text-base">
+              {entry.item.season} — {entry.offeredBy.length} offering,{" "}
+              {demand?.wanters.length ?? 0} looking for it in this paste.
+            </DialogDescription>
+            <p className="text-sm text-muted-foreground">
+              Copy a Discord name below, then paste it into Discord search to
+              contact that trader.
+            </p>
+          </div>
         </DialogHeader>
 
-        <section className="space-y-2">
-          <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        <section className="space-y-2.5">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Offering it
           </h3>
           {entry.offeredBy.map((message) => {
@@ -270,10 +294,10 @@ function ObjektDialog({
             return (
               <div
                 key={message.key}
-                className="space-y-1 rounded border border-border/60 p-2 text-xs"
+                className="space-y-2 rounded-md border border-border/60 p-3 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <DiscordHandle name={message.author} />
+                  <CopyDiscordHandle name={message.author} />
                   {message.intent.intents.map((i) => (
                     <Badge key={i} variant="outline">
                       {INTENT_LABEL[i]}
@@ -328,12 +352,12 @@ function ObjektDialog({
           })}
         </section>
 
-        <section className="space-y-2">
-          <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        <section className="space-y-2.5">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Looking for it
           </h3>
           {!demand || demand.wanters.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Nobody in this paste asked for it.
             </p>
           ) : (
@@ -342,9 +366,9 @@ function ObjektDialog({
               return (
                 <div
                   key={message.key}
-                  className="flex flex-wrap items-center gap-1.5 rounded border border-border/60 p-2 text-xs"
+                  className="flex flex-wrap items-center gap-1.5 rounded-md border border-border/60 p-3 text-sm"
                 >
-                  <DiscordHandle name={message.author} />
+                  <CopyDiscordHandle name={message.author} />
                   {message.intent.intents.map((i) => (
                     <Badge key={i} variant="outline">
                       {INTENT_LABEL[i]}

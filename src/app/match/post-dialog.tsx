@@ -1,8 +1,18 @@
 "use client";
 
-import { AlertTriangleIcon, ShieldCheckIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CopyIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
+  ShieldCheckIcon,
+} from "lucide-react";
+import Image from "next/image";
+import { useState } from "react";
+import { toast } from "sonner";
 import { DiscordIcon } from "@/components/discord-icon";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,31 +23,60 @@ import { INTENT_LABEL } from "@/lib/discord/intent";
 import { type MatchedPoster, objektKey } from "@/lib/discord/match";
 import type { TranscriptMessage } from "@/lib/discord/transcript";
 import type { VerificationState } from "@/lib/discord/verify";
+import {
+  type ExternalListImport,
+  type ExternalListLink,
+  externalItemToParsed,
+} from "@/lib/external-list";
 import { formatShortLabel } from "@/lib/objekt-label";
 
+const OFFER_PREVIEW_LIMIT = 30;
+const LINKED_LIST_PREVIEW_LIMIT = 12;
+
+function discordHandleText(name: string) {
+  return name.replace(/^@+/, "");
+}
+
 /**
- * The poster's Discord display name, styled as the contact affordance.
- *
- * A pasted transcript carries the rendered display name and nothing else — no
- * user ID, no discriminator — so this cannot be a link or a DM action. It is
- * the string to search for in the channel, and it is labelled as such rather
- * than dressed up as something clickable that would dead-end.
+ * A pasted transcript does not include a durable Discord profile URL. Copying
+ * the displayed username is therefore the useful contact action: paste it into
+ * Discord's member search or the channel search to find the trader.
  */
-export function DiscordHandle({
+export function CopyDiscordHandle({
   name,
   className = "",
 }: {
   name: string;
   className?: string;
 }) {
+  const handle = discordHandleText(name);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(handle);
+      toast.success(`Copied ${handle} — paste it into Discord to find them.`);
+    } catch {
+      toast.error("Could not copy the Discord name.");
+    }
+  };
+
   return (
-    <span
-      title="Discord display name, as it appeared in the paste — search for it in your channel"
-      className={`inline-flex items-center gap-1.5 rounded-md bg-[#5865F2]/15 px-2 py-1 text-[#8b96f2] ${className}`}
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      onClick={(event) => {
+        event.stopPropagation();
+        void copy();
+      }}
+      aria-label={`Copy ${handle} to find this trader in Discord`}
+      title="Copy this name to find the trader in Discord"
+      className={`h-8 max-w-full bg-[#5865F2]/15 text-[#8b96f2] hover:bg-[#5865F2]/25 hover:text-[#aeb6ff] ${className}`}
     >
       <DiscordIcon className="size-3.5 shrink-0 text-[#5865F2]" />
-      <span className="font-medium">{name}</span>
-    </span>
+      <span className="truncate font-medium">{name}</span>
+      <CopyIcon className="ml-0.5 shrink-0" />
+    </Button>
   );
 }
 
@@ -82,7 +121,147 @@ interface PostDialogProps {
   verification: VerificationState | undefined;
   picked: ReadonlySet<string>;
   onToggle: (key: string) => void;
+  linkedImport:
+    | {
+        status: "loading";
+        links: ExternalListLink[];
+      }
+    | {
+        status: "loaded";
+        links: ExternalListLink[];
+        imports: ExternalListImport[];
+        errors: { link: ExternalListLink; message: string }[];
+      }
+    | undefined;
   onOpenChange: (open: boolean) => void;
+}
+
+function linkedListTitle(source: ExternalListImport["source"]) {
+  return source === "objekt.top" ? "objekt.top list" : "Apollo list";
+}
+
+function LinkedListImports({
+  state,
+  picked,
+  onToggle,
+}: {
+  state: PostDialogProps["linkedImport"];
+  picked: ReadonlySet<string>;
+  onToggle: (key: string) => void;
+}) {
+  if (!state) return null;
+  if (state.status === "loading") {
+    return (
+      <section className="flex items-center gap-2 rounded-md border border-primary/35 bg-primary/5 p-3 text-sm text-primary">
+        <Loader2Icon className="size-4 animate-spin" />
+        Importing {state.links.length} linked list
+        {state.links.length === 1 ? "" : "s"}…
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3 rounded-md border border-primary/35 bg-primary/5 p-3">
+      <div>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-primary">
+          Linked list offers
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Imported as their offers. Click a card to add it to your wants.
+        </p>
+      </div>
+
+      {state.imports.map((list) => {
+        const preview = list.items.slice(0, LINKED_LIST_PREVIEW_LIMIT);
+        const importedCount = list.items.length;
+        const shownTotal = list.total ?? importedCount;
+        return (
+          <div key={list.url} className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <a
+                href={list.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+              >
+                {linkedListTitle(list.source)}
+                <ExternalLinkIcon className="size-3" />
+              </a>
+              <span className="text-muted-foreground">
+                {list.partial
+                  ? `${importedCount} of ${shownTotal} public cards imported`
+                  : `${importedCount} card${importedCount === 1 ? "" : "s"} imported`}
+              </span>
+            </div>
+            {list.partial && (
+              <p className="text-xs text-amber-400">
+                Apollo currently exposes this public preview; open the source
+                list for the remaining cards.
+              </p>
+            )}
+            {preview.length > 0 ? (
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                {preview.map((item) => {
+                  const parsed = externalItemToParsed(item);
+                  const key = objektKey(parsed);
+                  const label = itemLabel(parsed);
+                  return (
+                    <button
+                      type="button"
+                      key={`${list.url}-${key ?? label}`}
+                      onClick={() => key && onToggle(key)}
+                      disabled={!key}
+                      className={`group relative overflow-hidden rounded-md border text-left transition-colors ${
+                        key && picked.has(key)
+                          ? "border-primary ring-2 ring-primary"
+                          : "border-border hover:border-primary/70"
+                      }`}
+                      title={key ? `${label} — add to your wants` : label}
+                    >
+                      {item.imageUrl ? (
+                        <div className="relative aspect-photocard w-full bg-muted">
+                          <Image
+                            src={item.imageUrl}
+                            alt={label}
+                            fill
+                            sizes="(min-width: 640px) 96px, 22vw"
+                            className="object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex aspect-photocard items-center justify-center bg-muted p-1 text-center text-[10px] text-muted-foreground">
+                          {label}
+                        </div>
+                      )}
+                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-1 pb-1 pt-4 font-medium text-[10px] text-white leading-tight">
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                This public list has no readable objekt entries.
+              </p>
+            )}
+            {importedCount > preview.length && (
+              <p className="text-xs text-muted-foreground">
+                +{importedCount - preview.length} more are now in “What they
+                have” on this page.
+              </p>
+            )}
+          </div>
+        );
+      })}
+
+      {state.errors.map(({ link, message }) => (
+        <p key={link.url} className="text-xs text-amber-400">
+          Couldn’t import {link.source}: {message}
+        </p>
+      ))}
+    </section>
+  );
 }
 
 /**
@@ -98,10 +277,14 @@ export function PostDialog({
   verification,
   picked,
   onToggle,
+  linkedImport,
   onOpenChange,
 }: PostDialogProps) {
+  const [expandedOfferFor, setExpandedOfferFor] = useState<string | null>(null);
+
   if (!match) return null;
-  const { message, theyWantYouHave, theyHave } = match;
+  const { message, theyHaveYouWant, theyWantYouHave, theyHave } = match;
+  const showAllOffers = expandedOfferFor === message.key;
 
   // Deduped and keyed: a trader who listed the same objekt twice gets one chip.
   const offer = [
@@ -122,14 +305,32 @@ export function PostDialog({
   const remarkEntries = Object.entries(message.remarks).filter(([key]) =>
     labelByKey.has(key),
   );
+  const visibleOffer = showAllOffers
+    ? offer
+    : offer.slice(0, OFFER_PREVIEW_LIMIT);
+  const importedImageByKey = new Map<string, string>();
+  if (linkedImport?.status === "loaded") {
+    for (const list of linkedImport.imports) {
+      for (const item of list.items) {
+        const key = objektKey(externalItemToParsed(item));
+        if (key && item.imageUrl && !importedImageByKey.has(key)) {
+          importedImageByKey.set(key, item.imageUrl);
+        }
+      }
+    }
+  }
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex flex-wrap items-center gap-2">
-            <DiscordHandle name={message.author} />
+        <DialogHeader className="gap-3">
+          <DialogTitle className="flex flex-wrap items-center gap-2 text-xl">
+            <CopyDiscordHandle name={message.author} />
           </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Copy the name, then paste it into Discord member or channel search
+            to contact this trader.
+          </p>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -178,16 +379,25 @@ export function PostDialog({
           </p>
         )}
 
+        <LinkedListImports
+          state={linkedImport}
+          picked={picked}
+          onToggle={onToggle}
+        />
+
         {theyWantYouHave.length > 0 && (
-          <section className="space-y-1.5">
-            <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              They want, you have
+          <section className="space-y-2 rounded-md border border-emerald-600/40 bg-emerald-600/10 p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+              You give
             </h3>
+            <p className="text-sm text-muted-foreground">
+              They are looking for these from you.
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {theyWantYouHave.map((hit) => (
                 <span
                   key={hit.key}
-                  className="rounded border border-emerald-600/40 bg-emerald-600/10 px-2 py-1 text-xs"
+                  className="rounded border border-emerald-600/40 bg-background/40 px-2.5 py-1.5 text-sm"
                 >
                   {itemLabel(hit.want)}
                   {hit.owned.length > 1 && (
@@ -201,18 +411,58 @@ export function PostDialog({
           </section>
         )}
 
+        {theyHaveYouWant.length > 0 && (
+          <section className="space-y-2 rounded-md border border-primary/40 bg-primary/10 p-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-primary">
+              You get
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              They are offering these to you.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {theyHaveYouWant.map((item) => {
+                const key = objektKey(item);
+                const imageUrl = key ? importedImageByKey.get(key) : null;
+                return (
+                  <span
+                    key={
+                      key ??
+                      `${item.member}-${item.season}-${item.collectionNo}`
+                    }
+                    className="inline-flex items-center gap-2 rounded border border-primary/40 bg-background/40 py-1 pr-2.5 pl-1 text-sm"
+                  >
+                    {imageUrl && (
+                      <span className="relative size-9 shrink-0 overflow-hidden rounded-sm bg-muted">
+                        <Image
+                          src={imageUrl}
+                          alt=""
+                          fill
+                          sizes="36px"
+                          className="object-cover"
+                        />
+                      </span>
+                    )}
+                    {itemLabel(item)}
+                  </span>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {offer.length > 0 && (
           <section className="space-y-1.5">
-            <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Everything they have ({offer.length}) — click to pick
+            <h3 className="text-xs uppercase tracking-wide text-muted-foreground">
+              Everything else they listed ({offer.length}) — click to add to
+              your wants
             </h3>
             <div className="flex flex-wrap gap-1.5">
-              {offer.map(({ key, item }) => (
+              {visibleOffer.map(({ key, item }) => (
                 <button
                   type="button"
                   key={key}
                   onClick={() => onToggle(key)}
-                  className={`rounded border px-2 py-1 text-xs transition-colors ${
+                  className={`rounded border px-2.5 py-1.5 text-sm transition-colors ${
                     picked.has(key)
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-card hover:border-primary/50"
@@ -225,6 +475,22 @@ export function PostDialog({
                 </button>
               ))}
             </div>
+            {offer.length > OFFER_PREVIEW_LIMIT && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setExpandedOfferFor((current) =>
+                    current === message.key ? null : message.key,
+                  )
+                }
+              >
+                {showAllOffers
+                  ? "Show fewer"
+                  : `Show all ${offer.length.toLocaleString()} cards`}
+              </Button>
+            )}
           </section>
         )}
 

@@ -9,7 +9,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://cloud.umami.is https://cdn.jsdelivr.net",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.cosmo.fans https://imagedelivery.net",
+  "img-src 'self' data: blob: https://*.cosmo.fans https://imagedelivery.net https://media.objekt.top",
   "font-src 'self' data:",
   "connect-src 'self' https://cloud.umami.is https://*.pusher.com wss://*.pusher.com",
   "worker-src 'self' blob:",
@@ -67,6 +67,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "imagedelivery.net",
+      },
+      {
+        protocol: "https",
+        hostname: "media.objekt.top",
       },
     ],
   },
