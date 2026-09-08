@@ -397,7 +397,6 @@ export function MatchClient() {
         })
         .sort(
           (a, b) =>
-            Number(activeGive.has(b.key)) - Number(activeGive.has(a.key)) ||
             b.posts.length - a.posts.length ||
             deskLabel(a.item).localeCompare(deskLabel(b.item)),
         ),
