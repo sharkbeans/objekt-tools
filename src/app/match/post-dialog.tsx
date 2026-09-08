@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import { INTENT_LABEL } from "@/lib/discord/intent";
 import { type MatchedPoster, objektKey } from "@/lib/discord/match";
+import { askingPrice, bidPrice, formatPrice } from "@/lib/discord/price";
+import type { DeskMode } from "@/lib/discord/trade-desk";
 import type { TranscriptMessage } from "@/lib/discord/transcript";
 import type { VerificationState } from "@/lib/discord/verify";
 import {
@@ -117,6 +119,7 @@ function tierBadge(tier: TranscriptMessage["tier"], chainChecked: boolean) {
 }
 
 interface PostDialogProps {
+  mode?: DeskMode;
   match: MatchedPoster | null;
   verification: VerificationState | undefined;
   picked: ReadonlySet<string>;
@@ -273,6 +276,7 @@ function LinkedListImports({
  * while leaving the full post one click away.
  */
 export function PostDialog({
+  mode = "trade",
   match,
   verification,
   picked,
@@ -385,13 +389,15 @@ export function PostDialog({
           onToggle={onToggle}
         />
 
-        {theyWantYouHave.length > 0 && (
+        {mode !== "buy" && theyWantYouHave.length > 0 && (
           <section className="space-y-2 rounded-md border border-emerald-600/40 bg-emerald-600/10 p-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
-              You give
+              {mode === "sell" ? "You sell" : "You give"}
             </h3>
             <p className="text-sm text-muted-foreground">
-              They are looking for these from you.
+              {mode === "sell"
+                ? "They are looking to buy these from you."
+                : "They are looking for these from you."}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {theyWantYouHave.map((hit) => (
@@ -400,6 +406,14 @@ export function PostDialog({
                   className="rounded border border-emerald-600/40 bg-background/40 px-2.5 py-1.5 text-sm"
                 >
                   {itemLabel(hit.want)}
+                  {mode === "sell" && (
+                    <span className="ml-2 font-medium">
+                      {(() => {
+                        const bid = bidPrice(message.pricing, hit.key);
+                        return bid ? formatPrice(bid) : "Ask for bid";
+                      })()}
+                    </span>
+                  )}
                   {hit.owned.length > 1 && (
                     <span className="ml-1 text-emerald-400">
                       ×{hit.owned.length}
@@ -411,10 +425,10 @@ export function PostDialog({
           </section>
         )}
 
-        {theyHaveYouWant.length > 0 && (
+        {mode !== "sell" && theyHaveYouWant.length > 0 && (
           <section className="space-y-2 rounded-md border border-primary/40 bg-primary/10 p-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-primary">
-              You get
+              {mode === "buy" ? "You buy" : "You get"}
             </h3>
             <p className="text-sm text-muted-foreground">
               They are offering these to you.
@@ -443,6 +457,16 @@ export function PostDialog({
                       </span>
                     )}
                     {itemLabel(item)}
+                    {mode === "buy" && (
+                      <span className="ml-2 font-medium">
+                        {(() => {
+                          const ask = key
+                            ? askingPrice(message.pricing, key)
+                            : null;
+                          return ask ? formatPrice(ask) : "Ask for price";
+                        })()}
+                      </span>
+                    )}
                   </span>
                 );
               })}
@@ -450,11 +474,10 @@ export function PostDialog({
           </section>
         )}
 
-        {offer.length > 0 && (
+        {mode !== "sell" && offer.length > 0 && (
           <section className="space-y-1.5">
             <h3 className="text-xs uppercase tracking-wide text-muted-foreground">
-              Everything else they listed ({offer.length}) — click to add to
-              your wants
+              Their listed cards ({offer.length}) — click to select
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {visibleOffer.map(({ key, item }) => (
@@ -469,6 +492,14 @@ export function PostDialog({
                   }`}
                 >
                   {itemLabel(item)}
+                  {mode === "buy" && (
+                    <span className="ml-2 text-primary">
+                      {(() => {
+                        const ask = askingPrice(message.pricing, key);
+                        return ask ? formatPrice(ask) : "Ask for price";
+                      })()}
+                    </span>
+                  )}
                   {message.remarks[key] && (
                     <span className="ml-1 text-amber-400">⚑</span>
                   )}
