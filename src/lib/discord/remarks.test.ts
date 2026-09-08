@@ -41,6 +41,13 @@ describe("lineRemark", () => {
     assert.equal(lineRemark("Have: Shion bb306 (#10)", MEMBERS), "");
     assert.equal(lineRemark("hayeon bb119 x2 bb301", MEMBERS), "");
   });
+
+  it("does not turn the group-separator bullet into a remark", () => {
+    // "Seoyeon: <fcos> • <dcos>" splits a member's line into two groups; the
+    // bullet is punctuation, not a qualifier. Left in, every objekt on a line
+    // like this picked up a bare "•" remark — 413 of them in one real post.
+    assert.equal(lineRemark("Seoyeon: A104a C108 • A201 A329", MEMBERS), "");
+  });
 });
 
 describe("extractRemarks", () => {

@@ -151,4 +151,143 @@ https://apollo.cafe/@someone?transferable=true
     const d309 = parsed.haves.find((i) => i.collectionNo === "309");
     assert.equal(d309?.onOffline, "offline");
   });
+
+  it("keeps parsing items after prose within a section", () => {
+    const parsed = parsePastedTrade(`HAVE
+SeoYeon CC101
+unscanned, ask for details
+HyeRin CC102`);
+
+    assert.deepEqual(
+      parsed.haves.map((item) => item.member),
+      ["SeoYeon", "HyeRin"],
+    );
+    assert.equal(parsed.notes, "unscanned, ask for details");
+  });
+
+  it("resolves a member named mid-line", () => {
+    const parsed = parsePastedTrade(`HAVE
+S12 YeonJi CC330
+YuBin C305 C322 Kaede BB326`);
+
+    assert.deepEqual(
+      parsed.haves.map((item) => [item.member, item.collectionNo]),
+      [
+        ["YeonJi", "330"],
+        ["YuBin", "305"],
+        ["YuBin", "322"],
+        ["Kaede", "326"],
+      ],
+    );
+  });
+
+  it("assigns a code and its modifiers to every member named ahead of it", () => {
+    const parsed = parsePastedTrade("HAVE\nNakyoung Nien CC344 x2 #3");
+
+    assert.deepEqual(
+      parsed.haves.map((item) => [
+        item.member,
+        item.collectionNo,
+        item.quantity,
+        item.serial,
+      ]),
+      [
+        ["NaKyoung", "344", 2, "3"],
+        ["Nien", "344", 2, "3"],
+      ],
+    );
+  });
+
+  it("does not assign collab codes to a member inherited from the prior line", () => {
+    const parsed = parsePastedTrade("HAVE\nXinyu\nS1 x S9 CC601");
+
+    assert.deepEqual(
+      parsed.haves.map((item) => [item.member, item.collectionNo]),
+      [[null, "601"]],
+    );
+  });
+
+  it("does not read one-letter member aliases mid-line", () => {
+    const parsed = parsePastedTrade("HAVE\nSeoYeon CC101 x CC102");
+
+    assert.deepEqual(
+      parsed.haves.map((item) => [item.member, item.collectionNo]),
+      [
+        ["SeoYeon", "101"],
+        ["SeoYeon", "102"],
+      ],
+    );
+  });
+
+  it("reads an unlabelled WTT list as haves", () => {
+    const parsed = parsePastedTrade("WTT\nSeoYeon CC101 CC102");
+
+    assert.deepEqual(
+      parsed.haves.map((item) => item.collectionNo),
+      ["101", "102"],
+    );
+    assert.deepEqual(parsed.errors, []);
+  });
+
+  it("does not let a prose preamble open an implicit have section", () => {
+    const parsed = parsePastedTrade("WTT\nRare objekt list\nDM for details");
+
+    assert.equal(parsed.haves.length, 0);
+    assert.equal(parsed.wants.length, 0);
+    assert.equal(parsed.notes, "Rare objekt list\nDM for details");
+  });
+
+  it("recognises an or-prefixed want header", () => {
+    const parsed = parsePastedTrade(`HAVE
+SeoYeon CC101
+or want to trade for:
+JiWoo CC102`);
+
+    assert.deepEqual(
+      parsed.haves.map((item) => item.collectionNo),
+      ["101"],
+    );
+    assert.deepEqual(
+      parsed.wants.map((item) => [item.member, item.collectionNo]),
+      [["JiWoo", "102"]],
+    );
+  });
+
+  it("treats a priced markdown sale subheading after WANT as new haves", () => {
+    const parsed = parsePastedTrade(`**HAVE**
+CC FCO
+**WANT**
+Chaewon CC301 Unscanned (1:1)
+Mayu × Chaewon CC601 Unscanned (1:1)
+
+**CC FCO 1st & 2nd Set ($13/set)**
+SeoYeon CC101-CC108 CC109-CC116
+**WISE ONLY**`);
+
+    assert.deepEqual(
+      parsed.wants.map((item) => `${item.member}:${item.collectionNo}`),
+      ["ChaeWon:301", "Mayu:601", "ChaeWon:601"],
+    );
+    assert.deepEqual(
+      parsed.haves.map((item) => `${item.member}:${item.collectionNo}`),
+      [
+        "SeoYeon:101",
+        "SeoYeon:102",
+        "SeoYeon:103",
+        "SeoYeon:104",
+        "SeoYeon:105",
+        "SeoYeon:106",
+        "SeoYeon:107",
+        "SeoYeon:108",
+        "SeoYeon:109",
+        "SeoYeon:110",
+        "SeoYeon:111",
+        "SeoYeon:112",
+        "SeoYeon:113",
+        "SeoYeon:114",
+        "SeoYeon:115",
+        "SeoYeon:116",
+      ],
+    );
+  });
 });

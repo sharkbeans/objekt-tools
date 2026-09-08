@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   analyzeTranscript,
+  extractExternalListLinks,
   extractProfileLink,
   mergeTranscripts,
   messageKey,
+  parseMessageTime,
   parseTranscript,
   splitMessages,
   UNKNOWN_AUTHOR,
@@ -92,6 +94,30 @@ describe("extractProfileLink", () => {
   });
 });
 
+describe("extractExternalListLinks", () => {
+  it("finds canonical Objekt.top and Apollo list links without confusing profiles", () => {
+    assert.deepEqual(
+      extractExternalListLinks(`
+        https://objekt.top/list/85aFYsxdJ
+        [Apollo](<https://apollo.cafe/@Friendly/list/8b8a24e1-447b-468b-8371-b73063abdc00>)
+        https://objekt.top/@not-a-list
+      `),
+      [
+        {
+          source: "objekt.top",
+          id: "85aFYsxdJ",
+          url: "https://objekt.top/list/85aFYsxdJ",
+        },
+        {
+          source: "apollo.cafe",
+          id: "8b8a24e1-447b-468b-8371-b73063abdc00",
+          url: "https://apollo.cafe/@Friendly/list/8b8a24e1-447b-468b-8371-b73063abdc00",
+        },
+      ],
+    );
+  });
+});
+
 describe("parseTranscript", () => {
   it("classifies posters by how verifiable their claim is", () => {
     const messages = parseTranscript(SAMPLE);
@@ -118,6 +144,16 @@ describe("parseTranscript", () => {
       b.wants.map((i) => i.collectionNo),
       ["101", "102"],
     );
+  });
+
+  it("keeps a public list-only post so it can be imported from its dialog", () => {
+    const [message] = parseTranscript(`seller — 3:41 PM
+HAVE
+CC FCO
+[View this list](<https://objekt.top/list/85aFYsxdJ>)`);
+    assert.equal(message.tier, "claimed");
+    assert.equal(message.haves.length, 0);
+    assert.equal(message.listLinks.length, 1);
   });
 
   it("keeps the section-wipe fix working through the splitter", () => {
@@ -226,6 +262,45 @@ Lynn E317 - 320`);
   });
 });
 
+describe("Discrub export headers", () => {
+  // Discrub writes "@handle (MM/DD/YYYY H:MM AM)" instead of the UI's
+  // "name — H:MM AM". Unrecognised, a whole export has no message boundaries
+  // and collapses into a single anonymous poster owning everything.
+  const EXPORT = `@Kira0211 (09/08/2026 10:55 AM)
+HAVE:
+Seoyeon CC302
+
+@밤이의 불씨 (09/08/2026 10:54 AM)
+Have
+Lynn D301 D302`;
+
+  it("splits on the @handle (date time) header", () => {
+    const messages = parseTranscript(EXPORT);
+    assert.deepEqual(
+      messages.map((m) => m.author),
+      ["Kira0211", "밤이의 불씨"],
+    );
+  });
+
+  it("keeps each poster's objekts with that poster", () => {
+    const [a, b] = parseTranscript(EXPORT);
+    assert.deepEqual(
+      a.haves.map((i) => i.collectionNo),
+      ["302"],
+    );
+    assert.deepEqual(
+      b.haves.map((i) => i.collectionNo),
+      ["301", "302"],
+    );
+  });
+
+  it("reads the export's full date, which the UI copy never carries", () => {
+    const [a] = parseTranscript(EXPORT);
+    assert.equal(a.time?.dated, true);
+    assert.equal(a.time?.minutes, 10 * 60 + 55);
+  });
+});
+
 describe("analyzeTranscript", () => {
   it("reads a headerless paste as one anonymous list", () => {
     // Discord's per-message "Copy Text" omits the name/time line entirely.
@@ -235,6 +310,13 @@ describe("analyzeTranscript", () => {
     assert.equal(result.messages[0].author, UNKNOWN_AUTHOR);
     assert.equal(result.messages[0].haves.length, 1);
     assert.equal(result.messages[0].wants.length, 1);
+  });
+
+  it("keeps a headerless public list link for on-open importing", () => {
+    const parsed = analyzeTranscript("https://objekt.top/list/85aFYsxdJ");
+    assert.equal(parsed.headerless, true);
+    assert.equal(parsed.messages.length, 1);
+    assert.equal(parsed.messages[0]?.listLinks[0]?.source, "objekt.top");
   });
 
   it("rejects headerless text that is not a trade list at all", () => {
@@ -259,6 +341,58 @@ Seoyeon CC112`);
     assert.equal(result.orphanLines, 0);
     assert.equal(result.headerless, false);
     assert.equal(result.messages.length, 3);
+  });
+});
+
+describe("parseMessageTime", () => {
+  it("converts a 12-hour clock to minutes past midnight", () => {
+    assert.equal(parseMessageTime("7:47 AM").minutes, 7 * 60 + 47);
+    assert.equal(parseMessageTime("3:41 PM").minutes, 15 * 60 + 41);
+    assert.equal(parseMessageTime("12:00 AM").minutes, 0);
+    assert.equal(parseMessageTime("12:00 PM").minutes, 12 * 60);
+  });
+
+  it("converts a 24-hour clock the same way", () => {
+    assert.equal(parseMessageTime("15:41").minutes, 15 * 60 + 41);
+  });
+
+  it("flags a header carrying a date or Today/Yesterday as dated", () => {
+    assert.equal(parseMessageTime("7:47 AM").dated, false);
+    assert.equal(parseMessageTime("Yesterday at 3:41 PM").dated, true);
+    assert.equal(parseMessageTime("Today at 15:41").dated, true);
+    assert.equal(parseMessageTime("09/05/2026 3:41 PM").dated, true);
+  });
+});
+
+describe("TranscriptMessage.time and .repeats", () => {
+  it("attaches the parsed post time to each message", () => {
+    const [a, b, c] = parseTranscript(SAMPLE);
+    assert.equal(a.time?.raw, "3:41 PM");
+    assert.equal(b.time?.minutes, 15 * 60 + 44);
+    assert.equal(c.time?.minutes, 15 * 60 + 45);
+  });
+
+  it("is null for a headerless paste", () => {
+    const result = analyzeTranscript("HAVE\nSeoyeon CC112");
+    assert.equal(result.messages[0].time, null);
+  });
+
+  it("counts reposts of the same list instead of only keeping the first", () => {
+    const bumped = `traderA — 7:50 AM
+Have
+Seoyeon CC112
+traderA — 8:21 AM
+Have
+Seoyeon CC112`;
+    const [msg] = parseTranscript(bumped);
+    assert.equal(msg.repeats, 2);
+    // The later timestamp survives — that is the trader's most recent bump.
+    assert.equal(msg.time?.raw, "8:21 AM");
+  });
+
+  it("defaults repeats to 1 for a post seen once", () => {
+    const [msg] = parseTranscript(SAMPLE);
+    assert.equal(msg.repeats, 1);
   });
 });
 

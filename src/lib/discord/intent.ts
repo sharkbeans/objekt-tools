@@ -32,8 +32,9 @@ export interface IntentSignals {
 const PAYMENT =
   /\b(paypal|pp\s*f&f|fnf|gns|g&s|wise|payoneer|venmo|gcash|paymaya|alipay|wechat\s*pay|paypay|kr\s*bank|krbank|korean\s*bank|ina\s*bank|bank\s*transfer|qyop)\b/i;
 
-// "$5.5", "12$", "$1.50" — a price tag anywhere in the body.
-const PRICE = /(?:\$\s*\d+(?:[.,]\d+)?)|(?:\d+(?:[.,]\d+)?\s*\$)/;
+// "$5.5", "12$", "$1.50" — a price tag anywhere in the body. The fullwidth ＄
+// is what CJK keyboards emit and appears throughout real posts.
+const PRICE = /(?:[$＄]\s*\d+(?:[.,]\d+)?)|(?:\d+(?:[.,]\d+)?\s*[$＄])/;
 
 const SELL_TOKEN = /\b(wts|selling|sale|for\s+sale|qyop)\b/i;
 const BUY_TOKEN = /\b(wtb|buying|looking\s+to\s+buy)\b/i;

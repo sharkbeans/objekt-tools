@@ -60,10 +60,13 @@ export interface ParseResult {
 }
 
 /** Case-insensitive member resolve: shortform → full name, or exact match */
-function resolveMember(text: string): string | null {
+function resolveMember(text: string, atLineStart = true): string | null {
   const lower = text.toLowerCase();
   const shortform = shortformMembers[lower];
-  if (shortform) return shortform;
+  // One-letter aliases such as x (Xinyu) and m (Mayu) are useful at the
+  // beginning of a list, but mid-line they are normally separators in a
+  // collab code ("S5 x S20 CC601"), not an owner.
+  if (shortform) return atLineStart || lower.length > 2 ? shortform : null;
   const exact = allMembers.find((m) => m.toLowerCase() === lower);
   return exact ?? null;
 }
@@ -164,7 +167,9 @@ function isSectionHeader(line: string): {
   if (lower === "h") return { section: "have", hasOneToOne: false, rest: "" };
   if (lower === "w") return { section: "want", hasOneToOne: false, rest: "" };
 
-  const match = stripped.match(/^(have|haves|wts|want|wants|wtb)\b[\s:]*/i);
+  const match = stripped.match(
+    /^(?:or\s+)?(have|haves|wts|want|wants|wtb)\b[\s:]*/i,
+  );
   if (!match) return null;
 
   const section: "have" | "want" = /^(have|haves|wts)$/i.test(match[1])
@@ -177,6 +182,30 @@ function isSectionHeader(line: string): {
 function isIgnorableTradeIntentLine(line: string): boolean {
   const stripped = stripDiscordFormatting(line).toLowerCase();
   return /^(wtt|want to trade)$/.test(stripped);
+}
+
+/**
+ * Traders commonly put a priced sale block after their 1:1 WANT block:
+ *
+ *   **WANT**
+ *   ChaeWon CC301 (1:1)
+ *   **CC FCO 1st & 2nd Set ($13/set)**
+ *   SeoYeon CC101-CC116
+ *
+ * The second heading has no explicit WTS/HAVE word, but treating its following
+ * cards as wants produces the backwards "You give" result. Limit this to a
+ * markdown heading with a price and no collection code, so an ordinary priced
+ * want line ("ChaeWon CC301 $5") remains a want.
+ */
+function isPricedOfferSubheading(line: string): boolean {
+  const isStyledHeading =
+    /^\s*#{1,3}\s+\S/.test(line) ||
+    /^\s*(?:\*\*|__).+(?:\*\*|__)\s*$/.test(line);
+  if (!isStyledHeading) return false;
+  const stripped = stripDiscordFormatting(line);
+  const hasPrice = /(?:[$￥₩]\s*\d|\b(?:usd|sgd|php|rm)\s*\d)/i.test(stripped);
+  const hasCollection = /(?:[A-Za-z]{1,3}\d{3}|\b\d{3}\b)/.test(stripped);
+  return hasPrice && !hasCollection;
 }
 
 /** Token is a quantity annotation like x3, x10 — returns the number or null */
@@ -270,40 +299,65 @@ function parseLine(
   let leadingMember: string | null = isAnyLine ? null : inheritedMember;
   let explicitMember: string | null | undefined; // set only when this line names a member
   let currentSeason: string | null = null; // inherited for bare-number tokens across the line
+  let activeMembers = leadingMember ? [leadingMember] : [];
+  let sawCodeSinceMember = false;
+  let sawMemberOnLine = false;
+  let lastEmitted: ParsedItem[] = [];
+  const isCollabLine = /\bS\d{1,2}\s*x\s*S\d{1,2}\b/i.test(trimmed);
+
+  /** Emit one collection for all owners currently named ahead of it. */
+  const emit = (item: Omit<ParsedItem, "member" | "raw">, label: string) => {
+    const owners =
+      isCollabLine || (isAnyLine && section === "want")
+        ? [null]
+        : activeMembers.length > 0
+          ? activeMembers
+          : [leadingMember];
+    lastEmitted = owners.map((member) => ({
+      ...item,
+      member,
+      raw: member ? `${member} ${label}` : label,
+    }));
+    items.push(...lastEmitted);
+    sawCodeSinceMember = true;
+  };
 
   for (let i = 0; i < commaParts.length; i++) {
     const part = commaParts[i];
     const tokens = part.split(/\s+/);
 
-    let startIndex = 0;
-    if (i === 0) {
-      const memberCandidate = resolveMember(tokens[0]);
-      if (memberCandidate) {
-        leadingMember = memberCandidate;
-        explicitMember = memberCandidate;
-        startIndex = 1;
-      }
-    }
-
-    // Member-only first part; collections follow in subsequent comma-parts
-    if (startIndex === tokens.length) continue;
-
-    for (let j = startIndex; j < tokens.length; j++) {
+    for (let j = 0; j < tokens.length; j++) {
       const token = tokens[j];
       if (!token) continue;
+
+      const memberCandidate = resolveMember(token, i === 0 && j === 0);
+      if (memberCandidate) {
+        // Names that arrive before a code jointly own it. A name after a code
+        // starts a new group on the same line.
+        if (!sawMemberOnLine || sawCodeSinceMember) {
+          activeMembers = [memberCandidate];
+          sawCodeSinceMember = false;
+        } else {
+          activeMembers = [...activeMembers, memberCandidate];
+        }
+        sawMemberOnLine = true;
+        leadingMember = memberCandidate;
+        explicitMember = memberCandidate;
+        continue;
+      }
 
       // ── Quantity: x3, x10 ────────────────────────────────────────────────
       const qty = parseQuantityToken(token);
       if (qty !== null) {
-        if (items.length > 0) items[items.length - 1].quantity = qty;
+        for (const item of lastEmitted) item.quantity = qty;
         continue;
       }
 
       // ── Parenthetical quantity: (4), (13) — no # prefix ─────────────────
       const parenQtyMatch = token.match(/^\(x?(\d+)\)$/i);
       if (parenQtyMatch) {
-        if (items.length > 0)
-          items[items.length - 1].quantity = parseInt(parenQtyMatch[1], 10);
+        for (const item of lastEmitted)
+          item.quantity = parseInt(parenQtyMatch[1], 10);
         continue;
       }
 
@@ -312,7 +366,7 @@ function parseLine(
       const serialTokenMatch = token.match(/^(?:\(#(\d+x?)\)|#(\d+x?))$/i);
       if (serialTokenMatch) {
         const serialVal = serialTokenMatch[1] ?? serialTokenMatch[2];
-        if (items.length > 0) items[items.length - 1].serial = serialVal;
+        for (const item of lastEmitted) item.serial = serialVal;
         continue;
       }
 
@@ -331,14 +385,13 @@ function parseLine(
         if (season && end >= start && end - start < 50) {
           for (let n = start; n <= end; n++) {
             const digits = String(n).padStart(3, "0");
-            items.push({
-              member: isAnyLine && section === "want" ? null : leadingMember,
-              season,
-              collectionNo: digits,
-              raw: leadingMember
-                ? `${leadingMember} ${prefix}${digits}`
-                : `${prefix}${digits}`,
-            });
+            emit(
+              {
+                season,
+                collectionNo: digits,
+              },
+              `${prefix}${digits}`,
+            );
           }
           if (prefix && seasonPrefixMap[prefix])
             currentSeason = seasonPrefixMap[prefix];
@@ -358,14 +411,15 @@ function parseLine(
       const parsed = parseCollectionToken(collToken);
       if (parsed) {
         currentSeason = parsed.season;
-        items.push({
-          member: isAnyLine && section === "want" ? null : leadingMember,
-          season: parsed.season,
-          collectionNo: parsed.digits,
-          raw: leadingMember ? `${leadingMember} ${collToken}` : collToken,
-          ...(attachedSerial ? { serial: attachedSerial } : {}),
-          ...(parsed.onOffline ? { onOffline: parsed.onOffline } : {}),
-        });
+        emit(
+          {
+            season: parsed.season,
+            collectionNo: parsed.digits,
+            ...(attachedSerial ? { serial: attachedSerial } : {}),
+            ...(parsed.onOffline ? { onOffline: parsed.onOffline } : {}),
+          },
+          collToken,
+        );
         continue;
       }
 
@@ -373,12 +427,13 @@ function parseLine(
       // e.g. "Hayeon bb101 102 104" → 102/104 inherit Binary02
       const bareDigitsMatch = token.match(/^(\d{3})[azAZ]?$/);
       if (bareDigitsMatch && currentSeason) {
-        items.push({
-          member: isAnyLine && section === "want" ? null : leadingMember,
-          season: currentSeason,
-          collectionNo: bareDigitsMatch[1],
-          raw: leadingMember ? `${leadingMember} ${token}` : token,
-        });
+        emit(
+          {
+            season: currentSeason,
+            collectionNo: bareDigitsMatch[1],
+          },
+          token,
+        );
       }
 
       // Unknown token — skip silently (e.g. "unscanned", "available", price annotations)
@@ -408,8 +463,9 @@ function parseLine(
  * Main entry: parse pasted text into structured have/want items.
  *
  * Section headers: HAVE / WANT / WTS (→ have) / WTB (→ want), plus multi-word variants.
- * Any trailing lines after the last parseable line are collected as poster notes.
- * Preamble lines (before any header) are also included in notes.
+ * Every non-item line is retained as a poster note without ever closing the
+ * current section: traders frequently resume a list after a sentence, link or
+ * subsection label.
  */
 export function parsePastedTrade(text: string): ParseResult {
   const lines = text.split("\n");
@@ -419,18 +475,7 @@ export function parsePastedTrade(text: string): ParseResult {
 
   let currentSection: "have" | "want" | null = null;
   let lastMember: string | null = null; // inherited across lines within a section
-  // Whether the current section has produced at least one item yet. Prose that
-  // appears *before* the first item ("Mostly Lynn", "Rare objekt list", a sale
-  // blurb) is a note, not the end of the list — only a blank stretch *after*
-  // real items means we've reached the footer.
-  let sectionHasItems = false;
-
-  const preambleLines: string[] = [];
-  const trailingUnmatched: string[] = [];
-  let inFooter = false;
-
-  // Deduplicated note fragments extracted mid-parse (e.g. "1:1" from headers/lines)
-  const extractedNoteFragments = new Set<string>();
+  const noteLines: string[] = [];
 
   for (const line of lines) {
     let trimmed = line.trim();
@@ -443,54 +488,60 @@ export function parsePastedTrade(text: string): ParseResult {
     if (headerResult) {
       currentSection = headerResult.section;
       lastMember = null; // reset member inheritance on section change
-      sectionHasItems = false;
-      if (headerResult.hasOneToOne) extractedNoteFragments.add("1:1");
-      trailingUnmatched.length = 0;
-      inFooter = false;
+      if (headerResult.hasOneToOne) noteLines.push("1:1");
       // "Have: Shion bb306" puts the header and the item on one line. Fall
       // through with the remainder instead of discarding it.
       if (!headerResult.rest) continue;
       trimmed = headerResult.rest;
     }
 
-    // Once in footer, collect everything (including blanks) as trailing notes
-    if (inFooter) {
-      trailingUnmatched.push(trimmed);
+    // Blank lines are meaningful paragraph separators in notes, but a later
+    // item must still be read rather than being trapped behind a footer state.
+    if (!trimmed) {
+      noteLines.push("");
       continue;
     }
-
-    if (!trimmed) continue;
 
     if (isIgnorableTradeIntentLine(line)) continue;
 
-    if (!currentSection) {
-      preambleLines.push(trimmed);
+    // A separate, priced markdown heading after a WANT section starts a sale
+    // list. See isPricedOfferSubheading for the intentionally narrow shape.
+    if (
+      !headerResult &&
+      currentSection === "want" &&
+      isPricedOfferSubheading(line)
+    ) {
+      currentSection = "have";
+      lastMember = null;
+      noteLines.push(trimmed);
       continue;
     }
 
+    let parsedLine: ReturnType<typeof parseLine> | undefined;
+    if (!currentSection) {
+      // HAVE headers are often omitted after a short "WTT" opener. Only a
+      // genuinely parseable collection begins an implicit HAVE section; prose
+      // remains a note instead of turning every preamble into a trade list.
+      parsedLine = parseLine(trimmed, "have", lastMember);
+      if (parsedLine.items.length === 0) {
+        noteLines.push(trimmed);
+        continue;
+      }
+      currentSection = "have";
+    }
+
+    const lineResult: ReturnType<typeof parseLine> =
+      parsedLine ?? parseLine(trimmed, currentSection, lastMember);
     const {
       items,
       errors: lineErrors,
       noteFragments,
       explicitMember,
-    } = parseLine(trimmed, currentSection, lastMember);
+    } = lineResult;
     if (explicitMember !== undefined) lastMember = explicitMember;
 
-    for (const frag of noteFragments) extractedNoteFragments.add(frag);
-
-    if (items.length > 0) {
-      trailingUnmatched.length = 0;
-      inFooter = false; // reset — subsection labels between items no longer kill parsing
-      sectionHasItems = true;
-    } else if (sectionHasItems) {
-      inFooter = true;
-      trailingUnmatched.push(trimmed);
-    } else {
-      // Prose before this section's first item — a WTS blurb, a subsection
-      // label, a price note. Keep it as a note and keep scanning; entering
-      // footer mode here would swallow the entire list that follows.
-      preambleLines.push(trimmed);
-    }
+    for (const frag of noteFragments) noteLines.push(frag);
+    if (items.length === 0) noteLines.push(trimmed);
 
     if (currentSection === "have") haves.push(...items);
     else wants.push(...items);
@@ -503,18 +554,7 @@ export function parsePastedTrade(text: string): ParseResult {
     );
   }
 
-  // Build notes: preamble + extracted fragments + trailing unparseable lines
-  const noteParts: string[] = [];
-  if (preambleLines.length > 0) noteParts.push(preambleLines.join("\n").trim());
-  if (extractedNoteFragments.size > 0)
-    noteParts.push([...extractedNoteFragments].join(", "));
-  if (trailingUnmatched.length > 0) {
-    const trailing = trailingUnmatched.join("\n").trim();
-    if (trailing) noteParts.push(trailing);
-  }
-
-  const rawNotes =
-    noteParts.length > 0 ? noteParts.join("\n\n").trim() : undefined;
+  const rawNotes = noteLines.join("\n").trim() || undefined;
   const notes = rawNotes ? sanitizeNoteText(rawNotes) || undefined : undefined;
 
   return { haves, wants, errors, notes };

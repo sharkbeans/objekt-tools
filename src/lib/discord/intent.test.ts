@@ -79,4 +79,9 @@ Offer DM Plz`);
   it("never leaves a post with items unclassified", () => {
     assert.deepEqual(intentsFor("Have\nSeoyeon cc101"), ["wtt"]);
   });
+
+  it("reads a sale from the fullwidth ＄ CJK keyboards emit", () => {
+    const intents = intentsFor("Have\nSeoyeon cc101\nEach dco 3＄");
+    assert.ok(intents.includes("wts"));
+  });
 });

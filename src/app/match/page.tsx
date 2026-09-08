@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { MatchClient } from "./match-client";
+import { MatchClientShell } from "./match-client-shell";
 
 export const metadata: Metadata = {
   title: "Match from a Discord paste | objekt.my",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function MatchPage() {
-  return <MatchClient />;
+  return <MatchClientShell />;
 }
