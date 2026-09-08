@@ -147,24 +147,31 @@ function stripDiscordFormatting(line: string): string {
  * Extra words (FCO, DCO, "Ever", etc.) are ignored.
  * Returns hasOneToOne=true if "1:1" appears in the header.
  */
-function isSectionHeader(
-  line: string,
-): { section: "have" | "want"; hasOneToOne: boolean } | null {
+function isSectionHeader(line: string): {
+  section: "have" | "want";
+  hasOneToOne: boolean;
+  /**
+   * Whatever follows the header keyword on the same line. Traders often write
+   * the whole trade on one line each ("Have: Shion bb306" / "Want Lynn bb305");
+   * discarding the remainder loses the entire post.
+   */
+  rest: string;
+} | null {
   const stripped = stripDiscordFormatting(line);
   const lower = stripped.toLowerCase();
 
   // Single-letter shorthands [H], [W]
-  if (lower === "h") return { section: "have", hasOneToOne: false };
-  if (lower === "w") return { section: "want", hasOneToOne: false };
+  if (lower === "h") return { section: "have", hasOneToOne: false, rest: "" };
+  if (lower === "w") return { section: "want", hasOneToOne: false, rest: "" };
 
-  let section: "have" | "want" | null = null;
-  if (/^(have|haves|wts)\b/i.test(lower)) section = "have";
-  else if (/^(want|wants|wtb)\b/i.test(lower)) section = "want";
+  const match = stripped.match(/^(have|haves|wts|want|wants|wtb)\b[\s:]*/i);
+  if (!match) return null;
 
-  if (!section) return null;
-
+  const section: "have" | "want" = /^(have|haves|wts)$/i.test(match[1])
+    ? "have"
+    : "want";
   const hasOneToOne = /\b1:1\b/.test(stripped);
-  return { section, hasOneToOne };
+  return { section, hasOneToOne, rest: stripped.slice(match[0].length).trim() };
 }
 
 function isIgnorableTradeIntentLine(line: string): boolean {
@@ -176,6 +183,30 @@ function isIgnorableTradeIntentLine(line: string): boolean {
 function parseQuantityToken(token: string): number | null {
   const m = token.match(/^x(\d+)$/i);
   return m ? parseInt(m[1], 10) : null;
+}
+
+/**
+ * Normalise the shapes real Discord trade posts use that plain whitespace
+ * tokenisation would otherwise mangle. Applied per line before splitting.
+ *
+ *   "Sohyun D102 (×2)"        → "(x2)"     U+00D7 is common on mobile keyboards
+ *   "Shion cc109x4 cc111"     → "cc109 x4" attached quantity, else the item is lost
+ *   "Lynn E317 - 320 E347"    → "E317-320" spaced range; the range expander
+ *                                          already handles the unspaced form
+ */
+function normalizeItemLine(line: string): string {
+  return (
+    line
+      // Multiplication sign → ASCII x, so x3 / (x3) parse identically.
+      .replace(/×/g, "x")
+      // Collapse spaces around a range separator between two collection codes.
+      .replace(
+        /([A-Za-z]{0,3}\d{3}[azAZ]?)\s*[-~]\s*([A-Za-z]{0,3}\d{3}[azAZ]?)/g,
+        "$1-$2",
+      )
+      // Detach a trailing quantity fused onto a collection code.
+      .replace(/([A-Za-z]{1,3}\d{3}[azAZ]?)x(\d+)\b/gi, "$1 x$2")
+  );
 }
 
 /**
@@ -192,7 +223,7 @@ function parseLine(
   noteFragments: string[];
   explicitMember: string | null | undefined;
 } {
-  let trimmed = stripDiscordFormatting(line);
+  let trimmed = normalizeItemLine(stripDiscordFormatting(line));
   if (!trimmed)
     return {
       items: [],
@@ -269,7 +300,7 @@ function parseLine(
       }
 
       // ── Parenthetical quantity: (4), (13) — no # prefix ─────────────────
-      const parenQtyMatch = token.match(/^\((\d+)\)$/);
+      const parenQtyMatch = token.match(/^\(x?(\d+)\)$/i);
       if (parenQtyMatch) {
         if (items.length > 0)
           items[items.length - 1].quantity = parseInt(parenQtyMatch[1], 10);
@@ -388,6 +419,11 @@ export function parsePastedTrade(text: string): ParseResult {
 
   let currentSection: "have" | "want" | null = null;
   let lastMember: string | null = null; // inherited across lines within a section
+  // Whether the current section has produced at least one item yet. Prose that
+  // appears *before* the first item ("Mostly Lynn", "Rare objekt list", a sale
+  // blurb) is a note, not the end of the list — only a blank stretch *after*
+  // real items means we've reached the footer.
+  let sectionHasItems = false;
 
   const preambleLines: string[] = [];
   const trailingUnmatched: string[] = [];
@@ -397,7 +433,7 @@ export function parsePastedTrade(text: string): ParseResult {
   const extractedNoteFragments = new Set<string>();
 
   for (const line of lines) {
-    const trimmed = line.trim();
+    let trimmed = line.trim();
 
     // Skip URLs — they appear as context links in trade posts, not as items
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://"))
@@ -407,10 +443,14 @@ export function parsePastedTrade(text: string): ParseResult {
     if (headerResult) {
       currentSection = headerResult.section;
       lastMember = null; // reset member inheritance on section change
+      sectionHasItems = false;
       if (headerResult.hasOneToOne) extractedNoteFragments.add("1:1");
       trailingUnmatched.length = 0;
       inFooter = false;
-      continue;
+      // "Have: Shion bb306" puts the header and the item on one line. Fall
+      // through with the remainder instead of discarding it.
+      if (!headerResult.rest) continue;
+      trimmed = headerResult.rest;
     }
 
     // Once in footer, collect everything (including blanks) as trailing notes
@@ -441,9 +481,15 @@ export function parsePastedTrade(text: string): ParseResult {
     if (items.length > 0) {
       trailingUnmatched.length = 0;
       inFooter = false; // reset — subsection labels between items no longer kill parsing
-    } else {
+      sectionHasItems = true;
+    } else if (sectionHasItems) {
       inFooter = true;
       trailingUnmatched.push(trimmed);
+    } else {
+      // Prose before this section's first item — a WTS blurb, a subsection
+      // label, a price note. Keep it as a note and keep scanning; entering
+      // footer mode here would swallow the entire list that follows.
+      preambleLines.push(trimmed);
     }
 
     if (currentSection === "have") haves.push(...items);
