@@ -1,3 +1,4 @@
+import { extensionApi } from "./browser";
 import { loadInventory } from "./inventory";
 import { channelIds } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
@@ -18,44 +19,47 @@ function isBlock(
     Number.isFinite(Date.parse(b.time))
   );
 }
-chrome.runtime.onMessage.addListener((request, sender, reply) => {
-  if (sender.id !== chrome.runtime.id) return;
-  const popup = sender.url === chrome.runtime.getURL("popup.html");
+extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
+  if (sender.id !== extensionApi.runtime.id) return;
+  const popup = sender.url === extensionApi.runtime.getURL("popup.html");
   const channel = sender.url?.match(
     /^https:\/\/discord\.com\/channels\/\d+\/(\d+)(?:[/?#]|$)/,
   )?.[1];
   const run = async () => {
     if (request?.type === "capture" && channel && isBlock(request.block)) {
-      const settings = await chrome.storage.local.get("channels");
+      const settings = await extensionApi.storage.local.get("channels");
       const channels = channelIds(settings.channels);
       if (!channels.includes(channel)) throw new Error("Capture is paused");
       let entry: Entry;
       try {
         entry = await capture(request.block);
       } catch {
-        await chrome.action.setBadgeText({ text: "!" });
-        await chrome.storage.local.set({
+        await extensionApi.action.setBadgeText({ text: "!" });
+        await extensionApi.storage.local.set({
           captureError:
             "Could not save captured posts. Browser storage may be full. Export your index before clearing it.",
         });
         throw new Error("Could not save captured post");
       }
-      await chrome.storage.local.remove("captureError");
-      await chrome.action.setBadgeText({ text: String(await count()) });
+      await extensionApi.storage.local.remove("captureError");
+      await extensionApi.action.setBadgeText({ text: String(await count()) });
       return entry;
     }
     if (!popup) throw new Error("Unsupported request");
     if (request?.type === "inventory") {
       const owned = await loadInventory(request.nickname);
-      await chrome.storage.local.set({ owned, nickname: request.nickname });
+      await extensionApi.storage.local.set({
+        owned,
+        nickname: request.nickname,
+      });
       return owned.length;
     }
     if (request?.type === "dump") return entries();
     if (request?.type === "count") return count();
     if (request?.type === "clear") {
-      await chrome.storage.local.set({ channels: [] });
+      await extensionApi.storage.local.set({ channels: [] });
       await clear();
-      await chrome.action.setBadgeText({ text: "" });
+      await extensionApi.action.setBadgeText({ text: "" });
       return true;
     }
     throw new Error("Unsupported request");

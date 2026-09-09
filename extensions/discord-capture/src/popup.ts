@@ -1,11 +1,12 @@
 import { parseOffering } from "@/lib/discord/match";
+import { extensionApi } from "./browser";
 import { exportTranscript } from "./export";
 import { channelIds } from "./settings";
 import type { Entry } from "./store";
 
 const status = document.getElementById("status") as HTMLElement;
 async function request(type: string, extra: Record<string, unknown> = {}) {
-  const response = await chrome.runtime.sendMessage({ type, ...extra });
+  const response = await extensionApi.runtime.sendMessage({ type, ...extra });
   if (!response?.ok)
     throw new Error(response?.error ?? "Extension unavailable");
   return response.value;
@@ -18,8 +19,14 @@ function action(id: string, run: () => Promise<void>) {
   });
 }
 async function refresh() {
-  const settings = await chrome.storage.local.get(["captureError", "channels"]);
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const settings = await extensionApi.storage.local.get([
+    "captureError",
+    "channels",
+  ]);
+  const [tab] = await extensionApi.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
   const channel = tab?.url?.match(
     /^https:\/\/discord\.com\/channels\/\d+\/(\d+)/,
   )?.[1];
@@ -38,15 +45,18 @@ function download(text: string, filename: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 action("toggle", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await extensionApi.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
   const channel = tab?.url?.match(
     /^https:\/\/discord\.com\/channels\/\d+\/(\d+)/,
   )?.[1];
   if (!channel) throw new Error("Open a Discord server trade channel first.");
-  const settings = await chrome.storage.local.get("channels");
+  const settings = await extensionApi.storage.local.get("channels");
   const channels = channelIds(settings.channels);
   const enabled = channels.includes(channel);
-  await chrome.storage.local.set({
+  await extensionApi.storage.local.set({
     channels: enabled
       ? channels.filter((id: string) => id !== channel)
       : [...channels, channel],
@@ -93,11 +103,15 @@ action("save-haves", async () => {
   );
   if (haves.value.trim() && !owned.length)
     throw new Error("No objekts recognized. Try YooYeon CC101.");
-  await chrome.storage.local.set({ owned, nickname: "", haves: haves.value });
+  await extensionApi.storage.local.set({
+    owned,
+    nickname: "",
+    haves: haves.value,
+  });
   inventoryStatus.textContent = `${owned.length} typed haves saved`;
 });
 action("load-inventory", async () => {
-  const allowed = await chrome.permissions.request({
+  const allowed = await extensionApi.permissions.request({
     origins: ["https://objekt.my/*"],
   });
   if (!allowed)
@@ -115,7 +129,7 @@ action("load-inventory", async () => {
     throw error;
   }
 });
-void chrome.storage.local
+void extensionApi.storage.local
   .get(["owned", "nickname", "haves"])
   .then((settings) => {
     inventoryStatus.textContent = `${Array.isArray(settings.owned) ? settings.owned.length : 0} saved haves`;
