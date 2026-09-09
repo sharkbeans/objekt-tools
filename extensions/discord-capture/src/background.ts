@@ -1,6 +1,6 @@
 import { extensionApi } from "./browser";
 import { loadInventory } from "./inventory";
-import { channelIds } from "./settings";
+import { channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
 
 function isBlock(
@@ -22,17 +22,32 @@ function isBlock(
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
   const popup = sender.url === extensionApi.runtime.getURL("popup.html");
-  const channel = sender.url?.match(
-    /^https:\/\/discord\.com\/channels\/\d+\/(\d+)(?:[/?#]|$)/,
-  )?.[1];
+  // The sender URL proves the message came from a Discord page; which channel
+  // the post belongs to comes from the message, because search results render
+  // posts from channels other than the one currently open.
+  const fromDiscord = isDiscordUrl(sender.url);
+  const channel =
+    typeof request?.channel === "string" && /^\d+$/.test(request.channel)
+      ? request.channel
+      : null;
+  const messageId =
+    typeof request?.id === "string" && /^\d+$/.test(request.id)
+      ? request.id
+      : null;
   const run = async () => {
-    if (request?.type === "capture" && channel && isBlock(request.block)) {
+    if (
+      request?.type === "capture" &&
+      fromDiscord &&
+      channel &&
+      messageId &&
+      isBlock(request.block)
+    ) {
       const settings = await extensionApi.storage.local.get("channels");
       const channels = channelIds(settings.channels);
       if (!channels.includes(channel)) throw new Error("Capture is paused");
       let entry: Entry;
       try {
-        entry = await capture(request.block);
+        entry = await capture(request.block, `${channel}-${messageId}`);
       } catch {
         await extensionApi.action.setBadgeText({ text: "!" });
         await extensionApi.storage.local.set({
@@ -57,7 +72,9 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     if (request?.type === "dump") return entries();
     if (request?.type === "count") return count();
     if (request?.type === "clear") {
-      await extensionApi.storage.local.set({ channels: [] });
+      // Clears posts only. Pausing capture is a separate, deliberate action —
+      // wiping the enabled channels here silently stopped collection and the
+      // button name gave no hint that it would.
       await clear();
       await extensionApi.action.setBadgeText({ text: "" });
       return true;

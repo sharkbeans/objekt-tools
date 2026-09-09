@@ -40,13 +40,22 @@ export async function transaction<T>(
     });
   });
 }
-export function capture(block: StoredBlock): Promise<Entry> {
+/**
+ * Store one post, keyed by Discord's message id.
+ *
+ * Keying on the content hash duplicated posts instead: Discord appends a server
+ * tag to the rendered author as the row hydrates, so the same message was read
+ * as "pbrihu" and "pbrihuWAV" and hashed to two different keys. The message id
+ * does not change.
+ */
+export function capture(block: StoredBlock, id: string): Promise<Entry> {
   return transaction("readwrite", (store, done) => {
-    const key = messageKey(block.author, block.body);
+    const key = id;
     const request = store.get(key);
     request.onsuccess = () => {
       const existing: Entry | undefined = request.result;
       if (existing) {
+        let changed = false;
         if (
           block.time &&
           (!existing.block.time ||
@@ -54,8 +63,17 @@ export function capture(block: StoredBlock): Promise<Entry> {
         ) {
           existing.block.time = block.time;
           existing.parsed.time = parseMessageTime(block.time);
-          store.put(existing);
+          changed = true;
         }
+        // Prefer the shorter reading: the tag is appended to the display name,
+        // so the shorter one is the name without it.
+        if (block.author.length < existing.block.author.length) {
+          existing.block.author = block.author;
+          existing.parsed.author = block.author;
+          existing.parsed.key = messageKey(block.author, block.body);
+          changed = true;
+        }
+        if (changed) store.put(existing);
         done(existing);
         return;
       }

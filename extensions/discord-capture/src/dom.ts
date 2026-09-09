@@ -1,9 +1,19 @@
 import { parseMessageTime } from "@/lib/discord/transcript";
 export const MESSAGE_SELECTOR = '[id^="chat-messages-"]';
-/** Fail closed: never borrow an author from an adjacent message or reply. */
-export function readMessage(element: Element, channel: string) {
+/**
+ * Read one rendered message, reporting which channel it belongs to.
+ *
+ * The channel comes from the element id rather than the page URL: search
+ * results render in their own panel and can come from any channel in the
+ * guild, while the URL still points at whatever channel is open. The caller
+ * decides whether that channel is one the user enabled.
+ *
+ * Fail closed: never borrow an author from an adjacent message or reply.
+ */
+export function readMessage(element: Element) {
   const match = element.id.match(/^chat-messages-(\d+)-(\d+)$/);
-  if (!match || match[1] !== channel) return null;
+  if (!match) return null;
+  const channel = match[1];
   const id = match[2];
   const body = element.querySelector(`[id="message-content-${id}"]`);
   const times = element.querySelectorAll("time[datetime]");
@@ -30,6 +40,10 @@ export function readMessage(element: Element, channel: string) {
   const text = readText(body).trim();
   if (!text) return null;
   return {
+    channel,
+    // Discord's own message id. Unique and stable, unlike the rendered author
+    // name, which gains a server tag as the row hydrates.
+    id,
     author,
     body: text,
     time: parseMessageTime(new Date(iso).toISOString()),
