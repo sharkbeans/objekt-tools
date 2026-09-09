@@ -8,7 +8,7 @@ import {
   ShieldCheckIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DiscordIcon } from "@/components/discord-icon";
 import { Badge } from "@/components/ui/badge";
@@ -31,9 +31,11 @@ import {
   externalItemToParsed,
 } from "@/lib/external-list";
 import { formatShortLabel } from "@/lib/objekt-label";
+import { useDeskArtwork } from "./desk-artwork";
 
 const OFFER_PREVIEW_LIMIT = 30;
 const LINKED_LIST_PREVIEW_LIMIT = 12;
+const EMPTY_IMAGES = new Map<string, string>();
 
 function discordHandleText(name: string) {
   return name.replace(/^@+/, "");
@@ -47,9 +49,11 @@ function discordHandleText(name: string) {
 export function CopyDiscordHandle({
   name,
   className = "",
+  explicit = false,
 }: {
   name: string;
   className?: string;
+  explicit?: boolean;
 }) {
   const handle = discordHandleText(name);
 
@@ -76,7 +80,9 @@ export function CopyDiscordHandle({
       className={`h-8 max-w-full bg-[#5865F2]/15 text-[#8b96f2] hover:bg-[#5865F2]/25 hover:text-[#aeb6ff] ${className}`}
     >
       <DiscordIcon className="size-3.5 shrink-0 text-[#5865F2]" />
-      <span className="truncate font-medium">{name}</span>
+      <span className="truncate font-medium">
+        {explicit ? "Copy Discord name" : name}
+      </span>
       <CopyIcon className="ml-0.5 shrink-0" />
     </Button>
   );
@@ -116,6 +122,31 @@ function tierBadge(tier: TranscriptMessage["tier"], chainChecked: boolean) {
       </Badge>
     );
   return <Badge variant="outline">No list</Badge>;
+}
+
+function DialogObjektImage({
+  url,
+  label,
+  size = "size-10",
+}: {
+  url?: string | null;
+  label: string;
+  size?: string;
+}) {
+  return (
+    <span
+      className={`relative shrink-0 overflow-hidden rounded-sm bg-muted ${size}`}
+      aria-hidden="true"
+    >
+      {url ? (
+        <Image src={url} alt="" fill sizes="56px" className="object-cover" />
+      ) : (
+        <span className="absolute inset-0 flex items-center justify-center p-1 text-center text-[9px] leading-tight text-muted-foreground">
+          {label}
+        </span>
+      )}
+    </span>
+  );
 }
 
 interface PostDialogProps {
@@ -276,7 +307,7 @@ function LinkedListImports({
  * while leaving the full post one click away.
  */
 export function PostDialog({
-  mode = "trade",
+  mode = "wtt",
   match,
   verification,
   picked,
@@ -285,6 +316,23 @@ export function PostDialog({
   onOpenChange,
 }: PostDialogProps) {
   const [expandedOfferFor, setExpandedOfferFor] = useState<string | null>(null);
+
+  const artworkCards = useMemo(() => {
+    if (!match) return [];
+    const items = [
+      ...match.theyHave,
+      ...match.theyHaveYouWant,
+      ...match.theyWantYouHave.map((hit) => hit.want),
+    ];
+    const seen = new Set<string>();
+    return items.flatMap((item) => {
+      const key = objektKey(item);
+      if (!key || seen.has(key)) return [];
+      seen.add(key);
+      return [{ key, item }];
+    });
+  }, [match]);
+  const resolvedImages = useDeskArtwork(artworkCards, EMPTY_IMAGES);
 
   if (!match) return null;
   const { message, theyHaveYouWant, theyWantYouHave, theyHave } = match;
@@ -389,13 +437,13 @@ export function PostDialog({
           onToggle={onToggle}
         />
 
-        {mode !== "buy" && theyWantYouHave.length > 0 && (
+        {mode !== "wtb" && theyWantYouHave.length > 0 && (
           <section className="space-y-2 rounded-md border border-emerald-600/40 bg-emerald-600/10 p-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
-              {mode === "sell" ? "You sell" : "You give"}
+              They want
             </h3>
             <p className="text-sm text-muted-foreground">
-              {mode === "sell"
+              {mode === "wts"
                 ? "They are looking to buy these from you."
                 : "They are looking for these from you."}
             </p>
@@ -403,10 +451,15 @@ export function PostDialog({
               {theyWantYouHave.map((hit) => (
                 <span
                   key={hit.key}
-                  className="rounded border border-emerald-600/40 bg-background/40 px-2.5 py-1.5 text-sm"
+                  className="inline-flex items-center gap-2 rounded border border-emerald-600/40 bg-background/40 py-1.5 pr-2.5 pl-1 text-sm"
                 >
+                  <DialogObjektImage
+                    url={resolvedImages.get(hit.key)}
+                    label={itemLabel(hit.want)}
+                    size="size-9"
+                  />
                   {itemLabel(hit.want)}
-                  {mode === "sell" && (
+                  {mode === "wts" && (
                     <span className="ml-2 font-medium">
                       {(() => {
                         const bid = bidPrice(message.pricing, hit.key);
@@ -425,10 +478,10 @@ export function PostDialog({
           </section>
         )}
 
-        {mode !== "sell" && theyHaveYouWant.length > 0 && (
+        {mode !== "wts" && theyHaveYouWant.length > 0 && (
           <section className="space-y-2 rounded-md border border-primary/40 bg-primary/10 p-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-primary">
-              {mode === "buy" ? "You buy" : "You get"}
+              They have
             </h3>
             <p className="text-sm text-muted-foreground">
               They are offering these to you.
@@ -436,7 +489,9 @@ export function PostDialog({
             <div className="flex flex-wrap gap-1.5">
               {theyHaveYouWant.map((item) => {
                 const key = objektKey(item);
-                const imageUrl = key ? importedImageByKey.get(key) : null;
+                const imageUrl = key
+                  ? (importedImageByKey.get(key) ?? resolvedImages.get(key))
+                  : null;
                 return (
                   <span
                     key={
@@ -445,19 +500,13 @@ export function PostDialog({
                     }
                     className="inline-flex items-center gap-2 rounded border border-primary/40 bg-background/40 py-1 pr-2.5 pl-1 text-sm"
                   >
-                    {imageUrl && (
-                      <span className="relative size-9 shrink-0 overflow-hidden rounded-sm bg-muted">
-                        <Image
-                          src={imageUrl}
-                          alt=""
-                          fill
-                          sizes="36px"
-                          className="object-cover"
-                        />
-                      </span>
-                    )}
+                    <DialogObjektImage
+                      url={imageUrl}
+                      label={itemLabel(item)}
+                      size="size-9"
+                    />
                     {itemLabel(item)}
-                    {mode === "buy" && (
+                    {mode === "wtb" && (
                       <span className="ml-2 font-medium">
                         {(() => {
                           const ask = key
@@ -474,7 +523,7 @@ export function PostDialog({
           </section>
         )}
 
-        {mode !== "sell" && offer.length > 0 && (
+        {mode !== "wts" && offer.length > 0 && (
           <section className="space-y-1.5">
             <h3 className="text-xs uppercase tracking-wide text-muted-foreground">
               Their listed cards ({offer.length}) — click to select
@@ -485,14 +534,19 @@ export function PostDialog({
                   type="button"
                   key={key}
                   onClick={() => onToggle(key)}
-                  className={`rounded border px-2.5 py-1.5 text-sm transition-colors ${
+                  className={`inline-flex items-center gap-2 rounded border py-1.5 pr-2.5 pl-1 text-sm transition-colors ${
                     picked.has(key)
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-card hover:border-primary/50"
                   }`}
                 >
+                  <DialogObjektImage
+                    url={importedImageByKey.get(key) ?? resolvedImages.get(key)}
+                    label={itemLabel(item)}
+                    size="size-9"
+                  />
                   {itemLabel(item)}
-                  {mode === "buy" && (
+                  {mode === "wtb" && (
                     <span className="ml-2 text-primary">
                       {(() => {
                         const ask = askingPrice(message.pricing, key);

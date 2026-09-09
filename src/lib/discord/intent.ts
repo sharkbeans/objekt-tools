@@ -107,7 +107,7 @@ function wantBlock(body: string): string | null {
 }
 
 export const INTENT_LABEL: Record<TradeIntent, string> = {
-  wtt: "Trade",
-  wts: "Sells",
-  wtb: "Buys",
+  wtt: "WTT",
+  wts: "WTS",
+  wtb: "WTB",
 };

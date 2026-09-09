@@ -2,31 +2,14 @@
 
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import Image from "next/image";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type DeskCard, deskLabel } from "@/lib/discord/trade-desk";
-import type { ParsedItem } from "@/lib/paste-parser";
-import { resolveForPoster } from "@/lib/poster/poster-resolver";
+import { useDeskArtwork } from "./desk-artwork";
 import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
 
 const ROWS_PER_PAGE = 3;
-// Share resolved art across both grids and result cards. Each mounted grid
-// resolves at most one page, with four lookups in flight at a time.
-const artCache = new Map<string, Promise<string | null>>();
-async function artwork(key: string, item: ParsedItem) {
-  let pending = artCache.get(key);
-  if (!pending) {
-    pending = resolveForPoster([{ ...item, onOffline: undefined }])
-      .then((rows) => rows[0]?.imageUrl ?? null)
-      .catch(() => null);
-    if (artCache.size >= 1500)
-      artCache.delete(artCache.keys().next().value as string);
-    artCache.set(key, pending);
-  }
-  return pending;
-}
-
 export function DeskGrid({
   cards,
   selected,
@@ -36,6 +19,7 @@ export function DeskGrid({
   caption,
   emptyText,
   columns,
+  poolKey,
 }: {
   cards: DeskCard[];
   selected: ReadonlySet<string>;
@@ -45,19 +29,23 @@ export function DeskGrid({
   caption: (card: DeskCard) => string;
   emptyText: string;
   columns: number;
+  poolKey: string;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
-  const [resolved, setResolved] = useState<Map<string, string>>(new Map());
   const filtered = useMemo(() => {
     const parsed = parseDeskQuery(query);
     return cards.filter((card) => matchesDeskQuery(card.item, parsed));
   }, [cards, query]);
-  // A changed pool starts at its first page. Selection trays remain visible
-  // outside the grid even when a search hides a selected collection.
-  const [lastCards, setLastCards] = useState(cards);
-  if (lastCards !== cards) {
-    setLastCards(cards);
+  // A new pool — another mode, another paste, another inventory — starts at
+  // its first page. Selecting a card rebuilds this list too, and that must not
+  // move the reader: the page they were on is kept and only clamped when the
+  // narrowed pool has fewer pages, so clearing the pick returns them to it.
+  // Selection trays remain visible outside the grid even when a search hides a
+  // selected collection.
+  const [lastPool, setLastPool] = useState(poolKey);
+  if (lastPool !== poolKey) {
+    setLastPool(poolKey);
     setPage(0);
   }
   const pageSize = columns * ROWS_PER_PAGE;
@@ -67,23 +55,7 @@ export function DeskGrid({
     () => filtered.slice(safePage * pageSize, (safePage + 1) * pageSize),
     [filtered, safePage, pageSize],
   );
-  useEffect(() => {
-    let active = true;
-    const queue = visible.filter((card) => !images.has(card.key));
-    async function worker() {
-      while (active && queue.length) {
-        const card = queue.shift();
-        if (!card) break;
-        const url = await artwork(card.key, card.item);
-        if (active && url)
-          setResolved((prev) => new Map(prev).set(card.key, url));
-      }
-    }
-    void Promise.all(Array.from({ length: 4 }, worker));
-    return () => {
-      active = false;
-    };
-  }, [visible, images]);
+  const resolved = useDeskArtwork(visible, images);
 
   return (
     <div className="space-y-3">

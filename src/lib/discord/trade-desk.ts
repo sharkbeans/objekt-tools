@@ -3,7 +3,7 @@ import type { TranscriptMessage } from "@/lib/discord/transcript";
 import { formatShortLabel } from "@/lib/objekt-label";
 import type { ParsedItem } from "@/lib/paste-parser";
 
-export type DeskMode = "trade" | "buy" | "sell";
+export type DeskMode = "wtt" | "wtb" | "wts";
 
 export function deskLabel(item: ParsedItem): string {
   return formatShortLabel({ ...item, collectionId: "" });
@@ -52,12 +52,12 @@ export function selectDeskPosts(
   give: ReadonlySet<string>,
   get: ReadonlySet<string>,
 ): DeskPost[] {
-  const intent = mode === "buy" ? "wts" : mode === "sell" ? "wtb" : "wtt";
+  const intent = mode === "wtb" ? "wts" : mode === "wts" ? "wtb" : "wtt";
   return posts.filter(
     (post) =>
       post.message.intent.intents.includes(intent) &&
-      (mode === "buy" || containsEvery(post.wants, give)) &&
-      (mode === "sell" || containsEvery(post.haves, get)),
+      (mode === "wtb" || containsEvery(post.wants, give)) &&
+      (mode === "wts" || containsEvery(post.haves, get)),
   );
 }
 

@@ -79,6 +79,16 @@ import {
   encodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
+import {
+  blocksToTranscript,
+  mergeBlocks,
+  type StoredBlock,
+} from "@/lib/match/transcript-blocks";
+import {
+  clearBlocks,
+  loadBlocks,
+  saveBlocks,
+} from "@/lib/match/transcript-store";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { resolveForPoster } from "@/lib/poster/poster-resolver";
 import { stripVariantSuffix } from "@/lib/season-prefix";
@@ -87,7 +97,6 @@ import { ContactResults } from "./desk-contacts";
 import { DeskGrid } from "./desk-grid";
 import { PostDialog } from "./post-dialog";
 
-const RAW_KEY = "match:raw:v1";
 const NICK_KEY = "match:nickname:v1";
 const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
@@ -98,20 +107,20 @@ const DEFAULT_COLUMNS = 8;
 const EMPTY_KEYS = new Set<string>();
 const MODES = [
   {
-    id: "trade",
-    label: "Trade",
+    id: "wtt",
+    label: "WTT",
     icon: ArrowLeftRightIcon,
     hint: "Choose what you can give or what you want. The other side shows cards connected through the same trader.",
   },
   {
-    id: "buy",
-    label: "Buy",
+    id: "wtb",
+    label: "WTB",
     icon: ShoppingBagIcon,
     hint: "Pick cards for sale on the right, compare sellers below, then copy a Discord name to contact them.",
   },
   {
-    id: "sell",
-    label: "Sell",
+    id: "wts",
+    label: "WTS",
     icon: TagIcon,
     hint: "Pick your cards on the left to see who is looking to buy them, with bids where stated.",
   },
@@ -193,9 +202,8 @@ function SelectionTray({
 }
 
 export function MatchClient() {
-  const [mode, setMode] = useState<DeskMode>("trade");
+  const [mode, setMode] = useState<DeskMode>("wtt");
   const [raw, setRaw] = useState("");
-  const [storedRaw, setStoredRaw] = useState("");
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
   const [offering, setOffering] = useState("");
   const [wanting, setWanting] = useState("");
@@ -217,6 +225,9 @@ export function MatchClient() {
   const [sort, setSort] = useState<"popular" | "member" | "price">("popular");
   const [listLimit, setListLimit] = useState(12);
   const [columns, setColumns] = useState<number>(DEFAULT_COLUMNS);
+  // Persisted, never rendered — a ref keeps pastes out of the render path and
+  // keeps `addPaste` free of a stale closure over the previous blocks.
+  const blocksRef = useRef<StoredBlock[]>([]);
   const importStarted = useRef(new Set<string>());
   const generation = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -224,9 +235,6 @@ export function MatchClient() {
 
   useEffect(() => {
     try {
-      const savedRaw = localStorage.getItem(RAW_KEY) ?? "";
-      setStoredRaw(savedRaw);
-      setMessages(analyzeTranscript(savedRaw).messages);
       setOffering(localStorage.getItem(OFFERING_KEY) ?? "");
       setWanting(localStorage.getItem(WANTING_KEY) ?? "");
       setNickname(localStorage.getItem(NICK_KEY) ?? "");
@@ -244,19 +252,22 @@ export function MatchClient() {
     } catch {
       /* A disabled or full store still allows a session. */
     }
-    setReady(true);
+    // The transcript is gzipped in IndexedDB, so reading it is async. `ready`
+    // gates the settings writes below until it has landed.
+    let cancelled = false;
+    loadBlocks()
+      .then((saved) => {
+        if (cancelled) return;
+        blocksRef.current = saved;
+        setMessages(analyzeTranscript(blocksToTranscript(saved)).messages);
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
-  useEffect(() => {
-    if (!ready) return;
-    try {
-      if (storedRaw) localStorage.setItem(RAW_KEY, storedRaw);
-      else localStorage.removeItem(RAW_KEY);
-    } catch {
-      toast.warning(
-        "This paste is available for this session, but is too large to save in your browser.",
-      );
-    }
-  }, [ready, storedRaw]);
   useEffect(() => {
     if (!ready) return;
     try {
@@ -278,9 +289,16 @@ export function MatchClient() {
       return;
     }
     setMessages((previous) => mergeTranscripts(previous, parsed.messages));
-    // Keep a headerless chunk separate from earlier named posts on reload.
-    const source = parsed.headerless ? `Unknown poster — 00:00\n${text}` : text;
-    setStoredRaw((previous) => (previous ? `${previous}\n${source}` : source));
+    // Dedupe before storing: the paste-scroll-paste workflow guarantees
+    // overlapping selections, and traders repost the same list constantly.
+    const next = mergeBlocks(blocksRef.current, text);
+    blocksRef.current = next;
+    void saveBlocks(next).then((stored) => {
+      if (!stored)
+        toast.warning(
+          "This paste is available for this session, but could not be saved in your browser.",
+        );
+    });
     setRaw("");
     setEditor(null);
     if (parsed.orphanLines)
@@ -373,6 +391,15 @@ export function MatchClient() {
     () => selectDeskPosts(indexed, mode, activeGive, get),
     [indexed, mode, activeGive, get],
   );
+  // Card order comes from the whole mode pool, never from the current
+  // selection: picking a card would otherwise make it the most-wanted card
+  // left and pull it to the front of the grid mid-scan.
+  const pool = useMemo(
+    () => selectDeskPosts(indexed, mode, EMPTY_KEYS, EMPTY_KEYS),
+    [indexed, mode],
+  );
+  const poolDemand = useMemo(() => collectDeskCards(pool, "wants"), [pool]);
+  const poolSupply = useMemo(() => collectDeskCards(pool, "haves"), [pool]);
   const offered = useMemo(
     () => collectDeskCards(candidates, "haves"),
     [candidates],
@@ -387,7 +414,7 @@ export function MatchClient() {
         .flatMap(([key, item]): DeskCard[] => {
           const posts = demanded.get(key)?.posts ?? [];
           if (
-            mode === "trade" &&
+            mode === "wtt" &&
             get.size > 0 &&
             posts.length === 0 &&
             !activeGive.has(key)
@@ -397,10 +424,11 @@ export function MatchClient() {
         })
         .sort(
           (a, b) =>
-            b.posts.length - a.posts.length ||
+            (poolDemand.get(b.key)?.posts.length ?? 0) -
+              (poolDemand.get(a.key)?.posts.length ?? 0) ||
             deskLabel(a.item).localeCompare(deskLabel(b.item)),
         ),
-    [mine, demanded, activeGive, get, mode],
+    [mine, demanded, poolDemand, activeGive, get, mode],
   );
   const theirCards = useMemo(
     () =>
@@ -409,10 +437,10 @@ export function MatchClient() {
           return deskLabel(a.item).localeCompare(deskLabel(b.item), undefined, {
             numeric: true,
           });
-        if (sort === "price" && mode === "buy") {
+        if (sort === "price" && mode === "wtb") {
           const price = (card: DeskCard) =>
             Math.min(
-              ...card.posts.map(
+              ...(poolSupply.get(card.key)?.posts ?? card.posts).map(
                 (post) =>
                   askingPrice(post.message.pricing, card.key)?.amount ??
                   Number.POSITIVE_INFINITY,
@@ -423,18 +451,19 @@ export function MatchClient() {
           if (pa !== pb) return pa < pb ? -1 : 1;
         }
         return (
-          b.posts.length - a.posts.length ||
+          (poolSupply.get(b.key)?.posts.length ?? 0) -
+            (poolSupply.get(a.key)?.posts.length ?? 0) ||
           deskLabel(a.item).localeCompare(deskLabel(b.item))
         );
       }),
-    [offered, sort, mode],
+    [offered, poolSupply, sort, mode],
   );
   const contactPosts = useMemo(
     () =>
       candidates
         .filter((post) => {
-          if (mode === "buy") return post.haves.size > 0;
-          if (mode === "sell")
+          if (mode === "wtb") return post.haves.size > 0;
+          if (mode === "wts")
             return [...post.wants.keys()].some((key) => mine.has(key));
           if (activeGive.size || get.size) return true;
           return [...post.wants.keys()].some((key) => mine.has(key));
@@ -546,7 +575,8 @@ export function MatchClient() {
     generation.current++;
     importStarted.current.clear();
     setMessages([]);
-    setStoredRaw("");
+    blocksRef.current = [];
+    void clearBlocks();
     setImports(new Map());
     setVerified(new Map());
     setGive(new Set());
@@ -564,7 +594,7 @@ export function MatchClient() {
     setMode(next);
     setGive(new Set());
     setGet(new Set());
-    setSort(next === "buy" ? "price" : "popular");
+    setSort(next === "wtb" ? "price" : "popular");
   };
   const toggleGive = (key: string) =>
     setGive((previous) => toggle(previous, key));
@@ -606,7 +636,7 @@ export function MatchClient() {
     const message = enriched.find((post) => post.key === openPost);
     if (!message) return null;
     const offeredMine =
-      mode === "buy"
+      mode === "wtb"
         ? []
         : [...mine]
             .filter(([key]) => activeGive.size === 0 || activeGive.has(key))
@@ -614,14 +644,14 @@ export function MatchClient() {
     return matchTranscript(
       [message],
       indexOwned(offeredMine),
-      mode === "sell" ? EMPTY_KEYS : get,
+      mode === "wts" ? EMPTY_KEYS : get,
     )[0];
   }, [enriched, openPost, mine, activeGive, get, mode]);
   const selectionCount = activeGive.size + get.size;
   const contactTitle =
-    mode === "sell"
+    mode === "wts"
       ? "Buyers for your objekts"
-      : mode === "buy"
+      : mode === "wtb"
         ? "Sellers to contact"
         : "Traders to contact";
   const contactProps = {
@@ -631,15 +661,13 @@ export function MatchClient() {
     give: activeGive,
     get,
     onOpen: setOpenPost,
-    onChoose: (left: string[], right: string[]) => {
-      setGive(new Set(left));
-      setGet(new Set(right));
-    },
+    images,
+    wanted: new Set([...savedWants.keys(), ...savedPicks]),
     onCheck: checkInventory,
     verified,
   };
   const priceCaption = (card: DeskCard) => {
-    if (mode !== "buy")
+    if (mode !== "wtb")
       return `${card.posts.length} trader${card.posts.length === 1 ? "" : "s"}`;
     const prices = card.posts
       .flatMap((post) => {
@@ -675,7 +703,7 @@ export function MatchClient() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <fieldset
             className="inline-flex rounded-xl border bg-muted/50 p-1"
-            aria-label="Choose Trade, Buy or Sell"
+            aria-label="Choose WTT, WTB or WTS"
           >
             {MODES.map(({ id, label, icon: Icon }) => (
               <Button
@@ -741,12 +769,12 @@ export function MatchClient() {
         <p className="text-sm">
           <span className="font-semibold">
             {contactPosts.length}{" "}
-            {mode === "buy" ? "seller" : mode === "sell" ? "buyer" : "trade"}{" "}
-            post{contactPosts.length === 1 ? "" : "s"}
+            {mode === "wtb" ? "WTS" : mode === "wts" ? "WTB" : "WTT"} post
+            {contactPosts.length === 1 ? "" : "s"}
           </span>
           {selectionCount
             ? " match your selections"
-            : mode === "buy"
+            : mode === "wtb"
               ? " with cards for sale"
               : " want cards you have"}
           .{" "}
@@ -769,7 +797,7 @@ export function MatchClient() {
               Clear selections
             </Button>
           )}
-          {mode !== "sell" && (
+          {mode !== "wts" && (
             <Button
               size="sm"
               variant="outline"
@@ -777,7 +805,7 @@ export function MatchClient() {
                 resultsRef.current?.scrollIntoView({ block: "start" })
               }
             >
-              See {mode === "buy" ? "sellers" : "traders"}
+              See {mode === "wtb" ? "sellers" : "traders"}
               <ArrowDownIcon className="size-3.5" />
             </Button>
           )}
@@ -786,22 +814,22 @@ export function MatchClient() {
       <div className="grid items-start gap-4 md:grid-cols-2">
         <section
           className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
-          aria-label={mode === "buy" ? "Buying list" : "My objekts"}
+          aria-label={mode === "wtb" ? "Buying list" : "My objekts"}
         >
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
-                {mode === "buy" ? "Your selection" : "Your side"}
+                {mode === "wtb" ? "Your selection" : "Your side"}
               </p>
               <h2 className="mt-1 text-lg font-semibold">
-                {mode === "buy"
+                {mode === "wtb"
                   ? "I want to buy"
-                  : mode === "sell"
+                  : mode === "wts"
                     ? "I want to sell"
                     : "My objekts"}
               </h2>
             </div>
-            {mode !== "buy" && (
+            {mode !== "wtb" && (
               <Button
                 variant="outline"
                 size="sm"
@@ -812,7 +840,7 @@ export function MatchClient() {
               </Button>
             )}
           </div>
-          {mode === "buy" ? (
+          {mode === "wtb" ? (
             <>
               <SelectionTray
                 selected={get}
@@ -849,13 +877,13 @@ export function MatchClient() {
                 items={mine}
                 onToggle={toggleGive}
                 empty={
-                  mode === "sell"
+                  mode === "wts"
                     ? "Select a card to find cash buyers"
                     : "Select a card to see what you could get"
                 }
               />
               <p className="text-xs text-muted-foreground">
-                {mode === "trade" && get.size
+                {mode === "wtt" && get.size
                   ? "Showing your cards wanted by traders who have your selection."
                   : "Cards with interested people appear first."}
               </p>
@@ -876,10 +904,11 @@ export function MatchClient() {
                   images={images}
                   side="mine"
                   caption={(card) =>
-                    `${card.posts.length} ${mode === "sell" ? "buying" : "want this"}`
+                    `${card.posts.length} ${mode === "wts" ? "buying" : "want this"}`
                   }
                   emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
                   columns={columns}
+                  poolKey={`${mode}|${mine.size}|${pool.length}`}
                 />
               )}
             </>
@@ -887,7 +916,7 @@ export function MatchClient() {
         </section>
         <section
           className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
-          aria-label={mode === "sell" ? "Cash buyers" : "Their objekts"}
+          aria-label={mode === "wts" ? "Cash buyers" : "Their objekts"}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -895,14 +924,14 @@ export function MatchClient() {
                 From your Discord paste
               </p>
               <h2 className="mt-1 text-lg font-semibold">
-                {mode === "sell"
+                {mode === "wts"
                   ? contactTitle
-                  : mode === "buy"
+                  : mode === "wtb"
                     ? "Objekts for sale"
                     : "Their objekts"}
               </h2>
             </div>
-            {mode !== "sell" && (
+            {mode !== "wts" && (
               <select
                 aria-label="Sort their objekts"
                 value={sort}
@@ -911,11 +940,11 @@ export function MatchClient() {
               >
                 <option value="popular">Most offers</option>
                 <option value="member">Member</option>
-                {mode === "buy" && <option value="price">Lowest price</option>}
+                {mode === "wtb" && <option value="price">Lowest price</option>}
               </select>
             )}
           </div>
-          {mode === "sell" ? (
+          {mode === "wts" ? (
             <>
               <p className="text-sm text-muted-foreground">
                 Cash buyers only. Copy a name to contact them in Discord.
@@ -924,7 +953,7 @@ export function MatchClient() {
             </>
           ) : (
             <>
-              {mode === "trade" && (
+              {mode === "wtt" && (
                 <SelectionTray
                   selected={get}
                   items={allTheirItems}
@@ -932,7 +961,7 @@ export function MatchClient() {
                   empty="Select a card to see what they want from you"
                 />
               )}
-              {mode === "trade" &&
+              {mode === "wtt" &&
                 (savedWants.size > 0 || savedPicks.length > 0) && (
                   <button
                     type="button"
@@ -943,7 +972,7 @@ export function MatchClient() {
                   </button>
                 )}
               <p className="text-xs text-muted-foreground">
-                {mode === "buy"
+                {mode === "wtb"
                   ? "Asking prices appear on each card. Select one to compare its sellers below."
                   : activeGive.size
                     ? "Only offers from traders who want your selected cards."
@@ -967,11 +996,12 @@ export function MatchClient() {
                   side="theirs"
                   caption={priceCaption}
                   emptyText={
-                    mode === "buy"
+                    mode === "wtb"
                       ? "No listed sale cards match. Remove a selection, open a linked list below, or add WTS posts."
                       : "No offers connect these selections yet. Remove a card, open a linked list below, or add more posts."
                   }
                   columns={columns}
+                  poolKey={`${mode}|${pool.length}`}
                 />
               )}
             </>
@@ -1016,7 +1046,7 @@ export function MatchClient() {
           )}
         </section>
       </div>
-      {mode !== "sell" && (
+      {mode !== "wts" && (
         <section
           ref={resultsRef}
           className="scroll-mt-20 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
@@ -1031,12 +1061,12 @@ export function MatchClient() {
                 </span>
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {mode === "buy"
+                {mode === "wtb"
                   ? "Prices belong to each seller. Copy their name to arrange the purchase in Discord."
-                  : "Each result connects one trader’s offers and wants. Copy their name to discuss the trade; ratios and conditions are in the post."}
+                  : "See what they want from you and browse what you could get. Review the post for ratios and conditions."}
               </p>
             </div>
-            {mode === "trade" && get.size > 0 && (
+            {mode === "wtt" && get.size > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1143,7 +1173,7 @@ export function MatchClient() {
                   value={wanting}
                   onChange={(event) => setWanting(event.target.value)}
                 />
-                {mode !== "sell" && savedWants.size > 0 && (
+                {mode !== "wts" && savedWants.size > 0 && (
                   <Button
                     className="mt-2"
                     variant="outline"
