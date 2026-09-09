@@ -315,7 +315,8 @@ export function parseTranscript(transcript: string): TranscriptMessage[] {
   return analyzeTranscript(transcript).messages;
 }
 
-function collect(
+/** Parse structural message blocks without guessing clipboard boundaries. */
+export function collect(
   blocks: { author: string; body: string; time: MessageTime | null }[],
 ): TranscriptMessage[] {
   const byKey = new Map<string, TranscriptMessage>();
