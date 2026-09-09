@@ -314,10 +314,22 @@ Per "Dedupe" and "Rate limits" above.
 
 ## Progress (branch `proto/discord-paste-match`)
 
-Prototype built 2026-09-07. Steps 1–5 are done and pushed; step 6 is partly
-done (localStorage dedupe and append-paste ship; the signed-in DB half does
-not). All four gates green at every checkpoint: 148 tests, lint, typecheck,
-build.
+Prototype built 2026-09-07. Steps 1–6 are done and pushed. All four gates green
+at every checkpoint: 259 tests, lint, typecheck, build.
+
+Step 6 landed in two parts. The transcript now dedupes by content key before it
+is stored, is gzipped through `CompressionStream`, and lives in IndexedDB rather
+than `localStorage` — measured against a real 2,900-message export, that is
+3.51 MB of the 5 MB origin budget down to 0.222 MB, and roughly 1.4 days of
+channel history up to months (`src/lib/match/transcript-{blocks,store}.ts`).
+Triage state — posts handled, traders muted — is stored as SHA-256 ids in
+`localStorage`, and additionally in `discord_paste_seen` once signed in, which
+is what makes it follow a user across devices
+(`src/lib/match/seen-{id,store}.ts`, `src/app/api/match/seen/`).
+
+Hard constraint 2 held throughout: what reaches the database is a digest, never
+a message. Signing in buys cross-device triage and the 60/min verification tier,
+not a bigger transcript — the transcript stays in the browser for everyone.
 
 | Step | State | Where |
 | --- | --- | --- |
@@ -326,7 +338,7 @@ build.
 | 3 — transcript splitter | DONE | `src/lib/discord/transcript.ts` |
 | 4 — link → verified inventory | DONE | `src/lib/discord/verify.ts` |
 | 5 — paste → pile → pick UI | DONE | `src/app/match/` (route `/match`) |
-| 6 — dedupe + append-paste | PARTIAL | localStorage only; no DB, no auth tier |
+| 6 — dedupe + append-paste | DONE | `src/lib/match/`, `src/app/api/match/seen/` |
 
 ### Measured against the real 12-message sample
 
@@ -369,8 +381,6 @@ items and is the top supplier for most search queries once verified.
   exist.
 - Objekt images in the pile: needs `/api/objekts/search` resolution per item,
   skipped to keep the first pass network-free.
-- The signed-in half of step 6: DB-backed seen-hashes and the 60/min
-  verification tier.
 
 ## Open questions for the repo owner
 

@@ -211,6 +211,13 @@
       "when": 1785286270827,
       "tag": "0029_stormy_wallflower",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788926131778,
+      "tag": "0030_wise_mister_fear",
+      "breakpoints": true
     }
   ]
 }

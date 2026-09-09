@@ -497,6 +497,38 @@ export const tradeBan = pgTable(
   ],
 );
 
+// Which Discord paste posts a signed-in user has already triaged, and which
+// traders they have muted.
+//
+// Hashes only, never content. The /match feature reads other people's messages
+// out of the user's own clipboard; persisting those server-side would make
+// objekt.my a mirror of a channel it has no business republishing (see
+// docs/plans/035-discord-paste-match.md, "Hard constraints"). A SHA-256 of the
+// normalised author and body is enough to recognise a post the user has seen,
+// and is not reversible into the post. An edited list hashes differently and
+// correctly resurfaces.
+export const discordPasteSeen = pgTable(
+  "discord_paste_seen",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** "post" for a triaged post, "author" for a muted trader. */
+    kind: text("kind").notNull(),
+    /** Hex SHA-256. Deliberately not the FNV key used in-browser. */
+    hash: text("hash").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("discord_paste_seen_user_kind_hash_unique").on(
+      t.userId,
+      t.kind,
+      t.hash,
+    ),
+  ],
+);
+
 // ============================================================
 // Relations
 // ============================================================

@@ -1,6 +1,11 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import {
+  BellOffIcon,
+  CheckCheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { askingPrice, bidPrice, formatPrice } from "@/lib/discord/price";
@@ -10,6 +15,7 @@ import {
   deskLabel,
 } from "@/lib/discord/trade-desk";
 import type { VerificationState } from "@/lib/discord/verify";
+import type { SeenKind } from "@/lib/match/seen-id";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { ContactGallery } from "./contact-gallery";
 import { CopyDiscordHandle } from "./post-dialog";
@@ -28,6 +34,8 @@ export function ContactResults({
   wanted,
   onCheck,
   verified,
+  onMarkSeen,
+  canMarkSeen,
 }: {
   posts: DeskPost[];
   mode: DeskMode;
@@ -39,6 +47,10 @@ export function ContactResults({
   wanted: ReadonlySet<string>;
   onCheck: (post: DeskPost) => void;
   verified: ReadonlyMap<string, VerificationState>;
+  /** Hide this post, or every post by its author, from the desk. */
+  onMarkSeen: (messageKey: string, kind: SeenKind) => void;
+  /** False until the ids have been hashed, which is a beat after a paste. */
+  canMarkSeen: boolean;
 }) {
   const [page, setPage] = useState(0);
   const [previous, setPrevious] = useState(posts);
@@ -186,6 +198,28 @@ export function ContactResults({
                           ? "Inventory checked"
                           : "Check inventory"}
                     </Button>
+                  )}
+                  {canMarkSeen && (
+                    <div className="ml-auto flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title="Hide this post from the desk"
+                        onClick={() => onMarkSeen(post.message.key, "post")}
+                      >
+                        <CheckCheckIcon className="size-4" />
+                        Handled
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        title={`Hide every post by ${post.message.author}`}
+                        onClick={() => onMarkSeen(post.message.key, "author")}
+                      >
+                        <BellOffIcon className="size-4" />
+                        Mute
+                      </Button>
+                    </div>
                   )}
                 </div>
                 {state?.status === "failed" && (
