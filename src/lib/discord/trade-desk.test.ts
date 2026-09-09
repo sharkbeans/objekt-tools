@@ -32,7 +32,7 @@ const empty = new Set<string>();
 
 describe("trade desk selections", () => {
   it("selecting mine shows only offers from people who want it", () => {
-    const hits = selectDeskPosts(posts, "trade", new Set([jiyeon]), empty);
+    const hits = selectDeskPosts(posts, "wtt", new Set([jiyeon]), empty);
     assert.deepEqual(
       hits.map((p) => p.message.author),
       ["Alice"],
@@ -43,7 +43,7 @@ describe("trade desk selections", () => {
     );
   });
   it("selecting theirs reveals what the same traders want from me", () => {
-    const hits = selectDeskPosts(posts, "trade", empty, new Set([mayu]));
+    const hits = selectDeskPosts(posts, "wtt", empty, new Set([mayu]));
     assert.deepEqual(
       [...collectDeskCards(hits, "wants").keys()],
       ["xinyu|cream02|101"],
@@ -51,8 +51,7 @@ describe("trade desk selections", () => {
   });
   it("never bridges unrelated traders or separate posts by the same author", () => {
     assert.equal(
-      selectDeskPosts(posts, "trade", new Set([jiyeon]), new Set([mayu]))
-        .length,
+      selectDeskPosts(posts, "wtt", new Set([jiyeon]), new Set([mayu])).length,
       0,
     );
     const split = indexDeskPosts(
@@ -66,7 +65,7 @@ WANT
 JiYeon CC102`),
     );
     assert.equal(
-      selectDeskPosts(split, "trade", new Set([jiyeon]), new Set([seoyeon]))
+      selectDeskPosts(split, "wtt", new Set([jiyeon]), new Set([seoyeon]))
         .length,
       0,
     );
@@ -75,19 +74,15 @@ JiYeon CC102`),
     assert.equal(
       selectDeskPosts(
         posts,
-        "trade",
+        "wtt",
         new Set([jiyeon]),
         new Set([seoyeon, "seoyeon|cream02|102"]),
       ).length,
       1,
     );
     assert.equal(
-      selectDeskPosts(
-        posts,
-        "trade",
-        new Set([jiyeon]),
-        new Set([seoyeon, mayu]),
-      ).length,
+      selectDeskPosts(posts, "wtt", new Set([jiyeon]), new Set([seoyeon, mayu]))
+        .length,
       0,
     );
   });
@@ -112,7 +107,7 @@ JiYeon CC102`),
   });
   it("buy shows sellers without requiring an inventory or a return leg", () => {
     assert.deepEqual(
-      selectDeskPosts(posts, "buy", new Set([jiyeon]), new Set([mayu])).map(
+      selectDeskPosts(posts, "wtb", new Set([jiyeon]), new Set([mayu])).map(
         (p) => p.message.author,
       ),
       ["Seller"],
@@ -120,7 +115,7 @@ JiYeon CC102`),
   });
   it("sell shows cash buyers, not everyone who wants a swap", () => {
     assert.deepEqual(
-      selectDeskPosts(posts, "sell", new Set([jiyeon]), new Set([mayu])).map(
+      selectDeskPosts(posts, "wts", new Set([jiyeon]), new Set([mayu])).map(
         (p) => p.message.author,
       ),
       ["Buyer"],

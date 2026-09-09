@@ -11,6 +11,7 @@ import {
 } from "@/lib/discord/trade-desk";
 import type { VerificationState } from "@/lib/discord/verify";
 import type { ParsedItem } from "@/lib/paste-parser";
+import { ContactGallery } from "./contact-gallery";
 import { CopyDiscordHandle } from "./post-dialog";
 
 const PAGE_SIZE = 6;
@@ -23,7 +24,8 @@ export function ContactResults({
   give,
   get,
   onOpen,
-  onChoose,
+  images,
+  wanted,
   onCheck,
   verified,
 }: {
@@ -33,7 +35,8 @@ export function ContactResults({
   give: ReadonlySet<string>;
   get: ReadonlySet<string>;
   onOpen: (key: string) => void;
-  onChoose: (give: string[], get: string[]) => void;
+  images: ReadonlyMap<string, string>;
+  wanted: ReadonlySet<string>;
   onCheck: (post: DeskPost) => void;
   verified: ReadonlyMap<string, VerificationState>;
 }) {
@@ -49,15 +52,15 @@ export function ContactResults({
     <div className="space-y-3">
       {posts.length === 0 && (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          {mode === "buy"
-            ? "No seller in this paste lists all of these cards. Remove a selection or import more sale posts."
-            : mode === "sell"
-              ? "No cash buyer in this paste matches these cards. Try Trade to find people who want a swap, or import more WTB posts."
-              : "No single trade post connects these selections. Remove a card or import more posts to find another offer."}
+          {mode === "wtb"
+            ? "No seller in this paste lists all of these cards. Remove a selection or import more WTS posts."
+            : mode === "wts"
+              ? "No cash buyer in this paste matches these cards. Try WTT to find people who want a swap, or import more WTB posts."
+              : "No single WTT post connects these selections. Remove a card or import more posts to find another offer."}
         </div>
       )}
       <div
-        className={`grid gap-3 ${mode === "sell" ? "max-h-[560px] overflow-y-auto" : "lg:grid-cols-2"}`}
+        className={`grid gap-3 ${mode === "wts" ? "max-h-[560px] overflow-y-auto" : ""}`}
       >
         {posts
           .slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
@@ -65,20 +68,31 @@ export function ContactResults({
             const theirWants = [...post.wants].filter(
               ([key]) => mine.has(key) && (give.size === 0 || give.has(key)),
             );
-            const theirOffers = [...post.haves].filter(
-              ([key]) => get.size === 0 || get.has(key),
-            );
+            const theirOffers = [...post.haves]
+              .filter(([key]) => get.size === 0 || get.has(key))
+              .sort(
+                ([a], [b]) => Number(wanted.has(b)) - Number(wanted.has(a)),
+              );
             const state = post.message.nickname
               ? verified.get(post.message.nickname)
               : undefined;
             return (
               <article
                 key={post.message.key}
-                className="space-y-3 rounded-xl border bg-background p-4"
+                className="overflow-hidden rounded-xl border bg-background"
                 data-testid="trader-result"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CopyDiscordHandle name={post.message.author} />
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3 sm:px-5">
+                  <div>
+                    <p className="font-semibold">{post.message.author}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {mode === "wtb"
+                        ? `${theirOffers.length} listed cards for sale`
+                        : theirWants.length === 1
+                          ? `Wants your ${deskLabel(theirWants[0][1])}`
+                          : `${theirWants.length} of your cards on their want list`}
+                    </p>
+                  </div>
                   <span className="text-xs text-muted-foreground">
                     {post.message.time?.raw ?? "Pasted post"}
                     {post.message.repeats > 1
@@ -86,130 +100,79 @@ export function ContactResults({
                       : ""}
                   </span>
                 </div>
-                {mode !== "buy" && (
-                  <div>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-500">
-                      {mode === "sell"
-                        ? "They want to buy"
-                        : give.size
-                          ? "You give"
-                          : "You could give"}
-                    </p>
-                    {theirWants.length === 0 ? (
+                <div
+                  className={`grid gap-6 p-4 sm:p-5 ${mode === "wtt" && theirOffers.length > 0 ? "md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : ""}`}
+                >
+                  {mode !== "wtb" &&
+                    (theirWants.length > 0 ? (
+                      <ContactGallery
+                        items={theirWants}
+                        images={images}
+                        title="Your cards they want"
+                        onReview={() => onOpen(post.message.key)}
+                        caption={
+                          mode === "wts"
+                            ? (key) => {
+                                const bid = bidPrice(post.message.pricing, key);
+                                return bid ? formatPrice(bid) : "Ask for bid";
+                              }
+                            : undefined
+                        }
+                      />
+                    ) : (
                       <p className="text-sm text-muted-foreground">
                         None of your cards are on their want list.
                       </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {theirWants.slice(0, 6).map(([key, item]) => {
-                          const bid =
-                            mode === "sell"
-                              ? bidPrice(post.message.pricing, key)
-                              : null;
-                          return (
-                            <span
-                              key={key}
-                              className="rounded-md bg-emerald-500/10 px-2 py-1 text-sm"
-                            >
-                              {deskLabel(item)}
-                              {mode === "sell" && (
-                                <span className="ml-1.5 font-medium text-emerald-500">
-                                  {bid ? formatPrice(bid) : "Ask for bid"}
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })}
-                        {theirWants.length > 6 && (
-                          <span className="self-center text-xs text-muted-foreground">
-                            +{theirWants.length - 6} more
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {mode !== "sell" && (
-                  <div>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary">
-                      {mode === "buy"
-                        ? "You buy"
-                        : get.size
-                          ? "You get"
-                          : "You could get"}
-                    </p>
-                    {theirOffers.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Open their linked list to see the cards they offer.
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {theirOffers.slice(0, 6).map(([key, item]) => {
-                          const ask =
-                            mode === "buy"
-                              ? askingPrice(post.message.pricing, key)
-                              : null;
-                          return (
-                            <span
-                              key={key}
-                              className="rounded-md bg-primary/10 px-2 py-1 text-sm"
-                            >
-                              {deskLabel(item)}
-                              {mode === "buy" && (
-                                <span className="ml-1.5 font-medium text-primary">
-                                  {ask
-                                    ? formatPrice(ask)
-                                    : post.message.pricing.qyop
-                                      ? "Make an offer"
-                                      : "Ask for price"}
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })}
-                        {theirOffers.length > 6 && (
-                          <span className="self-center text-xs text-muted-foreground">
-                            +{theirOffers.length - 6} more
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {(post.message.pricing.payment.length > 0 ||
-                  post.message.notes) && (
-                  <p className="line-clamp-2 whitespace-pre-line text-sm text-muted-foreground">
-                    {post.message.pricing.payment.length > 0
-                      ? `Payment: ${post.message.pricing.payment.join(", ")}. `
-                      : ""}
-                    {post.message.notes}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onOpen(post.message.key)}
-                  >
-                    {mode === "buy" ? "Price & post details" : "View full post"}
-                  </Button>
-                  {mode === "trade" &&
-                    theirWants.length > 0 &&
-                    theirOffers.length > 0 &&
-                    (give.size === 0 || get.size === 0) && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          onChoose(
-                            give.size ? [...give] : [theirWants[0][0]],
-                            get.size ? [...get] : [theirOffers[0][0]],
-                          )
+                    ))}
+                  {mode !== "wts" &&
+                    (theirOffers.length > 0 ? (
+                      <ContactGallery
+                        items={theirOffers}
+                        images={images}
+                        wanted={wanted}
+                        title={
+                          mode === "wtb"
+                            ? "Cards for sale"
+                            : "Their cards you could get"
                         }
+                        onReview={() => onOpen(post.message.key)}
+                        caption={
+                          mode === "wtb"
+                            ? (key) => {
+                                const ask = askingPrice(
+                                  post.message.pricing,
+                                  key,
+                                );
+                                return ask
+                                  ? formatPrice(ask)
+                                  : post.message.pricing.qyop
+                                    ? "Make an offer"
+                                    : "Ask for price";
+                              }
+                            : undefined
+                        }
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-left text-sm font-medium text-primary underline-offset-4 hover:underline"
+                        onClick={() => onOpen(post.message.key)}
                       >
-                        Compare this pair
-                      </Button>
-                    )}
+                        {post.message.listLinks.length
+                          ? "View linked offers →"
+                          : "Offers not listed · Review post →"}
+                      </button>
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3 sm:px-5">
+                  <Button size="sm" onClick={() => onOpen(post.message.key)}>
+                    {mode === "wtb"
+                      ? "Review prices & post"
+                      : mode === "wts"
+                        ? "Review buyer’s post"
+                        : "Review trade"}
+                  </Button>
+                  <CopyDiscordHandle name={post.message.author} explicit />
                   {post.message.nickname && (
                     <Button
                       size="sm"
@@ -226,10 +189,12 @@ export function ContactResults({
                   )}
                 </div>
                 {state?.status === "failed" && (
-                  <p className="text-xs text-amber-500">{state.reason}</p>
+                  <p className="px-5 pb-3 text-xs text-amber-500">
+                    {state.reason}
+                  </p>
                 )}
                 {state?.status === "verified" && state.stale.length > 0 && (
-                  <p className="text-xs text-amber-500">
+                  <p className="px-5 pb-3 text-xs text-amber-500">
                     {state.stale.length} listed cards are no longer in their
                     inventory. Check the full post before contacting them.
                   </p>
