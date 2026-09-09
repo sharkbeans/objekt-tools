@@ -53,3 +53,34 @@ test("index survives reopen, dedupes concurrent captures and uses shared range p
   await clear();
   assert.equal((await entries()).length, 0);
 });
+
+test("ambiguous or invalid timestamps fail closed", () => {
+  const doc = fixture();
+  const li = doc.querySelector("li") as Element;
+  li.insertAdjacentHTML(
+    "afterbegin",
+    '<time datetime="2026-09-08T00:00:00Z"></time>',
+  );
+  assert.equal(readMessage(li, "123"), null);
+  li.querySelector("time")?.remove();
+  li.querySelector("time")?.setAttribute("datetime", "not-a-date");
+  assert.equal(readMessage(li, "123"), null);
+});
+test("reposts refresh timestamps without duplicating; edited lists stay distinct", async () => {
+  await clear();
+  const block = {
+    author: "Trader",
+    body: "HAVE\nYooYeon CC101",
+    time: "2026-09-08T23:59:00.000Z",
+  };
+  await capture(block);
+  await capture({ ...block, time: "2026-09-09T00:01:00.000Z" });
+  await capture(block);
+  let stored = await entries();
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].parsed.time?.raw, "2026-09-09T00:01:00.000Z");
+  await capture({ ...block, body: "HAVE\nYooYeon CC102" });
+  stored = await entries();
+  assert.equal(stored.length, 2);
+  await clear();
+});

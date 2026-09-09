@@ -48,3 +48,32 @@ Exports validate every author, timestamp and message boundary before downloading
 header-like body text stops the export rather than inventing another trader. The JSON dump
 remains available for inspection. `/match` retains its 40,000-post cap, so text exports above
 that limit stop with an explanation; the extension itself keeps the complete local index.
+
+## Inventory and annotations
+
+Type haves and choose **Save typed haves**, or enter a Cosmo nickname and choose **Load
+inventory**. The latter requests optional permission for `https://objekt.my/*` and calls
+only the existing by-nickname endpoint, once per click, without cookies. Errors, rate
+limits and unavailable inventory leave the saved haves intact. Loading replaces typed
+haves; saving typed haves replaces loaded inventory. An empty typed list clears haves.
+
+Enabled channels show **wants N of yours** for exact matches from the shared matcher.
+Wildcards are deliberately not counted, matching `/match`. Inventory is a saved snapshot;
+load again after trading to refresh it. Pausing removes annotations. Clearing the index
+also pauses every channel. A `!` toolbar badge and popup error report failed storage writes.
+
+## Automated validation
+
+`npm run extension:smoke` builds and loads the actual MV3 bundle in a temporary Chromium
+profile, fulfills Discord navigation with a local fixture, and checks capture, virtualized
+re-render dedupe, annotation updates, export downloads and pause. It never contacts Discord.
+Install the Playwright Chromium browser first if it is missing (`npx playwright install chromium`).
+The Node tests cover structural attribution, IndexedDB transactions/reopens, ranges, ISO
+round trips, ambiguous export rejection, and inventory failures. `npm test` includes the
+shared engine import-graph purity guard.
+
+Implementation checkpoints: Phase 1 capture, Phase 2 handoff, Phase 3 inventory/annotations.
+All are implemented; the live two-minute capture check and subsequent week of real usage
+remain manual acceptance steps. No Phase 4/5 implementation or direct-origin storage write
+is included. Parser changes should bump the extension version; persisted parsed entries
+currently use the initial parser schema, so clear/re-capture after incompatible engine changes.

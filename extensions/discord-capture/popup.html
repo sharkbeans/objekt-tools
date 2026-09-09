@@ -4,4 +4,7 @@
 <button type="button" id="toggle">Enable / pause this channel</button><p id="status" role="status">Loading…</p>
 <button type="button" id="dump">Dump index (.json)</button><button type="button" id="clear">Clear captured posts</button>
 <button type="button" id="export">Export transcript (.txt)</button><p><a href="https://objekt.my/match" target="_blank" rel="noreferrer">Open objekt.my/match</a> → Import text files</p>
+<hr><h2>Your haves</h2><p id="inventory-status" role="status"></p>
+<label for="nickname">Cosmo nickname</label><input id="nickname" autocomplete="off" maxlength="30"><button type="button" id="load-inventory">Load inventory</button>
+<label for="haves">Or type haves (replaces saved inventory)</label><textarea id="haves" placeholder="YooYeon CC101"></textarea><button type="button" id="save-haves">Save typed haves</button>
 <script src="popup.js"></script></html>
