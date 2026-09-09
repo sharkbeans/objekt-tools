@@ -45,7 +45,7 @@ try {
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${id}/popup.html`);
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("1 distinct"),
+    document.getElementById("status").textContent.includes("1 post ready"),
   );
   // Use the actual typed-haves surface so collection key syntax stays shared.
   await popup.locator("#haves").fill("YooYeon CC109");
@@ -55,7 +55,7 @@ try {
   await page.locator("objekt-match-badge").waitFor();
   await popup.reload();
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("1 distinct"),
+    document.getElementById("status").textContent.includes("1 post ready"),
   );
   const downloadEvent = popup.waitForEvent("download");
   await popup.locator("#export").click();
@@ -72,7 +72,7 @@ try {
   });
   await popup.reload();
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("1 distinct"),
+    document.getElementById("status").textContent.includes("1 post ready"),
   );
   assert.deepEqual(failures, []);
   console.log(

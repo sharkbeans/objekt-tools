@@ -1,10 +1,77 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>objekt.my capture</title>
-<style>body{font:14px system-ui;width:300px;padding:16px;color:#eee;background:#18181b}button,input,textarea{box-sizing:border-box;width:100%;margin:6px 0;padding:8px}a{color:#a5b4fc}#status{white-space:pre-wrap}</style>
-<h1>Discord capture</h1><p>Enable on a trade channel, then browse normally. Posts stay in this browser.</p>
-<button type="button" id="toggle">Enable / pause this channel</button><p id="status" role="status">Loading…</p>
-<button type="button" id="dump">Dump index (.json)</button><button type="button" id="clear">Clear captured posts</button>
-<button type="button" id="export">Export transcript (.txt)</button><p><a href="https://objekt.my/match" target="_blank" rel="noreferrer">Open objekt.my/match</a> → Import text files</p>
-<hr><h2>Your haves</h2><p id="inventory-status" role="status"></p>
-<label for="nickname">Cosmo nickname</label><input id="nickname" autocomplete="off" maxlength="30"><button type="button" id="load-inventory">Load inventory</button>
-<label for="haves">Or type haves (replaces saved inventory)</label><textarea id="haves" placeholder="YooYeon CC101"></textarea><button type="button" id="save-haves">Save typed haves</button>
+<style>
+body{font:14px system-ui;width:320px;padding:14px;color:#eee;background:#18181b;margin:0}
+h1{font-size:15px;margin:0 0 4px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin:0 0 6px;font-weight:600}
+section{border-top:1px solid #27272a;padding:12px 0}
+section:first-of-type{border-top:0;padding-top:6px}
+button,input,textarea{box-sizing:border-box;width:100%;margin:4px 0;padding:8px;background:#27272a;color:#eee;border:1px solid #3f3f46;border-radius:6px;font:inherit}
+button{background:#3730a3;border-color:#4338ca;cursor:pointer}
+button.secondary{background:#27272a;border-color:#3f3f46}
+textarea{min-height:56px;resize:vertical}
+label{display:block;font-size:12px;color:#a1a1aa;margin-top:6px}
+a{color:#a5b4fc}code{background:#27272a;padding:1px 4px;border-radius:3px}
+p{margin:6px 0}
+.hint{font-size:12px;color:#a1a1aa}
+.row{display:flex;gap:6px}
+#status,#search-status,#inventory-status{white-space:pre-wrap;font-size:12px}
+#search-status{color:#c7d2fe}
+details{margin-top:10px;border-top:1px solid #27272a;padding-top:10px}
+summary{cursor:pointer;font-size:12px;color:#a1a1aa}
+</style>
+
+<h1>objekt.my capture</h1>
+<p class="hint">Posts stay in this browser. Nothing is sent to Discord.</p>
+
+<section>
+  <h2>1 · Your objekts</h2>
+  <label for="nickname">Cosmo nickname</label>
+  <input id="nickname" autocomplete="off" maxlength="30" placeholder="yourcosmoname">
+  <button type="button" id="load-inventory">Load inventory</button>
+  <label for="haves">or type them (replaces the loaded inventory)</label>
+  <textarea id="haves" placeholder="YooYeon CC101&#10;Mayu AA101"></textarea>
+  <button type="button" class="secondary" id="save-haves">Save typed haves</button>
+  <p id="inventory-status" role="status"></p>
+</section>
+
+<section>
+  <h2>2 · What to look for</h2>
+  <label for="wants">One objekt per line</label>
+  <textarea id="wants" placeholder="SeoYeon CC101&#10;Mayu AA101&#10;Hayeon BB401"></textarea>
+  <div class="row">
+    <span style="flex:1">
+      <label for="pages">Result pages each</label>
+      <input id="pages" type="number" min="1" max="20" step="1" value="3">
+    </span>
+    <span style="flex:1">
+      <label for="delay">Seconds between</label>
+      <input id="delay" type="number" min="1" max="60" step="1" value="3">
+    </span>
+  </div>
+  <p class="hint">Discord sorts newest first, so later pages are older posts. Three is usually plenty.</p>
+</section>
+
+<section>
+  <h2>3 · Search Discord</h2>
+  <p class="hint">Open your trade channel, then run. Searches by objekt code (<code>CC101</code>) — the member name is matched here instead, since searching it floods Discord with unrelated posts. Keep the tab on Discord.</p>
+  <button type="button" id="run-search">Search my wants</button>
+  <button type="button" class="secondary" id="stop-search">Stop</button>
+  <p id="search-status" role="status"></p>
+</section>
+
+<section>
+  <h2>4 · Match them</h2>
+  <p id="status" role="status">Loading…</p>
+  <button type="button" id="export">Export transcript (.txt)</button>
+  <p class="hint"><a href="https://objekt.my/match" target="_blank" rel="noreferrer">Open objekt.my/match</a> → <strong>Import text files</strong> → pick the download.</p>
+</section>
+
+<details>
+  <summary>Troubleshooting</summary>
+  <button type="button" class="secondary" id="toggle">Enable / pause capture here</button>
+  <button type="button" class="secondary" id="diagnose">Check this tab</button>
+  <button type="button" class="secondary" id="dump">Dump index (.json)</button>
+  <button type="button" class="secondary" id="clear">Clear captured posts</button>
+</details>
+
 <script src="popup.js"></script></html>
