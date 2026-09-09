@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useSession } from "@/lib/auth-client";
 import {
   fetchInventoryByNickname,
   type OwnedEntry,
@@ -80,6 +81,22 @@ import {
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
 import {
+  authorSeenId,
+  postSeenId,
+  type SeenId,
+  type SeenKind,
+} from "@/lib/match/seen-id";
+import {
+  clearRemoteSeen,
+  dropRemoteSeen,
+  fetchRemoteSeen,
+  loadHideSeen,
+  loadLocalSeen,
+  pushRemoteSeen,
+  saveHideSeen,
+  saveLocalSeen,
+} from "@/lib/match/seen-store";
+import {
   blocksToTranscript,
   mergeBlocks,
   type StoredBlock,
@@ -105,6 +122,10 @@ const COLS_KEY = "match:columns:v1";
 const COLUMN_CHOICES = [4, 5, 6, 7, 8, 10, 12] as const;
 const DEFAULT_COLUMNS = 8;
 const EMPTY_KEYS = new Set<string>();
+const EMPTY_SEEN: ReadonlySet<SeenId> = new Set<SeenId>();
+/** The two ids a post can be hidden by: itself, or its author. */
+type PostSeenIds = { post: SeenId; author: SeenId };
+const EMPTY_SEEN_IDS: ReadonlyMap<string, PostSeenIds> = new Map();
 const MODES = [
   {
     id: "wtt",
@@ -225,6 +246,12 @@ export function MatchClient() {
   const [sort, setSort] = useState<"popular" | "member" | "price">("popular");
   const [listLimit, setListLimit] = useState(12);
   const [columns, setColumns] = useState<number>(DEFAULT_COLUMNS);
+  const [seen, setSeen] = useState<ReadonlySet<SeenId>>(EMPTY_SEEN);
+  const [hideSeen, setHideSeen] = useState(true);
+  // messageKey -> the SHA-256 ids that identify this post and its author.
+  const [seenIds, setSeenIds] =
+    useState<ReadonlyMap<string, PostSeenIds>>(EMPTY_SEEN_IDS);
+  const { data: session } = useSession();
   // Persisted, never rendered — a ref keeps pastes out of the render path and
   // keeps `addPaste` free of a stale closure over the previous blocks.
   const blocksRef = useRef<StoredBlock[]>([]);
@@ -248,6 +275,8 @@ export function MatchClient() {
         setSavedPicks(
           oldPicks.filter((key): key is string => typeof key === "string"),
         );
+      setSeen(loadLocalSeen());
+      setHideSeen(loadHideSeen());
       localStorage.removeItem("match:transcript:v1");
     } catch {
       /* A disabled or full store still allows a session. */
@@ -279,6 +308,48 @@ export function MatchClient() {
       /* Keep the in-memory lists usable. */
     }
   }, [ready, offering, wanting, nickname, columns]);
+
+  // Hashing is async, so ids arrive a beat after the messages do. Until then a
+  // post has no id and stays visible, which is the right way round: a brief
+  // flash of a hidden post beats hiding one the user never triaged.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      messages.map(async (message) => {
+        const [post, author] = await Promise.all([
+          postSeenId(message.author, message.body),
+          authorSeenId(message.author),
+        ]);
+        return post && author
+          ? ([message.key, { post, author }] as const)
+          : null;
+      }),
+    ).then((entries) => {
+      if (!cancelled) setSeenIds(new Map(entries.filter((e) => e !== null)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages]);
+  // Signing in merges both directions: what this browser knew goes up, what
+  // other devices knew comes down.
+  const userId = session?.user.id;
+  useEffect(() => {
+    if (!ready || !userId) return;
+    let cancelled = false;
+    void fetchRemoteSeen().then((remote) => {
+      if (cancelled) return;
+      const local = loadLocalSeen();
+      const missing = [...local].filter((id) => !remote.has(id));
+      if (missing.length) void pushRemoteSeen(missing);
+      const merged = new Set([...local, ...remote]);
+      saveLocalSeen(merged);
+      setSeen(merged);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, userId]);
 
   const addPaste = useCallback((text: string) => {
     const parsed = analyzeTranscript(text);
@@ -376,7 +447,19 @@ export function MatchClient() {
       }),
     [messages, imports],
   );
-  const indexed = useMemo(() => indexDeskPosts(enriched), [enriched]);
+  // Triaged posts and muted traders drop out of the whole desk, not just the
+  // contact list: a post the user has dealt with should not keep contributing
+  // cards to the grids either.
+  const visible = useMemo(() => {
+    if (!hideSeen) return enriched;
+    return enriched.filter((message) => {
+      const ids = seenIds.get(message.key);
+      if (!ids) return true;
+      return !seen.has(ids.post) && !seen.has(ids.author);
+    });
+  }, [enriched, hideSeen, seen, seenIds]);
+  const hiddenCount = enriched.length - visible.length;
+  const indexed = useMemo(() => indexDeskPosts(visible), [visible]);
   const allTheirItems = useMemo(() => {
     const items = new Map(savedWants);
     for (const post of indexed)
@@ -590,6 +673,40 @@ export function MatchClient() {
       /* Session already cleared. */
     }
   };
+  const markSeen = (messageKey: string, kind: SeenKind) => {
+    const ids = seenIds.get(messageKey);
+    if (!ids) return;
+    const id = kind === "author" ? ids.author : ids.post;
+    const next = new Set(seen).add(id);
+    setSeen(next);
+    saveLocalSeen(next);
+    if (userId) void pushRemoteSeen([id]);
+    toast.success(
+      kind === "author" ? "Trader muted." : "Post marked as handled.",
+      {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            const undone = new Set(next);
+            undone.delete(id);
+            setSeen(undone);
+            saveLocalSeen(undone);
+            if (userId) void dropRemoteSeen([id]);
+          },
+        },
+      },
+    );
+  };
+  const clearSeen = () => {
+    setSeen(EMPTY_SEEN);
+    saveLocalSeen(EMPTY_SEEN);
+    if (userId) void clearRemoteSeen();
+  };
+  const toggleHideSeen = () => {
+    const next = !hideSeen;
+    setHideSeen(next);
+    saveHideSeen(next);
+  };
   const changeMode = (next: DeskMode) => {
     setMode(next);
     setGive(new Set());
@@ -665,6 +782,8 @@ export function MatchClient() {
     wanted: new Set([...savedWants.keys(), ...savedPicks]),
     onCheck: checkInventory,
     verified,
+    onMarkSeen: markSeen,
+    canMarkSeen: seenIds.size > 0,
   };
   const priceCaption = (card: DeskCard) => {
     if (mode !== "wtb")
@@ -785,6 +904,16 @@ export function MatchClient() {
           )}
         </p>
         <div className="flex gap-2">
+          {(hiddenCount > 0 || (!hideSeen && seen.size > 0)) && (
+            <Button size="sm" variant="ghost" onClick={toggleHideSeen}>
+              {hideSeen ? `Show ${hiddenCount} handled` : "Hide handled posts"}
+            </Button>
+          )}
+          {!hideSeen && seen.size > 0 && (
+            <Button size="sm" variant="ghost" onClick={clearSeen}>
+              Clear handled list
+            </Button>
+          )}
           {selectionCount > 0 && (
             <Button
               size="sm"
