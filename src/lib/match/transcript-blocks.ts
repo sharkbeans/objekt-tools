@@ -31,6 +31,14 @@ export interface StoredBlock {
   body: string;
 }
 
+// Re-parsing every stored block on load costs about 0.25 ms each, so history is
+// bounded by load time rather than by space: roughly 0.35 s per day of a busy
+// channel. 40,000 blocks is about a month of one, and lands near a 10 s worst
+// case on the measured hardware. Holding a full 90 days is not a tuning
+// question — it needs ~1.5 GB of heap for the parsed items, so it belongs on a
+// server that can filter before sending, not in the tab.
+export const MAX_BLOCKS = 40_000;
+
 // Stand-in timestamp for a block that never had one. Matches what the paste
 // path has always written for a headerless chunk, and parses as a clock time,
 // which is what makes the reconstructed header a valid message boundary.
@@ -41,8 +49,11 @@ const NO_TIME = "00:00";
  * already there.
  *
  * Last write wins, the same rule `mergeTranscripts` uses: a trader who edited
- * their list should show the newer copy. Insertion order is preserved, so a
- * repost keeps the position of its first sighting rather than jumping.
+ * their list should show the newer copy.
+ *
+ * Order is last-seen, not first-seen, which is what makes trimming safe: a
+ * trader who is still bumping their list moves back to the end and survives,
+ * while the ones who stopped posting fall off first.
  */
 export function mergeBlocks(
   existing: StoredBlock[],
@@ -68,9 +79,20 @@ export function mergeBlocks(
     existing.map((block) => [messageKey(block.author, block.body), block]),
   );
   for (const block of incoming) {
-    byKey.set(messageKey(block.author, block.body), block);
+    const key = messageKey(block.author, block.body);
+    // Delete before setting so a re-sighted post moves to the end rather than
+    // keeping the position of its first sighting.
+    byKey.delete(key);
+    byKey.set(key, block);
   }
-  return [...byKey.values()];
+  return trimBlocks([...byKey.values()]);
+}
+
+/** Drop the least recently seen blocks once past the load-time budget. */
+export function trimBlocks(blocks: StoredBlock[]): StoredBlock[] {
+  return blocks.length > MAX_BLOCKS
+    ? blocks.slice(blocks.length - MAX_BLOCKS)
+    : blocks;
 }
 
 /**

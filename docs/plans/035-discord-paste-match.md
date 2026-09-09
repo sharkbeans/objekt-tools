@@ -320,8 +320,19 @@ at every checkpoint: 259 tests, lint, typecheck, build.
 Step 6 landed in two parts. The transcript now dedupes by content key before it
 is stored, is gzipped through `CompressionStream`, and lives in IndexedDB rather
 than `localStorage` — measured against a real 2,900-message export, that is
-3.51 MB of the 5 MB origin budget down to 0.222 MB, and roughly 1.4 days of
-channel history up to months (`src/lib/match/transcript-{blocks,store}.ts`).
+3.51 MB of the 5 MB origin budget down to 0.222 MB
+(`src/lib/match/transcript-{blocks,store}.ts`).
+
+That moved the ceiling rather than removing it. Storage is no longer the limit;
+**re-parsing on load is**, at roughly 0.25 ms per stored block — about 0.35 s per
+day of a busy channel, measured. So history is capped at `MAX_BLOCKS` (40,000,
+about a month, near a 10 s worst case) and trimmed by least-recently-seen, which
+is why `mergeBlocks` moves a re-sighted post to the end: an active trader must
+survive the trim while the ones who stopped posting fall off.
+
+Holding a full 90 days client-side is not a tuning question. It needs ~32 s of
+parsing and ~1.5 GB of heap for 5.6 M parsed items, which no browser tab will
+carry — that range needs a server that can filter before sending.
 Triage state — posts handled, traders muted — is stored as SHA-256 ids in
 `localStorage`, and additionally in `discord_paste_seen` once signed in, which
 is what makes it follow a user across devices

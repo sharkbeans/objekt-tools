@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { analyzeTranscript, UNKNOWN_AUTHOR } from "@/lib/discord/transcript";
-import { blocksToTranscript, mergeBlocks } from "./transcript-blocks";
+import {
+  blocksToTranscript,
+  MAX_BLOCKS,
+  mergeBlocks,
+  trimBlocks,
+} from "./transcript-blocks";
 
 // Same shapes as the transcript suite: bracket tags, emoji, a trailing comma
 // after the display name, and link-embed chrome that must not survive.
@@ -83,6 +88,46 @@ describe("mergeBlocks", () => {
 
   it("ignores an empty paste", () => {
     assert.deepEqual(mergeBlocks([], "   \n\n"), []);
+  });
+
+  it("moves a re-sighted post to the end so trimming spares active traders", () => {
+    const first = mergeBlocks([], "traderA — 3:41 PM\nWTS CC101");
+    const second = mergeBlocks(first, "traderB — 3:42 PM\nWTS CC102");
+    // traderA bumps: they should now be the most recently seen, not the oldest.
+    const bumped = mergeBlocks(second, "traderA — 4:02 PM\nWTS CC101");
+    assert.deepEqual(
+      bumped.map((block) => block.author),
+      ["traderB", "traderA"],
+    );
+  });
+});
+
+describe("trimBlocks", () => {
+  const block = (n: number) => ({
+    author: `trader${n}`,
+    time: "3:41 PM",
+    body: `WTS CC${n}`,
+  });
+
+  it("leaves a store under the cap alone", () => {
+    const blocks = [block(1), block(2)];
+    assert.equal(trimBlocks(blocks), blocks);
+  });
+
+  it("keeps the most recently seen when over the cap", () => {
+    const blocks = Array.from({ length: MAX_BLOCKS + 3 }, (_, i) => block(i));
+    const trimmed = trimBlocks(blocks);
+    assert.equal(trimmed.length, MAX_BLOCKS);
+    // The three oldest went, the newest survived.
+    assert.equal(trimmed[0].author, "trader3");
+    assert.equal(trimmed.at(-1)?.author, `trader${MAX_BLOCKS + 2}`);
+  });
+
+  it("bounds what a paste can grow the store to", () => {
+    const huge = Array.from({ length: MAX_BLOCKS }, (_, i) => block(i));
+    const merged = mergeBlocks(huge, "traderX — 3:41 PM\nWTS CC999");
+    assert.equal(merged.length, MAX_BLOCKS);
+    assert.equal(merged.at(-1)?.author, "traderX");
   });
 });
 
