@@ -100,3 +100,13 @@ Firefox package validation (`npx web-ext lint --source-dir extensions/discord-ca
 passes with no errors. It reports one store-readiness warning for the missing data-collection
 permission declaration; settle the declaration and nickname-lookup consent before signing
 or submitting a permanent package. This does not prevent temporary local testing.
+
+### Wrong-manifest installation error
+
+If Firefox says `background.service_worker is currently disabled`, an older Chrome-only
+manifest was selected. Rebuild with `npm run extension:build:firefox` and select the
+**generated** `dist-firefox/manifest.json`, not the source manifest in the parent folder.
+The default `npm run extension:build` output in `dist` now also declares Firefox background
+scripts alongside Chrome's service worker, so either built directory supports Firefox.
+The source folder itself is not loadable: its JavaScript bundles exist only in the build
+output. The default build supports Chrome 121+ and Firefox 128+.

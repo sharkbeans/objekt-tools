@@ -12,7 +12,7 @@ await build({
   outdir: new URL(`${output}/`, root).pathname,
   bundle: true,
   platform: "browser",
-  target: firefox ? "firefox128" : "chrome120",
+  target: firefox ? "firefox128" : ["chrome121", "firefox128"],
   format: "iife",
   tsconfig: "tsconfig.json",
 });
@@ -32,4 +32,8 @@ await writeFile(
 await copyFile(
   new URL("popup.html", root),
   new URL(`${output}/popup.html`, root),
+);
+
+console.log(
+  `Load the built extension from ${new URL(`${output}/manifest.json`, root).pathname}`,
 );
