@@ -5,7 +5,8 @@
   "description": "Capture rendered trade posts locally and bring them to objekt.my.",
   "permissions": ["storage", "activeTab"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
   },
   "action": {
     "default_popup": "popup.html"
@@ -17,5 +18,11 @@
       "run_at": "document_idle"
     }
   ],
-  "optional_host_permissions": ["https://objekt.my/*"]
+  "optional_host_permissions": ["https://objekt.my/*"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "discord-capture@objekt.my",
+      "strict_min_version": "128.0"
+    }
+  }
 }
