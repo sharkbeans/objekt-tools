@@ -47,6 +47,15 @@ export function capture(block: StoredBlock): Promise<Entry> {
     request.onsuccess = () => {
       const existing: Entry | undefined = request.result;
       if (existing) {
+        if (
+          block.time &&
+          (!existing.block.time ||
+            Date.parse(block.time) > Date.parse(existing.block.time))
+        ) {
+          existing.block.time = block.time;
+          existing.parsed.time = parseMessageTime(block.time);
+          store.put(existing);
+        }
         done(existing);
         return;
       }

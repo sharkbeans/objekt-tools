@@ -1,5 +1,6 @@
+import { loadInventory } from "./inventory";
 import { channelIds } from "./settings";
-import { capture, clear, count, entries } from "./store";
+import { capture, clear, count, type Entry, entries } from "./store";
 
 function isBlock(
   value: unknown,
@@ -28,14 +29,31 @@ chrome.runtime.onMessage.addListener((request, sender, reply) => {
       const settings = await chrome.storage.local.get("channels");
       const channels = channelIds(settings.channels);
       if (!channels.includes(channel)) throw new Error("Capture is paused");
-      const entry = await capture(request.block);
+      let entry: Entry;
+      try {
+        entry = await capture(request.block);
+      } catch {
+        await chrome.action.setBadgeText({ text: "!" });
+        await chrome.storage.local.set({
+          captureError:
+            "Could not save captured posts. Browser storage may be full. Export your index before clearing it.",
+        });
+        throw new Error("Could not save captured post");
+      }
+      await chrome.storage.local.remove("captureError");
       await chrome.action.setBadgeText({ text: String(await count()) });
       return entry;
     }
     if (!popup) throw new Error("Unsupported request");
+    if (request?.type === "inventory") {
+      const owned = await loadInventory(request.nickname);
+      await chrome.storage.local.set({ owned, nickname: request.nickname });
+      return owned.length;
+    }
     if (request?.type === "dump") return entries();
     if (request?.type === "count") return count();
     if (request?.type === "clear") {
+      await chrome.storage.local.set({ channels: [] });
       await clear();
       await chrome.action.setBadgeText({ text: "" });
       return true;

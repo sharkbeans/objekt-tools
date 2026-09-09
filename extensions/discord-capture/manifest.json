@@ -16,5 +16,6 @@
       "js": ["content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "optional_host_permissions": ["https://objekt.my/*"]
 }

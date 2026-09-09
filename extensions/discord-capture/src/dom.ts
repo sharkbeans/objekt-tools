@@ -6,7 +6,9 @@ export function readMessage(element: Element, channel: string) {
   if (!match || match[1] !== channel) return null;
   const id = match[2];
   const body = element.querySelector(`[id="message-content-${id}"]`);
-  const time = element.querySelector("time[datetime]");
+  const times = element.querySelectorAll("time[datetime]");
+  if (times.length !== 1) return null;
+  const time = times[0];
   const iso = time?.getAttribute("datetime");
   if (
     !body ||
