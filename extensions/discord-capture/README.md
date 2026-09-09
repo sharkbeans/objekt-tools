@@ -1,6 +1,6 @@
 # Discord capture prototype
 
-Chrome/Chromium MV3 extension, built directly from the shared engine in `src/lib`.
+Chrome/Chromium and Firefox MV3 extension, built directly from the shared engine in `src/lib`.
 
 ```sh
 npm ci
@@ -36,7 +36,7 @@ session was available during implementation.
 
 Direct `/match` IndexedDB handoff is deferred. Chrome documents host-origin storage for
 content scripts, but a real-origin spike is still required before introducing that contract.
-Firefox packaging is deferred; Phase 4 search awaits a week of Phase 3 usage and an owner
+Phase 4 search awaits a week of Phase 3 usage and an owner
 decision. Phase 5 pooling remains deferred.
 
 ## Transcript handoff
@@ -77,3 +77,26 @@ All are implemented; the live two-minute capture check and subsequent week of re
 remain manual acceptance steps. No Phase 4/5 implementation or direct-origin storage write
 is included. Parser changes should bump the extension version; persisted parsed entries
 currently use the initial parser schema, so clear/re-capture after incompatible engine changes.
+
+## Firefox
+
+Run `npm run extension:build:firefox`. In Firefox 128 or newer, open
+`about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select
+`extensions/discord-capture/dist-firefox/manifest.json`. Reload Discord, then enable
+capture for the trade channel using the extension popup. If Firefox shows the extension
+as needing site access, grant access to Discord from the Extensions menu and reload.
+
+The Firefox build uses an MV3 background event page and Firefox's Promise-based
+`browser` API. The parser, storage and UI are shared with Chromium. After source changes,
+rebuild, click **Reload** in about:debugging, and reload Discord. Temporary add-ons are
+removed when Firefox restarts; load the manifest again to resume testing. Export before
+ending the test session. Permanent installation requires a Mozilla-signed package,
+which this local prototype does not include.
+
+Mozilla references: [temporary installation](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/),
+[MV3 background differences](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background).
+
+Firefox package validation (`npx web-ext lint --source-dir extensions/discord-capture/dist-firefox`)
+passes with no errors. It reports one store-readiness warning for the missing data-collection
+permission declaration; settle the declaration and nickname-lookup consent before signing
+or submitting a permanent package. This does not prevent temporary local testing.

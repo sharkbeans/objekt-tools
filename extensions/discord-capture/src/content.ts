@@ -1,4 +1,5 @@
 import { indexOwned, matchTranscript } from "@/lib/discord/match";
+import { extensionApi } from "./browser";
 import { MESSAGE_SELECTOR, readMessage } from "./dom";
 import { inventoryRows } from "./inventory";
 import { channelIds } from "./settings";
@@ -36,7 +37,7 @@ async function scan(element: Element) {
   if (seen.get(element) === signature) return;
   pending.add(element);
   try {
-    const response = await chrome.runtime.sendMessage({
+    const response = await extensionApi.runtime.sendMessage({
       type: "capture",
       block: { ...message, time: message.time.raw },
     });
@@ -106,11 +107,11 @@ function update(settings: Record<string, unknown>) {
     badge.remove();
   visit(document.body);
 }
-chrome.storage.onChanged.addListener((changes, area) => {
+extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   const settings: Record<string, unknown> = {};
   for (const key of ["channels", "owned"])
     if (changes[key]) settings[key] = changes[key].newValue;
   if (Object.keys(settings).length) update(settings);
 });
-void chrome.storage.local.get(["channels", "owned"]).then(update);
+void extensionApi.storage.local.get(["channels", "owned"]).then(update);

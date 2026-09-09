@@ -25,7 +25,8 @@
     "sync-indexer": "tsx scripts/sync-indexer.ts",
     "extension:build": "node extensions/discord-capture/build.mjs",
     "extension:test": "tsx --test extensions/discord-capture/src/*.test.ts",
-    "extension:smoke": "npm run extension:build && node extensions/discord-capture/smoke.mjs"
+    "extension:smoke": "npm run extension:build && node extensions/discord-capture/smoke.mjs",
+    "extension:build:firefox": "node extensions/discord-capture/build.mjs --firefox"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.6.25",
