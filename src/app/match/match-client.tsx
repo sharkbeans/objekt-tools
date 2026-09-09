@@ -98,6 +98,7 @@ import {
 } from "@/lib/match/seen-store";
 import {
   blocksToTranscript,
+  MAX_BLOCKS,
   mergeBlocks,
   type StoredBlock,
 } from "@/lib/match/transcript-blocks";
@@ -246,6 +247,7 @@ export function MatchClient() {
   const [sort, setSort] = useState<"popular" | "member" | "price">("popular");
   const [listLimit, setListLimit] = useState(12);
   const [columns, setColumns] = useState<number>(DEFAULT_COLUMNS);
+  const [storedCount, setStoredCount] = useState(0);
   const [seen, setSeen] = useState<ReadonlySet<SeenId>>(EMPTY_SEEN);
   const [hideSeen, setHideSeen] = useState(true);
   // messageKey -> the SHA-256 ids that identify this post and its author.
@@ -288,6 +290,7 @@ export function MatchClient() {
       .then((saved) => {
         if (cancelled) return;
         blocksRef.current = saved;
+        setStoredCount(saved.length);
         setMessages(analyzeTranscript(blocksToTranscript(saved)).messages);
       })
       .finally(() => {
@@ -364,6 +367,7 @@ export function MatchClient() {
     // overlapping selections, and traders repost the same list constantly.
     const next = mergeBlocks(blocksRef.current, text);
     blocksRef.current = next;
+    setStoredCount(next.length);
     void saveBlocks(next).then((stored) => {
       if (!stored)
         toast.warning(
@@ -659,6 +663,7 @@ export function MatchClient() {
     importStarted.current.clear();
     setMessages([]);
     blocksRef.current = [];
+    setStoredCount(0);
     void clearBlocks();
     setImports(new Map());
     setVerified(new Map());
@@ -900,6 +905,12 @@ export function MatchClient() {
           {selectionCount > 1 && (
             <span className="text-muted-foreground">
               Each post must match every selected card.
+            </span>
+          )}
+          {storedCount >= MAX_BLOCKS && (
+            <span className="text-muted-foreground">
+              Holding the most recent {MAX_BLOCKS.toLocaleString()} posts; older
+              ones are dropped as you paste.
             </span>
           )}
         </p>

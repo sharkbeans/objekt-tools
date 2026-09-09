@@ -13,6 +13,10 @@ const HIDE_KEY = "match:hide-seen:v1";
 const API = "/api/match/seen";
 // Mirrors the route's own cap.
 const MAX_IDS = 500;
+// Each id costs ~144 bytes of the localStorage budget (69 chars of JSON, billed
+// at 2 bytes per UTF-16 unit), so an unbounded list would quietly refill the
+// 5 MB the transcript just vacated. 10,000 is weeks of heavy triaging at 1.4 MB.
+const MAX_STORED = 10_000;
 
 export function loadLocalSeen(): Set<SeenId> {
   try {
@@ -26,7 +30,9 @@ export function loadLocalSeen(): Set<SeenId> {
 
 export function saveLocalSeen(ids: ReadonlySet<SeenId>): void {
   try {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify([...ids]));
+    // Sets keep insertion order, so the tail is what was hidden most recently.
+    const kept = [...ids].slice(-MAX_STORED);
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(kept));
   } catch {
     /* Full or disabled store — the in-memory set still hides for this session. */
   }

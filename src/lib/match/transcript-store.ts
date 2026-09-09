@@ -17,7 +17,7 @@
 // Compression is async, which is the whole reason this module exists rather
 // than a pair of synchronous helpers.
 
-import { mergeBlocks, type StoredBlock } from "./transcript-blocks";
+import { mergeBlocks, type StoredBlock, trimBlocks } from "./transcript-blocks";
 
 const DB_NAME = "objekt-match";
 const STORE_NAME = "kv";
@@ -166,9 +166,13 @@ function clearLegacyRaw(): void {
 export async function loadBlocks(): Promise<StoredBlock[]> {
   let blocks: StoredBlock[] = [];
   try {
-    blocks = await decodeBlocks(
-      await runTransaction<unknown>("readonly", (store) =>
-        store.get(BLOCKS_KEY),
+    // Trim on read too: a store written before the cap existed can be larger
+    // than the load-time budget allows.
+    blocks = trimBlocks(
+      await decodeBlocks(
+        await runTransaction<unknown>("readonly", (store) =>
+          store.get(BLOCKS_KEY),
+        ),
       ),
     );
   } catch {
