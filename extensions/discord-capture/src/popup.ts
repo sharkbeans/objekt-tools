@@ -1,4 +1,6 @@
+import { exportTranscript } from "./export";
 import { channelIds } from "./settings";
+import type { Entry } from "./store";
 
 const status = document.getElementById("status") as HTMLElement;
 async function request(type: string) {
@@ -58,4 +60,14 @@ action("clear", async () => {
 });
 void refresh().catch((error) => {
   status.textContent = error.message;
+});
+
+action("export", async () => {
+  const posts: Entry[] = await request("dump");
+  download(
+    exportTranscript(posts.map((post) => post.block)),
+    "objekt-discord-transcript.txt",
+    "text/plain;charset=utf-8",
+  );
+  status.textContent = "Downloaded. Open /match and choose Import text files.";
 });

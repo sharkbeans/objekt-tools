@@ -42,7 +42,8 @@ const ALL_MEMBERS = Object.values(membersByArtist).flat();
 // CJK/Hangul names, and the stray trailing comma Discord emits after some
 // display names.
 const TIME = String.raw`\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp]\.?[Mm]\.?)?`;
-const WHEN = String.raw`(?:(?:Today|Yesterday)\s+at\s+|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4},?\s+|\d{4}-\d{2}-\d{2},?\s+)?${TIME}`;
+const ISO_TIME = String.raw`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z`;
+const WHEN = String.raw`(?:${ISO_TIME}|(?:(?:Today|Yesterday)\s+at\s+|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4},?\s+|\d{4}-\d{2}-\d{2},?\s+)?${TIME})`;
 // The separator must be surrounded by whitespace, which keeps item lines like
 // "Lynn E317 - 320" from being mistaken for headers (no "H:MM" follows).
 const AUTHOR_LINE = new RegExp(
@@ -374,6 +375,11 @@ export function collect(
 
 /** True when `a` was rendered later than `b`. Same-day clock times only. */
 function after(a: MessageTime, b: MessageTime): boolean {
+  if (a.raw.includes("T") && b.raw.includes("T")) {
+    const left = Date.parse(a.raw);
+    const right = Date.parse(b.raw);
+    if (Number.isFinite(left) && Number.isFinite(right)) return left > right;
+  }
   if (a.minutes === null || b.minutes === null) return false;
   return a.minutes > b.minutes;
 }

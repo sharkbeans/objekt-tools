@@ -38,3 +38,13 @@ Direct `/match` IndexedDB handoff is deferred. Chrome documents host-origin stor
 content scripts, but a real-origin spike is still required before introducing that contract.
 Firefox packaging is deferred; Phase 4 search awaits a week of Phase 3 usage and an owner
 decision. Phase 5 pooling remains deferred.
+
+## Transcript handoff
+
+Choose **Export transcript (.txt)**, open `https://objekt.my/match`, and use **Import text files**.
+The shared parser now accepts ISO UTC timestamps. Deploy this branch's app parser before
+importing into production; older app versions do not recognize these headers.
+Exports validate every author, timestamp and message boundary before downloading. Ambiguous
+header-like body text stops the export rather than inventing another trader. The JSON dump
+remains available for inspection. `/match` retains its 40,000-post cap, so text exports above
+that limit stop with an explanation; the extension itself keeps the complete local index.
