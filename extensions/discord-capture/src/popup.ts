@@ -1,5 +1,11 @@
 import { parseOffering } from "@/lib/discord/match";
 import { extensionApi } from "./browser";
+import {
+  acceptAutomation,
+  acceptCapture,
+  automationAllowed,
+  captureAllowed,
+} from "./consent";
 import { exportTranscript } from "./export";
 import { channelFromUrl, channelIds, isDiscordUrl } from "./settings";
 import type { Entry } from "./store";
@@ -18,6 +24,62 @@ function action(id: string, run: () => Promise<void>) {
     });
   });
 }
+/**
+ * Show only what the user has agreed to.
+ *
+ * Both stores require the disclosure to be in the extension's own UI and to be
+ * agreed to before anything is collected, so the rest of the interface stays
+ * out of the way until it is — a paused-looking capture panel above an
+ * un-read disclosure is exactly the "surprise" the policies are about.
+ */
+function showSections(consent: unknown) {
+  const capture = captureAllowed(consent);
+  const automation = automationAllowed(consent);
+  const show = (id: string, on: boolean) => {
+    const element = document.getElementById(id);
+    if (element) element.hidden = !on;
+  };
+  show("consent", !capture);
+  for (const id of [
+    "step-inventory",
+    "step-wants",
+    "step-match",
+    "step-trouble",
+  ])
+    show(id, capture);
+  show("automation-gate", capture && !automation);
+  show("search-section", capture && automation);
+}
+
+async function readConsentSetting(): Promise<unknown> {
+  const { consent } = await extensionApi.storage.local.get("consent");
+  return consent;
+}
+
+action("accept-capture", async () => {
+  const consent = acceptCapture(await readConsentSetting());
+  await extensionApi.storage.local.set({ consent });
+  showSections(consent);
+  await refresh();
+});
+
+action("accept-automation", async () => {
+  const consent = acceptAutomation(await readConsentSetting());
+  await extensionApi.storage.local.set({ consent });
+  showSections(consent);
+});
+
+action("withdraw", async () => {
+  if (
+    !confirm(
+      "Stop reading Discord and forget your agreement? Posts already captured are kept — clear them separately if you want them gone.",
+    )
+  )
+    return;
+  await extensionApi.storage.local.remove("consent");
+  showSections(undefined);
+});
+
 /** The search whose posts the export is scoped to, or null before any search. */
 async function currentRun(): Promise<string | null> {
   const { searchRunId } = await extensionApi.storage.local.get("searchRunId");
@@ -101,6 +163,7 @@ action("clear", async () => {
     await refresh();
   }
 });
+void readConsentSetting().then(showSections);
 void refresh().catch((error) => {
   status.textContent = error.message;
 });
@@ -355,6 +418,8 @@ action("stop-search", async () => {
 
 extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
+  // Another window of this panel may have agreed, or withdrawn.
+  if (changes.consent) showSections(changes.consent.newValue);
   if (changes.searchProgress) {
     searchStatus.textContent = describe(changes.searchProgress.newValue);
     tally(changes.searchProgress.newValue);

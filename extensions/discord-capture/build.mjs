@@ -1,4 +1,10 @@
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { build } from "esbuild";
 
 const root = new URL("./", import.meta.url);
@@ -12,7 +18,7 @@ await build({
   outdir: new URL(`${output}/`, root).pathname,
   bundle: true,
   platform: "browser",
-  target: firefox ? "firefox128" : ["chrome121", "firefox128"],
+  target: firefox ? "firefox128" : "chrome116",
   format: "iife",
   tsconfig: "tsconfig.json",
 });
@@ -26,11 +32,14 @@ manifest.version_name = `${manifest.version} · built ${new Date()
   .toISOString()
   .slice(0, 16)
   .replace("T", " ")}Z`;
+// One manifest per store, rather than one that carries both and draws a
+// "unrecognized key" warning wherever it is loaded. Reviewers read these.
 if (firefox) {
+  // Firefox's MV3 background is an event page; it has no service worker.
   manifest.background = { scripts: ["background.js"] };
-  manifest.browser_specific_settings = {
-    gecko: { id: "discord-capture@objekt.my", strict_min_version: "128.0" },
-  };
+  delete manifest.minimum_chrome_version;
+} else {
+  delete manifest.browser_specific_settings;
 }
 await writeFile(
   new URL(`${output}/manifest.json`, root),
@@ -40,6 +49,13 @@ await copyFile(
   new URL("popup.html", root),
   new URL(`${output}/popup.html`, root),
 );
+await mkdir(new URL(`${output}/icons/`, root), { recursive: true });
+for (const icon of await readdir(new URL("icons/", root)))
+  if (icon.endsWith(".png"))
+    await copyFile(
+      new URL(`icons/${icon}`, root),
+      new URL(`${output}/icons/${icon}`, root),
+    );
 
 console.log(
   `Load the built extension from ${new URL(`${output}/manifest.json`, root).pathname}`,

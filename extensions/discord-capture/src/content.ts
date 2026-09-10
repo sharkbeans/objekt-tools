@@ -5,6 +5,7 @@ import {
   parseOffering,
 } from "@/lib/discord/match";
 import { extensionApi } from "./browser";
+import { automationAllowed, captureAllowed } from "./consent";
 import {
   MESSAGE_BODY,
   MESSAGE_SELECTOR,
@@ -82,7 +83,7 @@ const unreadableSince = new Map<string, number>();
 const UNREADABLE_GRACE_MS = 1500;
 
 async function scan(element: Element) {
-  if (pending.has(element)) return;
+  if (!watching || pending.has(element)) return;
   const message = readMessage(element);
   // The channel toggle governs passive browsing of a channel. A search result
   // is here because the user asked for it by name, so it is kept wherever in
@@ -173,14 +174,35 @@ const observer = new MutationObserver((records) => {
     for (const node of record.addedNodes) visit(node);
   }
 });
-observer.observe(document.body, {
-  childList: true,
-  subtree: true,
-  characterData: true,
-  attributes: true,
-  attributeFilter: ["id", "datetime", "aria-labelledby"],
-});
+/**
+ * Nothing observes the page until the user has agreed to capture.
+ *
+ * The disclosure requirement is about handling, not only about storing: an
+ * observer that reads message bodies and decides they are unreadable has still
+ * read them. So the observer is attached on consent and detached when it is
+ * withdrawn, rather than left running behind a flag.
+ */
+let watching = false;
+function watch(on: boolean) {
+  if (on === watching) return;
+  watching = on;
+  if (!on) {
+    observer.disconnect();
+    for (const badge of document.querySelectorAll("objekt-match-badge"))
+      badge.remove();
+    return;
+  }
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["id", "datetime", "aria-labelledby"],
+  });
+}
+let consent: unknown;
 function update(settings: Record<string, unknown>) {
+  if ("consent" in settings) consent = settings.consent;
   if ("channels" in settings) channels = channelIds(settings.channels);
   if ("owned" in settings) {
     try {
@@ -205,7 +227,13 @@ function update(settings: Record<string, unknown>) {
   unreadableSince.clear();
   for (const badge of document.querySelectorAll("objekt-match-badge"))
     badge.remove();
-  visit(document.body);
+  const allowed = captureAllowed(consent);
+  // Withdrawing consent mid-run stops the run as well as the reading.
+  if (!allowed) searchSignal.cancelled = true;
+  watch(allowed);
+  // Re-reads what is already on screen, so enabling a channel or changing the
+  // haves list takes effect without waiting for Discord to render something.
+  if (allowed) visit(document.body);
 }
 // A full run outlives the popup, which closes as soon as it loses focus, so
 // progress goes to storage and the popup reads it whenever it reopens.
@@ -280,6 +308,17 @@ const captureProbe: CaptureProbe = {
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
   if (request?.type === "diagnose") {
+    // Structure only, and only once capture has been agreed to: the readable
+    // count is produced by parsing message bodies, which is the thing consent
+    // governs.
+    if (!captureAllowed(consent)) {
+      reply({
+        ok: false,
+        error:
+          "Agree to capture first — nothing on the page is read before that.",
+      });
+      return true;
+    }
     // Reports which layer is failing: no reply at all means the content script
     // is not running; zero elements means the selector no longer matches
     // Discord's DOM; elements but nothing readable means the author/time
@@ -377,6 +416,14 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     return true;
   }
   if (request?.type !== "run-search") return;
+  if (!automationAllowed(consent)) {
+    reply({
+      ok: false,
+      error:
+        "Agree to run searches in the extension panel first — it types into Discord's own search box on your behalf.",
+    });
+    return true;
+  }
   if (searching) {
     reply({ ok: false, error: "A search run is already in progress." });
     return true;
@@ -436,10 +483,10 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
 extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   const settings: Record<string, unknown> = {};
-  for (const key of ["channels", "owned", "wants"])
+  for (const key of ["consent", "channels", "owned", "wants"])
     if (changes[key]) settings[key] = changes[key].newValue;
   if (Object.keys(settings).length) update(settings);
 });
 void extensionApi.storage.local
-  .get(["channels", "owned", "wants"])
+  .get(["consent", "channels", "owned", "wants"])
   .then(update);
