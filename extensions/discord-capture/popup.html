@@ -18,6 +18,11 @@ input[type=range]{padding:0;height:24px;background:transparent;border:0;accent-c
 .tally{font-size:12px;color:#a1a1aa}
 .tally strong{font-size:20px;color:#a5b4fc;font-variant-numeric:tabular-nums;margin-right:4px}
 #status,#search-status,#inventory-status{white-space:pre-wrap;font-size:12px}
+#consent{border:1px solid #4338ca;border-radius:8px;padding:12px;background:#1e1b4b}
+#consent h2{color:#c7d2fe}
+#consent ul{margin:6px 0;padding-left:18px;color:#d4d4d8;font-size:12px}
+#consent li{margin:3px 0}
+.warn{border:1px solid #854d0e;background:#27200a;border-radius:8px;padding:10px;font-size:12px;color:#fde68a;margin:8px 0}
 #search-status{color:#c7d2fe}
 details{margin-top:10px;border-top:1px solid #27272a;padding-top:10px}
 summary{cursor:pointer;font-size:12px;color:#a1a1aa}
@@ -26,7 +31,26 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
 <h1>objekt.my capture</h1>
 <p class="hint">Posts stay in this browser. Nothing is sent to Discord.</p>
 
-<section>
+<section id="consent" hidden>
+  <h2>Before you start</h2>
+  <p class="hint">This extension reads Discord posts you can already see, so you need to
+  agree to that first. Here is exactly what it does:</p>
+  <ul>
+    <li><strong>Collects</strong> the author name, text and timestamp of messages in the
+    channels you switch on — nothing else, and only while you are looking at them.</li>
+    <li><strong>Stores</strong> them in this browser (IndexedDB), on your device.</li>
+    <li><strong>Sends nothing anywhere</strong> on its own. Exports are files you download
+    and hand to objekt.my/match yourself.</li>
+    <li><strong>Optionally</strong> asks objekt.my for the objekts owned by a Cosmo nickname
+    you type. That is the only network request, and only when you press the button.</li>
+    <li>Never reads your Discord token, calls Discord's API, or sends anything to Discord.</li>
+  </ul>
+  <p class="hint">Full detail: <a id="privacy" href="https://objekt.my/extension-privacy" target="_blank" rel="noreferrer">privacy policy</a>.
+  Other people's posts are their words — keep the export to yourself and delete it when you are done.</p>
+  <button type="button" id="accept-capture">I agree — start capturing</button>
+</section>
+
+<section id="step-inventory">
   <h2>1 · Your objekts</h2>
   <label for="nickname">Cosmo nickname</label>
   <input id="nickname" autocomplete="off" maxlength="30" placeholder="yourcosmoname">
@@ -37,7 +61,7 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <p id="inventory-status" role="status"></p>
 </section>
 
-<section>
+<section id="step-wants">
   <h2>2 · What to look for</h2>
   <label for="wants">One objekt per line</label>
   <textarea id="wants" placeholder="SeoYeon CC101&#10;Mayu AA101&#10;Hayeon BB401"></textarea>
@@ -49,7 +73,19 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <p class="hint"><strong>Fastest</strong> moves on the moment every post on a page is recorded &mdash; no fixed wait. Drag right to add a pause on top if Discord starts rate-limiting.</p>
 </section>
 
-<section>
+<section id="automation-gate" hidden>
+  <h2>3 · Search Discord</h2>
+  <div class="warn">
+    <strong>Read this first.</strong> Searching types your objekt codes into Discord's own
+    search box for you and clicks through the results — that is automation of your account,
+    which <a href="https://discord.com/terms" target="_blank" rel="noreferrer">Discord's terms</a>
+    do not allow. Discord may action accounts for it. Capture on its own (just browsing the
+    channel) does not do this.
+  </div>
+  <button type="button" id="accept-automation">I understand the risk — enable search</button>
+</section>
+
+<section id="search-section">
   <h2>3 · Search Discord</h2>
   <p class="hint">Open your trade channel, then run. Searches by objekt code (<code>CC101</code>) — the member name is matched here instead, since searching it floods Discord with unrelated posts. Keep the tab on Discord.</p>
   <button type="button" id="run-search">Search my wants</button>
@@ -58,15 +94,16 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <p id="search-status" role="status"></p>
 </section>
 
-<section>
+<section id="step-match">
   <h2>4 · Match them</h2>
   <p id="status" role="status">Loading…</p>
   <button type="button" id="export">Export this search (.txt)</button>
   <p class="hint"><a href="https://objekt.my/match" target="_blank" rel="noreferrer">Open objekt.my/match</a> → <strong>Import text files</strong> → pick the download.</p>
 </section>
 
-<details>
+<details id="step-trouble">
   <summary>Troubleshooting</summary>
+  <button type="button" class="secondary" id="withdraw">Withdraw consent &amp; stop reading Discord</button>
   <p class="hint">Loaded build: <code id="build">…</code><br>After rebuilding, reload the extension <em>and</em> refresh the Discord tab — an open tab keeps the old content script.</p>
   <button type="button" class="secondary" id="toggle">Enable / pause capture here</button>
   <button type="button" class="secondary" id="diagnose">Check this tab</button>

@@ -1,4 +1,5 @@
 import { extensionApi } from "./browser";
+import { automationAllowed, captureAllowed } from "./consent";
 import { loadInventory } from "./inventory";
 import { channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
@@ -18,6 +19,19 @@ function isBlock(
     typeof b.time === "string" &&
     Number.isFinite(Date.parse(b.time))
   );
+}
+/**
+ * Publish the index size to the toolbar badge and to storage.
+ *
+ * The badge is for the user; the storage copy is how an open panel learns that
+ * a post landed. A panel has no way to observe IndexedDB on the worker's
+ * origin, and polling for a number that changes in bursts is worse than one
+ * write per post.
+ */
+async function publishCount(): Promise<void> {
+  const total = await count();
+  await extensionApi.action.setBadgeText({ text: String(total) });
+  await extensionApi.storage.local.set({ captured: total });
 }
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
@@ -52,6 +66,15 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       messageId &&
       isBlock(request.block)
     ) {
+      // Defence in depth. The content script does not read a message body
+      // before consent is recorded, so nothing should reach here without it —
+      // but a stale content script from before an upgrade would not know that,
+      // and this is the last point where a post can still be refused.
+      const consent = await extensionApi.storage.local.get("consent");
+      if (!captureAllowed(consent.consent))
+        throw new Error("Capture has not been agreed to yet");
+      if (fromSearch && !automationAllowed(consent.consent))
+        throw new Error("Search has not been agreed to yet");
       if (!fromSearch) {
         const settings = await extensionApi.storage.local.get("channels");
         const channels = channelIds(settings.channels);
@@ -74,7 +97,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
         throw new Error("Could not save captured post");
       }
       await extensionApi.storage.local.remove("captureError");
-      await extensionApi.action.setBadgeText({ text: String(await count()) });
+      await publishCount();
       return entry;
     }
     if (!popup) throw new Error("Unsupported request");
@@ -95,6 +118,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       // button name gave no hint that it would.
       await clear();
       await extensionApi.action.setBadgeText({ text: "" });
+      await extensionApi.storage.local.set({ captured: 0 });
       return true;
     }
     throw new Error("Unsupported request");

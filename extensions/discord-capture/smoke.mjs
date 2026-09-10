@@ -44,9 +44,24 @@ try {
   await render();
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${id}/popup.html`);
+  // Nothing may be read before the disclosure is agreed to, so the index is
+  // empty however many posts are on screen, and the working UI is not shown.
+  await popup.waitForFunction(() =>
+    document.getElementById("status").textContent.includes("Nothing captured"),
+  );
+  assert.equal(await popup.locator("#consent").isVisible(), true);
+  assert.equal(await popup.locator("#step-wants").isVisible(), false);
+  assert.equal(await page.locator("objekt-match-badge").count(), 0);
+  await popup.locator("#accept-capture").click();
+  // Agreeing attaches the observer, which sweeps what is already rendered —
+  // the page is deliberately not re-rendered here.
   await popup.waitForFunction(() =>
     document.getElementById("status").textContent.includes("1 post ready"),
   );
+  assert.equal(await popup.locator("#consent").isVisible(), false);
+  // Capture consent alone must not unlock search automation.
+  assert.equal(await popup.locator("#automation-gate").isVisible(), true);
+  assert.equal(await popup.locator("#search-section").isVisible(), false);
   // Use the actual typed-haves surface so collection key syntax stays shared.
   await popup.locator("#haves").fill("YooYeon CC109");
   await popup.locator("#save-haves").click();
@@ -74,9 +89,31 @@ try {
   await popup.waitForFunction(() =>
     document.getElementById("status").textContent.includes("1 post ready"),
   );
+  // Withdrawing detaches the reader: the badge goes, and a fresh post is not
+  // taken even with the channel enabled.
+  await worker.evaluate(() => chrome.storage.local.set({ channels: ["123"] }));
+  await popup.locator("#step-trouble > summary").click();
+  popup.once("dialog", (dialog) => dialog.accept());
+  await popup.locator("#withdraw").click();
+  await popup.waitForFunction(() =>
+    document.getElementById("consent").checkVisibility(),
+  );
+  await page.waitForFunction(
+    () => !document.querySelector("objekt-match-badge"),
+  );
+  await page.evaluate(() => {
+    document.getElementById("messages").insertAdjacentHTML(
+      "beforeend",
+      '<li id="chat-messages-123-789" aria-labelledby="message-username-789"><span id="message-username-789">Other</span><time datetime="2026-09-09T04:00:00.000Z"></time><div id="message-content-789">HAVE YooYeon CC109</div></li>',
+    );
+  });
+  await popup.reload();
+  await popup.waitForFunction(() =>
+    document.getElementById("status").textContent.includes("1 post ready"),
+  );
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: MV3 capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause.",
+    "PASS: consent gate, MV3 capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();
