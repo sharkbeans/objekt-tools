@@ -3,7 +3,7 @@ import test from "node:test";
 import { JSDOM } from "jsdom";
 import "fake-indexeddb/auto";
 import { readMessage } from "./dom";
-import { capture, clear, entries } from "./store";
+import { capture, clear, count, entries } from "./store";
 
 function fixture(extra = "") {
   return new JSDOM(
@@ -107,4 +107,84 @@ test("the same message keeps one row when Discord appends a server tag", async (
   assert.equal(stored[0].block.author, "pbrihu");
   assert.equal(stored[0].parsed.author, "pbrihu");
   await clear();
+});
+
+// A search result as Discord actually renders it: a plain <li> with no
+// chat-messages wrapper, so no channel in the row id — the shape that made an
+// entire index turn out to contain nothing but the open channel.
+function searchResult(
+  link = '<a href="/channels/700/800/456">#objekt-trade</a>',
+) {
+  return new JSDOM(
+    `<ol><li>${link}<span id="message-username-456">Trader</span><span id="message-timestamp-456"><time datetime="2026-09-09T03:41:00.000Z"></time></span><div id="message-content-456">HAVE<br>YooYeon CC101</div></li></ol>`,
+  ).window.document;
+}
+
+test("reads a search result that has no chat-messages wrapper", () => {
+  const message = readMessage(searchResult().querySelector("li") as Element);
+  assert.equal(message?.source, "search");
+  assert.equal(message?.id, "456");
+  assert.equal(message?.author, "Trader");
+  assert.equal(message?.time.raw, "2026-09-09T03:41:00.000Z");
+  assert.match(message?.body ?? "", /HAVE\nYooYeon CC101/);
+  // The channel survives only through the link back to where it was posted —
+  // /channels/<guild>/<channel>/<message>, so the second segment.
+  assert.equal(message?.channel, "800");
+});
+
+test("a result still reads when Discord links no channel", () => {
+  // Captured anyway: the user searched for it, so there is no channel filter to
+  // apply. Only the channel it came from is lost.
+  const message = readMessage(searchResult("").querySelector("li") as Element);
+  assert.equal(message?.source, "search");
+  assert.equal(message?.channel, null);
+  assert.equal(message?.author, "Trader");
+});
+
+test("channel rows keep naming their own channel", () => {
+  const message = readMessage(fixture().querySelector("li") as Element);
+  assert.equal(message?.source, "channel");
+  assert.equal(message?.channel, "123");
+});
+
+test("a container holding several messages is not read as one row", () => {
+  // Fail closed: two bodies means this is a list, and attributing either one to
+  // the other's author or timestamp would fabricate a post.
+  const doc = searchResult();
+  doc
+    .querySelector("li")
+    ?.insertAdjacentHTML(
+      "beforeend",
+      '<div id="message-content-457">other</div>',
+    );
+  assert.equal(readMessage(doc.querySelector("li") as Element), null);
+});
+
+test("scopes posts to the search run that found them", async () => {
+  await clear();
+  const message = readMessage(fixture().querySelector("li") as Element);
+  assert.ok(message);
+  const block = {
+    author: message.author,
+    body: message.body,
+    time: message.time.raw,
+  };
+  // Browsing a channel tags nothing: those posts are not part of any search.
+  await capture(block, "123-456");
+  assert.equal(await count(), 1);
+  assert.equal(await count("run-a"), 0);
+
+  // The same post surfaced by a search belongs to that search, even though it
+  // was already in the index — otherwise a re-found post would be missing from
+  // the export of the run that found it.
+  await capture(block, "123-456", "run-a");
+  assert.equal(await count(), 1, "must not duplicate the post");
+  assert.equal(await count("run-a"), 1);
+
+  // A later run takes it over; the earlier run's export is not the current one.
+  await capture(block, "123-456", "run-b");
+  assert.equal(await count("run-a"), 0);
+  assert.equal(await count("run-b"), 1);
+  const stored = await entries();
+  assert.equal(stored[0].run, "run-b");
 });

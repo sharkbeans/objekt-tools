@@ -30,6 +30,16 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     typeof request?.channel === "string" && /^\d+$/.test(request.channel)
       ? request.channel
       : null;
+  // A search result is kept wherever it was posted; only channel browsing is
+  // gated on the enabled list. Results also reach here with no channel at all
+  // when Discord does not link one, which is why the key falls back to the
+  // message id — unique on its own, since it is a snowflake.
+  const fromSearch = request?.source === "search";
+  // Which search produced this post, so the export can be scoped to it.
+  const searchRun =
+    fromSearch && typeof request?.run === "string" && request.run
+      ? request.run
+      : undefined;
   const messageId =
     typeof request?.id === "string" && /^\d+$/.test(request.id)
       ? request.id
@@ -38,16 +48,23 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     if (
       request?.type === "capture" &&
       fromDiscord &&
-      channel &&
+      (channel || fromSearch) &&
       messageId &&
       isBlock(request.block)
     ) {
-      const settings = await extensionApi.storage.local.get("channels");
-      const channels = channelIds(settings.channels);
-      if (!channels.includes(channel)) throw new Error("Capture is paused");
+      if (!fromSearch) {
+        const settings = await extensionApi.storage.local.get("channels");
+        const channels = channelIds(settings.channels);
+        if (!channel || !channels.includes(channel))
+          throw new Error("Capture is paused");
+      }
       let entry: Entry;
       try {
-        entry = await capture(request.block, `${channel}-${messageId}`);
+        entry = await capture(
+          request.block,
+          channel ? `${channel}-${messageId}` : messageId,
+          searchRun,
+        );
       } catch {
         await extensionApi.action.setBadgeText({ text: "!" });
         await extensionApi.storage.local.set({
@@ -70,7 +87,8 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       return owned.length;
     }
     if (request?.type === "dump") return entries();
-    if (request?.type === "count") return count();
+    if (request?.type === "count")
+      return count(typeof request.run === "string" ? request.run : undefined);
     if (request?.type === "clear") {
       // Clears posts only. Pausing capture is a separate, deliberate action —
       // wiping the enabled channels here silently stopped collection and the

@@ -19,6 +19,13 @@ await build({
 const manifest = JSON.parse(
   await readFile(new URL("manifest.json", root), "utf8"),
 );
+// Reloading the extension leaves the old content script running in any Discord
+// tab that is already open, so "did my change take effect" is not answerable by
+// looking at the UI. Stamping the build makes it answerable.
+manifest.version_name = `${manifest.version} · built ${new Date()
+  .toISOString()
+  .slice(0, 16)
+  .replace("T", " ")}Z`;
 if (firefox) {
   manifest.background = { scripts: ["background.js"] };
   manifest.browser_specific_settings = {

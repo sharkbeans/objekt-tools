@@ -1,18 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { JSDOM } from "jsdom";
+import { rowKey } from "./dom";
 import {
+  type CaptureProbe,
+  commitSearch,
   currentPage,
   findNextPage,
   findSearchBox,
+  findSubmitOption,
+  resultRows,
+  resultsPanel,
+  rowSignature,
   runSearches,
   searchQueries,
+  settlePage,
   submitSearch,
   typeQuery,
 } from "./search";
 
-const SEARCH_BOX =
-  '<div role="combobox" contenteditable="true" aria-label="Search tripleS"></div>';
+// Discord paints a placeholder inside the editable whenever Slate's model is
+// empty, and hides it as soon as the model has content. That is the only signal
+// there is for whether the editor took what was typed, so the fixture has to
+// have one or the tests are checking markup the real thing does not have.
+const PLACEHOLDER = '<span data-slate-placeholder="true">Search tripleS</span>';
+const SEARCH_BOX = `<div role="combobox" contenteditable="true" aria-label="Search tripleS">${PLACEHOLDER}</div>`;
 // The message composer: same contenteditable shape, must never be typed into.
 const COMPOSER =
   '<div role="textbox" contenteditable="true" aria-label="Message #objekt-trade"></div>';
@@ -25,11 +37,31 @@ function page(html = SEARCH_BOX) {
     configurable: true,
     writable: true,
     value: (command: string, _ui: boolean, text: string) => {
-      if (command !== "insertText") return false;
+      const target = doc.activeElement ?? doc.body;
+      const selection = doc.defaultView?.getSelection();
       // Mimic Slate: nested spans plus a zero-width placeholder, so the
       // field's textContent never equals the typed string exactly.
-      const target = doc.activeElement ?? doc.body;
-      target.innerHTML = `<span data-slate-node="text"><span data-slate-string="true">${text}</span></span>\uFEFF`;
+      const write = (value: string) => {
+        target.innerHTML = `${value ? "" : PLACEHOLDER}<span data-slate-node="text"><span data-slate-string="true">${value}</span></span>\uFEFF`;
+        // The caret ends up after what was written, so the next insert appends
+        // rather than replacing — which is what makes per-character typing
+        // spell a word instead of leaving only its last letter.
+        selection?.removeAllRanges();
+      };
+      if (command === "delete") {
+        write("");
+        return true;
+      }
+      if (command !== "insertText") return false;
+      const replacing =
+        (selection?.rangeCount ?? 0) > 0 && selection?.isCollapsed === false;
+      const existing = replacing
+        ? ""
+        : (
+            target.querySelector('[data-slate-string="true"]')?.textContent ??
+            ""
+          ).replace(/[\u200B-\u200D\uFEFF]/g, "");
+      write(existing + text);
       return true;
     },
   });
@@ -98,6 +130,9 @@ test("types through insertText so Slate keeps the text", async () => {
   assert.deepEqual(await typeQuery(box, "SeoYeon CC101", now), {
     ok: true,
     seen: "SeoYeon CC101",
+    via: "insertText",
+    index: 0,
+    tried: ["insertText"],
   });
   // A second query replaces the first rather than appending.
   assert.equal((await typeQuery(box, "Mayu CC103", now)).ok, true);
@@ -163,10 +198,28 @@ test("submits every query in order, pacing between them", async () => {
     },
   });
   assert.deepEqual(submitted, ["A CC1", "B CC2", "C CC3"]);
-  assert.deepEqual(run, { done: 3, stopped: null });
-  // One wait per page per query, including after the last: that pause is when
-  // the results render and the capture observer sees them.
-  assert.deepEqual(waits, [3000, 3000, 3000]);
+  assert.deepEqual(run, {
+    done: 3,
+    stopped: null,
+    pagesWalked: 3,
+    pagerNote: null,
+    posts: 0,
+    unsettled: 0,
+    unchanged: 0,
+    settleNote: null,
+    submittedBy: { option: 0, enter: 3 },
+    retried: 0,
+    empty: 0,
+    typedBy: { insertText: 3 },
+  });
+  // One pacing wait per page per query, including after the last: that pause is
+  // when the results render and the capture observer sees them. The shorter
+  // waits mixed in are the poll for Discord's "Search for …" row and the
+  // retype that follows when it never appears.
+  assert.deepEqual(
+    waits.filter((ms) => ms === 3000),
+    [3000, 3000, 3000],
+  );
 });
 
 test("stops immediately when cancelled", async () => {
@@ -204,7 +257,12 @@ test("stops rather than firing blind when the UI changes shape", async () => {
     wait: async () => {},
   });
   assert.equal(rejected.done, 0);
-  assert.match(rejected.stopped ?? "", /did not accept "A CC1"/);
+  assert.match(rejected.stopped ?? "", /would not take "A CC1"/);
+  // Names every insertion it tried, which is the difference between "Discord
+  // changed" and "this browser needs a different one". The order rotates with
+  // the attempt, so assert on membership rather than sequence.
+  for (const insertion of ["insertText", "beforeinput", "paste"])
+    assert.match(rejected.stopped ?? "", new RegExp(insertion));
 });
 
 test("recognises Discord's hosts and channel URLs", async () => {
@@ -335,7 +393,11 @@ test("a missing pager ends that query without abandoning the rest", async () => 
     wait: async () => {},
   });
   // Both queries still submitted, just one page each.
-  assert.deepEqual(run, { done: 2, stopped: null });
+  assert.equal(run.done, 2);
+  assert.equal(run.stopped, null);
+  // One page each, and it says why it went no further.
+  assert.equal(run.pagesWalked, 2);
+  assert.match(run.pagerNote ?? "", /no Next control/);
 });
 
 test("stops paging the moment it is cancelled", async () => {
@@ -361,4 +423,748 @@ test("stops paging the moment it is cancelled", async () => {
   assert.equal(run.stopped, "Cancelled.");
   // Cancelled part way, not after exhausting all ten pages.
   assert.ok(current < 10, `stopped at page ${current}`);
+});
+
+test("counts the pages it really walked, not the ones requested", async () => {
+  const doc = page(SEARCH_BOX + PAGER);
+  let current = 1;
+  const mark = () => {
+    doc.querySelector('[aria-current="page"]')?.removeAttribute("aria-current");
+    doc
+      .querySelector(`[aria-label="Page ${current}"]`)
+      ?.setAttribute("aria-current", "page");
+  };
+  doc.querySelector('[rel="next"]')?.addEventListener("click", () => {
+    current += 1;
+    mark();
+  });
+  // A new query resets the pager to page one, the way Discord does.
+  doc.addEventListener("keydown", () => {
+    current = 1;
+    mark();
+  });
+  const run = await runSearches(doc, ["CC101", "CC102"], {
+    delayMs: 0,
+    pages: 3,
+    signal: { cancelled: false },
+    wait: async () => {},
+  });
+  assert.equal(run.pagesWalked, 6);
+  assert.equal(run.pagerNote, null);
+});
+
+test("says so when the pager refuses to advance", async () => {
+  // Pager present but frozen: the run must not silently report success.
+  const run = await runSearches(page(SEARCH_BOX + PAGER), ["CC101"], {
+    delayMs: 0,
+    pages: 4,
+    signal: { cancelled: false },
+    wait: async () => {},
+  });
+  assert.equal(run.pagesWalked, 1);
+  assert.match(run.pagerNote ?? "", /did not leave page 1/);
+});
+
+// Discord's real markup, as measured on a live results page: a channel row is
+// an <li id="chat-messages-<channel>-<id>">, while a search result is a plain
+// <li> with no channel anywhere in it. Both carry a message body whose id
+// embeds the message id, and that is the only anchor they share.
+const CHANNEL_ROW = (id: string) =>
+  `<li id="chat-messages-111-${id}"><div id="message-content-${id}"></div></li>`;
+const RESULT_ROW = (id: string) =>
+  `<li><div id="message-content-${id}"></div></li>`;
+const rowId = (id: string) => `message-content-${id}`;
+const panel = (ids: string[], current = 1) =>
+  `<div id="search-results">${ids.map(RESULT_ROW).join("")}${pager(current, 3)}</div>`;
+const probeOf = (recorded: Set<string>): CaptureProbe => ({
+  account: (rows) => {
+    const tally = { recorded: 0, pending: 0, unreadable: 0 };
+    for (const row of rows)
+      if (recorded.has(rowKey(row))) tally.recorded++;
+      else tally.pending++;
+    return tally;
+  },
+  posts: () => recorded.size,
+});
+
+test("settles on the results panel, not the channel list behind it", () => {
+  // A busy trade channel takes new posts the whole time a run is going; waiting
+  // on those would mean no page ever looks finished.
+  const doc = page(
+    SEARCH_BOX +
+      `<div id="channel">${CHANNEL_ROW("900")}</div>` +
+      panel(["1", "2"]),
+  );
+  assert.equal(resultsPanel(doc)?.id, "search-results");
+  // Result rows carry no id of their own, so they are keyed by their body.
+  assert.deepEqual(resultRows(doc).map(rowKey), [rowId("1"), rowId("2")]);
+});
+
+test("finds the results panel through the pager when the id is gone", () => {
+  // No class names: the pager only ever renders inside the panel, so its
+  // nearest ancestor holding messages is the panel.
+  const doc = page(
+    `${SEARCH_BOX}<div id="channel">${CHANNEL_ROW("900")}</div><aside><div>${RESULT_ROW("1")}${pager()}</div></aside>`,
+  );
+  const found = resultsPanel(doc);
+  assert.ok(found);
+  assert.deepEqual(
+    [...found.querySelectorAll('[id^="message-content-"]')].map(
+      (row) => row.id,
+    ),
+    [rowId("1")],
+  );
+});
+
+test("holds the page open until every post on it is recorded", async () => {
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const recorded = new Set<string>();
+  let polls = 0;
+  const settled = await settlePage(doc, {
+    page: 1,
+    before: "",
+    probe: probeOf(recorded),
+    wait: async () => {
+      // Capture lands late, which is exactly what a fixed delay used to page
+      // straight past.
+      if (++polls === 3) {
+        recorded.add(rowId("1"));
+        recorded.add(rowId("2"));
+      }
+    },
+  });
+  assert.deepEqual(settled, {
+    panel: true,
+    rendered: 2,
+    recorded: 2,
+    unreadable: 0,
+    outstanding: 0,
+    settled: true,
+    changed: true,
+  });
+  assert.ok(polls >= 4, `settled after only ${polls} polls`);
+});
+
+test("gives up on a page it cannot confirm, and says how much was left", async () => {
+  let polls = 0;
+  const settled = await settlePage(page(SEARCH_BOX + panel(["1", "2"])), {
+    page: 1,
+    before: "",
+    probe: probeOf(new Set()),
+    wait: async () => {
+      polls++;
+    },
+    pollMs: 100,
+    budgetMs: 500,
+  });
+  assert.deepEqual(settled, {
+    panel: true,
+    rendered: 2,
+    recorded: 0,
+    unreadable: 0,
+    outstanding: 2,
+    settled: false,
+    changed: true,
+  });
+  assert.equal(polls, 5, "should stop at the budget, not poll forever");
+});
+
+test("will not call a page done while the pager is still on the last one", async () => {
+  // Everything on screen is recorded — but it is the *previous* page's rows,
+  // which survive the click for a frame. Settling here would fire Next again
+  // and skip page two entirely.
+  const settled = await settlePage(page(SEARCH_BOX + panel(["1", "2"], 1)), {
+    page: 2,
+    before: "",
+    probe: probeOf(new Set([rowId("1"), rowId("2")])),
+    wait: async () => {},
+    pollMs: 100,
+    budgetMs: 400,
+  });
+  assert.equal(settled.settled, false);
+});
+
+test("settles once the pager arrives on the page it was sent to", async () => {
+  const doc = page(SEARCH_BOX + panel(["1", "2"], 1));
+  let polls = 0;
+  const settled = await settlePage(doc, {
+    page: 2,
+    before: "",
+    probe: probeOf(new Set([rowId("1"), rowId("2")])),
+    wait: async () => {
+      if (++polls !== 2) return;
+      doc
+        .querySelector('[aria-current="page"]')
+        ?.removeAttribute("aria-current");
+      doc
+        .querySelector('[aria-label="Page 2"]')
+        ?.setAttribute("aria-current", "page");
+    },
+  });
+  assert.equal(settled.settled, true);
+});
+
+test("waits out the grace period when Discord returns the same list", async () => {
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  let polls = 0;
+  const settled = await settlePage(doc, {
+    page: 1,
+    before: rowSignature(doc),
+    probe: probeOf(new Set([rowId("1"), rowId("2")])),
+    wait: async () => {
+      polls++;
+    },
+    pollMs: 100,
+    graceMs: 500,
+    budgetMs: 5000,
+  });
+  // Rows that never turn over are accepted, but only after the grace window —
+  // and the run is told, because that is also what rate-limiting looks like.
+  assert.deepEqual(settled, {
+    panel: true,
+    rendered: 2,
+    recorded: 2,
+    unreadable: 0,
+    outstanding: 0,
+    settled: true,
+    changed: false,
+  });
+  assert.equal(polls, 5);
+});
+
+test("scrolls the results list to the bottom before calling the page done", async () => {
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  // jsdom has no layout, so stand in for a list taller than its viewport.
+  let scrollTop = 0;
+  Object.defineProperty(list, "clientHeight", { value: 100 });
+  Object.defineProperty(list, "scrollHeight", { value: 300 });
+  Object.defineProperty(list, "scrollTop", {
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTop = value;
+    },
+  });
+  const settled = await settlePage(doc, {
+    page: 1,
+    before: "",
+    probe: probeOf(new Set([rowId("1"), rowId("2")])),
+    wait: async () => {},
+  });
+  assert.equal(settled.settled, true);
+  // Discord fills the list lazily: a page confirmed without reaching the bottom
+  // would be confirmed on rows it never rendered.
+  assert.equal(scrollTop, 200);
+});
+
+test("a run does not page on while posts on the current page are unrecorded", async () => {
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const view = doc.defaultView;
+  assert.ok(view);
+  const recorded = new Set<string>();
+  const render = (ids: string[], current: number) => {
+    list.innerHTML = ids.map(RESULT_ROW).join("") + pager(current, 3);
+  };
+  // Stand in for Discord: submitting renders page one, Next renders page two.
+  doc.addEventListener("keydown", () => render(["1", "2"], 1));
+  const unrecordedAtClick: number[] = [];
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof view.Element)) return;
+    if (!target.closest('[rel="next"]')) return;
+    unrecordedAtClick.push(
+      resultRows(doc).filter((row) => !recorded.has(rowKey(row))).length,
+    );
+    render(["3", "4"], 2);
+    recorded.add(rowId("3"));
+    recorded.add(rowId("4"));
+  });
+  let polls = 0;
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 2,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {
+      if (++polls !== 3) return;
+      recorded.add(rowId("1"));
+      recorded.add(rowId("2"));
+    },
+  });
+  assert.deepEqual(
+    unrecordedAtClick,
+    [0],
+    "clicked Next with posts still unrecorded",
+  );
+  assert.equal(run.pagesWalked, 2);
+  assert.equal(run.posts, 4);
+  assert.equal(run.unsettled, 0);
+  assert.equal(run.settleNote, null);
+});
+
+test("says so when Discord answers with the results already on screen", async () => {
+  const recorded = new Set([rowId("1"), rowId("2")]);
+  const run = await runSearches(
+    page(SEARCH_BOX + searchRow("CC101") + panel(["1", "2"])),
+    ["CC101"],
+    {
+      delayMs: 0,
+      signal: { cancelled: false },
+      probe: probeOf(recorded),
+      wait: async () => {},
+      settlePollMs: 100,
+    },
+  );
+  assert.equal(run.unchanged, 1);
+  assert.equal(run.posts, 2);
+  assert.match(run.settleNote ?? "", /rate-limiting/);
+});
+
+test("refuses to count pages the pager cannot confirm it walked", async () => {
+  // Next exists but nothing is numbered, so there is no evidence any click
+  // landed. Reporting ten pages here is how a run that never left page one
+  // claimed forty pages while capturing the channel behind it.
+  const doc = page(
+    `${SEARCH_BOX}<button type="button" rel="next"><span>Next</span></button>`,
+  );
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 10,
+    signal: { cancelled: false },
+    wait: async () => {},
+  });
+  assert.equal(run.pagesWalked, 1);
+  assert.match(run.pagerNote ?? "", /no page numbers/);
+});
+
+test("stops the run when there is no results panel to read", async () => {
+  // The channel list is always on screen and always already captured. Settling
+  // against it confirmed page after page that held no search results at all.
+  const doc = page(
+    `${SEARCH_BOX}<div id="channel">${CHANNEL_ROW("900")}</div>`,
+  );
+  const run = await runSearches(doc, ["CC101", "CC102"], {
+    delayMs: 0,
+    pages: 10,
+    signal: { cancelled: false },
+    probe: probeOf(new Set([rowId("900")])),
+    wait: async () => {},
+  });
+  assert.equal(run.done, 1, "should not keep firing queries it cannot read");
+  assert.equal(run.pagesWalked, 0);
+  assert.equal(run.posts, 1);
+  assert.match(run.stopped ?? "", /search results/);
+});
+
+test("never mistakes the channel list for the results panel", () => {
+  const doc = page(
+    `${SEARCH_BOX}<div id="channel">${CHANNEL_ROW("900")}</div>`,
+  );
+  assert.equal(resultsPanel(doc), null);
+  assert.deepEqual(resultRows(doc), []);
+});
+
+test("finds search results that carry no chat-messages wrapper", () => {
+  // The measured shape of a real results page: 48 message bodies on screen, only
+  // the 22 in the channel list wrapped in chat-messages ids. Anchoring on that
+  // wrapper made the other 26 invisible, and the panel walk-up climbed past them
+  // into the channel list — which then confirmed every page.
+  const doc = page(
+    `${SEARCH_BOX}<div id="channel">${CHANNEL_ROW("900")}${CHANNEL_ROW("901")}</div>` +
+      panel(["1", "2", "3"]),
+  );
+  assert.deepEqual(resultRows(doc).map(rowKey), [
+    rowId("1"),
+    rowId("2"),
+    rowId("3"),
+  ]);
+  assert.equal(
+    rowSignature(doc),
+    "message-content-1 message-content-2 message-content-3",
+  );
+});
+
+test("stops when the results render but none of them can be read", async () => {
+  // Rows present, parser blind to all of them: the exact state that silently
+  // walked forty pages and recorded nothing but the channel behind it.
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const run = await runSearches(doc, ["CC101", "CC102"], {
+    delayMs: 0,
+    pages: 10,
+    signal: { cancelled: false },
+    probe: {
+      account: (rows) => ({
+        recorded: 0,
+        pending: 0,
+        unreadable: rows.length,
+      }),
+      posts: () => 0,
+    },
+    wait: async () => {},
+  });
+  assert.equal(run.done, 1);
+  assert.equal(run.pagesWalked, 0);
+  assert.match(run.stopped ?? "", /rendered 2 posts but none could be read/);
+});
+
+test("counts unreadable rows apart from recorded ones", async () => {
+  // Attachment-only posts never parse. They must not hold a page open, and they
+  // must not be mistaken for posts that landed.
+  const settled = await settlePage(page(SEARCH_BOX + panel(["1", "2", "3"])), {
+    page: 1,
+    before: "",
+    probe: {
+      account: () => ({ recorded: 2, pending: 0, unreadable: 1 }),
+      posts: () => 2,
+    },
+    wait: async () => {},
+  });
+  assert.deepEqual(settled, {
+    panel: true,
+    rendered: 3,
+    recorded: 2,
+    unreadable: 1,
+    outstanding: 0,
+    settled: true,
+    changed: true,
+  });
+});
+
+// Discord's combobox dropdown: generic filter rows, and — once the client has
+// actually registered a query — a row that runs it.
+const FILTER_ROWS =
+  '<div role="option">From a specific user</div>' +
+  '<div role="option">Sent in a specific channel</div>';
+const searchRow = (query: string) =>
+  `<div role="option" id="run-it">Search for ${query}</div>`;
+
+test("picks the row carrying the query, never a filter row", () => {
+  const doc = page(SEARCH_BOX + FILTER_ROWS + searchRow("AA101"));
+  assert.equal(findSubmitOption(doc, "AA101")?.id, "run-it");
+  // Filter rows alone offer nothing to click: that is the stuck state Chrome
+  // sits in, and clicking "From a specific user" would apply a filter instead.
+  assert.equal(findSubmitOption(page(SEARCH_BOX + FILTER_ROWS), "AA101"), null);
+});
+
+test("clicks the Search-for row rather than relying on Enter", async () => {
+  const doc = page(SEARCH_BOX + FILTER_ROWS + searchRow("AA101"));
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  const seen: string[] = [];
+  for (const type of ["mousedown", "click", "keydown"])
+    doc.addEventListener(type, (event) => {
+      seen.push(`${type}:${(event.target as Element)?.id ?? ""}`);
+    });
+  assert.equal(await commitSearch(box, "AA101", now), "option");
+  // Committed on the row, and Enter never fired — pressing it while the filter
+  // list is open selects a filter.
+  assert.ok(seen.includes("mousedown:run-it"), seen.join(" "));
+  assert.ok(seen.includes("click:run-it"), seen.join(" "));
+  assert.deepEqual(
+    seen.filter((entry) => entry.startsWith("keydown")),
+    [],
+  );
+});
+
+test("falls back to Enter when no row ever appears", async () => {
+  const doc = page(SEARCH_BOX + FILTER_ROWS);
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  const enters: number[] = [];
+  box.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key === "Enter") enters.push(13);
+  });
+  assert.equal(await commitSearch(box, "AA101", now), "enter");
+  assert.deepEqual(enters, [13]);
+});
+
+test("says the query never ran when it had to fall back to Enter", async () => {
+  // Enter plus results that never changed is the Chrome failure exactly, and it
+  // must not be reported as rate-limiting.
+  const doc = page(SEARCH_BOX + FILTER_ROWS + panel(["1", "2"]));
+  const run = await runSearches(doc, ["AA101"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(new Set([rowId("1"), rowId("2")])),
+    wait: async () => {},
+    settlePollMs: 100,
+  });
+  // Fired three times before giving up: a query that draws no response is far
+  // more often a misfire than a real answer.
+  assert.deepEqual(run.submittedBy, { option: 0, enter: 3 });
+  assert.equal(run.retried, 2);
+  assert.match(run.settleNote ?? "", /results never changed after 3 attempts/);
+});
+
+test("retries a query that draws no response, and recovers", async () => {
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const recorded = new Set<string>();
+  let submits = 0;
+  // Chrome's misfire: the first submit lands the text but the bar never opens,
+  // so nothing runs. The retry clicks it open, retypes, and results arrive.
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Enter") return;
+    if (++submits < 2) return;
+    list.innerHTML = ["1", "2"].map(RESULT_ROW).join("") + pager(1, 3);
+    recorded.add(rowId("1"));
+    recorded.add(rowId("2"));
+  });
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 1,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+  });
+  assert.equal(run.retried, 1);
+  assert.equal(run.posts, 2);
+  // Recovered, so there is nothing to warn about...
+  assert.equal(run.unchanged, 0);
+  assert.equal(run.settleNote, null);
+  // ...and a retry is the same query again, not an extra one.
+  assert.equal(run.done, 1);
+});
+
+test("leaves the search bar alone until a query has misfired", async () => {
+  // Clicking re-renders the bar, which detaches the field that was just found —
+  // typing into that stale node inserts nothing and reads back as the
+  // placeholder. So the first pass types into what it found, untouched.
+  const doc = page(SEARCH_BOX);
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  const events: string[] = [];
+  box.addEventListener("mousedown", () => events.push("open"));
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key === "Enter") events.push("submit");
+  });
+  await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    wait: async () => {},
+  });
+  assert.deepEqual(events, ["submit"]);
+});
+
+test("clicks the bar open on the recovery pass, and re-finds the field", async () => {
+  // No results panel: every attempt misfires, so every retry recovers.
+  const doc = page(SEARCH_BOX);
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  let opens = 0;
+  box.addEventListener("mousedown", () => {
+    opens++;
+  });
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(new Set()),
+    wait: async () => {},
+  });
+  assert.equal(run.retried, 2);
+  assert.equal(opens, 2, "one open per recovery pass, none on the first");
+});
+
+test("an empty field reads as empty, not as its own placeholder", async () => {
+  // Discord renders the placeholder inside the editable and it repeats the
+  // field's accessible name, so a field that took no text reported back as
+  // 'the search box shows: "Search tripleS"'.
+  const doc = page(SEARCH_BOX);
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  box.textContent = "Search tripleS";
+  Object.defineProperty(doc, "execCommand", {
+    configurable: true,
+    value: () => true,
+  });
+  const typed = await typeQuery(box, "CC101", now);
+  assert.equal(typed.ok, false);
+  assert.equal(typed.seen, "", "the placeholder is not content");
+});
+
+test("a query that matches nothing does not end the run", async () => {
+  // Once any query has produced results the panel is known to work, so an empty
+  // one is a code nobody posted. Ending there abandoned every query after the
+  // first gap — a four-query run stopped on its second.
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const recorded = new Set<string>();
+  let submits = 0;
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Enter") return;
+    submits++;
+    // First query hits, the rest match nothing at all.
+    if (submits > 1) {
+      list.innerHTML = "";
+      return;
+    }
+    list.innerHTML = ["1", "2"].map(RESULT_ROW).join("");
+    recorded.add(rowId("1"));
+    recorded.add(rowId("2"));
+  });
+  const run = await runSearches(doc, ["CC101", "CC201", "AA101"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+    settlePollMs: 100,
+  });
+  assert.equal(run.stopped, null, "an empty result set is an answer");
+  assert.equal(run.done, 3, "every query still ran");
+  assert.equal(run.empty, 2);
+  assert.equal(run.posts, 2);
+});
+
+test("still stops when no query ever finds a results panel", async () => {
+  // Nothing has proved the panel works, so this really could be broken.
+  const run = await runSearches(page(SEARCH_BOX), ["CC101", "CC201"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(new Set()),
+    wait: async () => {},
+  });
+  assert.equal(run.done, 1);
+  assert.equal(run.retried, 2);
+  assert.match(run.stopped ?? "", /Could not find Discord's search results/);
+});
+
+/**
+ * A stand-in for Slate: it owns the text, and paints the placeholder exactly
+ * while its model is empty.
+ *
+ * `accepts` decides which insertions reach the model. Chrome accepts
+ * `beforeinput` and silently drops `execCommand`, which still edits the markup —
+ * so the markup and the model disagree, which is the entire bug.
+ */
+function fakeEditor(doc: Document, box: HTMLElement, accepts: string[]) {
+  let model = "";
+  const render = () => {
+    box.innerHTML = model
+      ? `<span data-slate-string="true">${model}</span>`
+      : PLACEHOLDER;
+  };
+  const set = (value: string) => {
+    model = value;
+    render();
+  };
+  render();
+  Object.defineProperty(doc, "execCommand", {
+    configurable: true,
+    value: (command: string, _ui: boolean, text: string) => {
+      if (accepts.includes("insertText")) {
+        set(command === "delete" ? "" : text);
+        return true;
+      }
+      // Dropped by the editor, but the markup still changes — the state that
+      // made every text-based check pass while nothing was searched.
+      if (command === "delete") box.innerHTML = PLACEHOLDER;
+      else box.insertAdjacentHTML("beforeend", `<span>${text}</span>`);
+      return true;
+    },
+  });
+  box.addEventListener("beforeinput", (event) => {
+    if (!accepts.includes("beforeinput")) return;
+    const input = event as InputEvent;
+    set(input.inputType === "insertText" ? (input.data ?? "") : "");
+  });
+  return { model: () => model };
+}
+
+test("replaces the previous query in an editor that ignores execCommand", async () => {
+  // Chrome. The first query worked because an empty field still shows its
+  // placeholder, which caught the dropped insert. The second had no such
+  // signal: the markup read back as the new code while the editor held the old
+  // one, so a four-query run returned 231 posts all carrying the first code.
+  const doc = page();
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  const editor = fakeEditor(doc, box, ["beforeinput"]);
+
+  const first = await typeQuery(box, "CC101", now);
+  assert.equal(first.ok, true);
+  assert.equal(first.via, "beforeinput");
+  assert.equal(editor.model(), "CC101");
+
+  const second = await typeQuery(box, "CC201", now);
+  assert.equal(second.ok, true);
+  assert.equal(second.via, "beforeinput");
+  assert.equal(editor.model(), "CC201", "the editor holds the new query");
+});
+
+test("takes the cheap path in an editor that accepts execCommand", async () => {
+  // Firefox, where insertText reaches the model: nothing should escalate.
+  const doc = page();
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  const editor = fakeEditor(doc, box, ["insertText"]);
+  const typed = await typeQuery(box, "CC101", now);
+  assert.equal(typed.via, "insertText");
+  assert.deepEqual(typed.tried, ["insertText"]);
+  assert.equal(editor.model(), "CC101");
+});
+
+test("refuses when no insertion reaches the editor at all", async () => {
+  const doc = page();
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  const editor = fakeEditor(doc, box, []);
+  const typed = await typeQuery(box, "CC101", now);
+  assert.equal(typed.ok, false, "markup is not the editor");
+  assert.equal(typed.via, null);
+  assert.equal(editor.model(), "");
+});
+
+test("escalates the insertion until the results actually move", async () => {
+  // The real verdict. Reading the field back cannot tell whether the editor
+  // took the text — the markup can show CC201 while the model still holds
+  // CC101 — so the run escalates on the only ground truth there is: whether
+  // Discord's results changed. Here the first insertion is ignored by the
+  // editor and the second is not.
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const box = findSearchBox(doc);
+  assert.ok(box);
+  const recorded = new Set<string>();
+  let served = 0;
+  // Only beforeinput reaches the editor; execCommand edits the markup alone.
+  Object.defineProperty(doc, "execCommand", {
+    configurable: true,
+    value: (command: string, _ui: boolean, text: string) => {
+      box.innerHTML =
+        command === "delete"
+          ? PLACEHOLDER
+          : `<span data-slate-string="true">${text}</span>`;
+      return true;
+    },
+  });
+  box.addEventListener("beforeinput", (event) => {
+    const input = event as InputEvent;
+    if (input.inputType !== "insertText" || !input.data) return;
+    box.innerHTML = `<span data-slate-string="true">${input.data}</span>`;
+    // The editor took it, so Discord answers with fresh results.
+    served++;
+    list.innerHTML = [`${served}1`, `${served}2`].map(RESULT_ROW).join("");
+    recorded.add(rowId(`${served}1`));
+    recorded.add(rowId(`${served}2`));
+  });
+  const run = await runSearches(doc, ["CC101", "CC201"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+    settlePollMs: 100,
+  });
+  assert.equal(run.stopped, null);
+  assert.equal(run.done, 2);
+  assert.equal(run.posts, 4, "both queries returned their own results");
+  // One retry for the first query to find the working insertion; the second
+  // query starts from it and needs none.
+  assert.equal(run.retried, 1);
+  assert.deepEqual(run.typedBy, { insertText: 1, beforeinput: 2 });
 });

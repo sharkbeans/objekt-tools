@@ -14,6 +14,9 @@ a{color:#a5b4fc}code{background:#27272a;padding:1px 4px;border-radius:3px}
 p{margin:6px 0}
 .hint{font-size:12px;color:#a1a1aa}
 .row{display:flex;gap:6px}
+input[type=range]{padding:0;height:24px;background:transparent;border:0;accent-color:#6366f1;cursor:pointer}
+.tally{font-size:12px;color:#a1a1aa}
+.tally strong{font-size:20px;color:#a5b4fc;font-variant-numeric:tabular-nums;margin-right:4px}
 #status,#search-status,#inventory-status{white-space:pre-wrap;font-size:12px}
 #search-status{color:#c7d2fe}
 details{margin-top:10px;border-top:1px solid #27272a;padding-top:10px}
@@ -38,17 +41,12 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <h2>2 · What to look for</h2>
   <label for="wants">One objekt per line</label>
   <textarea id="wants" placeholder="SeoYeon CC101&#10;Mayu AA101&#10;Hayeon BB401"></textarea>
-  <div class="row">
-    <span style="flex:1">
-      <label for="pages">Result pages each</label>
-      <input id="pages" type="number" min="1" max="20" step="1" value="3">
-    </span>
-    <span style="flex:1">
-      <label for="delay">Seconds between</label>
-      <input id="delay" type="number" min="1" max="60" step="1" value="3">
-    </span>
-  </div>
+  <label for="pages">Result pages each</label>
+  <input id="pages" type="number" min="1" max="20" step="1" value="3">
   <p class="hint">Discord sorts newest first, so later pages are older posts. Three is usually plenty.</p>
+  <label for="delay">Pace &middot; <span id="delay-value">Fastest</span></label>
+  <input id="delay" type="range" min="0" max="15" step="1" value="0">
+  <p class="hint"><strong>Fastest</strong> moves on the moment every post on a page is recorded &mdash; no fixed wait. Drag right to add a pause on top if Discord starts rate-limiting.</p>
 </section>
 
 <section>
@@ -56,20 +54,23 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <p class="hint">Open your trade channel, then run. Searches by objekt code (<code>CC101</code>) — the member name is matched here instead, since searching it floods Discord with unrelated posts. Keep the tab on Discord.</p>
   <button type="button" id="run-search">Search my wants</button>
   <button type="button" class="secondary" id="stop-search">Stop</button>
+  <p class="tally"><strong id="search-total">0</strong> posts recorded this search</p>
   <p id="search-status" role="status"></p>
 </section>
 
 <section>
   <h2>4 · Match them</h2>
   <p id="status" role="status">Loading…</p>
-  <button type="button" id="export">Export transcript (.txt)</button>
+  <button type="button" id="export">Export this search (.txt)</button>
   <p class="hint"><a href="https://objekt.my/match" target="_blank" rel="noreferrer">Open objekt.my/match</a> → <strong>Import text files</strong> → pick the download.</p>
 </section>
 
 <details>
   <summary>Troubleshooting</summary>
+  <p class="hint">Loaded build: <code id="build">…</code><br>After rebuilding, reload the extension <em>and</em> refresh the Discord tab — an open tab keeps the old content script.</p>
   <button type="button" class="secondary" id="toggle">Enable / pause capture here</button>
   <button type="button" class="secondary" id="diagnose">Check this tab</button>
+  <button type="button" class="secondary" id="export-all">Export whole index (.txt)</button>
   <button type="button" class="secondary" id="dump">Dump index (.json)</button>
   <button type="button" class="secondary" id="clear">Clear captured posts</button>
 </details>
