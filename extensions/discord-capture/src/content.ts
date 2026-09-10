@@ -149,7 +149,13 @@ async function scan(element: Element) {
   }
   unreadableSince.delete(rowKey(element));
   const signature = JSON.stringify([message, revision]);
-  if (seen.get(element) === signature) return;
+  if (seen.get(element) === signature) {
+    // Already stored, and unchanged since. Re-assert that to the run's
+    // accounting, which is what lets the bookkeeping below be cleared between
+    // runs without a settled page turning back into an unfinished one.
+    recorded.add(rowKey(element));
+    return;
+  }
   pending.add(element);
   try {
     const response = await extensionApi.runtime.sendMessage({
@@ -646,8 +652,13 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   markPanelBusy(true);
   holdWorkerOpen(true);
   searchSignal.cancelled = false;
-  // A fresh run counts from zero, so the popup's total reflects this search.
+  // A fresh run counts from zero, so the panel's total reflects this search.
   runPosts.clear();
+  // Row bookkeeping is only meaningful within a run, and a long browsing
+  // session would otherwise accumulate a string per message seen, for ever.
+  // Rows still on screen re-assert themselves the next time they are scanned.
+  recorded.clear();
+  unreadableSince.clear();
   postsReportedAt = 0;
   searchRun = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   void extensionApi.storage.local.set({ searchRunId: searchRun });
