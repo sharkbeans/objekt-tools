@@ -299,6 +299,7 @@ build.textContent = manifest.version_name ?? manifest.version;
 const wants = document.getElementById("wants") as HTMLTextAreaElement;
 const delay = document.getElementById("delay") as HTMLInputElement;
 const pages = document.getElementById("pages") as HTMLInputElement;
+const skipRecent = document.getElementById("skip-recent") as HTMLInputElement;
 const delayValue = document.getElementById("delay-value") as HTMLElement;
 const searchStatus = document.getElementById("search-status") as HTMLElement;
 const searchTotal = document.getElementById("search-total") as HTMLElement;
@@ -347,15 +348,30 @@ async function activeDiscordTab() {
   return (await discordTab()).id;
 }
 
+/**
+ * How long a run may go without reporting before it is presumed dead.
+ *
+ * A page settles in fifteen seconds at the outside and reports on every page,
+ * so a minute of silence is not a slow run — it is a tab that navigated away
+ * mid-run and took the content script with it.
+ */
+const STALE_MS = 60_000;
+
 function describe(progress: unknown): string {
   if (!progress || typeof progress !== "object") return "";
   const p = progress as Record<string, unknown>;
   const done = typeof p.done === "number" ? p.done : 0;
   const total = typeof p.total === "number" ? p.total : 0;
-  if (p.running)
+  const planNote =
+    typeof p.planNote === "string" && p.planNote ? `\n${p.planNote}` : "";
+  if (p.running) {
+    const at = typeof p.at === "number" ? p.at : 0;
+    if (at && Date.now() - at > STALE_MS)
+      return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed — anything captured is still in the index.`;
     return `Searching ${done}/${total}${p.query ? ` · ${p.query}` : ""}${
       typeof p.page === "number" ? ` · page ${p.page}` : ""
-    }…`;
+    }…${planNote}`;
+  }
   const pages =
     typeof p.pagesWalked === "number" ? ` · ${p.pagesWalked} pages walked` : "";
   // Worth showing even on a clean run: retries mean Discord's search bar is
@@ -369,6 +385,12 @@ function describe(progress: unknown): string {
   const empty =
     typeof p.empty === "number" && p.empty > 0
       ? ` · ${p.empty} with no matches`
+      : "";
+  // A panel closed under the run is a thing the user did, and the fix is
+  // something only they can do.
+  const closed =
+    typeof p.closed === "number" && p.closed > 0
+      ? ` · ${p.closed} cut short by the results closing`
       : "";
   // Chrome and Firefox accept different insertions; which one carried the run
   // is the first thing worth knowing when one browser misbehaves.
@@ -387,11 +409,11 @@ function describe(progress: unknown): string {
     .map((text) => `\n⚠ ${text}`)
     .join("");
   if (typeof p.stopped === "string" && p.stopped)
-    return `Stopped after ${done}/${total}: ${p.stopped}${note}`;
+    return `Stopped after ${done}/${total}: ${p.stopped}${planNote}${note}`;
   return total
-    ? `Finished ${done}/${total} searches${pages}${retries}${empty}.${
+    ? `Finished ${done}/${total} searches${pages}${retries}${empty}${closed}.${
         typed ? `\ntyped via ${typed}` : ""
-      }${note}`
+      }${planNote}${note}`
     : "";
 }
 
@@ -410,6 +432,7 @@ async function refreshSearch() {
     "wants",
     "searchDelay",
     "searchPages",
+    "skipRecent",
   ]);
   if (typeof settings.wants === "string" && !wants.value)
     wants.value = settings.wants;
@@ -417,6 +440,8 @@ async function refreshSearch() {
     delay.value = String(settings.searchDelay);
   if (typeof settings.searchPages === "number")
     pages.value = String(settings.searchPages);
+  if (typeof settings.skipRecent === "boolean")
+    skipRecent.checked = settings.skipRecent;
   showDelay();
   searchStatus.textContent = describe(settings.searchProgress);
   tally(settings.searchProgress);
@@ -444,15 +469,18 @@ action("run-search", async () => {
     wants: wants.value,
     searchDelay: seconds,
     searchPages: pageCount,
+    skipRecent: skipRecent.checked,
   });
   const response = await toContentScript(tabId, {
     type: "run-search",
     wants: wants.value,
     delayMs: seconds * 1000,
     pages: pageCount,
+    skipRecent: skipRecent.checked,
   });
   if (!response?.ok) throw new Error(response?.error ?? "Could not start.");
-  searchStatus.textContent = `Searching 0/${response.value.total}… you can close this popup.`;
+  const note = response.value.note ? `\n${response.value.note}` : "";
+  searchStatus.textContent = `Searching 0/${response.value.total}… the panel can be moved or closed while it runs.${note}`;
   searchTotal.textContent = "0";
   void refresh();
 });

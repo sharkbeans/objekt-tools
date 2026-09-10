@@ -33,6 +33,13 @@ import {
   runSearches,
   searchQueries,
 } from "./search";
+import {
+  DEFAULT_COOLDOWN_MS,
+  describePlan,
+  planQueries,
+  pruneSearchedAt,
+  readSearchedAt,
+} from "./search-plan";
 import { channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
 
@@ -243,15 +250,61 @@ function update(settings: Record<string, unknown>) {
   // haves list takes effect without waiting for Discord to render something.
   if (allowed) visit(document.body);
 }
-// A full run outlives the popup, which closes as soon as it loses focus, so
-// progress goes to storage and the popup reads it whenever it reopens.
+/**
+ * When each code was last searched, so a repeat run continues rather than
+ * restarts.
+ *
+ * Held in memory during a run and written once at the end: a storage write per
+ * query, on top of everything else a run writes, is a lot of churn for a map
+ * nothing reads until the next run.
+ */
+let searched = new Map<string, number>();
+let searchedDirty = false;
+function rememberQuery(query: string) {
+  searched.set(query, Date.now());
+  searchedDirty = true;
+}
+async function flushSearched() {
+  if (!searchedDirty) return;
+  searchedDirty = false;
+  await extensionApi.storage.local.set({
+    searchedAt: pruneSearchedAt(searched, DEFAULT_COOLDOWN_MS, Date.now()),
+  });
+}
+
+// A full run outlives the panel, which can be closed at any point, so progress
+// goes to storage and the panel reads it whenever it is shown.
 const searchSignal = { cancelled: false };
 let searching = false;
 let lastProgress: Record<string, unknown> = {};
 async function report(progress: Record<string, unknown>) {
-  lastProgress = progress;
-  await extensionApi.storage.local.set({ searchProgress: progress });
+  // Stamped so the panel can tell a run that is working from one that died with
+  // the tab it was running in. Nothing else can: a content script that goes
+  // away leaves `running: true` behind it, and the panel reported "Searching
+  // 3/10…" until something else overwrote it.
+  lastProgress = { ...progress, at: Date.now() };
+  await extensionApi.storage.local.set({ searchProgress: lastProgress });
 }
+
+/**
+ * A run does not survive its tab.
+ *
+ * Reloading Discord, following a link out of it, or closing the tab all tear
+ * the content script down mid-run. This is best effort — the write may not
+ * land before the page goes — which is why the panel also treats a progress
+ * stamp that has stopped moving as an interrupted run.
+ */
+window.addEventListener("pagehide", () => {
+  if (!searching) return;
+  void extensionApi.storage.local.set({
+    searchProgress: {
+      ...lastProgress,
+      running: false,
+      stopped: "The Discord tab was closed or navigated away mid-run.",
+      at: Date.now(),
+    },
+  });
+});
 
 /**
  * Posts this run has recorded, deduped by row id and cleared when a run starts.
@@ -477,13 +530,28 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     reply({ ok: false, error: "A search run is already in progress." });
     return true;
   }
-  const queries = searchQueries(String(request.wants ?? ""));
-  if (!queries.length) {
+  const wanted = searchQueries(String(request.wants ?? ""));
+  if (!wanted.length) {
     reply({ ok: false, error: "No objekts recognized. Try YooYeon CC101." });
     return true;
   }
   const delayMs = Number(request.delayMs);
   const pages = Number(request.pages);
+  // Skipping is opt-out rather than automatic: a run that quietly searched
+  // nothing because everything was searched an hour ago would look broken.
+  const cooldownMs = request.skipRecent === false ? 0 : DEFAULT_COOLDOWN_MS;
+  const plan = planQueries(wanted, { searched, cooldownMs });
+  const queries = plan.queries;
+  const planNote = describePlan(plan);
+  if (!queries.length) {
+    reply({
+      ok: false,
+      error: plan.skipped.length
+        ? `All ${plan.skipped.length} codes were searched in the last few hours. Untick “skip codes searched recently” to search them again.`
+        : "Nothing to search.",
+    });
+    return true;
+  }
   searching = true;
   markPanelBusy(true);
   searchSignal.cancelled = false;
@@ -492,14 +560,15 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   postsReportedAt = 0;
   searchRun = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   void extensionApi.storage.local.set({ searchRunId: searchRun });
-  // Reply now: the popup is gone long before this finishes.
-  reply({ ok: true, value: { total: queries.length } });
+  // Reply now: a run outlives the click that started it.
+  reply({ ok: true, value: { total: queries.length, note: planNote } });
   void report({
     done: 0,
     total: queries.length,
     query: "",
     posts: 0,
     running: true,
+    planNote,
   })
     .then(() =>
       runSearches(document, queries, {
@@ -511,11 +580,14 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
         pages: Number.isFinite(pages) ? Math.min(20, Math.max(1, pages)) : 1,
         signal: searchSignal,
         probe: captureProbe,
-        onProgress: (progress) => void report({ ...progress, running: true }),
+        onProgress: (progress) =>
+          void report({ ...progress, running: true, planNote }),
+        onQuerySearched: rememberQuery,
       }),
     )
     .then(
-      (run) => report({ ...run, total: queries.length, running: false }),
+      (run) =>
+        report({ ...run, total: queries.length, running: false, planNote }),
       (error) =>
         report({
           done: 0,
@@ -528,19 +600,23 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     .finally(() => {
       searching = false;
       markPanelBusy(false);
+      void flushSearched();
     });
   return true;
 });
 extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   const settings: Record<string, unknown> = {};
+  if (changes.searchedAt && !searchedDirty)
+    searched = readSearchedAt(changes.searchedAt.newValue);
   for (const key of ["consent", "channels", "owned", "wants"])
     if (changes[key]) settings[key] = changes[key].newValue;
   if (Object.keys(settings).length) update(settings);
 });
 void extensionApi.storage.local
-  .get(["consent", "channels", "owned", "wants", "panel"])
+  .get(["consent", "channels", "owned", "wants", "panel", "searchedAt"])
   .then((settings) => {
+    searched = readSearchedAt(settings.searchedAt);
     update(settings);
     // The panel is a window, so it stays where it was: open across reloads and
     // across channel switches, until it is closed on purpose.

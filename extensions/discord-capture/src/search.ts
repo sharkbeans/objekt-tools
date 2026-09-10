@@ -38,9 +38,28 @@ export function searchQueries(text: string): string[] {
       ...item,
       collectionId: "",
     }).trim();
-    if (query) queries.add(query);
+    const safe = searchSafe(query);
+    if (safe) queries.add(safe);
   }
   return [...queries];
+}
+
+/**
+ * A query Discord will read as words rather than as instructions.
+ *
+ * Discord's search has its own syntax — `from:`, `in:`, `has:`, `before:`,
+ * quoting, `-` for exclusion — and a query is built from parsed user input, so
+ * a colon or a quote reaching it turns a search for an objekt into a filter
+ * nobody asked for. Letters, digits and single spaces are all a collection
+ * code needs. Anything under two characters is dropped: it matches most of the
+ * channel and finds nothing useful.
+ */
+export function searchSafe(query: string): string {
+  const clean = query
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean.length >= 2 ? clean : "";
 }
 
 /**
@@ -134,20 +153,21 @@ function placeholderShowing(element: HTMLElement): boolean {
 }
 
 /** Ways to empty a Slate editor, cheapest first — mirroring the insertions. */
-const CLEARANCES: { name: string; run: (element: HTMLElement) => void }[] = [
+const CLEARANCES: { name: string; run: (element: HTMLElement) => boolean }[] = [
   {
     name: "delete",
     run: (element) => {
-      selectAll(element);
+      if (!selectAll(element)) return false;
       element.ownerDocument.execCommand("delete");
+      return true;
     },
   },
   {
     name: "beforeinput",
     run: (element) => {
       const view = element.ownerDocument.defaultView;
-      if (!view || !("InputEvent" in view)) return;
-      selectAll(element);
+      if (!view || !("InputEvent" in view)) return false;
+      if (!selectAll(element)) return false;
       element.dispatchEvent(
         new view.InputEvent("beforeinput", {
           inputType: "deleteContentBackward",
@@ -155,14 +175,15 @@ const CLEARANCES: { name: string; run: (element: HTMLElement) => void }[] = [
           cancelable: true,
         }),
       );
+      return true;
     },
   },
   {
     name: "beforeinput-empty",
     run: (element) => {
       const view = element.ownerDocument.defaultView;
-      if (!view || !("InputEvent" in view)) return;
-      selectAll(element);
+      if (!view || !("InputEvent" in view)) return false;
+      if (!selectAll(element)) return false;
       element.dispatchEvent(
         new view.InputEvent("beforeinput", {
           inputType: "insertText",
@@ -171,6 +192,7 @@ const CLEARANCES: { name: string; run: (element: HTMLElement) => void }[] = [
           cancelable: true,
         }),
       );
+      return true;
     },
   },
 ];
@@ -204,21 +226,22 @@ function accepted(element: HTMLElement, query: string): boolean {
  */
 const INSERTIONS: {
   name: string;
-  run: (element: HTMLElement, query: string) => void;
+  run: (element: HTMLElement, query: string) => boolean;
 }[] = [
   {
     name: "insertText",
     run: (element, query) => {
-      selectAll(element);
+      if (!selectAll(element)) return false;
       element.ownerDocument.execCommand("insertText", false, query);
+      return true;
     },
   },
   {
     name: "beforeinput",
     run: (element, query) => {
       const view = element.ownerDocument.defaultView;
-      if (!view || !("InputEvent" in view)) return;
-      selectAll(element);
+      if (!view || !("InputEvent" in view)) return false;
+      if (!selectAll(element)) return false;
       element.dispatchEvent(
         new view.InputEvent("beforeinput", {
           inputType: "insertText",
@@ -227,6 +250,7 @@ const INSERTIONS: {
           cancelable: true,
         }),
       );
+      return true;
     },
   },
   {
@@ -234,8 +258,8 @@ const INSERTIONS: {
     run: (element, query) => {
       const view = element.ownerDocument.defaultView;
       if (!view || !("ClipboardEvent" in view) || !("DataTransfer" in view))
-        return;
-      selectAll(element);
+        return false;
+      if (!selectAll(element)) return false;
       const data = new view.DataTransfer();
       data.setData("text/plain", query);
       element.dispatchEvent(
@@ -245,21 +269,51 @@ const INSERTIONS: {
           cancelable: true,
         }),
       );
+      return true;
     },
   },
 ];
 
-function selectAll(element: HTMLElement): void {
+/**
+ * Whether the commands about to run are actually pointed at the search box.
+ *
+ * `execCommand` and the synthetic input events act on the document's selection,
+ * not on the element they were handed. An insertion attempted while something
+ * else holds focus therefore types the query into that something else — and in
+ * this document the other contenteditable is the message composer. It fails
+ * quietly: the search box reads back empty, the attempt is recorded as refused
+ * and retried, and what it leaves behind is an objekt code sitting in the
+ * message box of a public channel, one Enter away from being posted.
+ *
+ * So every insertion, every clearance and the Enter itself are conditional on
+ * this. Refusing to type is always the safe failure.
+ */
+function holdsFocus(element: HTMLElement): boolean {
+  if (!element.isConnected) return false;
+  const active = element.ownerDocument.activeElement;
+  return active === element || (active !== null && element.contains(active));
+}
+
+/**
+ * Focus the field and select what is in it, reporting whether focus took.
+ *
+ * False means the caller must not touch the selection: the field is detached,
+ * or the browser refused it focus, and whatever is focused instead is not
+ * something this extension is allowed to type into.
+ */
+function selectAll(element: HTMLElement): boolean {
   const doc = element.ownerDocument;
   const view = doc.defaultView;
-  if (!view) return;
+  if (!view || !element.isConnected) return false;
   element.focus();
+  if (!holdsFocus(element)) return false;
   const selection = view.getSelection();
-  if (!selection) return;
+  if (!selection) return false;
   const range = doc.createRange();
   range.selectNodeContents(element);
   selection.removeAllRanges();
   selection.addRange(range);
+  return true;
 }
 
 export async function typeQuery(
@@ -274,11 +328,22 @@ export async function typeQuery(
   via: string | null;
   index: number;
   tried: string[];
+  /** True when nothing was typed because the field never held focus. */
+  unfocused: boolean;
 }> {
   const doc = element.ownerDocument;
   const view = doc.defaultView;
-  if (!view) return { ok: false, seen: "", via: null, index: -1, tried: [] };
+  if (!view)
+    return {
+      ok: false,
+      seen: "",
+      via: null,
+      index: -1,
+      tried: [],
+      unfocused: false,
+    };
   const tried: string[] = [];
+  let unfocused = false;
   // Start where the caller asks and wrap around, so every insertion still gets
   // a turn. Skipping the earlier ones outright meant a late attempt could be
   // left with only a method this browser does not implement, and fail without
@@ -287,6 +352,13 @@ export async function typeQuery(
     const index = (Math.max(0, from) + step) % INSERTIONS.length;
     const insertion = INSERTIONS[index];
     element.focus();
+    // Nothing is typed at a field that does not hold focus, because the
+    // commands would land wherever focus actually is.
+    if (!holdsFocus(element)) {
+      unfocused = true;
+      await wait(50);
+      continue;
+    }
     // Best-effort clear, so the insertion replaces rather than appends. Not
     // verified: some states never repaint the placeholder, and there is no
     // other way to ask the editor what its model holds.
@@ -297,7 +369,10 @@ export async function typeQuery(
     }
     await wait(50);
     try {
-      insertion.run(element, query);
+      if (!insertion.run(element, query)) {
+        unfocused = unfocused || !holdsFocus(element);
+        continue;
+      }
     } catch {
       continue;
     }
@@ -312,11 +387,19 @@ export async function typeQuery(
           via: insertion.name,
           index,
           tried,
+          unfocused: false,
         };
       await wait(50);
     }
   }
-  return { ok: false, seen: fieldText(element), via: null, index: -1, tried };
+  return {
+    ok: false,
+    seen: fieldText(element),
+    via: null,
+    index: -1,
+    tried,
+    unfocused,
+  };
 }
 
 /**
@@ -415,8 +498,8 @@ async function clearSearch(
   await wait(50);
 }
 
-/** How the query was finally handed to Discord. */
-export type SubmitPath = "option" | "enter";
+/** How the query was finally handed to Discord, or that it never was. */
+export type SubmitPath = "option" | "enter" | "blocked";
 
 /**
  * Hand the query to Discord: its own "Search for …" row when there is one,
@@ -436,13 +519,20 @@ export async function commitSearch(
     clickLike(option);
     return "option";
   }
-  submitSearch(element);
-  return "enter";
+  return submitSearch(element) ? "enter" : "blocked";
 }
 
-export function submitSearch(element: HTMLElement): void {
+/**
+ * Press Enter at the search box.
+ *
+ * Guarded on focus like the insertions: Discord listens for keys at the
+ * document too, and an Enter that bubbles up from a field nobody is typing in
+ * is not something to fire at a chat client on spec. Returns false when it
+ * declined.
+ */
+export function submitSearch(element: HTMLElement): boolean {
   const view = element.ownerDocument.defaultView;
-  if (!view) return;
+  if (!view || !holdsFocus(element)) return false;
   // keydown alone is usually enough for React, but some handlers still read the
   // legacy numeric codes, which a constructed KeyboardEvent leaves at 0.
   for (const type of ["keydown", "keyup"]) {
@@ -456,6 +546,7 @@ export function submitSearch(element: HTMLElement): void {
     Object.defineProperty(event, "which", { get: () => 13 });
     element.dispatchEvent(event);
   }
+  return true;
 }
 
 /**
@@ -520,9 +611,14 @@ const PAGER_SELECTOR =
   '[aria-label^="Page "], button[rel="next"], button[rel="prev"]';
 
 export function resultsPanel(doc: Document): Element | null {
+  // The precise anchors identify the panel on their own, so an empty one still
+  // counts: "Discord answered, and nothing matched" is an answer, and it used
+  // to be indistinguishable from "Discord never answered" — which cost every
+  // unmatched code the full grace period, and made a closed panel look like an
+  // empty result.
   for (const selector of RESULTS_SELECTORS) {
     const found = doc.querySelector(selector);
-    if (found && resultBodies(found).length) return found;
+    if (found) return found;
   }
   for (
     let node = doc.querySelector(PAGER_SELECTOR)?.parentElement ?? null;
@@ -559,11 +655,12 @@ export function resultRows(doc: Document): Element[] {
  */
 export function rowSignature(doc: Document): string {
   const panel = resultsPanel(doc);
-  return panel
-    ? resultBodies(panel)
-        .map((body) => body.id)
-        .join(" ")
-    : "";
+  if (!panel) return "";
+  // The prefix is what makes an empty panel differ from no panel at all, so a
+  // query that matched nothing still reads as the results having turned over.
+  return `panel ${resultBodies(panel)
+    .map((body) => body.id)
+    .join(" ")}`;
 }
 
 /**
@@ -661,6 +758,8 @@ export interface SettleOptions {
   before: string;
   probe: CaptureProbe;
   wait: (ms: number) => Promise<void>;
+  /** Checked every poll, so Stop is not held up by the settle budget. */
+  signal?: { cancelled: boolean };
   pollMs?: number;
   budgetMs?: number;
   /** How long to wait for the rows to turn over before accepting them as-is. */
@@ -709,7 +808,9 @@ export async function settlePage(
     // out the grace period rather than the whole budget before accepting it.
     const need = changed ? 2 : Math.max(2, Math.ceil(graceMs / pollMs));
     const done = quiet >= need;
-    if (done || waited >= budgetMs)
+    // Stop means stop: waiting out a fifteen-second budget first is how a
+    // cancel button earns a reputation for not working.
+    if (done || waited >= budgetMs || options.signal?.cancelled)
       return {
         panel,
         rendered: rows.length,
@@ -765,6 +866,8 @@ export interface SearchRun {
   retried: number;
   /** Queries that ran and matched nothing. A normal outcome, not a failure. */
   empty: number;
+  /** Times the results panel disappeared mid-query, which ends that query. */
+  closed: number;
   /**
    * Which insertion the editor accepted, per query. The browsers differ here —
    * Chrome drops the one Firefox takes — so it is worth knowing which is
@@ -801,7 +904,32 @@ export interface SearchOptions {
    * safe: a query that did run just runs again.
    */
   attempts?: number;
+  /**
+   * First pause before re-firing a query that drew no response, doubled each
+   * time.
+   *
+   * A query that got no answer is the shape a rate limit takes, and retrying
+   * one immediately — three times, for every query — is the worst possible
+   * response to being rate limited. Backing off costs nothing when the cause
+   * was a one-off misfire.
+   */
+  backoffMs?: number;
+  /**
+   * Consecutive unanswered queries before the run gives up.
+   *
+   * Being refused three times in a row is not a run that will come good on the
+   * fourth; it is a client that has stopped answering, and continuing to type
+   * into it is how an account gets noticed.
+   */
+  stallLimit?: number;
   onProgress?: (progress: SearchProgress) => void;
+  /**
+   * Called for each query Discord actually answered.
+   *
+   * Lets the caller remember what has been searched recently, so re-running a
+   * long want list does not search every code again from scratch.
+   */
+  onQuerySearched?: (query: string) => void;
   /** Injectable for tests. */
   wait?: (ms: number) => Promise<void>;
 }
@@ -829,13 +957,34 @@ export async function runSearches(
   let empty = 0;
   /** Whether any query has produced a results panel, which proves it works. */
   let sawPanel = false;
+  /**
+   * Whether any query has visibly moved the results.
+   *
+   * Until one has, an unchanged empty panel cannot be read as "nothing matched"
+   * — it is equally likely that nothing was ever submitted, and calling that an
+   * answer would report a completely broken run as a quiet one.
+   */
+  let sawChange = false;
+  /** Consecutive queries answered with the list already on screen. */
+  let stalled = 0;
+  /** Result pages abandoned because the panel disappeared under the run. */
+  let closed = 0;
   const typedBy: Record<string, number> = {};
   /** Insertion that last actually moved the results. Index into INSERTIONS. */
   let preferred = 0;
   const attempts = Math.max(1, options.attempts ?? 3);
+  const backoffMs = Math.max(0, options.backoffMs ?? 750);
+  const stallLimit = Math.max(1, options.stallLimit ?? 3);
+  /** Wait longer for each attempt, so a rate limit is given room to clear. */
+  const backoff = (attempt: number) =>
+    wait(Math.min(8_000, backoffMs * 2 ** (attempt - 1)));
   let pagerNote: string | null = null;
   let settleNote: string | null = null;
-  const submittedBy: Record<SubmitPath, number> = { option: 0, enter: 0 };
+  const submittedBy: Record<SubmitPath, number> = {
+    option: 0,
+    enter: 0,
+    blocked: 0,
+  };
   const finish = (stopped: string | null): SearchRun => ({
     done,
     stopped,
@@ -848,6 +997,7 @@ export async function runSearches(
     submittedBy,
     retried,
     empty,
+    closed,
     typedBy,
   });
   const progress = (query: string, page: number) =>
@@ -883,9 +1033,14 @@ export async function runSearches(
         before,
         probe,
         wait,
+        signal: options.signal,
         pollMs: options.settlePollMs,
         budgetMs: options.settleBudgetMs,
       });
+      // A settle that ended because Stop was pressed has no verdict to give:
+      // every count in it is a snapshot of a page that was still working.
+      if (options.signal.cancelled)
+        return { blocked: "Cancelled.", retryable: false, result };
       // A missing panel is left for the caller: it is a misfire on the first
       // query, a code nobody has posted on a later one, and simply the end of
       // the results while paging. Only the caller knows which.
@@ -948,7 +1103,16 @@ export async function runSearches(
       }
       if (typed.via) typedBy[typed.via] = (typedBy[typed.via] ?? 0) + 1;
       const usedInsertion = typed.index;
-      submittedBy[await commitSearch(box, query, wait)]++;
+      const path = await commitSearch(box, query, wait);
+      submittedBy[path]++;
+      // Nothing was handed to Discord at all, so there is nothing to wait for.
+      if (path === "blocked") {
+        if (attempt >= attempts)
+          return `Discord's search box lost focus before "${query}" could be submitted. Click into the Discord window and run again.`;
+        retried++;
+        await backoff(attempt);
+        continue;
+      }
       if (attempt === 1) done++;
       progress(query, 1);
       // Page one renders during this wait and is captured by the observer.
@@ -956,40 +1120,72 @@ export async function runSearches(
       if (outcome.blocked) {
         if (!outcome.retryable || attempt >= attempts) return outcome.blocked;
         retried++;
+        await backoff(attempt);
         continue;
       }
       if (!outcome.result) return null;
+      if (options.signal.cancelled) return "Cancelled.";
       if (!outcome.result.panel) {
-        // Once any query has produced results, the panel is known to work, so
-        // an empty one means this code has simply not been posted. Ending the
-        // whole run on that would abandon every query after the first gap.
+        // The panel is gone, not empty — an empty one is still a panel now.
+        // After a query has produced one, that means it was closed: the user
+        // clicked a result, or pressed Escape. The next query types into the
+        // bar again and brings it back, so this ends the query, not the run.
         if (sawPanel) {
-          empty++;
+          closed++;
+          pagerNote ??=
+            "the search results closed part-way through — leave the results panel open while a run is going";
           return null;
         }
         if (attempt >= attempts)
           return "Could not find Discord's search results. Nothing on the results pages was read — open Troubleshooting and press “Check this tab”.";
         retried++;
+        await backoff(attempt);
         continue;
       }
       sawPanel = true;
       if (outcome.result.changed) {
         // The results moved, so this insertion really did reach the editor.
         preferred = usedInsertion;
+        sawChange = true;
+        stalled = 0;
+        if (outcome.result.rendered === 0) empty++;
+        return null;
+      }
+      // An empty panel that did not change is the previous empty answer still
+      // on screen, which means this code is not posted either. Retrying it
+      // three times finds the same nothing three times — but only once a query
+      // in this run has visibly moved the results, because before that "the
+      // panel never changed" is equally consistent with nothing being
+      // submitted at all.
+      if (outcome.result.rendered === 0 && sawChange) {
+        empty++;
+        stalled = 0;
         return null;
       }
       if (attempt >= attempts) {
         unchanged++;
+        stalled++;
         settleNote ??= `${query}: the results never changed after ${attempt} attempts (typed via ${typed.via ?? "nothing"}). Either the editor is dropping every insertion this build knows, or Discord is rate-limiting — try adding a pause.`;
         return null;
       }
       retried++;
+      await backoff(attempt);
     }
   };
 
   for (const query of queries) {
     const blocked = await fire(query);
     if (blocked) return finish(blocked);
+    // Three queries in a row answered with the list already on screen is not a
+    // run that recovers on the fourth. Something — a rate limit, or a Discord
+    // change this build does not understand — has stopped it working, and
+    // typing more into a client that is refusing to answer is exactly what
+    // gets an account noticed.
+    if (stalled >= stallLimit)
+      return finish(
+        `Discord stopped answering: ${stalled} searches in a row returned the results already on screen. That usually means search is rate-limited — wait a few minutes, then run again with a pace of a second or two.`,
+      );
+    options.onQuerySearched?.(query);
     pagesWalked++;
 
     const pages = Math.max(1, options.pages ?? 1);
