@@ -26,7 +26,8 @@
     "extension:build": "node extensions/discord-capture/build.mjs",
     "extension:test": "tsx --test extensions/discord-capture/src/*.test.ts",
     "extension:smoke": "npm run extension:build && node extensions/discord-capture/smoke.mjs",
-    "extension:build:firefox": "node extensions/discord-capture/build.mjs --firefox"
+    "extension:build:firefox": "node extensions/discord-capture/build.mjs --firefox",
+    "extension:package": "node extensions/discord-capture/pack.mjs"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.6.25",

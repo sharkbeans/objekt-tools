@@ -92,3 +92,4 @@ next-env.d.ts
 
 /extensions/discord-capture/dist/
 /extensions/discord-capture/dist-firefox/
+/extensions/discord-capture/packages/
