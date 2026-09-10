@@ -144,6 +144,19 @@ export function closePanel(): void {
 }
 
 /**
+ * Take the panel off the page without recording that it was closed.
+ *
+ * For a content script standing down in favour of a newer one: the panel is
+ * being replaced, not dismissed, and writing "closed" would mean the
+ * replacement declined to reopen it.
+ */
+export function discardPanel(): void {
+  clearTimeout(saveTimer);
+  panel?.host.remove();
+  panel = null;
+}
+
+/**
  * Replace the panel's contents with a message.
  *
  * For the one thing the panel cannot say for itself: when the extension is

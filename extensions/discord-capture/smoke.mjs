@@ -117,8 +117,34 @@ try {
   );
   // A reload is not a reason to lose your window.
   await page.reload();
+  await (await panelFrame()).locator("#consent").waitFor();
+
+  // An update injects a newer content script into tabs that are already open.
+  // The old copy has to stand down, or the page ends up with two observers and
+  // two panels — and the panel that survives must be the new one.
+  await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ url: "https://discord.com/*" });
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["content.js"],
+    });
+  });
+  await page.waitForFunction(
+    () => document.querySelectorAll("objekt-capture-panel").length === 1,
+    undefined,
+    { timeout: 10_000 },
+  );
+  // Everything after this acts on the panel the new copy drew, not the one the
+  // old copy left behind — which is exactly the property under test.
   const embedded = await panelFrame();
   await embedded.locator("#consent").waitFor();
+  assert.equal(
+    await page.evaluate(
+      () => document.querySelectorAll("objekt-capture-panel").length,
+    ),
+    1,
+    "one panel after a newer content script takes over",
+  );
   assert.deepEqual(await stored().then(({ x, y }) => ({ x, y })), {
     x: moved.x,
     y: moved.y,
@@ -289,7 +315,7 @@ try {
   );
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), consent gates, a whole search run end to end, run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, a whole search run end to end, run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();
