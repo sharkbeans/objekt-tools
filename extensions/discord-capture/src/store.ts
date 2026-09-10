@@ -18,14 +18,48 @@ export interface Entry {
    */
   run?: string;
 }
+/**
+ * The open database, kept for as long as the worker lives.
+ *
+ * Opening and closing per operation was fine while a capture was something
+ * that happened as a person scrolled. A search run captures a page of
+ * twenty-five posts at a time, and each one was paying for a fresh connection
+ * — an open, an upgrade check and a close — before it could write a single
+ * row. The worker is torn down when it goes idle, which closes this with it,
+ * so there is nothing to clean up by hand.
+ */
+let connection: Promise<IDBDatabase> | null = null;
+
 export function openIndex(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (connection) return connection;
+  connection = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open("objekt-discord-capture", 1);
     request.onupgradeneeded = () =>
       request.result.createObjectStore("posts", { keyPath: "key" });
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Anything that closes the connection under us — an eviction, a version
+      // change from another context, the browser reclaiming it — must not
+      // leave a dead handle cached for the next write.
+      db.onclose = () => {
+        if (connection) connection = null;
+      };
+      db.onversionchange = () => {
+        connection = null;
+        db.close();
+      };
+      resolve(db);
+    };
+    request.onerror = () => {
+      connection = null;
+      reject(request.error);
+    };
   });
+  // A failed open must not be remembered as the connection.
+  connection.catch(() => {
+    connection = null;
+  });
+  return connection;
 }
 export async function transaction<T>(
   mode: IDBTransactionMode,
@@ -33,16 +67,20 @@ export async function transaction<T>(
 ): Promise<T> {
   const db = await openIndex();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("posts", mode);
+    let tx: IDBTransaction;
+    try {
+      tx = db.transaction("posts", mode);
+    } catch (error) {
+      // The handle went stale between being handed out and being used, which
+      // is recoverable: drop it so the next call opens a fresh one.
+      connection = null;
+      reject(error);
+      return;
+    }
     let value: T;
-    tx.oncomplete = () => {
-      db.close();
-      resolve(value);
-    };
-    tx.onabort = tx.onerror = () => {
-      db.close();
+    tx.oncomplete = () => resolve(value);
+    tx.onabort = tx.onerror = () =>
       reject(tx.error ?? new Error("Storage failed"));
-    };
     work(tx.objectStore("posts"), (result) => {
       value = result;
     });

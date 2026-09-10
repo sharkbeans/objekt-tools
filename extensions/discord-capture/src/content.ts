@@ -42,6 +42,7 @@ import {
 } from "./search-plan";
 import { channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
+import { waitFor } from "./wait";
 
 let owned = indexOwned([]);
 // The viewer's typed wants, keyed the same way `matchTranscript` keys a
@@ -250,6 +251,62 @@ function update(settings: Record<string, unknown>) {
   // haves list takes effect without waiting for Discord to render something.
   if (allowed) visit(document.body);
 }
+/**
+ * Wait, in a tab whose timers may be throttled.
+ *
+ * The rule and the racing live in `wait.ts`; this supplies the two timers and
+ * the answer to "is this page hidden".
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function pace(ms: number): Promise<void> {
+  return waitFor(ms, {
+    hidden: () => document.visibilityState === "hidden",
+    local: sleep,
+    remote: (delay) =>
+      extensionApi.runtime
+        .sendMessage({ type: "wake", ms: delay })
+        .then(() => undefined),
+  });
+}
+
+/**
+ * Hold the worker open for the length of a run.
+ *
+ * An MV3 worker is torn down after thirty seconds without work, which mid-run
+ * takes the timer above and the open database with it. A connected port with
+ * traffic on it is the documented way to say "still working"; the ping is well
+ * inside the idle timeout, and both ends tolerate the port going away.
+ */
+let keepalive: ReturnType<typeof extensionApi.runtime.connect> | null = null;
+let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
+function holdWorkerOpen(on: boolean) {
+  if (!on) {
+    clearInterval(keepaliveTimer);
+    keepaliveTimer = undefined;
+    keepalive?.disconnect();
+    keepalive = null;
+    return;
+  }
+  if (keepalive) return;
+  try {
+    keepalive = extensionApi.runtime.connect({ name: "objekt-run" });
+    keepalive.onDisconnect.addListener(() => {
+      keepalive = null;
+    });
+    keepaliveTimer = setInterval(() => {
+      try {
+        keepalive?.postMessage({ tick: Date.now() });
+      } catch {
+        keepalive = null;
+      }
+    }, 20_000);
+  } catch {
+    /* Worker unavailable; the run still works, it just may pause on restarts. */
+  }
+}
+
 /**
  * When each code was last searched, so a repeat run continues rather than
  * restarts.
@@ -554,6 +611,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   }
   searching = true;
   markPanelBusy(true);
+  holdWorkerOpen(true);
   searchSignal.cancelled = false;
   // A fresh run counts from zero, so the popup's total reflects this search.
   runPosts.clear();
@@ -583,6 +641,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
         onProgress: (progress) =>
           void report({ ...progress, running: true, planNote }),
         onQuerySearched: rememberQuery,
+        wait: pace,
       }),
     )
     .then(
@@ -600,6 +659,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     .finally(() => {
       searching = false;
       markPanelBusy(false);
+      holdWorkerOpen(false);
       void flushSearched();
     });
   return true;
