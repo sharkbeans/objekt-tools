@@ -561,9 +561,16 @@ function describe(progress: unknown): string {
       : "";
   // A code nobody has posted is a normal answer, and saying so stops it looking
   // like the run went wrong.
+  // Named, because "2 with no matches" is a claim the user is the only one who
+  // can check, and they can only check it if they know which two.
+  const names = Array.isArray(p.emptyQueries)
+    ? (p.emptyQueries as unknown[])
+        .filter((query): query is string => typeof query === "string")
+        .slice(0, 6)
+    : [];
   const empty =
     typeof p.empty === "number" && p.empty > 0
-      ? ` · ${p.empty} with no matches`
+      ? ` · ${p.empty} with no matches${names.length ? ` (${names.join(", ")})` : ""}`
       : "";
   // A panel closed under the run is a thing the user did, and the fix is
   // something only they can do.
