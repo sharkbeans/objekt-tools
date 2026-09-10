@@ -111,18 +111,134 @@ function isBlock(
   );
 }
 /**
+ * Settings the capture path reads for every post, cached for the worker's life.
+ *
+ * Two storage reads per captured post is nothing when posts arrive as fast as
+ * somebody scrolls. A search run delivers a page of twenty-five at once, and
+ * they were paying for a consent read and a channel read each. The cache is
+ * dropped whenever either changes, and dies with the worker — which is the
+ * right lifetime, because a worker that has been torn down re-reads anyway.
+ */
+let settings: { consent: unknown; channels: string[] } | null = null;
+async function currentSettings() {
+  if (!settings) {
+    const stored = await extensionApi.storage.local.get([
+      "consent",
+      "channels",
+    ]);
+    settings = {
+      consent: stored.consent,
+      channels: channelIds(stored.channels),
+    };
+  }
+  return settings;
+}
+
+/**
  * Publish the index size to the toolbar badge and to storage.
  *
  * The badge is for the user; the storage copy is how an open panel learns that
- * a post landed. A panel has no way to observe IndexedDB on the worker's
- * origin, and polling for a number that changes in bursts is worse than one
- * write per post.
+ * a post landed — a panel has no way to observe IndexedDB on the worker's
+ * origin. Both are coalesced: during a run the number changes twenty-five
+ * times a page, and nobody can read a badge that fast.
  */
+const PUBLISH_MS = 700;
+let publishQueued = false;
+let publishedAt = 0;
 async function publishCount(): Promise<void> {
+  publishedAt = Date.now();
   const total = await count();
   await extensionApi.action.setBadgeText({ text: String(total) });
   await extensionApi.storage.local.set({ captured: total });
 }
+function schedulePublish(): void {
+  if (publishQueued) return;
+  publishQueued = true;
+  setTimeout(
+    () => {
+      publishQueued = false;
+      void publishCount().catch(() => {});
+    },
+    Math.max(0, PUBLISH_MS - (Date.now() - publishedAt)),
+  );
+}
+
+/**
+ * Ask the browser not to evict the index.
+ *
+ * Without this the store is "best effort" storage, which the browser is free
+ * to clear when the disk gets tight — quietly, and taking a week of captures
+ * with it. Asked for once capture has been agreed to, because that is when
+ * there is something worth keeping and when asking is least surprising.
+ */
+async function requestPersistence(): Promise<void> {
+  try {
+    const storage = navigator.storage;
+    if (!storage?.persist || (await storage.persisted())) return;
+    await storage.persist();
+  } catch {
+    /* Not supported, or refused. The index still works, it is just evictable. */
+  }
+}
+
+/** What the panel shows under Troubleshooting: how much room the index has. */
+async function storageReport() {
+  try {
+    const estimate = (await navigator.storage?.estimate?.()) ?? {};
+    return {
+      persisted: (await navigator.storage?.persisted?.()) ?? false,
+      usage: estimate.usage ?? null,
+      quota: estimate.quota ?? null,
+    };
+  } catch {
+    return { persisted: false, usage: null, quota: null };
+  }
+}
+
+/**
+ * An unthrottled timer for the content script.
+ *
+ * Chrome throttles `setTimeout` in a hidden tab — to a second after ten
+ * seconds of hiding, and to once a minute once it decides the page is idle.
+ * A search run paces itself on 150ms polls, so in a background tab it does not
+ * slow down so much as stop. The worker is not a tab and is not throttled, so
+ * it keeps time on the run's behalf. The caller races this against its own
+ * timer, so a worker that has been torn down costs latency, never a hang.
+ */
+function wake(ms: number): Promise<true> {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve(true), Math.min(60_000, Math.max(0, ms))),
+  );
+}
+
+/**
+ * A run holds this port open for as long as it lasts.
+ *
+ * An MV3 worker is torn down after thirty seconds without work. Mid-run that
+ * takes the timer service and the open database with it, and the run stalls
+ * until its next message wakes a fresh worker. A connected port with traffic
+ * on it is the documented way to say "still working".
+ */
+extensionApi.runtime.onConnect.addListener((port) => {
+  if (port.name !== "objekt-run") return;
+  port.onMessage.addListener(() => {
+    try {
+      port.postMessage({ alive: true });
+    } catch {
+      /* Disconnected between the message and the reply. */
+    }
+  });
+});
+
+extensionApi.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes.consent || changes.channels) settings = null;
+  if (changes.consent && captureAllowed(changes.consent.newValue))
+    void requestPersistence();
+});
+/** Whether a storage failure is currently being reported to the user. */
+let reportedError = false;
+
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
   const panel = fromPanel(sender.url);
@@ -160,17 +276,13 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       // before consent is recorded, so nothing should reach here without it —
       // but a stale content script from before an upgrade would not know that,
       // and this is the last point where a post can still be refused.
-      const consent = await extensionApi.storage.local.get("consent");
-      if (!captureAllowed(consent.consent))
+      const current = await currentSettings();
+      if (!captureAllowed(current.consent))
         throw new Error("Capture has not been agreed to yet");
-      if (fromSearch && !automationAllowed(consent.consent))
+      if (fromSearch && !automationAllowed(current.consent))
         throw new Error("Search has not been agreed to yet");
-      if (!fromSearch) {
-        const settings = await extensionApi.storage.local.get("channels");
-        const channels = channelIds(settings.channels);
-        if (!channel || !channels.includes(channel))
-          throw new Error("Capture is paused");
-      }
+      if (!fromSearch && (!channel || !current.channels.includes(channel)))
+        throw new Error("Capture is paused");
       let entry: Entry;
       try {
         entry = await capture(
@@ -179,6 +291,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
           searchRun,
         );
       } catch {
+        reportedError = true;
         await extensionApi.action.setBadgeText({ text: "!" });
         await extensionApi.storage.local.set({
           captureError:
@@ -186,14 +299,21 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
         });
         throw new Error("Could not save captured post");
       }
-      await extensionApi.storage.local.remove("captureError");
-      await publishCount();
+      // Only worth a write when there is actually an error to clear; this used
+      // to run for every post captured.
+      if (reportedError) {
+        reportedError = false;
+        await extensionApi.storage.local.remove("captureError");
+      }
+      schedulePublish();
       return entry;
     }
     // A content script may ask for two things: proof it is loaded, and which
     // tab it is in, so an embedded panel can act on its own tab.
     if (fromDiscord) {
       if (request?.type === "ping") return true;
+      // Keeping time for a tab whose own timers are being throttled.
+      if (request?.type === "wake") return wake(Number(request.ms));
       if (request?.type === "tab-id") return sender.tab?.id ?? null;
       if (request?.type === "open-window") {
         await openPanelWindow();
@@ -236,6 +356,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       });
       return owned.length;
     }
+    if (request?.type === "storage") return storageReport();
     if (request?.type === "dump") return entries();
     if (request?.type === "count")
       return count(typeof request.run === "string" ? request.run : undefined);
@@ -244,6 +365,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       // wiping the enabled channels here silently stopped collection and the
       // button name gave no hint that it would.
       await clear();
+      publishedAt = Date.now();
       await extensionApi.action.setBadgeText({ text: "" });
       await extensionApi.storage.local.set({ captured: 0 });
       return true;

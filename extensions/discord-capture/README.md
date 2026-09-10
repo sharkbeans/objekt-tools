@@ -85,6 +85,32 @@ poll instead of at the end of the settle budget. A run that dies with its tab re
 interrupted — `pagehide` writes it where it can, and the panel treats a progress stamp older
 than a minute as dead regardless.
 
+## Running in the background
+
+A run spends most of its life in a tab nobody is looking at, which is the point of the
+panel. Three things have to hold for that to work:
+
+- **Timers.** Chrome throttles `setTimeout` in a hidden tab — to a second after ten seconds,
+  and to once a minute once it decides the page is idle — so a run pacing itself on 150ms
+  polls does not slow down so much as stop. While hidden, the run asks the worker to keep
+  time instead; the worker is not a tab and is not throttled. Both timers run and the first
+  to finish wins, so a worker that has been torn down costs latency and never a hang
+  (`wait.ts`, `wait.test.ts`).
+- **The worker.** An MV3 service worker is torn down after thirty seconds without work, which
+  mid-run takes the timer service and the open database with it. A run holds a named port
+  open and pings it, which is the documented way to say "still working".
+- **Cost per post.** A page of search results captures twenty-five posts at once. Each one
+  used to pay for two `storage.local` reads, a fresh IndexedDB connection, a `remove()` write
+  and a badge update. Consent and enabled channels are now cached for the worker's life and
+  invalidated on change, the database connection is held open (and dropped if anything closes
+  it underneath), the error clear only runs when there is an error, and badge/count updates
+  are coalesced to at most one every 700ms.
+
+The index also asks for `navigator.storage.persist()` once capture is agreed to, because
+without it the store is best-effort and the browser may quietly evict a week of captures.
+Troubleshooting → **Check this tab** reports whether that was granted and how full the store
+is.
+
 ## Validation still requiring a real Discord session
 
 Browse a trade channel for two minutes; dump the index and inspect authors, range coverage,

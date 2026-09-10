@@ -138,6 +138,25 @@ try {
   await popup.locator("#export").click();
   const download = await downloadEvent;
   assert.equal(download.suggestedFilename(), "objekt-discord-transcript.txt");
+  // Capture has to keep working while Discord is not the tab in front: that is
+  // where a search run spends most of its life.
+  // Headless Chromium reports every page as visible, so this checks the part
+  // that is checkable here — capture continuing while Discord is not the tab in
+  // front — and the throttled-timer rule it depends on is covered by
+  // wait.test.ts instead.
+  await popup.bringToFront();
+  await page.evaluate(() => {
+    document
+      .getElementById("messages")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<li id="chat-messages-123-555" aria-labelledby="message-username-555"><span id="message-username-555">Backgrounded</span><time datetime="2026-09-09T03:55:00.000Z"></time><div id="message-content-555">HAVE YooYeon CC109</div></li>',
+      );
+  });
+  await popup.waitForFunction(() =>
+    document.getElementById("status").textContent.includes("2 posts ready"),
+  );
+
   // Pausing removes annotations, and changing channel does not capture.
   await worker.evaluate(() => chrome.storage.local.set({ channels: [] }));
   await page.waitForFunction(
@@ -149,7 +168,7 @@ try {
   });
   await popup.reload();
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("1 post ready"),
+    document.getElementById("status").textContent.includes("2 posts ready"),
   );
   // Withdrawing detaches the reader: the badge goes, and a fresh post is not
   // taken even with the channel enabled.
@@ -173,11 +192,11 @@ try {
   });
   await popup.reload();
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("1 post ready"),
+    document.getElementById("status").textContent.includes("2 posts ready"),
   );
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), consent gate, MV3 capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), consent gate, MV3 capture, background-tab capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();

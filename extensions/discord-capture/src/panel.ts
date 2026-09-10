@@ -506,12 +506,26 @@ void refreshSearch().catch((error) => {
   searchStatus.textContent = error.message;
 });
 
+/** Bytes, in a unit a person reads. */
+function megabytes(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${(value / 1024 / 1024).toFixed(1)} MB`
+    : "unknown";
+}
+
 action("diagnose", async () => {
   const tabId = await activeDiscordTab();
   const response = await toContentScript(tabId, { type: "diagnose" });
   if (!response?.ok) throw new Error(response?.error ?? "No response.");
   const d = response.value;
+  // Eviction is silent and takes the whole index with it, so "is this store
+  // protected, and how full is it" belongs next to everything else that
+  // explains a capture going missing.
+  const storage = await request("storage").catch(() => null);
   const lines = [
+    storage
+      ? `storage: ${megabytes(storage.usage)} used of ${megabytes(storage.quota)}, ${storage.persisted ? "protected from eviction" : "evictable — export regularly"}`
+      : "storage: unavailable",
     // The popup and the content script are reloaded by different actions, so
     // they can disagree — and a stale content script explains almost every
     // "my fix did nothing".
