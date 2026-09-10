@@ -14,13 +14,35 @@ npm run extension:test
 ```
 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select
-`extensions/discord-capture/dist`. Reload Discord after loading or updating the extension.
-Open a server trade channel, open the extension popup, and **agree to the disclosure** — until
-then the content script attaches no observer and reads nothing. Then enable capture for that
-channel. Browse normally. The badge counts distinct captured posts (including
-non-actionable text); **Dump index** downloads blocks plus parsed items for inspection.
-Capture remains enabled across sessions until paused. Enable only channels you intend
-to collect. Clear captured posts through the popup; pause first to prevent recapture.
+`extensions/discord-capture/dist`. Open a server trade channel and click the toolbar button:
+the panel appears in the page. **Agree to the disclosure** — until then the content script
+attaches no observer and reads nothing. Then enable capture for that channel. Browse
+normally. The badge counts distinct captured posts (including non-actionable text);
+**Dump index** downloads blocks plus parsed items for inspection. Capture remains enabled
+across sessions until paused. Enable only channels you intend to collect. Clear captured
+posts through the panel; pause first to prevent recapture.
+
+## The panel
+
+The UI is a floating window inside the Discord page, not a toolbar popup — a popup closes
+the moment it loses focus, and a search run takes minutes, so every glance at Discord used to
+close the thing reporting on it. Drag it by the titlebar (or focus the titlebar and use the
+arrow keys, shift for bigger steps), resize from the bottom-right corner, `—` collapses it to
+the titlebar, `⤢` pops it out into a real browser window, `✕` closes it. Where it was left is
+remembered per browser, including whether it was open, and it is clamped back on screen when
+the window is smaller than it was.
+
+It is an extension page in an iframe inside a closed shadow root: Discord's CSS cannot reach
+it, Discord's scripts cannot see it, and the privileged calls (permission prompts, downloads)
+happen in an extension document where browsers allow them. `src/panel-frame.ts` owns the
+window chrome, `panel.html` + `src/panel.ts` own the UI, and `src/panel-geometry.ts` holds the
+placement rules that the tests exercise without a browser.
+
+The toolbar button toggles the panel on Discord tabs and opens the pop-out window anywhere
+else. Either way the panel acts on a specific Discord tab: the one it is embedded in, or —
+from a window — the Discord tab you used most recently (`src/host-tab.ts`), so it no longer
+matters which tab is in front. A Discord tab that was already open when the extension was
+installed no longer needs a reload either; the worker injects the content script on demand.
 
 The content script reads only rendered message bodies, explicit author anchors and
 machine timestamps. Missing or ambiguous author anchors are skipped, including grouped
@@ -66,7 +88,7 @@ haves; saving typed haves replaces loaded inventory. An empty typed list clears 
 Enabled channels show **wants N of yours** for exact matches from the shared matcher.
 Wildcards are deliberately not counted, matching `/match`. Inventory is a saved snapshot;
 load again after trading to refresh it. Pausing removes annotations. Clearing the index
-also pauses every channel. A `!` toolbar badge and popup error report failed storage writes.
+also pauses every channel. A `!` toolbar badge and panel error report failed storage writes.
 
 ## Automated validation
 
@@ -105,13 +127,14 @@ to any material change in what the extension collects.
 
 Run `npm run extension:build:firefox`. In Firefox 140 or newer, open
 `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select
-`extensions/discord-capture/dist-firefox/manifest.json`. Reload Discord, then enable
-capture for the trade channel using the extension popup. If Firefox shows the extension
+`extensions/discord-capture/dist-firefox/manifest.json`. Click the toolbar button on a
+Discord tab to show the panel, then enable capture for the trade channel from it. If Firefox shows the extension
 as needing site access, grant access to Discord from the Extensions menu and reload.
 
 The Firefox build uses an MV3 background event page and Firefox's Promise-based
 `browser` API. The parser, storage and UI are shared with Chromium. After source changes,
-rebuild, click **Reload** in about:debugging, and reload Discord. Temporary add-ons are
+rebuild, click **Reload** in about:debugging, and reload Discord (or just reopen the panel —
+the worker reinjects the content script). Temporary add-ons are
 removed when Firefox restarts; load the manifest again to resume testing. Export before
 ending the test session. Permanent installation requires a Mozilla-signed package,
 which this local prototype does not include.

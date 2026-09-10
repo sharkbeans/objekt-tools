@@ -1,6 +1,10 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>objekt.my capture</title>
 <style>
-body{font:14px system-ui;width:320px;padding:14px;color:#eee;background:#18181b;margin:0}
+body{font:14px system-ui;padding:14px;color:#eee;background:#18181b;margin:0;
+  /* Sized by whatever hosts it: the floating panel is resizable, the pop-out
+     window is a real window, and only a bare tab needs a width of its own. */
+  max-width:520px}
+body.embedded{padding:12px 14px 18px}
 h1{font-size:15px;margin:0 0 4px}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin:0 0 6px;font-weight:600}
 section{border-top:1px solid #27272a;padding:12px 0}
@@ -103,6 +107,7 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
 
 <details id="step-trouble">
   <summary>Troubleshooting</summary>
+  <button type="button" class="secondary" id="dock" hidden>Dock into the Discord tab</button>
   <button type="button" class="secondary" id="withdraw">Withdraw consent &amp; stop reading Discord</button>
   <p class="hint">Loaded build: <code id="build">…</code><br>After rebuilding, reload the extension <em>and</em> refresh the Discord tab — an open tab keeps the old content script.</p>
   <button type="button" class="secondary" id="toggle">Enable / pause capture here</button>
@@ -112,4 +117,4 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <button type="button" class="secondary" id="clear">Clear captured posts</button>
 </details>
 
-<script src="popup.js"></script></html>
+<script src="panel.js"></script></html>

@@ -12,7 +12,7 @@ const firefox = process.argv.includes("--firefox");
 const output = firefox ? "dist-firefox" : "dist";
 await mkdir(new URL(`${output}/`, root), { recursive: true });
 await build({
-  entryPoints: ["content", "background", "popup"].map(
+  entryPoints: ["content", "background", "panel"].map(
     (name) => new URL(`src/${name}.ts`, root).pathname,
   ),
   outdir: new URL(`${output}/`, root).pathname,
@@ -46,8 +46,8 @@ await writeFile(
   `${JSON.stringify(manifest, null, 2)}\n`,
 );
 await copyFile(
-  new URL("popup.html", root),
-  new URL(`${output}/popup.html`, root),
+  new URL("panel.html", root),
+  new URL(`${output}/panel.html`, root),
 );
 await mkdir(new URL(`${output}/icons/`, root), { recursive: true });
 for (const icon of await readdir(new URL("icons/", root)))

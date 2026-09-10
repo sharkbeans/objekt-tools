@@ -4,6 +4,96 @@ import { loadInventory } from "./inventory";
 import { channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
 
+/**
+ * The panel UI, wherever it is being shown from.
+ *
+ * The embedded panel carries its tab in the query string, so this compares the
+ * document rather than the whole URL — matching on the exact string is what
+ * would let an embedded panel through as "not the panel" and refuse every
+ * privileged request it makes.
+ */
+function fromPanel(url: string | undefined): boolean {
+  if (!url) return false;
+  const panel = extensionApi.runtime.getURL("panel.html");
+  return url === panel || url.startsWith(`${panel}?`);
+}
+
+/**
+ * Make sure the tab has a content script before talking to it.
+ *
+ * Declared content scripts are injected at page load, so a Discord tab that was
+ * already open when the extension was installed or updated has nothing
+ * listening. That was previously answered with "reload the Discord tab (F5)",
+ * which is a fine explanation and a poor experience.
+ */
+async function ensureContentScript(tabId: number): Promise<void> {
+  try {
+    const alive = await extensionApi.tabs.sendMessage(tabId, { type: "ping" });
+    if (alive?.ok) return;
+  } catch {
+    /* Nothing listening yet, which is what the injection below is for. */
+  }
+  await extensionApi.scripting.executeScript({
+    target: { tabId },
+    files: ["content.js"],
+  });
+}
+
+/**
+ * The pop-out window: the panel as a real browser window, for people who would
+ * rather have it beside Discord than on top of it.
+ *
+ * The id is kept in storage rather than in a variable because the service
+ * worker is torn down between clicks, and a forgotten id opens a second window
+ * on top of the first.
+ */
+async function openPanelWindow(): Promise<void> {
+  const { panelWindow } = await extensionApi.storage.local.get("panelWindow");
+  if (typeof panelWindow === "number") {
+    try {
+      await extensionApi.windows.update(panelWindow, {
+        focused: true,
+        drawAttention: true,
+      });
+      return;
+    } catch {
+      /* Closed since it was recorded. */
+    }
+  }
+  const created = await extensionApi.windows.create({
+    url: `${extensionApi.runtime.getURL("panel.html")}?window=1`,
+    type: "popup",
+    width: 420,
+    height: 780,
+  });
+  await extensionApi.storage.local.set({ panelWindow: created?.id ?? null });
+}
+
+extensionApi.windows?.onRemoved.addListener((closed) => {
+  void extensionApi.storage.local.get("panelWindow").then((settings) => {
+    if (settings.panelWindow === closed)
+      void extensionApi.storage.local.remove("panelWindow");
+  });
+});
+
+/**
+ * The toolbar button shows the panel in the page, or the window when there is
+ * no page to show it in.
+ *
+ * There is no `default_popup` any more: a popup that closes whenever the user
+ * looks at Discord is the wrong container for something that runs for minutes.
+ */
+extensionApi.action.onClicked.addListener((tab) => {
+  void (async () => {
+    if (typeof tab?.id === "number" && isDiscordUrl(tab.url)) {
+      await ensureContentScript(tab.id);
+      await extensionApi.tabs.sendMessage(tab.id, { type: "toggle-panel" });
+      return;
+    }
+    await openPanelWindow();
+  })().catch(() => openPanelWindow());
+});
+
 function isBlock(
   value: unknown,
 ): value is { author: string; body: string; time: string } {
@@ -35,7 +125,7 @@ async function publishCount(): Promise<void> {
 }
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
-  const popup = sender.url === extensionApi.runtime.getURL("popup.html");
+  const panel = fromPanel(sender.url);
   // The sender URL proves the message came from a Discord page; which channel
   // the post belongs to comes from the message, because search results render
   // posts from channels other than the one currently open.
@@ -100,7 +190,44 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       await publishCount();
       return entry;
     }
-    if (!popup) throw new Error("Unsupported request");
+    // A content script may ask for two things: proof it is loaded, and which
+    // tab it is in, so an embedded panel can act on its own tab.
+    if (fromDiscord) {
+      if (request?.type === "ping") return true;
+      if (request?.type === "tab-id") return sender.tab?.id ?? null;
+      if (request?.type === "open-window") {
+        await openPanelWindow();
+        // One live panel at a time: the embedded one closes as the window opens.
+        if (typeof sender.tab?.id === "number")
+          await extensionApi.tabs
+            .sendMessage(sender.tab.id, { type: "close-panel" })
+            .catch(() => {});
+        return true;
+      }
+    }
+    if (!panel) throw new Error("Unsupported request");
+    if (request?.type === "open-window") {
+      await openPanelWindow();
+      return true;
+    }
+    if (request?.type === "ensure") {
+      const tabId = Number(request.tabId);
+      if (!Number.isFinite(tabId)) throw new Error("No tab to start in");
+      await ensureContentScript(tabId);
+      return true;
+    }
+    if (request?.type === "close-window") {
+      const id = sender.tab?.windowId;
+      if (typeof id === "number") await extensionApi.windows.remove(id);
+      return true;
+    }
+    if (request?.type === "show-panel") {
+      const tabId = Number(request.tabId);
+      if (!Number.isFinite(tabId)) throw new Error("No tab to show it in");
+      await ensureContentScript(tabId);
+      await extensionApi.tabs.sendMessage(tabId, { type: "open-panel" });
+      return true;
+    }
     if (request?.type === "inventory") {
       const owned = await loadInventory(request.nickname);
       await extensionApi.storage.local.set({

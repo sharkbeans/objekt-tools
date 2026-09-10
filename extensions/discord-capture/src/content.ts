@@ -16,6 +16,14 @@ import {
 } from "./dom";
 import { inventoryRows } from "./inventory";
 import {
+  closePanel,
+  markPanelBusy,
+  openPanel,
+  togglePanel,
+  watchPanelPlacement,
+} from "./panel-frame";
+import { readPanelState } from "./panel-geometry";
+import {
   type CaptureProbe,
   currentPage,
   findNextPage,
@@ -305,8 +313,49 @@ const captureProbe: CaptureProbe = {
   },
   posts: () => runPosts.size,
 };
+/**
+ * This tab's id, asked for once and remembered.
+ *
+ * The panel needs it to act on the tab it is embedded in rather than on
+ * whichever tab is active, and a content script cannot read it directly.
+ */
+let ownTabId: number | null = null;
+async function tabId(): Promise<number | null> {
+  if (ownTabId !== null) return ownTabId;
+  try {
+    const response = await extensionApi.runtime.sendMessage({ type: "tab-id" });
+    if (response?.ok && typeof response.value === "number")
+      ownTabId = response.value;
+  } catch {
+    /* Worker restarting; the panel still works, just against the active tab. */
+  }
+  return ownTabId;
+}
+async function showPanel() {
+  await openPanel(await tabId());
+}
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
+  // Proof of life for the worker, which injects this script when there is none.
+  if (request?.type === "ping") {
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type === "toggle-panel") {
+    void tabId().then((id) => togglePanel(id));
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type === "open-panel") {
+    void showPanel();
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type === "close-panel") {
+    closePanel();
+    reply({ ok: true, value: true });
+    return true;
+  }
   if (request?.type === "diagnose") {
     // Structure only, and only once capture has been agreed to: the readable
     // count is produced by parsing message bodies, which is the thing consent
@@ -436,6 +485,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   const delayMs = Number(request.delayMs);
   const pages = Number(request.pages);
   searching = true;
+  markPanelBusy(true);
   searchSignal.cancelled = false;
   // A fresh run counts from zero, so the popup's total reflects this search.
   runPosts.clear();
@@ -477,6 +527,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     )
     .finally(() => {
       searching = false;
+      markPanelBusy(false);
     });
   return true;
 });
@@ -488,5 +539,11 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   if (Object.keys(settings).length) update(settings);
 });
 void extensionApi.storage.local
-  .get(["consent", "channels", "owned", "wants"])
-  .then(update);
+  .get(["consent", "channels", "owned", "wants", "panel"])
+  .then((settings) => {
+    update(settings);
+    // The panel is a window, so it stays where it was: open across reloads and
+    // across channel switches, until it is closed on purpose.
+    if (readPanelState(settings.panel).open) void showPanel();
+  });
+watchPanelPlacement();
