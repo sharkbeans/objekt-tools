@@ -19,6 +19,8 @@ p{margin:6px 0}
 .hint{font-size:12px;color:#a1a1aa}
 .row{display:flex;gap:6px}
 input[type=range]{padding:0;height:24px;background:transparent;border:0;accent-color:#6366f1;cursor:pointer}
+.check{display:flex;align-items:center;gap:8px;color:#d4d4d8;font-size:12px;margin-top:8px}
+.check input{width:auto;margin:0;accent-color:#6366f1}
 .tally{font-size:12px;color:#a1a1aa}
 .tally strong{font-size:20px;color:#a5b4fc;font-variant-numeric:tabular-nums;margin-right:4px}
 #status,#search-status,#inventory-status{white-space:pre-wrap;font-size:12px}
@@ -75,6 +77,8 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <label for="delay">Pace &middot; <span id="delay-value">Fastest</span></label>
   <input id="delay" type="range" min="0" max="15" step="1" value="0">
   <p class="hint"><strong>Fastest</strong> moves on the moment every post on a page is recorded &mdash; no fixed wait. Drag right to add a pause on top if Discord starts rate-limiting.</p>
+  <label class="check"><input type="checkbox" id="skip-recent" checked> Skip codes searched in the last 6 hours</label>
+  <p class="hint">A run searches at most 40 codes. With this on, the next run picks up where the last one stopped instead of starting the list again.</p>
 </section>
 
 <section id="automation-gate" hidden>

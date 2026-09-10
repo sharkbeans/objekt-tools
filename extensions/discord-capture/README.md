@@ -54,6 +54,37 @@ shared `messageKey(author, body)`. Parsed results persist alongside `StoredBlock
 renders do not parse again. Edited bodies produce new content keys, matching `/match`.
 The index has no app load-time cap; browser quota/eviction still applies. Export regularly.
 
+## Search
+
+A run types each collection code into Discord's own search box and lets Discord's client
+issue the request; nothing here calls Discord's API or touches a token. What that costs the
+user's account is in [`COMPLIANCE.md`](./COMPLIANCE.md#discord-terms-of-service) and behind
+its own consent.
+
+What the run refuses to do:
+
+- **Type anywhere but the search box.** `execCommand` and the synthetic input events act on
+  the document's selection, not on the element they are handed, so an insertion attempted
+  while the message composer holds focus types the query into the composer — silently, since
+  the search box then reads back empty and the attempt is retried. Every insertion, clearance
+  and Enter is conditional on the search box actually holding focus. `search.test.ts` proves
+  a detached field leaves the composer empty and presses no keys.
+- **Keep firing at a client that has stopped answering.** Retries back off (750ms, doubling),
+  and three queries in a row answered with the list already on screen ends the run with a
+  rate-limit explanation rather than a fourth attempt.
+- **Search a whole pasted want list.** 40 codes per run, and by default codes searched in the
+  last 6 hours are skipped, so a repeat run continues through the list instead of restarting
+  it (`search-plan.ts`). Untick the box to search everything.
+- **Read user input as Discord search syntax.** Queries are stripped to letters, digits and
+  single spaces, so a stray `from:` or quote cannot turn a search into a filter.
+
+An empty results panel is now recognised as an answer rather than as a missing panel, so a
+code nobody has posted costs one settle instead of the full grace period, and a panel that
+actually disappears is diagnosed as the user having closed it. Stop takes effect on the next
+poll instead of at the end of the settle budget. A run that dies with its tab reports as
+interrupted — `pagehide` writes it where it can, and the panel treats a progress stamp older
+than a minute as dead regardless.
+
 ## Validation still requiring a real Discord session
 
 Browse a trade channel for two minutes; dump the index and inspect authors, range coverage,

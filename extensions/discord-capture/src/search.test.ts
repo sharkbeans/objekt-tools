@@ -14,6 +14,7 @@ import {
   rowSignature,
   runSearches,
   searchQueries,
+  searchSafe,
   settlePage,
   submitSearch,
   typeQuery,
@@ -133,10 +134,46 @@ test("types through insertText so Slate keeps the text", async () => {
     via: "insertText",
     index: 0,
     tried: ["insertText"],
+    unfocused: false,
   });
   // A second query replaces the first rather than appending.
   assert.equal((await typeQuery(box, "Mayu CC103", now)).ok, true);
   assert.doesNotMatch(box.textContent ?? "", /SeoYeon/);
+});
+
+test("never types into whatever else has focus", async () => {
+  // The hazard this guards: execCommand acts on the document's selection, not
+  // on the element it was handed. A field that cannot take focus therefore
+  // sends the query wherever focus actually is — and the other contenteditable
+  // in this document is the message composer.
+  const doc = page(SEARCH_BOX + COMPOSER);
+  const box = findSearchBox(doc);
+  const composer = doc.querySelector('[role="textbox"]') as HTMLElement;
+  assert.ok(box);
+  // A field detached mid-run is the realistic version: Discord re-renders the
+  // search bar, and the reference the run is holding stops being in the page.
+  box.remove();
+  composer.focus();
+  const typed = await typeQuery(box, "SeoYeon CC101", now);
+  assert.equal(typed.ok, false);
+  assert.equal(typed.unfocused, true);
+  assert.equal(typed.tried.length, 0);
+  assert.equal(composer.textContent, "", "the composer must be left alone");
+});
+
+test("will not press Enter at a field that does not hold focus", async () => {
+  const doc = page(SEARCH_BOX + COMPOSER);
+  const box = findSearchBox(doc);
+  const composer = doc.querySelector('[role="textbox"]') as HTMLElement;
+  assert.ok(box);
+  const keys: string[] = [];
+  doc.addEventListener("keydown", (event) => {
+    keys.push((event as KeyboardEvent).key);
+  });
+  composer.focus();
+  assert.equal(submitSearch(box), false);
+  assert.equal(await commitSearch(box, "AA101", now), "blocked");
+  assert.deepEqual(keys, [], "no Enter reaches the page from a blurred field");
 });
 
 test("waits for Slate to commit before deciding the text was refused", async () => {
@@ -207,9 +244,10 @@ test("submits every query in order, pacing between them", async () => {
     unsettled: 0,
     unchanged: 0,
     settleNote: null,
-    submittedBy: { option: 0, enter: 3 },
+    submittedBy: { option: 0, enter: 3, blocked: 0 },
     retried: 0,
     empty: 0,
+    closed: 0,
     typedBy: { insertText: 3 },
   });
   // One pacing wait per page per query, including after the last: that pause is
@@ -258,11 +296,15 @@ test("stops rather than firing blind when the UI changes shape", async () => {
   });
   assert.equal(rejected.done, 0);
   assert.match(rejected.stopped ?? "", /would not take "A CC1"/);
-  // Names every insertion it tried, which is the difference between "Discord
-  // changed" and "this browser needs a different one". The order rotates with
-  // the attempt, so assert on membership rather than sequence.
-  for (const insertion of ["insertText", "beforeinput", "paste"])
+  // Names every insertion it actually tried, which is the difference between
+  // "Discord changed" and "this browser needs a different one". The order
+  // rotates with the attempt, so assert on membership rather than sequence.
+  // The paste path is absent because jsdom has no DataTransfer to build the
+  // event with — an insertion this browser cannot perform is not reported as
+  // one that was tried and refused.
+  for (const insertion of ["insertText", "beforeinput"])
     assert.match(rejected.stopped ?? "", new RegExp(insertion));
+  assert.doesNotMatch(rejected.stopped ?? "", /paste/);
 });
 
 test("recognises Discord's hosts and channel URLs", async () => {
@@ -294,7 +336,8 @@ test("Enter carries the legacy numeric codes some handlers still read", () => {
     if (event instanceof view.KeyboardEvent)
       seen.push({ key: event.key, keyCode: event.keyCode, type: event.type });
   });
-  submitSearch(box);
+  box.focus();
+  assert.equal(submitSearch(box), true);
   assert.deepEqual(seen, [{ key: "Enter", keyCode: 13, type: "keydown" }]);
 });
 
@@ -783,7 +826,7 @@ test("finds search results that carry no chat-messages wrapper", () => {
   ]);
   assert.equal(
     rowSignature(doc),
-    "message-content-1 message-content-2 message-content-3",
+    "panel message-content-1 message-content-2 message-content-3",
   );
 });
 
@@ -877,6 +920,7 @@ test("falls back to Enter when no row ever appears", async () => {
   box.addEventListener("keydown", (event) => {
     if ((event as KeyboardEvent).key === "Enter") enters.push(13);
   });
+  box.focus();
   assert.equal(await commitSearch(box, "AA101", now), "enter");
   assert.deepEqual(enters, [13]);
 });
@@ -894,7 +938,7 @@ test("says the query never ran when it had to fall back to Enter", async () => {
   });
   // Fired three times before giving up: a query that draws no response is far
   // more often a misfire than a real answer.
-  assert.deepEqual(run.submittedBy, { option: 0, enter: 3 });
+  assert.deepEqual(run.submittedBy, { option: 0, enter: 3, blocked: 0 });
   assert.equal(run.retried, 2);
   assert.match(run.settleNote ?? "", /results never changed after 3 attempts/);
 });
@@ -1167,4 +1211,137 @@ test("escalates the insertion until the results actually move", async () => {
   // query starts from it and needs none.
   assert.equal(run.retried, 1);
   assert.deepEqual(run.typedBy, { insertText: 1, beforeinput: 2 });
+});
+
+test("strips search operators out of a query", () => {
+  // Discord's search has its own syntax, and a query is built from parsed user
+  // input — a stray colon turns a search for an objekt into a filter.
+  assert.equal(searchSafe('from:me "CC101"'), "from me CC101");
+  assert.equal(searchSafe("CC101 -Mayu"), "CC101 Mayu");
+  // Too short to discriminate anything: it would match most of the channel.
+  assert.equal(searchSafe("#"), "");
+  assert.equal(searchSafe("A"), "");
+});
+
+test("an empty results panel is an answer, not a missing panel", async () => {
+  // Discord leaves the panel in place and empties it. Treating that as "no
+  // panel" cost every unmatched code the full grace period and made it
+  // indistinguishable from a panel that had been closed.
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  assert.equal(resultsPanel(doc)?.id, "search-results");
+  assert.equal(rowSignature(doc), "panel ");
+  assert.equal(resultRows(doc).length, 0);
+});
+
+test("does not re-fire a code that already came back empty", async () => {
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const recorded = new Set<string>();
+  const submits: string[] = [];
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Enter") return;
+    const typed = (findSearchBox(doc)?.textContent ?? "").replace(/[​-‍﻿]/g, "");
+    submits.push(typed);
+    // The first code is posted about; the two after it are not, and Discord
+    // answers those by leaving the panel exactly as it is.
+    if (submits.length === 1) {
+      list.innerHTML = RESULT_ROW("1");
+      recorded.add(rowId("1"));
+      return;
+    }
+    list.innerHTML = "";
+  });
+  const run = await runSearches(doc, ["CC101", "CC201", "AA101"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+    settlePollMs: 100,
+  });
+  assert.equal(run.stopped, null);
+  assert.equal(run.done, 3);
+  assert.equal(run.empty, 2, "both unmatched codes read as answered");
+  assert.equal(run.unchanged, 0, "and neither reads as a stall");
+  assert.deepEqual(submits, ["CC101", "CC201", "AA101"], "one submit each");
+});
+
+test("gives up rather than typing into a client that stopped answering", async () => {
+  // The shape a rate limit takes: the results stay exactly as they are, however
+  // many times the query is fired. Retrying that forever is how an account gets
+  // noticed.
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const recorded = new Set([rowId("1"), rowId("2")]);
+  let submits = 0;
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key === "Enter") submits++;
+  });
+  const waits: number[] = [];
+  const run = await runSearches(doc, ["CC1", "CC2", "CC3", "CC4", "CC5"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async (ms) => {
+      waits.push(ms);
+    },
+    settlePollMs: 100,
+    attempts: 2,
+    backoffMs: 500,
+  });
+  assert.match(run.stopped ?? "", /rate-limited/);
+  assert.equal(run.done, 3, "stops after the third stalled query, not the 5th");
+  assert.equal(submits, 6, "two attempts each, then it stops");
+  // And it backed off between attempts rather than firing straight back.
+  assert.ok(
+    waits.includes(500),
+    `expected a backoff pause, got ${waits.join(",")}`,
+  );
+});
+
+test("a run stops the moment it is cancelled, not when the budget runs out", async () => {
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const signal = { cancelled: false };
+  // Nothing is ever recorded, so the settle would otherwise wait out its whole
+  // budget on this page.
+  const probe = probeOf(new Set<string>());
+  let polls = 0;
+  const run = await runSearches(doc, ["CC1"], {
+    delayMs: 0,
+    signal,
+    probe,
+    wait: async () => {
+      polls++;
+      if (polls === 3) signal.cancelled = true;
+    },
+    settlePollMs: 100,
+    settleBudgetMs: 60_000,
+  });
+  assert.equal(run.stopped, "Cancelled.");
+  assert.ok(polls < 40, `settle kept polling after cancel: ${polls}`);
+});
+
+test("a results panel closed mid-run ends the query, not the run", async () => {
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const recorded = new Set([rowId("1"), rowId("2")]);
+  let submits = 0;
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Enter") return;
+    submits++;
+    // The user clicks a result, which closes the panel; the next query types
+    // into the bar again and brings it back.
+    const list = doc.getElementById("search-results");
+    if (submits === 2) list?.remove();
+    else if (!list) doc.body.insertAdjacentHTML("beforeend", panel(["3", "4"]));
+  });
+  for (const id of ["3", "4"]) recorded.add(rowId(id));
+  const run = await runSearches(doc, ["CC1", "CC2", "CC3"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+    settlePollMs: 100,
+  });
+  assert.equal(run.stopped, null, "the run carries on");
+  assert.equal(run.closed, 1);
+  assert.match(run.pagerNote ?? "", /results closed/);
 });
