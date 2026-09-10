@@ -9,6 +9,14 @@ export interface Entry {
   key: string;
   block: StoredBlock;
   parsed: TranscriptMessage;
+  /**
+   * The search run that produced this post, when one did.
+   *
+   * The index is cumulative and holds everything ever captured, channel
+   * browsing included — so "what did this search find" is not answerable from a
+   * total. Absent on posts collected by browsing a channel.
+   */
+  run?: string;
 }
 export function openIndex(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -48,7 +56,11 @@ export async function transaction<T>(
  * as "pbrihu" and "pbrihuWAV" and hashed to two different keys. The message id
  * does not change.
  */
-export function capture(block: StoredBlock, id: string): Promise<Entry> {
+export function capture(
+  block: StoredBlock,
+  id: string,
+  run?: string,
+): Promise<Entry> {
   return transaction("readwrite", (store, done) => {
     const key = id;
     const request = store.get(key);
@@ -56,6 +68,12 @@ export function capture(block: StoredBlock, id: string): Promise<Entry> {
       const existing: Entry | undefined = request.result;
       if (existing) {
         let changed = false;
+        // A post this search surfaced again belongs to this search, whenever it
+        // was first seen.
+        if (run && existing.run !== run) {
+          existing.run = run;
+          changed = true;
+        }
         if (
           block.time &&
           (!existing.block.time ||
@@ -80,7 +98,9 @@ export function capture(block: StoredBlock, id: string): Promise<Entry> {
       const parsed = collect([
         { ...block, time: block.time ? parseMessageTime(block.time) : null },
       ])[0];
-      const entry = { key, block, parsed };
+      const entry: Entry = run
+        ? { key, block, parsed, run }
+        : { key, block, parsed };
       store.add(entry);
       done(entry);
     };
@@ -98,9 +118,18 @@ export function clear(): Promise<void> {
     done();
   });
 }
-export function count(): Promise<number> {
+/** Posts stored, or just the ones a given search run produced. */
+export function count(run?: string): Promise<number> {
   return transaction("readonly", (store, done) => {
-    const req = store.count();
-    req.onsuccess = () => done(req.result);
+    if (!run) {
+      const req = store.count();
+      req.onsuccess = () => done(req.result);
+      return;
+    }
+    // No index on `run`: the store holds thousands at most, and this only runs
+    // while the popup is open.
+    const req = store.getAll();
+    req.onsuccess = () =>
+      done(req.result.filter((entry: Entry) => entry.run === run).length);
   });
 }
