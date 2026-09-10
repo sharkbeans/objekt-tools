@@ -18,6 +18,7 @@ import { type Health, HealthWatch } from "./health";
 import { inventoryRows } from "./inventory";
 import {
   closePanel,
+  discardPanel,
   markPanelBusy,
   openPanel,
   showPanelNotice,
@@ -64,15 +65,38 @@ function contextGone(error: unknown): boolean {
     )
   );
 }
-function orphan() {
+function orphan(superseded = false) {
   if (orphaned) return;
   orphaned = true;
   searchSignal.cancelled = true;
   watch(false);
-  showPanelNotice(
-    "The extension was reloaded or updated, so this tab is running an old copy of it. Reload Discord to carry on capturing — anything already captured is safe.",
-  );
+  // Superseded: a newer copy of this script is taking over the page, so the
+  // panel is being replaced rather than dismissed and there is nothing to
+  // report. Otherwise there is no replacement coming, and saying so is the
+  // only way the user learns why capture stopped.
+  if (superseded) discardPanel();
+  else
+    showPanelNotice(
+      "The extension was reloaded or updated, so this tab is running an old copy of it. Reload Discord to carry on capturing — anything already captured is safe.",
+    );
 }
+
+/**
+ * Stand down when a newer copy of this script is injected into the page.
+ *
+ * Updating an extension orphans the content scripts already running, and the
+ * usual answer is to tell everyone to reload their tabs. The worker can inject
+ * the new version instead — but then two copies share the page, both observing
+ * and both drawing a panel. DOM events cross isolated worlds, so the arriving
+ * copy simply says so and the older one steps aside.
+ */
+const CLAIM = "objekt-capture-claim";
+const instance = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+document.addEventListener(CLAIM, (event) => {
+  const claimant = (event as CustomEvent<string>).detail;
+  if (typeof claimant === "string" && claimant !== instance) orphan(true);
+});
+document.dispatchEvent(new CustomEvent(CLAIM, { detail: instance }));
 
 let owned = indexOwned([]);
 // The viewer's typed wants, keyed the same way `matchTranscript` keys a
@@ -485,6 +509,12 @@ async function showPanel() {
 }
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
+  // A copy that has stood down answers nothing. Its listeners outlive it when
+  // it was superseded rather than invalidated — the extension is still
+  // perfectly alive, this instance is simply not the one in charge — and two
+  // instances both accepting "run a search" means two runs typing into the
+  // same box. Returning without replying leaves the live copy to answer.
+  if (orphaned) return;
   // Proof of life for the worker, which injects this script when there is none.
   if (request?.type === "ping") {
     reply({ ok: true, value: true });

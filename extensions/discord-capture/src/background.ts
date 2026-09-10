@@ -1,5 +1,6 @@
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
+import { DISCORD_MATCHES, pickTab } from "./host-tab";
 import { loadInventory } from "./inventory";
 import { channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
@@ -92,6 +93,37 @@ extensionApi.action.onClicked.addListener((tab) => {
     }
     await openPanelWindow();
   })().catch(() => openPanelWindow());
+});
+
+/**
+ * Keep open Discord tabs working across an install or an update.
+ *
+ * Declared content scripts only run at page load, so an update leaves every
+ * open tab running the previous version — which is orphaned, cannot save
+ * anything, and until now had to be reloaded by hand. Injecting the new copy
+ * is enough: it announces itself and the old one stands down.
+ *
+ * On a first install there is nothing to replace, so the panel is opened
+ * instead — otherwise the extension is installed, does nothing, and gives no
+ * hint that a toolbar button is what starts it.
+ */
+extensionApi.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== "install" && details.reason !== "update") return;
+  void (async () => {
+    const tabs = await extensionApi.tabs.query({ url: DISCORD_MATCHES });
+    for (const tab of tabs) {
+      if (typeof tab.id !== "number") continue;
+      await extensionApi.scripting
+        .executeScript({ target: { tabId: tab.id }, files: ["content.js"] })
+        .catch(() => {});
+    }
+    if (details.reason !== "install") return;
+    const first = pickTab(tabs);
+    if (typeof first?.id === "number")
+      await extensionApi.tabs
+        .sendMessage(first.id, { type: "open-panel" })
+        .catch(() => {});
+  })().catch(() => {});
 });
 
 function isBlock(

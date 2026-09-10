@@ -145,8 +145,21 @@ worst kind:
 - **The extension is reloaded or updated.** Every content script already running is orphaned:
   `chrome.runtime` stops working and every message throws. The old code caught that and
   carried on scanning, so capture stopped for good and the badge simply never moved again.
-  An orphaned script now detaches its observer, cancels any run, and replaces the panel's
-  contents with what to do about it (reload Discord).
+  An orphaned script now detaches its observer, cancels any run, stops answering messages,
+  and replaces the panel's contents with what to do about it.
+
+  On an update the worker does better than that: it injects the new content script into
+  every open Discord tab, so nobody has to reload anything. Two copies would otherwise share
+  the page, both observing and both drawing a panel, so the arriving copy announces itself
+  through a DOM event — those cross isolated worlds — and the older one stands down and takes
+  its panel with it. A copy that has stood down answers no messages at all: its listeners
+  outlive it when it was superseded rather than invalidated, and two instances both accepting
+  "run a search" is two runs typing into the same box. The smoke test injects a second script
+  and checks that one panel survives and the run still works.
+
+  A first install opens the panel in a Discord tab if one is open, since an extension that
+  installs and then does nothing gives no hint that a toolbar button is what starts it.
+  <kbd>Alt+Shift+O</kbd> toggles the panel too.
 
 ## Validation still requiring a real Discord session
 
