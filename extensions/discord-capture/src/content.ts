@@ -682,4 +682,28 @@ void extensionApi.storage.local
     // across channel switches, until it is closed on purpose.
     if (readPanelState(settings.panel).open) void showPanel();
   });
+/**
+ * Report Discord's theme, so the panel can match it.
+ *
+ * Discord marks its own root with `theme-light` / `theme-dark`; that is a
+ * Discord setting rather than an operating-system one, so `prefers-color-scheme`
+ * would be wrong here about as often as it was right.
+ */
+function publishTheme() {
+  const theme = document.documentElement.classList.contains("theme-light")
+    ? "light"
+    : "dark";
+  void extensionApi.storage.local
+    .get("discordTheme")
+    .then((settings) => {
+      if (settings.discordTheme !== theme)
+        return extensionApi.storage.local.set({ discordTheme: theme });
+    })
+    .catch(() => {});
+}
+publishTheme();
+new MutationObserver(publishTheme).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ["class"],
+});
 watchPanelPlacement();

@@ -46,12 +46,45 @@ async function request(type: string, extra: Record<string, unknown> = {}) {
     throw new Error(response?.error ?? "Extension unavailable");
   return response.value;
 }
-function action(id: string, run: () => Promise<void>) {
-  document.getElementById(id)?.addEventListener("click", () => {
-    void run().catch((error) => {
-      status.textContent = error.message;
-    });
+/**
+ * Wire a button, and make it obvious that it is doing something.
+ *
+ * Every one of these round-trips to the worker or to a tab, so "did my click
+ * land" is a real question — and a second click while the first is in flight
+ * is how two inventory lookups or two exports happen.
+ */
+function action(
+  id: string,
+  run: () => Promise<void>,
+  say: (message: string, bad: boolean) => void = (message) => {
+    status.textContent = message;
+    status.classList.add("bad");
+  },
+) {
+  const button = document.getElementById(id);
+  if (!(button instanceof HTMLButtonElement)) return;
+  let busy = false;
+  button.addEventListener("click", () => {
+    if (busy) return;
+    busy = true;
+    const label = button.textContent;
+    button.disabled = true;
+    void run()
+      .catch((error) => {
+        say(error instanceof Error ? error.message : String(error), true);
+      })
+      .finally(() => {
+        busy = false;
+        button.disabled = false;
+        if (label !== null) button.textContent = label;
+      });
   });
+}
+
+/** Say something in a region, and colour it by whether it went wrong. */
+function say(element: HTMLElement, message: string, bad = false) {
+  element.textContent = message;
+  element.classList.toggle("bad", bad);
 }
 /**
  * Show only what the user has agreed to.
@@ -70,6 +103,7 @@ function showSections(consent: unknown) {
   };
   show("consent", !capture);
   for (const id of [
+    "channel-bar",
     "step-inventory",
     "step-wants",
     "step-match",
@@ -126,7 +160,7 @@ async function refresh() {
     channel && channelIds(settings.channels).includes(channel),
   );
   if (typeof settings.captureError === "string") {
-    status.textContent = settings.captureError;
+    say(status, settings.captureError, true);
     return;
   }
   const captured = Number(await request("count"));
@@ -141,13 +175,40 @@ async function refresh() {
         ? `${captured} post${captured === 1 ? "" : "s"} ready to export.`
         : "Nothing captured yet — run a search above.",
   ];
-  // Only worth mentioning when it explains why nothing is arriving.
-  if (channel && !enabled && captured === 0)
-    parts.push(
-      "Capture is paused for this channel; running a search enables it.",
-    );
+  // The channel strip says whether this channel is being collected, so the
+  // status does not repeat it.
   if (!channel) parts.push("Open a Discord trade channel to capture.");
-  status.textContent = parts.join(" ");
+  say(status, parts.join(" "));
+  showChannel(tab?.url, enabled);
+}
+
+/**
+ * The channel strip: which Discord channel this panel is pointed at, and
+ * whether its posts are being kept.
+ *
+ * This switch used to live in Troubleshooting, which is the wrong place for
+ * the control that decides whether the extension does anything at all.
+ */
+function showChannel(url: string | undefined, enabled: boolean) {
+  const bar = document.getElementById("channel-bar");
+  const state = document.getElementById("channel-state");
+  const pip = document.getElementById("channel-pip");
+  const button = document.getElementById("toggle");
+  if (!bar || !state || !pip || !(button instanceof HTMLButtonElement)) return;
+  const channel = channelFromUrl(url);
+  pip.classList.toggle("on", enabled);
+  button.hidden = !channel;
+  if (!channel) {
+    state.textContent = url
+      ? "Open a server channel in Discord — this is not one."
+      : "No Discord tab open.";
+    return;
+  }
+  state.innerHTML = "";
+  const label = document.createElement("strong");
+  label.textContent = enabled ? "Capturing" : "Not capturing";
+  state.append(label, ` this channel${enabled ? "" : " — posts are ignored"}`);
+  button.textContent = enabled ? "Pause here" : "Capture here";
 }
 function download(text: string, filename: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type }));
@@ -169,9 +230,13 @@ action("toggle", async () => {
       ? channels.filter((id: string) => id !== channel)
       : [...channels, channel],
   });
-  status.textContent = enabled
-    ? "Capture paused for this channel."
-    : "Capture enabled. Browse the channel to collect posts.";
+  say(
+    status,
+    enabled
+      ? "Capture paused for this channel."
+      : "Capture enabled. Browse the channel to collect posts.",
+  );
+  await refresh();
 });
 action("dump", async () => {
   download(
@@ -194,7 +259,7 @@ void refresh().catch((error) => {
 /** Export `posts`, or say why there was nothing to write. */
 function exportPosts(posts: Entry[], what: string) {
   if (!posts.length) {
-    status.textContent = `No ${what} to export yet.`;
+    say(status, `No ${what} to export yet.`, true);
     return;
   }
   download(
@@ -202,7 +267,10 @@ function exportPosts(posts: Entry[], what: string) {
     "objekt-discord-transcript.txt",
     "text/plain;charset=utf-8",
   );
-  status.textContent = `Downloaded ${posts.length} ${what}. Open /match and choose Import text files.`;
+  say(
+    status,
+    `Downloaded ${posts.length} ${what}. Open /match and choose Import text files.`,
+  );
 }
 
 action("export", async () => {
@@ -227,51 +295,62 @@ const inventoryStatus = document.getElementById(
 ) as HTMLElement;
 const nickname = document.getElementById("nickname") as HTMLInputElement;
 const haves = document.getElementById("haves") as HTMLTextAreaElement;
-action("save-haves", async () => {
-  const owned = parseOffering(haves.value).map(
-    ({ member, season, collectionNo }) => ({ member, season, collectionNo }),
-  );
-  if (haves.value.trim() && !owned.length)
-    throw new Error("No objekts recognized. Try YooYeon CC101.");
-  await extensionApi.storage.local.set({
-    owned,
-    nickname: "",
-    haves: haves.value,
-  });
-  inventoryStatus.textContent = `${owned.length} typed haves saved`;
-});
-action("load-inventory", async () => {
-  // A permission prompt has to come from a user gesture in an extension
-  // document. That holds here, but a panel embedded in a page is an unusual
-  // enough place for one that browsers have refused it outright before — so a
-  // throw is treated as "ask somewhere else", not as a failure.
-  let allowed: boolean;
-  try {
-    allowed = await extensionApi.permissions.request({
-      origins: ["https://objekt.my/*"],
-    });
-  } catch {
-    if (!embedded) throw new Error("The permission prompt could not be shown.");
-    await request("open-window");
-    throw new Error(
-      "This browser will not show the permission prompt inside the page. Use the window that just opened, or type your haves instead.",
+const sayInventory = (message: string, bad: boolean) =>
+  say(inventoryStatus, message, bad);
+action(
+  "save-haves",
+  async () => {
+    const owned = parseOffering(haves.value).map(
+      ({ member, season, collectionNo }) => ({ member, season, collectionNo }),
     );
-  }
-  if (!allowed)
-    throw new Error(
-      "Allow access to objekt.my to load inventory, or type your haves.",
-    );
-  inventoryStatus.textContent = "Loading inventory…";
-  try {
-    const count = await request("inventory", {
-      nickname: nickname.value.trim(),
+    if (haves.value.trim() && !owned.length)
+      throw new Error("No objekts recognized. Try YooYeon CC101.");
+    await extensionApi.storage.local.set({
+      owned,
+      nickname: "",
+      haves: haves.value,
     });
-    inventoryStatus.textContent = `${count} transferable objekts saved`;
-  } catch (error) {
-    inventoryStatus.textContent = "Lookup failed; saved haves kept.";
-    throw error;
-  }
-});
+    say(inventoryStatus, `${owned.length} typed haves saved`);
+  },
+  sayInventory,
+);
+action(
+  "load-inventory",
+  async () => {
+    // A permission prompt has to come from a user gesture in an extension
+    // document. That holds here, but a panel embedded in a page is an unusual
+    // enough place for one that browsers have refused it outright before — so a
+    // throw is treated as "ask somewhere else", not as a failure.
+    let allowed: boolean;
+    try {
+      allowed = await extensionApi.permissions.request({
+        origins: ["https://objekt.my/*"],
+      });
+    } catch {
+      if (!embedded)
+        throw new Error("The permission prompt could not be shown.");
+      await request("open-window");
+      throw new Error(
+        "This browser will not show the permission prompt inside the page. Use the window that just opened, or type your haves instead.",
+      );
+    }
+    if (!allowed)
+      throw new Error(
+        "Allow access to objekt.my to load inventory, or type your haves.",
+      );
+    say(inventoryStatus, "Loading inventory…");
+    try {
+      const count = await request("inventory", {
+        nickname: nickname.value.trim(),
+      });
+      say(inventoryStatus, `${count} transferable objekts saved`);
+    } catch (error) {
+      say(inventoryStatus, "Lookup failed; saved haves kept.", true);
+      throw error;
+    }
+  },
+  sayInventory,
+);
 void extensionApi.storage.local
   .get(["owned", "nickname", "haves"])
   .then((settings) => {
@@ -292,11 +371,70 @@ action("dock", async () => {
   await request("close-window");
 });
 
+/**
+ * Count what the parser will actually recognise, as it is typed.
+ *
+ * A list is only as good as what comes out of the parser, and the two differ
+ * far more often than people expect — a stray heading or a format the parser
+ * does not know reads as nothing at all. Saying so at the point of typing beats
+ * finding out after a run returns nothing.
+ */
+function countCodes(
+  field: HTMLTextAreaElement,
+  into: HTMLElement,
+  noun: string,
+) {
+  const show = () => {
+    const text = field.value.trim();
+    if (!text) {
+      say(into, "");
+      into.classList.remove("none");
+      return;
+    }
+    const found = parseOffering(field.value).length;
+    const lines = text.split("\n").filter((line) => line.trim()).length;
+    into.classList.toggle("none", found === 0);
+    // Saying which lines did not land matters more than the total: a list where
+    // half the lines are section headings parses to half a list, silently.
+    into.textContent = found
+      ? found < lines
+        ? `${found} ${noun}${found === 1 ? "" : "s"} from ${lines} lines — the rest were not recognised`
+        : `${found} ${noun}${found === 1 ? "" : "s"} recognised`
+      : "Nothing recognised yet — try “YooYeon CC101”";
+  };
+  field.addEventListener("input", show);
+  show();
+}
+
+/**
+ * Follow Discord's theme, not the operating system's.
+ *
+ * The panel sits inside Discord, where a light theme next to a dark page (or
+ * the reverse) reads as broken. Discord's choice is its own setting, so the
+ * content script reports it and this follows.
+ */
+function applyTheme(theme: unknown) {
+  document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
+}
+void extensionApi.storage.local
+  .get("discordTheme")
+  .then((settings) => applyTheme(settings.discordTheme));
+
 const build = document.getElementById("build") as HTMLElement;
 const manifest = extensionApi.runtime.getManifest();
 build.textContent = manifest.version_name ?? manifest.version;
 
 const wants = document.getElementById("wants") as HTMLTextAreaElement;
+countCodes(
+  haves,
+  document.getElementById("haves-count") as HTMLElement,
+  "objekt",
+);
+countCodes(
+  wants,
+  document.getElementById("wants-count") as HTMLElement,
+  "objekt",
+);
 const delay = document.getElementById("delay") as HTMLInputElement;
 const pages = document.getElementById("pages") as HTMLInputElement;
 const skipRecent = document.getElementById("skip-recent") as HTMLInputElement;
@@ -443,8 +581,25 @@ async function refreshSearch() {
   if (typeof settings.skipRecent === "boolean")
     skipRecent.checked = settings.skipRecent;
   showDelay();
-  searchStatus.textContent = describe(settings.searchProgress);
+  say(searchStatus, describe(settings.searchProgress));
   tally(settings.searchProgress);
+  progressBar(settings.searchProgress);
+}
+
+/** Keep the bar and the buttons in step with whatever the run last reported. */
+function progressBar(progress: unknown) {
+  if (!progress || typeof progress !== "object")
+    return showRunning(false, 0, 0);
+  const p = progress as Record<string, unknown>;
+  const at = typeof p.at === "number" ? p.at : 0;
+  // A run whose reports have stopped is not a run any more, whatever the flag
+  // says: it went away with its tab.
+  const running = p.running === true && (!at || Date.now() - at <= STALE_MS);
+  showRunning(
+    running,
+    typeof p.done === "number" ? p.done : 0,
+    typeof p.total === "number" ? p.total : 0,
+  );
 }
 
 /** Searching implies capturing here; a separate toggle only loses results. */
@@ -459,44 +614,80 @@ async function ensureCapturing(url: string | undefined): Promise<string> {
   return channel;
 }
 
-action("run-search", async () => {
-  const tab = await discordTab();
-  await ensureCapturing(tab.url);
-  const tabId = tab.id;
-  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
-  const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
-  await extensionApi.storage.local.set({
-    wants: wants.value,
-    searchDelay: seconds,
-    searchPages: pageCount,
-    skipRecent: skipRecent.checked,
-  });
-  const response = await toContentScript(tabId, {
-    type: "run-search",
-    wants: wants.value,
-    delayMs: seconds * 1000,
-    pages: pageCount,
-    skipRecent: skipRecent.checked,
-  });
-  if (!response?.ok) throw new Error(response?.error ?? "Could not start.");
-  const note = response.value.note ? `\n${response.value.note}` : "";
-  searchStatus.textContent = `Searching 0/${response.value.total}… the panel can be moved or closed while it runs.${note}`;
-  searchTotal.textContent = "0";
-  void refresh();
-});
+const saySearch = (message: string, bad: boolean) =>
+  say(searchStatus, message, bad);
+action(
+  "run-search",
+  async () => {
+    const tab = await discordTab();
+    await ensureCapturing(tab.url);
+    const tabId = tab.id;
+    const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+    const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
+    await extensionApi.storage.local.set({
+      wants: wants.value,
+      searchDelay: seconds,
+      searchPages: pageCount,
+      skipRecent: skipRecent.checked,
+    });
+    const response = await toContentScript(tabId, {
+      type: "run-search",
+      wants: wants.value,
+      delayMs: seconds * 1000,
+      pages: pageCount,
+      skipRecent: skipRecent.checked,
+    });
+    if (!response?.ok) throw new Error(response?.error ?? "Could not start.");
+    const note = response.value.note ? `\n${response.value.note}` : "";
+    say(
+      searchStatus,
+      `Searching 0/${response.value.total}… the panel can be moved or closed while it runs.${note}`,
+    );
+    searchTotal.textContent = "0";
+    showRunning(true, 0, response.value.total);
+    void refresh();
+  },
+  saySearch,
+);
 
-action("stop-search", async () => {
-  await toContentScript(await activeDiscordTab(), { type: "cancel-search" });
-  searchStatus.textContent = "Stopping after the current search…";
-});
+action(
+  "stop-search",
+  async () => {
+    await toContentScript(await activeDiscordTab(), { type: "cancel-search" });
+    say(searchStatus, "Stopping after the current page…");
+  },
+  saySearch,
+);
+
+/**
+ * Show a run as a run: a progress bar, and a Stop button that is only there
+ * when there is something to stop.
+ */
+function showRunning(running: boolean, done: number, total: number) {
+  const bar = document.getElementById("search-progress");
+  const stop = document.getElementById("stop-search");
+  const start = document.getElementById("run-search");
+  if (bar instanceof HTMLProgressElement) {
+    bar.hidden = !running;
+    bar.max = Math.max(1, total);
+    bar.value = Math.min(done, Math.max(1, total));
+  }
+  if (stop) stop.hidden = !running;
+  if (start instanceof HTMLButtonElement) {
+    start.disabled = running;
+    start.textContent = running ? "Searching…" : "Search my wants";
+  }
+}
 
 extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   // Another window of this panel may have agreed, or withdrawn.
   if (changes.consent) showSections(changes.consent.newValue);
+  if (changes.discordTheme) applyTheme(changes.discordTheme.newValue);
   if (changes.searchProgress) {
-    searchStatus.textContent = describe(changes.searchProgress.newValue);
+    say(searchStatus, describe(changes.searchProgress.newValue));
     tally(changes.searchProgress.newValue);
+    progressBar(changes.searchProgress.newValue);
   }
   // The captured count moves as results render, so keep step 4 current.
   void refresh().catch(() => {});
@@ -513,54 +704,58 @@ function megabytes(value: unknown): string {
     : "unknown";
 }
 
-action("diagnose", async () => {
-  const tabId = await activeDiscordTab();
-  const response = await toContentScript(tabId, { type: "diagnose" });
-  if (!response?.ok) throw new Error(response?.error ?? "No response.");
-  const d = response.value;
-  // Eviction is silent and takes the whole index with it, so "is this store
-  // protected, and how full is it" belongs next to everything else that
-  // explains a capture going missing.
-  const storage = await request("storage").catch(() => null);
-  const lines = [
-    storage
-      ? `storage: ${megabytes(storage.usage)} used of ${megabytes(storage.quota)}, ${storage.persisted ? "protected from eviction" : "evictable — export regularly"}`
-      : "storage: unavailable",
-    // The popup and the content script are reloaded by different actions, so
-    // they can disagree — and a stale content script explains almost every
-    // "my fix did nothing".
-    `content script build: ${d.build ?? "older than this popup — refresh the Discord tab"}`,
-    `channel: ${d.channel ?? "not on a channel"}`,
-    `enabled: ${d.enabled.length ? d.enabled.join(", ") : "none"}`,
-    `message elements found: ${d.elements}`,
-    `readable by the parser: ${d.readable}`,
-    `search box found: ${d.searchBox ? "yes" : "no"}`,
-    `skipped (channel not enabled): ${JSON.stringify(d.skippedByChannel ?? {})}`,
-    `results panel: ${d.results?.panel ?? "NOT FOUND"}`,
-    `result rows readable in it: ${d.results?.rows ?? 0}`,
-    `pager: page ${d.results?.page ?? "?"}, next ${d.results?.nextControl ? "yes" : "no"}, ${d.results?.numberedPages ?? 0} numbered`,
-    `row id shapes: ${JSON.stringify(d.results?.rowShapes ?? {})}`,
-    d.results?.sampleRow
-      ? `one result row:\n${d.results.sampleRow}`
-      : "one result row: none on screen",
-    d.sampleId ? `sample id: ${d.sampleId}` : "no message elements matched",
-    `probes: ${JSON.stringify(d.probes)}`,
-  ];
-  if (!d.elements)
-    lines.push(
-      "→ Discord's message markup changed; the selector needs updating.",
-    );
-  else if (!d.readable)
-    lines.push(
-      "→ Elements found but unreadable; the author/time anchors moved.",
-    );
-  else if (d.channel && !d.enabled.includes(d.channel))
-    lines.push("→ Readable, but this channel is paused. Click Enable above.");
-  // Run this with a search open: no panel means every "page walked" was walked
-  // against the channel list behind it.
-  if (!d.results?.panel)
-    lines.push(
-      "→ No search results panel found. Run a search first; if one is open, the row id shapes above say what its markup became.",
-    );
-  searchStatus.textContent = lines.join("\n");
-});
+action(
+  "diagnose",
+  async () => {
+    const tabId = await activeDiscordTab();
+    const response = await toContentScript(tabId, { type: "diagnose" });
+    if (!response?.ok) throw new Error(response?.error ?? "No response.");
+    const d = response.value;
+    // Eviction is silent and takes the whole index with it, so "is this store
+    // protected, and how full is it" belongs next to everything else that
+    // explains a capture going missing.
+    const storage = await request("storage").catch(() => null);
+    const lines = [
+      storage
+        ? `storage: ${megabytes(storage.usage)} used of ${megabytes(storage.quota)}, ${storage.persisted ? "protected from eviction" : "evictable — export regularly"}`
+        : "storage: unavailable",
+      // The popup and the content script are reloaded by different actions, so
+      // they can disagree — and a stale content script explains almost every
+      // "my fix did nothing".
+      `content script build: ${d.build ?? "older than this popup — refresh the Discord tab"}`,
+      `channel: ${d.channel ?? "not on a channel"}`,
+      `enabled: ${d.enabled.length ? d.enabled.join(", ") : "none"}`,
+      `message elements found: ${d.elements}`,
+      `readable by the parser: ${d.readable}`,
+      `search box found: ${d.searchBox ? "yes" : "no"}`,
+      `skipped (channel not enabled): ${JSON.stringify(d.skippedByChannel ?? {})}`,
+      `results panel: ${d.results?.panel ?? "NOT FOUND"}`,
+      `result rows readable in it: ${d.results?.rows ?? 0}`,
+      `pager: page ${d.results?.page ?? "?"}, next ${d.results?.nextControl ? "yes" : "no"}, ${d.results?.numberedPages ?? 0} numbered`,
+      `row id shapes: ${JSON.stringify(d.results?.rowShapes ?? {})}`,
+      d.results?.sampleRow
+        ? `one result row:\n${d.results.sampleRow}`
+        : "one result row: none on screen",
+      d.sampleId ? `sample id: ${d.sampleId}` : "no message elements matched",
+      `probes: ${JSON.stringify(d.probes)}`,
+    ];
+    if (!d.elements)
+      lines.push(
+        "→ Discord's message markup changed; the selector needs updating.",
+      );
+    else if (!d.readable)
+      lines.push(
+        "→ Elements found but unreadable; the author/time anchors moved.",
+      );
+    else if (d.channel && !d.enabled.includes(d.channel))
+      lines.push("→ Readable, but this channel is paused. Click Enable above.");
+    // Run this with a search open: no panel means every "page walked" was walked
+    // against the channel list behind it.
+    if (!d.results?.panel)
+      lines.push(
+        "→ No search results panel found. Run a search first; if one is open, the row id shapes above say what its markup became.",
+      );
+    say(searchStatus, lines.join("\n"));
+  },
+  saySearch,
+);

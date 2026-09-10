@@ -1,41 +1,103 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>objekt.my capture</title>
 <style>
-body{font:14px system-ui;padding:14px;color:#eee;background:#18181b;margin:0;
+/* Two palettes, because the panel sits inside Discord and Discord has a light
+   theme. The content script reports which one is on; nothing here guesses from
+   the operating system, which is a different setting entirely. */
+:root{
+  --bg:#18181b; --raised:#1f1f24; --line:#2e2e35; --field:#27272a;
+  --text:#ececee; --dim:#a1a1aa;
+  --accent:#4f46e5; --accent-line:#6366f1; --accent-soft:#1e1b4b; --accent-text:#c7d2fe;
+  --warn-line:#854d0e; --warn-bg:#27200a; --warn-text:#fde68a;
+  --bad:#fca5a5; --good:#4ade80;
+}
+:root[data-theme="light"]{
+  --bg:#ffffff; --raised:#f6f6f7; --line:#e2e2e6; --field:#ffffff;
+  --text:#1e1f22; --dim:#5c5f66;
+  --accent:#4f46e5; --accent-line:#4338ca; --accent-soft:#eef2ff; --accent-text:#3730a3;
+  --warn-line:#d9b45f; --warn-bg:#fdf7e7; --warn-text:#6d5106;
+  --bad:#b42318; --good:#15803d;
+}
+*{box-sizing:border-box}
+body{font:14px/1.45 system-ui,sans-serif;padding:14px;color:var(--text);background:var(--bg);margin:0;
   /* Sized by whatever hosts it: the floating panel is resizable, the pop-out
      window is a real window, and only a bare tab needs a width of its own. */
-  max-width:520px}
-body.embedded{padding:12px 14px 18px}
-h1{font-size:15px;margin:0 0 4px}
-h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin:0 0 6px;font-weight:600}
-section{border-top:1px solid #27272a;padding:12px 0}
-section:first-of-type{border-top:0;padding-top:6px}
-button,input,textarea{box-sizing:border-box;width:100%;margin:4px 0;padding:8px;background:#27272a;color:#eee;border:1px solid #3f3f46;border-radius:6px;font:inherit}
-button{background:#3730a3;border-color:#4338ca;cursor:pointer}
-button.secondary{background:#27272a;border-color:#3f3f46}
-textarea{min-height:56px;resize:vertical}
-label{display:block;font-size:12px;color:#a1a1aa;margin-top:6px}
-a{color:#a5b4fc}code{background:#27272a;padding:1px 4px;border-radius:3px}
+  max-width:560px}
+body.embedded{padding:10px 14px 20px}
+h1{font-size:15px;margin:0 0 2px}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin:0 0 8px;font-weight:600}
+section{border-top:1px solid var(--line);padding:14px 0}
+section:first-of-type{border-top:0;padding-top:8px}
 p{margin:6px 0}
-.hint{font-size:12px;color:#a1a1aa}
-.row{display:flex;gap:6px}
-input[type=range]{padding:0;height:24px;background:transparent;border:0;accent-color:#6366f1;cursor:pointer}
-.check{display:flex;align-items:center;gap:8px;color:#d4d4d8;font-size:12px;margin-top:8px}
-.check input{width:auto;margin:0;accent-color:#6366f1}
-.tally{font-size:12px;color:#a1a1aa}
-.tally strong{font-size:20px;color:#a5b4fc;font-variant-numeric:tabular-nums;margin-right:4px}
-#status,#search-status,#inventory-status{white-space:pre-wrap;font-size:12px}
-#consent{border:1px solid #4338ca;border-radius:8px;padding:12px;background:#1e1b4b}
-#consent h2{color:#c7d2fe}
-#consent ul{margin:6px 0;padding-left:18px;color:#d4d4d8;font-size:12px}
-#consent li{margin:3px 0}
-.warn{border:1px solid #854d0e;background:#27200a;border-radius:8px;padding:10px;font-size:12px;color:#fde68a;margin:8px 0}
-#search-status{color:#c7d2fe}
-details{margin-top:10px;border-top:1px solid #27272a;padding-top:10px}
-summary{cursor:pointer;font-size:12px;color:#a1a1aa}
+a{color:var(--accent-line)}
+code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-radius:4px;font-size:12px}
+button,input,textarea{width:100%;margin:4px 0;padding:8px 10px;background:var(--field);color:var(--text);
+  border:1px solid var(--line);border-radius:7px;font:inherit}
+button{background:var(--accent);border-color:var(--accent-line);color:#fff;cursor:pointer;font-weight:500}
+button:hover:not(:disabled){filter:brightness(1.12)}
+button.secondary{background:var(--field);border-color:var(--line);color:var(--text);font-weight:400}
+button:disabled{opacity:.55;cursor:default}
+button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent-line);outline-offset:1px}
+textarea{min-height:58px;resize:vertical}
+label{display:block;font-size:12px;color:var(--dim);margin-top:8px}
+.hint{font-size:12px;color:var(--dim)}
+/* The floating panel has its own titlebar carrying the name, so repeating it
+   inside costs a line of a small window for nothing. */
+body.embedded h1{display:none}
+.check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:12px;margin-top:10px}
+.check input{width:auto;margin:0;accent-color:var(--accent-line)}
+input[type=range]{padding:0;height:24px;background:transparent;border:0;accent-color:var(--accent-line);cursor:pointer}
+.count{font-size:12px;color:var(--dim);margin:2px 0 0}
+.count.none{color:var(--bad)}
+/* One live region per step, so a status never lands somewhere the eye is not. */
+.say{white-space:pre-wrap;font-size:12px;color:var(--dim);margin:8px 0 0}
+.say:empty{margin:0}
+.say.bad{color:var(--bad)}
+.tally{font-size:12px;color:var(--dim);margin:10px 0 0}
+.tally strong{font-size:21px;color:var(--accent-text);font-variant-numeric:tabular-nums;margin-right:5px}
+:root[data-theme="light"] .tally strong{color:var(--accent-line)}
+
+/* The channel this panel is pointed at, and whether it is being collected.
+   Promoted out of Troubleshooting: it is the switch that decides whether
+   anything happens at all. */
+#channel-bar{display:flex;align-items:center;gap:10px;border:1px solid var(--line);
+  background:var(--raised);border-radius:8px;padding:8px 10px;margin-top:10px}
+/* An id-level display beats the browser's own [hidden] rule, so the strip has
+   to opt back out of itself — it must not offer "Capture here" before capture
+   has been agreed to. */
+#channel-bar[hidden]{display:none}
+#channel-state{flex:1;min-width:0;font-size:12px;color:var(--dim)}
+#channel-state strong{color:var(--text);font-weight:600}
+#channel-bar button{width:auto;flex:none;margin:0;padding:5px 10px;font-size:12px}
+.pip{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+.pip.on{background:var(--good)}
+
+#consent{border:1px solid var(--accent-line);border-radius:9px;padding:14px;background:var(--accent-soft)}
+#consent h2{color:var(--accent-text)}
+:root[data-theme="light"] #consent h2{color:var(--accent-text)}
+#consent ul{margin:8px 0;padding-left:18px;font-size:12px}
+#consent li{margin:4px 0}
+.warn{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:8px;padding:10px;
+  font-size:12px;color:var(--warn-text);margin:8px 0}
+.warn a{color:inherit}
+
+progress{width:100%;height:6px;margin:10px 0 0;border:0;border-radius:3px;
+  background:var(--field);accent-color:var(--accent-line)}
+progress::-webkit-progress-bar{background:var(--field);border-radius:3px}
+progress::-webkit-progress-value{background:var(--accent-line);border-radius:3px}
+
+details{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-size:12px;color:var(--dim)}
+details p{margin-top:10px}
 </style>
 
 <h1>objekt.my capture</h1>
 <p class="hint">Posts stay in this browser. Nothing is sent to Discord.</p>
+
+<div id="channel-bar" hidden>
+  <span class="pip" id="channel-pip"></span>
+  <span id="channel-state">Looking for your Discord tab…</span>
+  <button type="button" class="secondary" id="toggle" hidden>Capture here</button>
+</div>
 
 <section id="consent" hidden>
   <h2>Before you start</h2>
@@ -63,14 +125,16 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
   <button type="button" id="load-inventory">Load inventory</button>
   <label for="haves">or type them (replaces the loaded inventory)</label>
   <textarea id="haves" placeholder="YooYeon CC101&#10;Mayu AA101"></textarea>
+  <p class="count" id="haves-count"></p>
   <button type="button" class="secondary" id="save-haves">Save typed haves</button>
-  <p id="inventory-status" role="status"></p>
+  <p id="inventory-status" class="say" role="status"></p>
 </section>
 
 <section id="step-wants">
   <h2>2 · What to look for</h2>
   <label for="wants">One objekt per line</label>
   <textarea id="wants" placeholder="SeoYeon CC101&#10;Mayu AA101&#10;Hayeon BB401"></textarea>
+  <p class="count" id="wants-count"></p>
   <label for="pages">Result pages each</label>
   <input id="pages" type="number" min="1" max="20" step="1" value="3">
   <p class="hint">Discord sorts newest first, so later pages are older posts. Three is usually plenty.</p>
@@ -95,16 +159,17 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
 
 <section id="search-section">
   <h2>3 · Search Discord</h2>
-  <p class="hint">Open your trade channel, then run. Searches by objekt code (<code>CC101</code>) — the member name is matched here instead, since searching it floods Discord with unrelated posts. Keep the tab on Discord.</p>
+  <p class="hint">Open your trade channel, then run. Searches by objekt code (<code>CC101</code>) — the member name is matched here instead, since searching it floods Discord with unrelated posts. Leave the results panel open while it runs.</p>
   <button type="button" id="run-search">Search my wants</button>
-  <button type="button" class="secondary" id="stop-search">Stop</button>
+  <button type="button" class="secondary" id="stop-search" hidden>Stop</button>
+  <progress id="search-progress" hidden max="1" value="0"></progress>
   <p class="tally"><strong id="search-total">0</strong> posts recorded this search</p>
-  <p id="search-status" role="status"></p>
+  <p id="search-status" class="say" role="status"></p>
 </section>
 
 <section id="step-match">
   <h2>4 · Match them</h2>
-  <p id="status" role="status">Loading…</p>
+  <p id="status" class="say" role="status">Loading…</p>
   <button type="button" id="export">Export this search (.txt)</button>
   <p class="hint"><a href="https://objekt.my/match" target="_blank" rel="noreferrer">Open objekt.my/match</a> → <strong>Import text files</strong> → pick the download.</p>
 </section>
@@ -112,13 +177,12 @@ summary{cursor:pointer;font-size:12px;color:#a1a1aa}
 <details id="step-trouble">
   <summary>Troubleshooting</summary>
   <button type="button" class="secondary" id="dock" hidden>Dock into the Discord tab</button>
-  <button type="button" class="secondary" id="withdraw">Withdraw consent &amp; stop reading Discord</button>
-  <p class="hint">Loaded build: <code id="build">…</code><br>After rebuilding, reload the extension <em>and</em> refresh the Discord tab — an open tab keeps the old content script.</p>
-  <button type="button" class="secondary" id="toggle">Enable / pause capture here</button>
   <button type="button" class="secondary" id="diagnose">Check this tab</button>
   <button type="button" class="secondary" id="export-all">Export whole index (.txt)</button>
   <button type="button" class="secondary" id="dump">Dump index (.json)</button>
   <button type="button" class="secondary" id="clear">Clear captured posts</button>
+  <button type="button" class="secondary" id="withdraw">Withdraw consent &amp; stop reading Discord</button>
+  <p class="hint">Loaded build: <code id="build">…</code><br>After rebuilding, reload the extension — the panel reinjects itself, so the Discord tab does not need refreshing.</p>
 </details>
 
 <script src="panel.js"></script></html>
