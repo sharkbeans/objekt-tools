@@ -186,7 +186,11 @@ try {
   const downloadEvent = popup.waitForEvent("download");
   await popup.locator("#export").click();
   const download = await downloadEvent;
-  assert.equal(download.suggestedFilename(), "objekt-discord-transcript.txt");
+  // Named for what is in it, so a second export is not "(1)".
+  assert.match(
+    download.suggestedFilename(),
+    /^objekt-trade-\d{4}-\d{2}-\d{2}-1-posts\.txt$/,
+  );
   // A whole search run, end to end and in a real browser: the consent for it,
   // the typing (real execCommand into a real contenteditable), Discord's reply,
   // and the results reaching the index scoped to this run.

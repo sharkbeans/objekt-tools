@@ -2,6 +2,8 @@
 
 Chrome/Chromium and Firefox MV3 extension, built directly from the shared engine in `src/lib`.
 
+What changed and why, per release: [`CHANGELOG.md`](./CHANGELOG.md).
+
 Store-facing paperwork lives beside the code: [`PRIVACY.md`](./PRIVACY.md) (publish at
 `https://objekt.my/extension-privacy`), [`STORE.md`](./STORE.md) (listing copy and permission
 justifications), [`COMPLIANCE.md`](./COMPLIANCE.md) (policy review, including the one unresolved
