@@ -23,7 +23,30 @@ try {
   await context.route("https://discord.com/**", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: '<!doctype html><html lang="en"><body><ol id="messages"></ol></body></html>',
+      body: `<!doctype html><html lang="en"><body>
+        <div role="combobox" contenteditable="true" aria-label="Search"></div>
+        <ol id="messages"></ol>
+        <div id="search-results"></div>
+        <script>
+          // Stands in for Discord answering a search: Enter in the search box
+          // renders one result row for whatever was typed. Everything else —
+          // the typing, the focus, the events — is the real browser.
+          const box = document.querySelector('[role="combobox"]');
+          const results = document.getElementById("search-results");
+          let n = 900;
+          box.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter") return;
+            const query = box.textContent.trim();
+            if (!query) return;
+            const id = ++n;
+            results.innerHTML =
+              '<li><a href="/channels/111/123">#trade</a>' +
+              '<span id="message-username-' + id + '">Seller</span>' +
+              '<time datetime="2026-09-09T05:00:00.000Z"></time>' +
+              '<div id="message-content-' + id + '">HAVE YooYeon ' + query + '</div></li>';
+          });
+        </script>
+      </body></html>`,
     }),
   );
   await worker.evaluate(() =>
@@ -138,6 +161,70 @@ try {
   await popup.locator("#export").click();
   const download = await downloadEvent;
   assert.equal(download.suggestedFilename(), "objekt-discord-transcript.txt");
+  // A whole search run, end to end and in a real browser: the consent for it,
+  // the typing (real execCommand into a real contenteditable), Discord's reply,
+  // and the results reaching the index scoped to this run.
+  assert.equal(await popup.locator("#search-section").isVisible(), false);
+  await popup.locator("#accept-automation").click();
+  await popup.locator("#search-section").waitFor();
+  await popup.locator("#wants").fill("SeoYeon CC101");
+  await popup.locator("#pages").fill("1");
+  await popup.locator("#run-search").click();
+  await popup.waitForFunction(() =>
+    document.getElementById("search-status").textContent.startsWith("Finished"),
+  );
+  assert.match(
+    await page.evaluate(
+      () => document.querySelector('[role="combobox"]').textContent,
+    ),
+    /^CC101$/,
+    "the collection code alone reaches Discord's search box",
+  );
+  await popup.waitForFunction(() =>
+    document
+      .getElementById("status")
+      .textContent.includes("1 post from this search"),
+  );
+  // The Search button hands itself back once the run is over.
+  assert.equal(await popup.locator("#run-search").isDisabled(), false);
+  assert.equal(await popup.locator("#stop-search").isVisible(), false);
+
+  // A run in progress, stated directly rather than raced against: Stop exists
+  // only while there is something to stop, and Search refuses a second run.
+  await worker.evaluate(() =>
+    chrome.storage.local.set({
+      searchProgress: {
+        running: true,
+        done: 1,
+        total: 4,
+        query: "CC101",
+        at: Date.now(),
+      },
+    }),
+  );
+  await popup.locator("#stop-search").waitFor();
+  assert.equal(await popup.locator("#run-search").isDisabled(), true);
+  assert.equal(await popup.locator("#search-progress").isVisible(), true);
+  // And a run whose reports stopped arriving is over, whatever the flag says:
+  // it went away with the tab it was running in.
+  await worker.evaluate(() =>
+    chrome.storage.local.set({
+      searchProgress: {
+        running: true,
+        done: 1,
+        total: 4,
+        at: Date.now() - 300_000,
+      },
+    }),
+  );
+  await popup.waitForFunction(() =>
+    document
+      .getElementById("search-status")
+      .textContent.includes("Stopped reporting"),
+  );
+  assert.equal(await popup.locator("#run-search").isDisabled(), false);
+  assert.equal(await popup.locator("#stop-search").isVisible(), false);
+
   // Capture has to keep working while Discord is not the tab in front: that is
   // where a search run spends most of its life.
   // Headless Chromium reports every page as visible, so this checks the part
@@ -153,8 +240,10 @@ try {
         '<li id="chat-messages-123-555" aria-labelledby="message-username-555"><span id="message-username-555">Backgrounded</span><time datetime="2026-09-09T03:55:00.000Z"></time><div id="message-content-555">HAVE YooYeon CC109</div></li>',
       );
   });
+  // Counted against the index rather than the run, because a search has now
+  // happened and the status reports both.
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("2 posts ready"),
+    document.getElementById("status").textContent.includes("3 in the index"),
   );
 
   // Pausing removes annotations, and changing channel does not capture.
@@ -167,8 +256,10 @@ try {
       "HAVE YooYeon CC110";
   });
   await popup.reload();
+  // Counted against the index rather than the run, because a search has now
+  // happened and the status reports both.
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("2 posts ready"),
+    document.getElementById("status").textContent.includes("3 in the index"),
   );
   // Withdrawing detaches the reader: the badge goes, and a fresh post is not
   // taken even with the channel enabled.
@@ -191,12 +282,14 @@ try {
       );
   });
   await popup.reload();
+  // Counted against the index rather than the run, because a search has now
+  // happened and the status reports both.
   await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("2 posts ready"),
+    document.getElementById("status").textContent.includes("3 in the index"),
   );
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), consent gate, MV3 capture, background-tab capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), consent gates, a whole search run end to end, run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();
