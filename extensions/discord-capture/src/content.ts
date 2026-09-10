@@ -14,11 +14,13 @@ import {
   rowKey,
   rowOf,
 } from "./dom";
+import { type Health, HealthWatch } from "./health";
 import { inventoryRows } from "./inventory";
 import {
   closePanel,
   markPanelBusy,
   openPanel,
+  showPanelNotice,
   togglePanel,
   watchPanelPlacement,
 } from "./panel-frame";
@@ -43,6 +45,34 @@ import {
 import { channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
 import { waitFor } from "./wait";
+
+/**
+ * Whether this content script still belongs to a live extension.
+ *
+ * Reloading or updating the extension orphans every content script already
+ * running: their `chrome.runtime` stops working and every message throws
+ * "Extension context invalidated". The old code caught that and carried on
+ * scanning, which meant capture stopped for good and said nothing at all —
+ * the badge simply never moved again.
+ */
+let orphaned = false;
+function contextGone(error: unknown): boolean {
+  return (
+    !extensionApi.runtime?.id ||
+    /context invalidated|Extension context/i.test(
+      error instanceof Error ? error.message : String(error ?? ""),
+    )
+  );
+}
+function orphan() {
+  if (orphaned) return;
+  orphaned = true;
+  searchSignal.cancelled = true;
+  watch(false);
+  showPanelNotice(
+    "The extension was reloaded or updated, so this tab is running an old copy of it. Reload Discord to carry on capturing — anything already captured is safe.",
+  );
+}
 
 let owned = indexOwned([]);
 // The viewer's typed wants, keyed the same way `matchTranscript` keys a
@@ -99,7 +129,7 @@ const unreadableSince = new Map<string, number>();
 const UNREADABLE_GRACE_MS = 1500;
 
 async function scan(element: Element) {
-  if (!watching || pending.has(element)) return;
+  if (!watching || orphaned || pending.has(element)) return;
   const message = readMessage(element);
   // The channel toggle governs passive browsing of a channel. A search result
   // is here because the user asked for it by name, so it is kept wherever in
@@ -152,8 +182,10 @@ async function scan(element: Element) {
         annotate(element, response.value);
       }
     }
-  } catch {
-    /* Extension reload or unavailable worker: retry on the next render. */
+  } catch (error) {
+    // A worker that is merely restarting will take the next attempt; an
+    // extension that has been reloaded never will.
+    if (contextGone(error)) orphan();
   } finally {
     pending.delete(element);
     const current = readMessage(element);
@@ -200,6 +232,7 @@ const observer = new MutationObserver((records) => {
  */
 let watching = false;
 function watch(on: boolean) {
+  if (on && orphaned) return;
   if (on === watching) return;
   watching = on;
   if (!on) {
@@ -682,6 +715,57 @@ void extensionApi.storage.local
     // across channel switches, until it is closed on purpose.
     if (readPanelState(settings.panel).open) void showPanel();
   });
+/**
+ * Watch for the parser quietly losing track of Discord's markup.
+ *
+ * Nothing throws when Discord rewrites its DOM — the selectors stop matching,
+ * every row reads as unreadable, and capture collects nothing while looking
+ * exactly like a quiet channel. Sampling for that shape is the only way the
+ * user finds out before wondering why a week of browsing produced nothing.
+ *
+ * Cheap: one `querySelectorAll` and at most a dozen reads, twice a minute, and
+ * only while capture is actually on.
+ */
+const HEALTH_EVERY_MS = 30_000;
+const HEALTH_SAMPLE = 12;
+const healthWatch = new HealthWatch();
+function sampleHealth() {
+  if (!watching || orphaned) return;
+  const rows = [...document.querySelectorAll(MESSAGE_SELECTOR)];
+  const capturing = rows.some(
+    (row) => row.id.match(/^chat-messages-(\d+)-/)?.[1] !== undefined,
+  )
+    ? enabled(channelFromUrl(location.href))
+    : false;
+  let readable = 0;
+  for (const row of rows.slice(0, HEALTH_SAMPLE))
+    if (readMessage(row)) readable++;
+  const verdict = healthWatch.add({
+    elements: rows.length,
+    readable,
+    capturing,
+  });
+  if (verdict) void reportHealth(verdict);
+}
+async function reportHealth(health: Health) {
+  try {
+    if (health.state === "broken")
+      await extensionApi.storage.local.set({
+        captureHealth: {
+          at: Date.now(),
+          elements: health.elements,
+          build:
+            extensionApi.runtime.getManifest().version_name ??
+            extensionApi.runtime.getManifest().version,
+        },
+      });
+    else await extensionApi.storage.local.remove("captureHealth");
+  } catch (error) {
+    if (contextGone(error)) orphan();
+  }
+}
+setInterval(sampleHealth, HEALTH_EVERY_MS);
+
 /**
  * Report Discord's theme, so the panel can match it.
  *
