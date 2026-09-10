@@ -267,9 +267,10 @@ action("toggle", async () => {
   await refresh();
 });
 action("dump", async () => {
+  const posts: Entry[] = await request("dump");
   download(
-    JSON.stringify(await request("dump"), null, 2),
-    "objekt-discord-index.json",
+    JSON.stringify(posts, null, 2),
+    exportName(posts.length, "json"),
     "application/json",
   );
 });
@@ -284,6 +285,18 @@ void refresh().catch((error) => {
   status.textContent = error.message;
 });
 
+/**
+ * A filename that says what is in it.
+ *
+ * Every export used to be `objekt-discord-transcript.txt`, so a second one
+ * landed as "(1)" and a downloads folder full of them told you nothing about
+ * which was which.
+ */
+function exportName(count: number, extension: string) {
+  const day = new Date().toISOString().slice(0, 10);
+  return `objekt-trade-${day}-${count}-posts.${extension}`;
+}
+
 /** Export `posts`, or say why there was nothing to write. */
 function exportPosts(posts: Entry[], what: string) {
   if (!posts.length) {
@@ -292,7 +305,7 @@ function exportPosts(posts: Entry[], what: string) {
   }
   download(
     exportTranscript(posts.map((post) => post.block)),
-    "objekt-discord-transcript.txt",
+    exportName(posts.length, "txt"),
     "text/plain;charset=utf-8",
   );
   say(
