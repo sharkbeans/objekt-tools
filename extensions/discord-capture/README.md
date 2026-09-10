@@ -98,7 +98,12 @@ that posts to a channel — so a recognised name in any of a dozen languages is 
 and an unrecognised one is taken only when it is the only combobox in the document.
 Ambiguity still fails closed, which is the property worth keeping: being unable to search is
 an inconvenience, typing into the wrong box is a message in a public channel. The pager reads
-`aria-current="page"` and the digits in the button, rather than the words "Page 2".
+`aria-current="page"` and the digits in the button, rather than the words "Page 2". A pager
+that renders no numbers at all still pages, on the result ids instead: a page counts as
+walked only when every id that was on screen is gone. "The panel changed" is not enough —
+Discord's list grows as the scroller reaches the bottom of a long page, and a query that
+matched nothing leaves the last one's pager up, both of which move the ids without anything
+being paged.
 
 An empty results panel is now recognised as an answer rather than as a missing panel, so a
 code nobody has posted costs one settle instead of the full grace period, and a panel that

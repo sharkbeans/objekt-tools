@@ -9,9 +9,12 @@ import {
   findNextPage,
   findSearchBox,
   findSubmitOption,
+  pagerCensus,
   resultRows,
   resultsPanel,
+  rowCount,
   rowSignature,
+  rowsTurnedOver,
   runSearches,
   searchQueries,
   searchSafe,
@@ -283,6 +286,7 @@ test("submits every query in order, pacing between them", async () => {
     submittedBy: { option: 0, enter: 3, blocked: 0 },
     retried: 0,
     empty: 0,
+    emptyQueries: [],
     closed: 0,
     typedBy: { insertText: 3 },
   });
@@ -784,6 +788,64 @@ test("a run does not page on while posts on the current page are unrecorded", as
   assert.equal(run.settleNote, null);
 });
 
+test("a search still in flight is not an answer of no matches", async () => {
+  // Discord opens the results panel first and answers a moment later. The panel
+  // appearing is a change of signature all on its own, so two quiet polls —
+  // 300ms — was enough to record the code as unposted and skip every page it
+  // had. It hit the first codes of a run hardest, and it was a race: the same
+  // code came back empty in one run and full in the next.
+  const doc = page(SEARCH_BOX);
+  const recorded = new Set<string>();
+  let polls = 0;
+  let answering = false;
+  doc.addEventListener("keydown", () => {
+    doc.body.insertAdjacentHTML("beforeend", '<div id="search-results"></div>');
+    answering = true;
+    polls = 0;
+  });
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 1,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {
+      if (!answering || ++polls !== 5) return;
+      answering = false;
+      const list = doc.getElementById("search-results");
+      assert.ok(list);
+      list.innerHTML = ["1", "2"].map(RESULT_ROW).join("");
+      recorded.add(rowId("1"));
+      recorded.add(rowId("2"));
+    },
+  });
+  assert.equal(run.empty, 0);
+  assert.deepEqual(run.emptyQueries, []);
+  assert.equal(run.posts, 2);
+});
+
+test("a code nobody has posted still reads as no matches, and is named", async () => {
+  // The other side of the same rule: an empty panel that stays empty for the
+  // grace period is an answer, and the run says which code it was so the claim
+  // can be checked by hand.
+  const doc = page(
+    `${SEARCH_BOX}<div id="search-results">${RESULT_ROW("9")}</div>`,
+  );
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  doc.addEventListener("keydown", () => {
+    list.innerHTML = "";
+  });
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 3,
+    signal: { cancelled: false },
+    probe: probeOf(new Set([rowId("9")])),
+    wait: async () => {},
+  });
+  assert.equal(run.empty, 1);
+  assert.deepEqual(run.emptyQueries, ["CC101"]);
+});
+
 test("says so when Discord answers with the results already on screen", async () => {
   const recorded = new Set([rowId("1"), rowId("2")]);
   const run = await runSearches(
@@ -813,6 +875,269 @@ test("refuses to count pages the pager cannot confirm it walked", async () => {
     delayMs: 0,
     pages: 10,
     signal: { cancelled: false },
+    wait: async () => {},
+  });
+  assert.equal(run.pagesWalked, 1);
+  assert.match(run.pagerNote ?? "", /no page numbers/);
+});
+
+test("walks a numberless pager on the results turning over instead", async () => {
+  // A pager with Next and no `aria-current` used to end the query at page two
+  // of five, having already clicked through to it — the pages were walked and
+  // read, and then thrown away for want of a number to compare. The result ids
+  // are scoped to the panel, so they say the same thing the number would.
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const view = doc.defaultView;
+  assert.ok(view);
+  const recorded = new Set<string>();
+  let page_ = 0;
+  const render = () => {
+    page_++;
+    const ids = [`${page_}a`, `${page_}b`];
+    list.innerHTML =
+      ids.map(RESULT_ROW).join("") +
+      // Next, and nothing numbered anywhere.
+      `<button type="button" rel="next"><span>Next</span></button>`;
+    for (const id of ids) recorded.add(rowId(id));
+  };
+  doc.addEventListener("keydown", render);
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof view.Element)) return;
+    if (target.closest('[rel="next"]')) render();
+  });
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 3,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+  });
+  assert.equal(run.pagesWalked, 3);
+  assert.equal(run.pagerNote, null);
+  assert.equal(run.posts, 6);
+});
+
+test("a run that ran out of pages says so differently from one that broke", () => {
+  // The last page: Discord keeps the pager and disables Next. A normal end,
+  // and the census says the pager was there and spent.
+  const spent = pagerCensus(page(SEARCH_BOX + panel(["1"], 3)));
+  assert.match(spent, /1 rel=next \(1 disabled\)/);
+  assert.match(spent, /4 numbered/);
+  // And it says what the controls actually are, which is what a pager this
+  // build cannot read has to be identified from.
+  assert.match(spent, /rel=next/);
+  assert.match(spent, /aria-current=page/);
+  // No pager at all: fewer results than fill one page. Also a normal end, and
+  // a different sentence — this is the one that used to read as a fault.
+  const none = pagerCensus(
+    page(`${SEARCH_BOX}<div id="search-results">${RESULT_ROW("1")}</div>`),
+  );
+  assert.match(none, /0 rel=next/);
+  assert.match(none, /0 numbered/);
+  assert.match(none, /controls: none/);
+});
+
+test("does not read the sidebar's current channel as the pager's page", () => {
+  // Discord marks the open channel with aria-current="page", and it comes
+  // first in document order. Reading that reported "no page numbers" over the
+  // top of a pager that was on screen and numbered.
+  const sidebar = '<a href="/channels/1/2" aria-current="page">trades</a>';
+  const doc = page(
+    `${SEARCH_BOX}${sidebar}<div id="search-results">${RESULT_ROW("1")}${pager(2)}</div>`,
+  );
+  assert.equal(currentPage(doc), 2);
+});
+
+test("tells a page change from a lazy list growing under the scroller", () => {
+  const before = "panel a b";
+  // Paging replaces every row.
+  assert.equal(rowsTurnedOver(before, "panel c d"), true);
+  // Discord appending as the scroller reaches the bottom keeps the ones there.
+  assert.equal(rowsTurnedOver(before, "panel a b c d"), false);
+  // Pages that overlap by a row are still pages: "a" is gone, so this moved.
+  assert.equal(rowsTurnedOver(before, "panel b c"), true);
+  assert.equal(rowCount(before), 2);
+  assert.equal(rowCount("panel"), 0);
+  // An empty panel on either side is no evidence, not evidence of a walk.
+  assert.equal(rowsTurnedOver("panel", "panel c d"), false);
+  assert.equal(rowsTurnedOver(before, "panel"), false);
+  assert.equal(rowsTurnedOver("", "panel c d"), false);
+});
+
+test("will not count rows a numberless pager only appended", async () => {
+  // The scroller reaching the bottom of a long page loads more of that same
+  // page. The signature moves, and nothing has been paged.
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const view = doc.defaultView;
+  assert.ok(view);
+  const recorded = new Set<string>();
+  const ids: string[] = [];
+  const render = () => {
+    ids.push(`${ids.length + 1}`);
+    for (const id of ids) recorded.add(rowId(id));
+    list.innerHTML =
+      ids.map(RESULT_ROW).join("") +
+      `<button type="button" rel="next"><span>Next</span></button>`;
+  };
+  doc.addEventListener("keydown", render);
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof view.Element)) return;
+    if (target.closest('[rel="next"]')) render();
+  });
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 5,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+  });
+  assert.equal(run.pagesWalked, 1);
+  assert.match(run.pagerNote ?? "", /without losing any/);
+});
+
+test("a query that matched nothing leaves the last one's pager alone", async () => {
+  // The pager outlives the query that drew it. Clicking it from an empty panel
+  // walks the previous code's results and bills them to this one.
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const view = doc.defaultView;
+  assert.ok(view);
+  const recorded = new Set([rowId("1"), rowId("2")]);
+  const NEXT = `<button type="button" rel="next"><span>Next</span></button>`;
+  // The previous query's results, and its pager, are what is on screen.
+  list.innerHTML = ["1", "2"].map(RESULT_ROW).join("") + NEXT;
+  // Nothing matched: the rows go, and the pager is still up.
+  doc.addEventListener("keydown", () => {
+    list.innerHTML = NEXT;
+  });
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof view.Element)) return;
+    if (!target.closest('[rel="next"]')) return;
+    list.innerHTML = ["1", "2"].map(RESULT_ROW).join("") + NEXT;
+  });
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 5,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+  });
+  assert.equal(run.empty, 1);
+  assert.equal(run.pagesWalked, 1);
+  // And it is not the run's one note either: "no Next control" from the query
+  // that was never going to have one buried what the real queries hit.
+  assert.equal(run.pagerNote, null);
+});
+
+test("keeps looking for Next before deciding the results ran out", async () => {
+  // Discord rebuilds the pager as the page loads. A single look taken inside
+  // that gap ended queries pages short and called it the end of the results.
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const view = doc.defaultView;
+  assert.ok(view);
+  const recorded = new Set<string>();
+  let rendered = 0;
+  const render = () => {
+    rendered++;
+    const ids = [`${rendered}a`, `${rendered}b`];
+    for (const id of ids) recorded.add(rowId(id));
+    list.innerHTML =
+      ids.map(RESULT_ROW).join("") +
+      `<button type="button" rel="next"><span>Next</span></button>`;
+  };
+  doc.addEventListener("keydown", render);
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof view.Element)) return;
+    if (target.closest('[rel="next"]')) render();
+  });
+  // The pager is on the page the whole time; it is the *first look* at it after
+  // each page that comes back empty, which is what a re-render looks like.
+  const query = doc.querySelector.bind(doc);
+  let looks = 0;
+  doc.querySelector = ((selector: string) =>
+    selector.includes('rel="next"') && ++looks % 2 === 1
+      ? null
+      : query(selector)) as typeof doc.querySelector;
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 3,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+  });
+  assert.equal(run.pagesWalked, 3);
+  assert.equal(run.pagerNote, null);
+});
+
+test("does not call a page done while Discord has emptied the list to fetch it", async () => {
+  // Clicking Next clears the results while the next page loads. An empty list
+  // is quiet by every other measure — nothing outstanding, scrolled to the
+  // bottom, the same as a poll ago — so the page was called done mid-fetch and
+  // the rows that arrived after it were read as "nothing turned over".
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  const view = doc.defaultView;
+  assert.ok(view);
+  const recorded = new Set<string>();
+  const NEXT = `<button type="button" rel="next"><span>Next</span></button>`;
+  let rendered = 0;
+  const render = () => {
+    rendered++;
+    const ids = [`${rendered}a`, `${rendered}b`];
+    for (const id of ids) recorded.add(rowId(id));
+    list.innerHTML = ids.map(RESULT_ROW).join("") + NEXT;
+  };
+  doc.addEventListener("keydown", render);
+  doc.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof view.Element)) return;
+    if (!target.closest('[rel="next"]')) return;
+    // Emptied now; the rows arrive several polls later.
+    list.innerHTML = NEXT;
+    let polls = 0;
+    fetching = () => {
+      if (++polls === 6) {
+        fetching = () => {};
+        render();
+      }
+    };
+  });
+  let fetching: () => void = () => {};
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 3,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => fetching(),
+  });
+  assert.equal(run.pagesWalked, 3);
+  assert.equal(run.pagerNote, null);
+});
+
+test("will not count a numberless pager whose results never move", async () => {
+  // The other half of the same rule: no number and no turnover is no evidence,
+  // and the run must not report pages it cannot show it walked.
+  const doc = page(
+    `${SEARCH_BOX}<div id="search-results">${RESULT_ROW("1")}` +
+      `<button type="button" rel="next"><span>Next</span></button></div>`,
+  );
+  const run = await runSearches(doc, ["CC101"], {
+    delayMs: 0,
+    pages: 10,
+    signal: { cancelled: false },
+    probe: probeOf(new Set([rowId("1")])),
     wait: async () => {},
   });
   assert.equal(run.pagesWalked, 1);

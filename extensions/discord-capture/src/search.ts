@@ -576,6 +576,10 @@ export function submitSearch(element: HTMLElement): boolean {
  * a click actually advanced anything. Generated class names are avoided
  * throughout — `pageButton_c15210` changes every release.
  */
+/** Looks at the pager before accepting that Next is gone, and the gap between. */
+const NEXT_LOOKS = 3;
+const NEXT_LOOK_MS = 300;
+
 const NEXT_PAGE_SELECTORS = [
   'button[rel="next"]',
   '[aria-label="Next Page"]',
@@ -588,7 +592,13 @@ export function currentPage(doc: Document): number | null {
   // label is not, and neither is the word in front of it. Read the digits from
   // the label if there are any, and from the button's own text if not — the
   // pager renders the number either way.
-  const active = doc.querySelector('[aria-current="page"]');
+  //
+  // Scoped to the results panel, because the sidebar marks the open channel
+  // with `aria-current="page"` as well and it comes first in document order. A
+  // document-wide lookup therefore reads the channel list, finds no digits in
+  // it, and reports "no pager" over the top of a pager that is right there.
+  const panel = resultsPanel(doc);
+  const active = (panel ?? doc).querySelector('[aria-current="page"]');
   if (!active) return null;
   return (
     pageNumber(active.getAttribute("aria-label")) ??
@@ -706,6 +716,110 @@ export function rowSignature(doc: Document): string {
 }
 
 /**
+ * What the pager looked like when no Next control could be found, in counts.
+ *
+ * "No Next control" has two opposite causes: one page of results, which is a
+ * normal end, and a pager this build can no longer read, which is a fault. The
+ * summary line reported both with the same sentence, so a run that stopped at
+ * page one could not be told from a run that had nothing more to fetch. These
+ * are the exact things `findNextPage` looks for, counted where it looks —
+ * document-wide, since Discord does not always render the pager inside the
+ * results panel. Counts only: nothing anyone posted goes in here.
+ */
+export function pagerCensus(doc: Document): string {
+  const count = (selector: string) => doc.querySelectorAll(selector).length;
+  const next = count('button[rel="next"]');
+  const off = count(
+    'button[rel="next"][disabled], button[rel="next"][aria-disabled="true"]',
+  );
+  const panel = resultsPanel(doc);
+  return [
+    `${next} rel=next${next && off ? ` (${off} disabled)` : ""}`,
+    `${count('button[rel="prev"]')} rel=prev`,
+    `${count('[aria-label^="Page "]')} numbered`,
+    `${count("[aria-current]")} aria-current`,
+    `controls: ${pagerControls(panel)}`,
+  ].join(", ");
+}
+
+/**
+ * The clickable things around the results, described rather than counted.
+ *
+ * Counting them established that Discord renders *something* and that none of
+ * it carries `rel="next"` or an English "Page N" label. What it cannot say is
+ * what to match on instead, which is the only thing left worth knowing. The
+ * panel's container is included because a pager is as often a sibling of the
+ * results list as a child of it.
+ *
+ * Attributes and labels only, capped, and never the message bodies: pager
+ * labels are Discord's own UI strings in whatever language it is running in.
+ */
+export function pagerControls(panel: Element | null): string {
+  if (!panel) return "no results panel";
+  const trim = (text: string | null) =>
+    (text ?? "").trim().replace(/\s+/g, " ").slice(0, 24);
+  const described = [
+    ...panel.querySelectorAll('button, [role="button"], a[href]'),
+  ]
+    // Not the rows: every result carries reactions, spoilers and a jump link,
+    // and ten of those crowded out the one control this is asked to find.
+    .filter((node) => {
+      const row = node.closest("li");
+      if (row && resultBodies(row).length) return false;
+      return !resultBodies(node).length;
+    })
+    // The end of the panel, because that is where a pager sits.
+    .slice(-10)
+    .map((node) =>
+      [
+        node.tagName.toLowerCase(),
+        node.getAttribute("role") && `role=${node.getAttribute("role")}`,
+        node.getAttribute("rel") && `rel=${node.getAttribute("rel")}`,
+        node.getAttribute("aria-current") &&
+          `aria-current=${node.getAttribute("aria-current")}`,
+        node.hasAttribute("disabled") && "disabled",
+        node.getAttribute("aria-label") &&
+          `label="${trim(node.getAttribute("aria-label"))}"`,
+        trim(node.textContent) && `text="${trim(node.textContent)}"`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  return described.length ? described.join(" | ") : "none";
+}
+
+/**
+ * Whether the panel's rows were replaced, rather than merely added to.
+ *
+ * Paging swaps the whole result set. Discord's list also *grows* — the scroller
+ * reaching the bottom lazily appends more rows to the page already on screen —
+ * and a signature that merely differs cannot tell the two apart. An id that
+ * survived the click did not come from a page change, because a page change
+ * keeps none of them. Both sides have to hold rows as well: an empty panel
+ * before or after is no evidence either way, which is what stopped a query that
+ * matched nothing from counting the previous query's pager as pages of its own.
+ */
+/** How many rows a signature stands for, for saying so in a note. */
+export function rowCount(signature: string): number {
+  return signature.split(" ").slice(1).filter(Boolean).length;
+}
+
+export function rowsTurnedOver(before: string, after: string): boolean {
+  // `rowSignature` is "panel" followed by the body ids, so drop the prefix.
+  const ids = (signature: string) =>
+    new Set(signature.split(" ").slice(1).filter(Boolean));
+  const was = ids(before);
+  const now = ids(after);
+  if (!was.size || !now.size) return false;
+  // One row gone is enough, and demanding more was too strict: Discord's pages
+  // can overlap by a row, and requiring that every id be new then read a real
+  // page change as no change at all. Growing keeps every row it had, so "none
+  // of them left" is the exact line between the two.
+  for (const id of was) if (!now.has(id)) return true;
+  return false;
+}
+
+/**
  * Nudge the results scroller down one viewport, reporting whether it is at the
  * bottom.
  *
@@ -806,6 +920,17 @@ export interface SettleOptions {
   budgetMs?: number;
   /** How long to wait for the rows to turn over before accepting them as-is. */
   graceMs?: number;
+  /**
+   * Whether this page is one Discord said exists, so an empty list is it still
+   * loading rather than the answer.
+   *
+   * Clicking Next empties the results while the next page is fetched, and an
+   * empty list is quiet by every other measure here — nothing outstanding,
+   * scrolled to the bottom, the same as it was a poll ago. Two polls of that is
+   * 300ms, so the page was called done mid-fetch, and the rows it was asked to
+   * confirm never got a chance to arrive.
+   */
+  expectRows?: boolean;
 }
 
 /**
@@ -842,13 +967,29 @@ export async function settlePage(
     const arrived =
       options.page === null || here === null || here === options.page;
     const still =
-      panel && arrived && bottom && outstanding === 0 && signature === last;
+      panel &&
+      arrived &&
+      bottom &&
+      outstanding === 0 &&
+      signature === last &&
+      (!options.expectRows || rows.length > 0);
     quiet = still ? quiet + 1 : 0;
     last = signature;
     // Two quiet polls once the rows have visibly turned over. When they have
     // not — a code nobody has posted returns the same empty panel twice — sit
     // out the grace period rather than the whole budget before accepting it.
-    const need = changed ? 2 : Math.max(2, Math.ceil(graceMs / pollMs));
+    //
+    // An *empty* panel is never the turnover, however much the signature moved:
+    // "nobody posted this" and "Discord has not answered yet" look identical,
+    // and only time tells them apart. The panel appearing at all counts as a
+    // change — the signature goes from no panel to an empty one — so the first
+    // query of a run reached its two quiet polls 300ms in, while the search was
+    // still in flight, and was recorded as no matches. That is the race that
+    // made the first codes in a run come back empty and their pages go unread,
+    // and it is a race, which is why the same code was empty in one run and
+    // not the next.
+    const need =
+      changed && rows.length > 0 ? 2 : Math.max(2, Math.ceil(graceMs / pollMs));
     const done = quiet >= need;
     // Stop means stop: waiting out a fifteen-second budget first is how a
     // cancel button earns a reputation for not working.
@@ -896,6 +1037,13 @@ export interface SearchRun {
   unsettled: number;
   /** Pages Discord answered with the list it was already showing. */
   unchanged: number;
+  /**
+   * The queries Discord answered with nothing.
+   *
+   * Named rather than counted, because "2 with no matches" is only believable
+   * if you can see which two and check one by hand.
+   */
+  emptyQueries: string[];
   /** The first settle that went wrong, in words. */
   settleNote: string | null;
   /**
@@ -1009,6 +1157,9 @@ export async function runSearches(
   let sawChange = false;
   /** Consecutive queries answered with the list already on screen. */
   let stalled = 0;
+  /** Whether the query in flight came back with no results at all. */
+  let matchedNothing = false;
+  const emptyQueries: string[] = [];
   /** Result pages abandoned because the panel disappeared under the run. */
   let closed = 0;
   const typedBy: Record<string, number> = {};
@@ -1035,6 +1186,7 @@ export async function runSearches(
     posts: probe?.posts() ?? 0,
     unsettled,
     unchanged,
+    emptyQueries,
     settleNote,
     submittedBy,
     retried,
@@ -1072,6 +1224,10 @@ export async function runSearches(
         // Page one of a fresh query has no pager number to wait for yet: the
         // pager may still be showing the last query's page until it resets.
         page: page === 1 ? null : page,
+        // Page one may legitimately be empty — nobody has posted the code.
+        // Any page after it was reached by clicking a Next that Discord only
+        // renders when there is more, so empty there means "not yet".
+        expectRows: page > 1,
         before,
         probe,
         wait,
@@ -1190,7 +1346,11 @@ export async function runSearches(
         preferred = usedInsertion;
         sawChange = true;
         stalled = 0;
-        if (outcome.result.rendered === 0) empty++;
+        if (outcome.result.rendered === 0) {
+          empty++;
+          matchedNothing = true;
+          emptyQueries.push(query);
+        }
         return null;
       }
       // An empty panel that did not change is the previous empty answer still
@@ -1201,6 +1361,8 @@ export async function runSearches(
       // submitted at all.
       if (outcome.result.rendered === 0 && sawChange) {
         empty++;
+        matchedNothing = true;
+        emptyQueries.push(query);
         stalled = 0;
         return null;
       }
@@ -1215,7 +1377,25 @@ export async function runSearches(
     }
   };
 
+  /**
+   * Look for Next, and keep looking for a moment before believing it is gone.
+   *
+   * Discord rebuilds the pager as a page loads, and a look taken inside that
+   * gap finds nothing — which ended queries several pages short of what was
+   * asked for and reported it as the results running out. The last page really
+   * does remove the control, so this cannot wait long; it only has to outlast
+   * a re-render.
+   */
+  const nextPage = async (): Promise<HTMLElement | null> => {
+    for (let look = 1; ; look++) {
+      const next = findNextPage(doc);
+      if (next || look >= NEXT_LOOKS || options.signal.cancelled) return next;
+      await wait(NEXT_LOOK_MS);
+    }
+  };
+
   for (const query of queries) {
+    matchedNothing = false;
     const blocked = await fire(query);
     if (blocked) return finish(blocked);
     // Three queries in a row answered with the list already on screen is not a
@@ -1231,13 +1411,18 @@ export async function runSearches(
     pagesWalked++;
 
     const pages = Math.max(1, options.pages ?? 1);
+    // A code nobody has posted has no pager of its own: the one on screen is
+    // the last query's. Clicking it walks that query's later pages and bills
+    // them here — and it filled the run's one note with "no Next control" from
+    // the query least likely to have one, hiding what the rest hit.
+    if (matchedNothing) continue;
     for (let page = 2; page <= pages; page++) {
       if (options.signal.cancelled) return finish("Cancelled.");
-      const next = findNextPage(doc);
+      const next = await nextPage();
       // Fail soft: fewer results than requested pages is normal, and a missing
       // pager must not abandon the remaining queries.
       if (!next) {
-        pagerNote ??= "no Next control found on the results pager";
+        pagerNote ??= `${query}: no Next control after page ${page - 1} of ${pages} requested — ${pagerCensus(doc)}`;
         break;
       }
       const beforePage = currentPage(doc);
@@ -1253,14 +1438,25 @@ export async function runSearches(
         pagerNote ??= "the results ran out before the requested page count";
         break;
       }
-      // Only the numbered buttons can confirm the click landed. Without them
-      // there is no evidence a page was walked, and counting one anyway is how
-      // a run that never left page one reported forty pages of progress.
+      // The numbered buttons confirm the click landed, and counting a page
+      // without that evidence is how a run that never left page one reported
+      // forty pages of progress. But Discord ships pagers with no
+      // `aria-current` at all, and abandoning the query at page two of five
+      // over a missing attribute throws away pages that were walked and read.
+      // The result ids are the other evidence, and they have to be read
+      // strictly: not "the panel changed" — the lazy list changes as it is
+      // scrolled — but "every row that was there is gone", which only a page
+      // change does. `rowSignature` is scoped to the panel, so a turnover
+      // there is this pager moving and not the channel behind it.
       const nowPage = currentPage(doc);
       if (beforePage === null || nowPage === null) {
-        pagerNote ??=
-          "the results pager has no page numbers, so paging could not be confirmed";
-        break;
+        const afterRows = rowSignature(doc);
+        if (!rowsTurnedOver(beforeRows, afterRows)) {
+          pagerNote ??= `${query}: page ${page} could not be confirmed — the pager has no page numbers, and the results went from ${rowCount(beforeRows)} to ${rowCount(afterRows)} rows without losing any`;
+          break;
+        }
+        pagesWalked++;
+        continue;
       }
       if (nowPage === beforePage) {
         pagerNote ??= `clicking Next did not leave page ${beforePage}`;
