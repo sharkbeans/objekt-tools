@@ -121,6 +121,23 @@ without it the store is best-effort and the browser may quietly evict a week of 
 Troubleshooting → **Check this tab** reports whether that was granted and how full the store
 is.
 
+## When it stops working
+
+Two failures used to be completely silent, which for a tool that runs unattended is the
+worst kind:
+
+- **Discord changes its markup.** Nothing throws; the selectors stop matching, every row
+  reads as unreadable, and capture collects nothing while looking exactly like a quiet
+  channel. The content script samples for that shape twice a minute — messages on screen,
+  capture on for the channel, none of them readable — and two consecutive bad samples put a
+  banner in the panel. `health.ts` holds the rule and `health.test.ts` the judgement calls
+  (one unreadable post is an attachment; a screenful of them is a broken parser).
+- **The extension is reloaded or updated.** Every content script already running is orphaned:
+  `chrome.runtime` stops working and every message throws. The old code caught that and
+  carried on scanning, so capture stopped for good and the badge simply never moved again.
+  An orphaned script now detaches its observer, cancels any run, and replaces the panel's
+  contents with what to do about it (reload Discord).
+
 ## Validation still requiring a real Discord session
 
 Browse a trade channel for two minutes; dump the index and inspect authors, range coverage,

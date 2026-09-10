@@ -95,6 +95,7 @@ interface Panel {
   root: HTMLElement;
   bar: HTMLElement;
   dot: HTMLElement;
+  notice: HTMLElement;
 }
 
 let panel: Panel | null = null;
@@ -140,6 +141,22 @@ export function closePanel(): void {
   panel.host.remove();
   panel = null;
   save(false);
+}
+
+/**
+ * Replace the panel's contents with a message.
+ *
+ * For the one thing the panel cannot say for itself: when the extension is
+ * reloaded or updated, every frame belonging to the old copy is destroyed, so
+ * the UI in it is already gone. Saying so where the panel was beats leaving a
+ * blank rectangle over Discord.
+ */
+export function showPanelNotice(message: string): void {
+  if (!panel) return;
+  panel.frame.hidden = true;
+  panel.notice.textContent = message;
+  panel.notice.hidden = false;
+  panel.dot.classList.remove("busy");
 }
 
 /** Turn the titlebar dot green while a run is going, so a covered panel still says so. */
@@ -321,7 +338,7 @@ export async function openPanel(tabId: number | null): Promise<void> {
 
   root.append(bar, body, grip);
   shadow.append(style, root);
-  panel = { host, frame, root, bar, dot };
+  panel = { host, frame, root, bar, dot, notice: fallback };
   apply();
   // documentElement, not body: Discord owns everything under its own root and
   // reconciles it, and a panel removed by a re-render is a panel that vanishes

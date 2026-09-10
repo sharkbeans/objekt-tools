@@ -152,6 +152,7 @@ async function currentRun(): Promise<string | null> {
 async function refresh() {
   const settings = await extensionApi.storage.local.get([
     "captureError",
+    "captureHealth",
     "channels",
   ]);
   const tab = await discordTab().catch(() => null);
@@ -159,6 +160,7 @@ async function refresh() {
   const enabled = Boolean(
     channel && channelIds(settings.channels).includes(channel),
   );
+  showHealth(settings.captureHealth);
   if (typeof settings.captureError === "string") {
     say(status, settings.captureError, true);
     return;
@@ -180,6 +182,27 @@ async function refresh() {
   if (!channel) parts.push("Open a Discord trade channel to capture.");
   say(status, parts.join(" "));
   showChannel(tab?.url, enabled);
+}
+
+/**
+ * Say when capture has stopped understanding Discord's markup.
+ *
+ * This is the failure that otherwise looks like nothing at all: no error, no
+ * exception, just a badge that never moves again. Discord rewrites its DOM
+ * regularly, so this will eventually be true, and a user who is told can stop
+ * relying on the extension and report it.
+ */
+function showHealth(health: unknown) {
+  const banner = document.getElementById("health");
+  if (!banner) return;
+  const broken =
+    health && typeof health === "object"
+      ? (health as Record<string, unknown>)
+      : null;
+  banner.hidden = !broken;
+  if (!broken) return;
+  const elements = typeof broken.elements === "number" ? broken.elements : 0;
+  banner.textContent = `Capture has stopped working: ${elements} messages are on screen and none of them can be read, which means Discord has changed its markup. The extension needs an update — Troubleshooting → Check this tab has the detail to report.`;
 }
 
 /**
@@ -684,6 +707,7 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   // Another window of this panel may have agreed, or withdrawn.
   if (changes.consent) showSections(changes.consent.newValue);
   if (changes.discordTheme) applyTheme(changes.discordTheme.newValue);
+  if (changes.captureHealth) showHealth(changes.captureHealth.newValue);
   if (changes.searchProgress) {
     say(searchStatus, describe(changes.searchProgress.newValue));
     tally(changes.searchProgress.newValue);
