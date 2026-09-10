@@ -88,6 +88,16 @@ What the run refuses to do:
 - **Read user input as Discord search syntax.** Queries are stripped to letters, digits and
   single spaces, so a stray `from:` or quote cannot turn a search into a filter.
 
+None of it is English-only any more. The search box was found by an accessible name
+beginning with "Search", which meant a client in any other language reported the box as
+missing and the whole feature was unavailable. The guard that matters is the role — the
+composer is `role="textbox"`, search is `role="combobox"`, so a combobox is never the box
+that posts to a channel — so a recognised name in any of a dozen languages is taken directly,
+and an unrecognised one is taken only when it is the only combobox in the document.
+Ambiguity still fails closed, which is the property worth keeping: being unable to search is
+an inconvenience, typing into the wrong box is a message in a public channel. The pager reads
+`aria-current="page"` and the digits in the button, rather than the words "Page 2".
+
 An empty results panel is now recognised as an answer rather than as a missing panel, so a
 code nobody has posted costs one settle instead of the full grace period, and a panel that
 actually disappears is diagnosed as the user having closed it. Stop takes effect on the next

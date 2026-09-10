@@ -73,19 +73,35 @@ export function searchSafe(query: string): string {
  * (`searchBar_c322aa`) are deliberately not used; they churn every release.
  */
 const SEARCH_BOX_SELECTOR = '[role="combobox"][contenteditable="true"]';
-const SEARCH_LABEL = /^\s*search\b/i;
+const SEARCH_LABEL =
+  /^\s*(search|suchen|buscar|rechercher|cerca|procurar|szukaj|zoeken|søk|sök|haku|keres|hledat|ara|поиск|пошук|検索|搜索|搜尋|검색|بحث|ค้นหา)\b/i;
 
+/**
+ * Discord's search field, in whatever language Discord is running in.
+ *
+ * The role is the guard that matters: the composer is `role="textbox"` and
+ * search is `role="combobox"`, so a combobox is never the box that posts to the
+ * channel. The accessible name was the second guard, and on its own it made the
+ * whole feature English-only — a client in any other language simply reported
+ * "Could not find Discord's search box".
+ *
+ * So: prefer a candidate whose name reads as "search" in a language this build
+ * knows, and otherwise accept the field only when it is the *only* combobox in
+ * the document. Ambiguity still fails closed, which is the property worth
+ * keeping — being unable to search is an inconvenience, and typing into the
+ * wrong box is a message posted to a public channel.
+ */
 export function findSearchBox(doc: Document): HTMLElement | null {
   const view = doc.defaultView;
   if (!view) return null;
+  const candidates: HTMLElement[] = [];
   for (const candidate of doc.querySelectorAll(SEARCH_BOX_SELECTOR)) {
     if (!(candidate instanceof view.HTMLElement)) continue;
-    // Fail closed: no accessible name, no typing.
-    if (!SEARCH_LABEL.test(candidate.getAttribute("aria-label") ?? ""))
-      continue;
-    return candidate;
+    if (SEARCH_LABEL.test(candidate.getAttribute("aria-label") ?? ""))
+      return candidate;
+    candidates.push(candidate);
   }
-  return null;
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 /**
@@ -568,11 +584,23 @@ const NEXT_PAGE_SELECTORS = [
 
 /** The page Discord marks as current, or null when there is no pager. */
 export function currentPage(doc: Document): number | null {
-  const active = doc.querySelector(
-    '[aria-current="page"][aria-label^="Page "]',
+  // `aria-current="page"` is the same in every language; the number inside the
+  // label is not, and neither is the word in front of it. Read the digits from
+  // the label if there are any, and from the button's own text if not — the
+  // pager renders the number either way.
+  const active = doc.querySelector('[aria-current="page"]');
+  if (!active) return null;
+  return (
+    pageNumber(active.getAttribute("aria-label")) ??
+    pageNumber(active.textContent)
   );
-  const label = active?.getAttribute("aria-label") ?? "";
-  const page = Number(label.replace(/^Page\s+/, ""));
+}
+
+/** The one run of digits in a pager label, or null when it is not that simple. */
+function pageNumber(text: string | null): number | null {
+  const digits = (text ?? "").match(/\d+/g);
+  if (digits?.length !== 1) return null;
+  const page = Number(digits[0]);
   return Number.isFinite(page) && page > 0 ? page : null;
 }
 
@@ -591,7 +619,21 @@ export function findNextPage(doc: Document): HTMLElement | null {
   const page = currentPage(doc);
   if (page === null) return null;
   const numbered = doc.querySelector(`[aria-label="Page ${page + 1}"]`);
-  return numbered instanceof view.HTMLElement ? numbered : null;
+  if (numbered instanceof view.HTMLElement) return numbered;
+  // English labels gone as well: find the button next to the current one whose
+  // number is the one after it. Scoped to the pager the current page sits in,
+  // so this cannot wander off into the rest of the page.
+  const active = doc.querySelector('[aria-current="page"]');
+  const pager = active?.parentElement;
+  if (!pager) return null;
+  for (const sibling of pager.children) {
+    if (!(sibling instanceof view.HTMLElement) || sibling === active) continue;
+    const number =
+      pageNumber(sibling.getAttribute("aria-label")) ??
+      pageNumber(sibling.textContent);
+    if (number === page + 1) return sibling;
+  }
+  return null;
 }
 
 /**
@@ -608,7 +650,7 @@ const RESULTS_SELECTORS = [
   '[aria-label="Search Results" i]',
 ];
 const PAGER_SELECTOR =
-  '[aria-label^="Page "], button[rel="next"], button[rel="prev"]';
+  '[aria-label^="Page "], [aria-current="page"], button[rel="next"], button[rel="prev"]';
 
 export function resultsPanel(doc: Document): Element | null {
   // The precise anchors identify the panel on their own, so an empty one still
