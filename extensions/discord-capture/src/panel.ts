@@ -75,6 +75,11 @@ function action(
       })
       .finally(() => {
         busy = false;
+        // A button whose state something longer-lived now owns is left alone.
+        // Starting a run finishes this handler in a few hundred milliseconds
+        // while the run itself goes on for minutes, and re-enabling the Search
+        // button there would offer a second run on top of the first.
+        if (button.dataset.hold === "1") return;
         button.disabled = false;
         if (label !== null) button.textContent = label;
       });
@@ -697,6 +702,9 @@ function showRunning(running: boolean, done: number, total: number) {
   }
   if (stop) stop.hidden = !running;
   if (start instanceof HTMLButtonElement) {
+    // Claimed for as long as the run lasts, so the click handler that started
+    // it does not hand the button back when it returns.
+    start.dataset.hold = running ? "1" : "";
     start.disabled = running;
     start.textContent = running ? "Searching…" : "Search my wants";
   }

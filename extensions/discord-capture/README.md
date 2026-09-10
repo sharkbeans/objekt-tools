@@ -177,9 +177,14 @@ also pauses every channel. A `!` toolbar badge and panel error report failed sto
 ## Automated validation
 
 `npm run extension:smoke` builds and loads the actual MV3 bundle in a temporary Chromium
-profile, fulfills Discord navigation with a local fixture, and checks the consent gate
-(nothing is captured or annotated before agreement, and withdrawal detaches the reader),
-capture, virtualized re-render dedupe, annotation updates, export downloads and pause. It never contacts Discord.
+profile, fulfills Discord navigation with a local fixture, and checks: the floating panel
+(opened the way the toolbar button opens it, dragged by its titlebar, held on screen,
+restored where it was left after a reload, and genuinely closed to the page); both consent
+gates; a whole search run end to end — real `execCommand` typing into a real contenteditable,
+a real Enter, results captured and scoped to the run; the run state machine, including a run
+whose reports stop arriving; capture with Discord behind another window; virtualized
+re-render dedupe; annotation updates; export downloads; pause; and withdrawal. It never
+contacts Discord.
 Install the Playwright Chromium browser first if it is missing (`npx playwright install chromium`).
 The Node tests cover structural attribution, IndexedDB transactions/reopens, ranges, ISO
 round trips, ambiguous export rejection, and inventory failures. `npm test` includes the
