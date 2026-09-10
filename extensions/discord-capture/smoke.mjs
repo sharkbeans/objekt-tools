@@ -42,8 +42,68 @@ try {
         '<li id="chat-messages-123-456" aria-labelledby="message-username-456"><span id="message-username-456">Trader</span><time datetime="2026-09-09T03:41:00.000Z"></time><div id="message-content-456">HAVE<br>YooYeon CC101-108<br>WANT<br>YooYeon CC109</div></li>';
     });
   await render();
+  // The floating panel: opened the way the toolbar button opens it, dragged,
+  // and checked for coming back where it was left.
+  await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ url: "https://discord.com/*" });
+    await chrome.tabs.sendMessage(tab.id, { type: "toggle-panel" });
+  });
+  // The panel lives in a closed shadow root, so it is unreachable from the
+  // page — which is the point — and has to be addressed as a frame.
+  const panelFrame = async () => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const frame = page
+        .frames()
+        .find((candidate) => candidate.url().includes("panel.html"));
+      if (frame) return frame;
+      await page.waitForTimeout(100);
+    }
+    throw new Error("the panel frame never appeared");
+  };
+  const frame = await panelFrame();
+  await frame.locator("#consent").waitFor();
+  assert.equal(
+    await page.evaluate(
+      () => document.querySelector("objekt-capture-panel")?.shadowRoot ?? null,
+    ),
+    null,
+    "the panel's shadow root is closed to the page",
+  );
+  const stored = () =>
+    worker.evaluate(() =>
+      chrome.storage.local.get("panel").then((settings) => settings.panel),
+    );
+  const settle = () => page.waitForTimeout(500);
+  await settle();
+  const before = await stored();
+  assert.equal(before?.open, true, `panel state: ${JSON.stringify(before)}`);
+  // Drag by the titlebar, which is the whole point of the panel.
+  await page.mouse.move(before.x + 60, before.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(before.x - 140, before.y + 200, { steps: 8 });
+  await page.mouse.up();
+  await settle();
+  const moved = await stored();
+  const height = await page.evaluate(() => window.innerHeight);
+  assert.equal(moved.x, before.x - 200, "dragging the titlebar moves it");
+  assert.ok(moved.y > before.y, "and downwards");
+  // The drag asked for more than fits; the panel is held on screen instead.
+  assert.ok(
+    moved.y + moved.height <= height,
+    `panel bottom ${moved.y + moved.height} past viewport ${height}`,
+  );
+  // A reload is not a reason to lose your window.
+  await page.reload();
+  const embedded = await panelFrame();
+  await embedded.locator("#consent").waitFor();
+  assert.deepEqual(await stored().then(({ x, y }) => ({ x, y })), {
+    x: moved.x,
+    y: moved.y,
+  });
+  await render();
+
   const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${id}/popup.html`);
+  await popup.goto(`chrome-extension://${id}/panel.html`);
   // Nothing may be read before the disclosure is agreed to, so the index is
   // empty however many posts are on screen, and the working UI is not shown.
   await popup.waitForFunction(() =>
@@ -59,6 +119,8 @@ try {
     document.getElementById("status").textContent.includes("1 post ready"),
   );
   assert.equal(await popup.locator("#consent").isVisible(), false);
+  // Every copy of the panel reflects the same agreement, without a reload.
+  await embedded.locator("#step-wants").waitFor();
   // Capture consent alone must not unlock search automation.
   assert.equal(await popup.locator("#automation-gate").isVisible(), true);
   assert.equal(await popup.locator("#search-section").isVisible(), false);
@@ -102,10 +164,12 @@ try {
     () => !document.querySelector("objekt-match-badge"),
   );
   await page.evaluate(() => {
-    document.getElementById("messages").insertAdjacentHTML(
-      "beforeend",
-      '<li id="chat-messages-123-789" aria-labelledby="message-username-789"><span id="message-username-789">Other</span><time datetime="2026-09-09T04:00:00.000Z"></time><div id="message-content-789">HAVE YooYeon CC109</div></li>',
-    );
+    document
+      .getElementById("messages")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<li id="chat-messages-123-789" aria-labelledby="message-username-789"><span id="message-username-789">Other</span><time datetime="2026-09-09T04:00:00.000Z"></time><div id="message-content-789">HAVE YooYeon CC109</div></li>',
+      );
   });
   await popup.reload();
   await popup.waitForFunction(() =>
@@ -113,7 +177,7 @@ try {
   );
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: consent gate, MV3 capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), consent gate, MV3 capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();

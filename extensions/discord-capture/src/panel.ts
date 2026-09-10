@@ -7,8 +7,37 @@ import {
   captureAllowed,
 } from "./consent";
 import { exportTranscript } from "./export";
-import { channelFromUrl, channelIds, isDiscordUrl } from "./settings";
+import { DISCORD_MATCHES, resolveTab, type TabLike } from "./host-tab";
+import { channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
+
+/**
+ * Where this copy of the panel is running.
+ *
+ * The same document is the floating panel inside Discord, the pop-out window,
+ * and whatever else hosts it later. The only differences are which tab it acts
+ * on and which buttons make sense, so the mode is a query parameter rather
+ * than three copies of the UI.
+ */
+const params = new URLSearchParams(location.search);
+const embedded = params.get("embedded") === "1";
+/** The tab an embedded panel is sitting in, which is the tab it acts on. */
+const pinnedTab = Number.isFinite(Number(params.get("tab")))
+  ? Number(params.get("tab"))
+  : null;
+
+const tabs: {
+  get: (id: number) => Promise<TabLike | undefined>;
+  query: () => Promise<TabLike[]>;
+} = {
+  get: (id) => extensionApi.tabs.get(id),
+  query: () => extensionApi.tabs.query({ url: DISCORD_MATCHES }),
+};
+
+/** The Discord tab this panel acts on. Throws with something readable if none. */
+function discordTab() {
+  return resolveTab(tabs, pinnedTab);
+}
 
 const status = document.getElementById("status") as HTMLElement;
 async function request(type: string, extra: Record<string, unknown> = {}) {
@@ -91,10 +120,7 @@ async function refresh() {
     "captureError",
     "channels",
   ]);
-  const [tab] = await extensionApi.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
+  const tab = await discordTab().catch(() => null);
   const channel = channelFromUrl(tab?.url);
   const enabled = Boolean(
     channel && channelIds(settings.channels).includes(channel),
@@ -132,11 +158,8 @@ function download(text: string, filename: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 action("toggle", async () => {
-  const [tab] = await extensionApi.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-  const channel = channelFromUrl(tab?.url);
+  const tab = await discordTab();
+  const channel = channelFromUrl(tab.url);
   if (!channel) throw new Error("Open a Discord server trade channel first.");
   const settings = await extensionApi.storage.local.get("channels");
   const channels = channelIds(settings.channels);
@@ -218,9 +241,22 @@ action("save-haves", async () => {
   inventoryStatus.textContent = `${owned.length} typed haves saved`;
 });
 action("load-inventory", async () => {
-  const allowed = await extensionApi.permissions.request({
-    origins: ["https://objekt.my/*"],
-  });
+  // A permission prompt has to come from a user gesture in an extension
+  // document. That holds here, but a panel embedded in a page is an unusual
+  // enough place for one that browsers have refused it outright before — so a
+  // throw is treated as "ask somewhere else", not as a failure.
+  let allowed: boolean;
+  try {
+    allowed = await extensionApi.permissions.request({
+      origins: ["https://objekt.my/*"],
+    });
+  } catch {
+    if (!embedded) throw new Error("The permission prompt could not be shown.");
+    await request("open-window");
+    throw new Error(
+      "This browser will not show the permission prompt inside the page. Use the window that just opened, or type your haves instead.",
+    );
+  }
   if (!allowed)
     throw new Error(
       "Allow access to objekt.my to load inventory, or type your haves.",
@@ -245,6 +281,17 @@ void extensionApi.storage.local
     haves.value = typeof settings.haves === "string" ? settings.haves : "";
   });
 
+// Only the pop-out window needs a way back into the page; the embedded panel
+// has the pop-out button in its own titlebar.
+const dock = document.getElementById("dock");
+if (dock) dock.hidden = embedded;
+document.body.classList.toggle("embedded", embedded);
+action("dock", async () => {
+  const tab = await discordTab();
+  await request("show-panel", { tabId: tab.id });
+  await request("close-window");
+});
+
 const build = document.getElementById("build") as HTMLElement;
 const manifest = extensionApi.runtime.getManifest();
 build.textContent = manifest.version_name ?? manifest.version;
@@ -264,11 +311,14 @@ function showDelay() {
 delay.addEventListener("input", showDelay);
 
 /**
- * Talk to the content script, translating the one failure users actually hit.
+ * Talk to the content script, injecting it first if the tab has none.
  *
- * Content scripts are injected at page load, so a Discord tab opened before the
- * extension was installed or reloaded has nothing listening — Chrome reports
- * that as "Receiving end does not exist", which tells the user nothing.
+ * Declared content scripts only run at page load, so a Discord tab that was
+ * already open when the extension was installed or updated has nothing
+ * listening; the browser reports that as "Receiving end does not exist", which
+ * tells the user nothing. The old answer was to tell them to press F5. The
+ * worker can simply inject it instead, so the failure is only worth reporting
+ * if the retry fails too.
  */
 async function toContentScript(
   tabId: number,
@@ -279,23 +329,22 @@ async function toContentScript(
   } catch (error) {
     const text = error instanceof Error ? error.message : "";
     if (
-      /Receiving end does not exist|Could not establish connection/i.test(text)
+      !/Receiving end does not exist|Could not establish connection/i.test(text)
     )
+      throw error;
+    await request("ensure", { tabId });
+    try {
+      return await extensionApi.tabs.sendMessage(tabId, message);
+    } catch {
       throw new Error(
-        "The extension is not running in that tab yet. Reload the Discord tab (F5) and try again.",
+        "The extension could not start in that Discord tab. Reload the tab (F5) and try again.",
       );
-    throw error;
+    }
   }
 }
 
 async function activeDiscordTab() {
-  const [tab] = await extensionApi.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-  if (!tab?.id || !isDiscordUrl(tab.url))
-    throw new Error("Open the Discord tab with your trade channel first.");
-  return tab.id;
+  return (await discordTab()).id;
 }
 
 function describe(progress: unknown): string {
@@ -386,12 +435,9 @@ async function ensureCapturing(url: string | undefined): Promise<string> {
 }
 
 action("run-search", async () => {
-  const [active] = await extensionApi.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-  await ensureCapturing(active?.url);
-  const tabId = await activeDiscordTab();
+  const tab = await discordTab();
+  await ensureCapturing(tab.url);
+  const tabId = tab.id;
   const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
   const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
   await extensionApi.storage.local.set({
