@@ -38,6 +38,16 @@ happen in an extension document where browsers allow them. `src/panel-frame.ts` 
 window chrome, `panel.html` + `src/panel.ts` own the UI, and `src/panel-geometry.ts` holds the
 placement rules that the tests exercise without a browser.
 
+Inside it: a channel strip at the top saying whether this channel is being collected, with
+the switch for it (that switch used to live under Troubleshooting, which is the wrong place
+for the control that decides whether the extension does anything at all); live counts under
+the haves and wants boxes, saying how many lines the parser actually recognised, because a
+list where half the lines are headings parses to half a list silently; a progress bar and a
+Stop button that only exists while a run does; and per-step status lines that go red when
+something failed rather than reporting errors somewhere else on the page. The palette follows
+Discord's own light/dark setting, reported by the content script — not `prefers-color-scheme`,
+which is a different setting and wrong about as often as it is right.
+
 The toolbar button toggles the panel on Discord tabs and opens the pop-out window anywhere
 else. Either way the panel acts on a specific Discord tab: the one it is embedded in, or —
 from a window — the Discord tab you used most recently (`src/host-tab.ts`), so it no longer
