@@ -233,11 +233,26 @@ extensionApi.runtime.onConnect.addListener((port) => {
 extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.consent || changes.channels) settings = null;
+  if (changes.captureError)
+    reportedError = typeof changes.captureError.newValue === "string";
   if (changes.consent && captureAllowed(changes.consent.newValue))
     void requestPersistence();
 });
-/** Whether a storage failure is currently being reported to the user. */
+/**
+ * Whether a storage failure is currently being reported to the user.
+ *
+ * Read back at start-up rather than assumed: the worker is torn down
+ * constantly, and a flag that resets to false on every restart would leave the
+ * error banner up for good — the clear only runs when this says there is
+ * something to clear.
+ */
 let reportedError = false;
+void extensionApi.storage.local
+  .get("captureError")
+  .then((stored) => {
+    reportedError = typeof stored.captureError === "string";
+  })
+  .catch(() => {});
 
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
@@ -337,8 +352,17 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       return true;
     }
     if (request?.type === "close-window") {
+      // Only a panel that *is* a window may close one. The embedded panel is
+      // also a panel document, and its window is the user's Discord window —
+      // closing that on a stray message would be spectacular. A top-level
+      // frame whose own URL is the panel is the one case that is safe.
       const id = sender.tab?.windowId;
-      if (typeof id === "number") await extensionApi.windows.remove(id);
+      if (
+        sender.frameId === 0 &&
+        fromPanel(sender.tab?.url) &&
+        id !== undefined
+      )
+        await extensionApi.windows.remove(id);
       return true;
     }
     if (request?.type === "show-panel") {
