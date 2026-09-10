@@ -207,6 +207,29 @@ from Troubleshooting → **Withdraw consent**:
 Bumping `CONSENT_VERSION` in `src/consent.ts` re-asks everyone, and is the correct response
 to any material change in what the extension collects.
 
+## Releasing
+
+```sh
+npm run typecheck && npm run lint && npm run extension:test && npm run extension:smoke
+npx web-ext lint --source-dir extensions/discord-capture/dist-firefox
+npm run extension:package
+```
+
+`extension:package` rebuilds both targets from scratch and writes
+`packages/objekt-capture-{chrome,firefox}-<version>.zip`. It rebuilds rather than zipping
+whatever is on disk, because uploading the wrong folder costs review days, and it strips the
+`version_name` build stamp so a package is not a different file every time it is built —
+two builds of the same source produce byte-identical zips.
+
+Before uploading: bump `version` in `manifest.json`; bump `CONSENT_VERSION` in
+`src/consent.ts` as well if what the extension collects has changed materially, which
+re-asks everyone. [`STORE.md`](./STORE.md) has the listing copy and every answer the two
+dashboards ask for; [`COMPLIANCE.md`](./COMPLIANCE.md) has the checklist of what is still
+outstanding, including the automated-search decision.
+
+Persisted parsed entries use the parser schema they were captured with, so a parser change
+that is not backwards compatible needs a clear-and-recapture, not just a version bump.
+
 ## Firefox
 
 Run `npm run extension:build:firefox`. In Firefox 140 or newer, open
