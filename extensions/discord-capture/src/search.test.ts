@@ -109,11 +109,47 @@ test("never selects the message composer, which Enter would post", () => {
   const box = findSearchBox(page(COMPOSER + SEARCH_BOX));
   assert.equal(box?.getAttribute("role"), "combobox");
   assert.match(box?.getAttribute("aria-label") ?? "", /^Search/);
-  // A combobox without a Search label is not trusted either.
+  // The composer is excluded by role, not by name, so it stays excluded in a
+  // client running in any language.
   assert.equal(
     findSearchBox(
       page(
-        '<div role="combobox" contenteditable="true" aria-label="Jump to"></div>',
+        COMPOSER +
+          '<div role="combobox" contenteditable="true" aria-label="Suchen"></div>',
+      ),
+    )?.getAttribute("aria-label"),
+    "Suchen",
+  );
+});
+
+test("finds the search box in a Discord that is not in English", () => {
+  // Requiring the name to start with "Search" made the whole feature
+  // English-only: every other client reported the box as missing.
+  for (const label of ["Rechercher", "検索", "Поиск", "Buscar tripleS"])
+    assert.equal(
+      findSearchBox(
+        page(
+          `<div role="combobox" contenteditable="true" aria-label="${label}"></div>`,
+        ),
+      )?.getAttribute("aria-label"),
+      label,
+    );
+  // A name this build does not recognise is still accepted when it is the only
+  // combobox there is — the composer is excluded by role either way.
+  assert.ok(
+    findSearchBox(
+      page(
+        COMPOSER +
+          '<div role="combobox" contenteditable="true" aria-label="Cerchi qualcosa"></div>',
+      ),
+    ),
+  );
+  // Two unrecognised candidates is ambiguity, and ambiguity fails closed.
+  assert.equal(
+    findSearchBox(
+      page(
+        '<div role="combobox" contenteditable="true" aria-label="Vai a"></div>' +
+          '<div role="combobox" contenteditable="true" aria-label="Cerchi qualcosa"></div>',
       ),
     ),
     null,
@@ -1344,4 +1380,40 @@ test("a results panel closed mid-run ends the query, not the run", async () => {
   assert.equal(run.stopped, null, "the run carries on");
   assert.equal(run.closed, 1);
   assert.match(run.pagerNote ?? "", /results closed/);
+});
+
+test("reads the pager in a client whose labels are not in English", () => {
+  // aria-current is the same everywhere; "Page 2" is not, and neither is the
+  // word in front of the number.
+  const doc = page(
+    '<div id="search-results"><div class="pager">' +
+      '<div role="button" aria-label="Seite 1" aria-current="page">1</div>' +
+      '<div role="button" aria-label="Seite 2">2</div>' +
+      "</div></div>",
+  );
+  assert.equal(currentPage(doc), 1);
+  assert.equal(findNextPage(doc)?.textContent, "2");
+});
+
+test("reads the pager from the button's own text when the label is gone", () => {
+  const doc = page(
+    '<div id="search-results"><div class="pager">' +
+      '<div role="button" aria-current="page">3</div>' +
+      '<div role="button">4</div>' +
+      "</div></div>",
+  );
+  assert.equal(currentPage(doc), 3);
+  assert.equal(findNextPage(doc)?.textContent, "4");
+});
+
+test("a pager it cannot read is reported as no pager, not as page one", () => {
+  // Guessing a page number is worse than admitting there is none: the run
+  // counts a page as walked only when the pager confirms it moved.
+  const doc = page(
+    '<div id="search-results"><div class="pager">' +
+      '<div role="button" aria-current="page">page one of many</div>' +
+      "</div></div>",
+  );
+  assert.equal(currentPage(doc), null);
+  assert.equal(findNextPage(doc), null);
 });
