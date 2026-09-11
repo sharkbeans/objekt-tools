@@ -945,6 +945,15 @@ export async function POST(
 
   // Update overall trade status (only for accepted/partial)
   let newTradeStatus = trade.status;
+  /**
+   * Whether the trade really is at `newTradeStatus` now.
+   *
+   * True without a write when nothing needed changing — re-polling a trade
+   * that is already complete must still lift bans and resolve its chain, which
+   * is idempotent and the reason this is not simply "did the update land".
+   * False only when a write was needed and something else got there first.
+   */
+  let statusLanded = true;
   if (["accepted", "partial"].includes(trade.status)) {
     const allConfirmed = freshSides.every((s) => s.status === "confirmed");
     const anyConfirmed = freshSides.some((s) => s.status === "confirmed");
@@ -957,23 +966,43 @@ export async function POST(
 
     if (newTradeStatus !== trade.status) {
       const statusChangedAt = new Date();
+      // Guarded on the status this request read at the top. Everything between
+      // that read and here is indexer work, and the trade page polls this
+      // endpoint while showing the other party a Cancel button — so "cancelled
+      // underneath us" is not a theoretical window. Without the guard a
+      // cancelled trade was written back to `partial`, or to `completed` with
+      // its posts consumed.
+      const guard = and(
+        eq(activeTrade.id, tradeId),
+        eq(activeTrade.status, trade.status),
+      );
+      let moved: boolean;
       if (newTradeStatus === "completed") {
         // Keep the trade transition and its partial post consumption atomic.
-        await db.transaction(async (tx) => {
-          await tx
+        moved = await db.transaction(async (tx) => {
+          const [row] = await tx
             .update(activeTrade)
             .set({ status: newTradeStatus, updatedAt: statusChangedAt })
-            .where(eq(activeTrade.id, tradeId));
+            .where(guard)
+            .returning({ id: activeTrade.id });
+          if (!row) return false;
           await finalizeCompletedTradePosts(tx, trade, statusChangedAt);
+          return true;
         });
       } else {
-        await db
+        const [row] = await db
           .update(activeTrade)
           .set({ status: newTradeStatus, updatedAt: statusChangedAt })
-          .where(eq(activeTrade.id, tradeId));
+          .where(guard)
+          .returning({ id: activeTrade.id });
+        moved = Boolean(row);
       }
+      statusLanded = moved;
 
-      if (newTradeStatus === "completed") {
+      // Everything below announces a completion. None of it should happen for
+      // a completion that did not land — least of all cancelling the sibling
+      // trades, which is not undone by anything.
+      if (moved && newTradeStatus === "completed") {
         await notify([
           {
             userId: trade.initiatorUserId,
@@ -1029,7 +1058,7 @@ export async function POST(
   }
 
   // Auto-lift bans and propagate chain resolution if trade completed
-  if (newTradeStatus === "completed") {
+  if (newTradeStatus === "completed" && statusLanded) {
     await Promise.all([
       tryLiftBan(trade.initiatorUserId, tradeId),
       tryLiftBan(trade.recipientUserId, tradeId),
@@ -1040,7 +1069,7 @@ export async function POST(
   // Realtime: notify participants of transfer updates
   if (updatedCount > 0) {
     const event =
-      newTradeStatus === "completed"
+      newTradeStatus === "completed" && statusLanded
         ? "trade:completed"
         : "trade:transfer-detected";
     void publishTradeEvent(tradeId, event, {
