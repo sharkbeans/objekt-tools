@@ -8,6 +8,7 @@ import {
 } from "./consent";
 import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, resolveTab, type TabLike } from "./host-tab";
+import { INVENTORY_ORIGIN } from "./inventory";
 import { channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
 
@@ -21,10 +22,17 @@ import type { Entry } from "./store";
  */
 const params = new URLSearchParams(location.search);
 const embedded = params.get("embedded") === "1";
-/** The tab an embedded panel is sitting in, which is the tab it acts on. */
-const pinnedTab = Number.isFinite(Number(params.get("tab")))
-  ? Number(params.get("tab"))
-  : null;
+/**
+ * The tab an embedded panel is sitting in, which is the tab it acts on.
+ *
+ * Read through the raw string, because `Number(null)` is 0 and `Number.isFinite`
+ * accepts it: the pop-out window, which carries no `tab` at all, was pinning
+ * itself to tab id 0 and only worked because looking that tab up fails and the
+ * fallback search runs anyway.
+ */
+const tabParam = params.get("tab");
+const pinnedTab =
+  tabParam !== null && /^\d+$/.test(tabParam) ? Number(tabParam) : null;
 
 const tabs: {
   get: (id: number) => Promise<TabLike | undefined>;
@@ -391,23 +399,31 @@ action(
 action(
   "load-inventory",
   async () => {
+    // Ask the worker whether the grant is already held before trying to
+    // prompt for it. The grant is permanent and belongs to the extension, not
+    // to the window that obtained it, so after the first time there is nothing
+    // to ask — and that is what makes the embedded panel usable rather than a
+    // button that always deflects to a second window. `permissions` is as
+    // absent from a framed extension page in Firefox as `tabs` is, so the
+    // check has to be the worker's to make.
+    let allowed = await request("has-origin").then(Boolean, () => false);
     // A permission prompt has to come from a user gesture in an extension
     // document. That holds here, but a panel embedded in a page is an unusual
     // enough place for one that browsers have refused it outright before — so a
     // throw is treated as "ask somewhere else", not as a failure.
-    let allowed: boolean;
-    try {
-      allowed = await extensionApi.permissions.request({
-        origins: ["https://objekt.my/*"],
-      });
-    } catch {
-      if (!embedded)
-        throw new Error("The permission prompt could not be shown.");
-      await request("open-window");
-      throw new Error(
-        "This browser will not show the permission prompt inside the page. Use the window that just opened, or type your haves instead.",
-      );
-    }
+    if (!allowed)
+      try {
+        allowed = await extensionApi.permissions.request({
+          origins: [INVENTORY_ORIGIN],
+        });
+      } catch {
+        if (!embedded)
+          throw new Error("The permission prompt could not be shown.");
+        await request("open-window");
+        throw new Error(
+          "Firefox will not show the permission prompt inside the page. Grant objekt.my access once in the window that just opened, and this panel will work from then on.",
+        );
+      }
     if (!allowed)
       throw new Error(
         "Allow access to objekt.my to load inventory, or type your haves.",
