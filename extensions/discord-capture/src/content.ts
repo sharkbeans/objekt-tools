@@ -27,6 +27,13 @@ import {
 } from "./panel-frame";
 import { readPanelState } from "./panel-geometry";
 import {
+  MAX_TRIES,
+  nextPending,
+  type PendingRun,
+  planResume,
+  readPendingRun,
+} from "./resume";
+import {
   type CaptureProbe,
   currentPage,
   findNextPage,
@@ -396,6 +403,13 @@ async function flushSearched() {
 // goes to storage and the panel reads it whenever it is shown.
 const searchSignal = { cancelled: false };
 let searching = false;
+/**
+ * Resumes that have begun at the query currently in flight.
+ *
+ * Carried in memory for the life of this content script and written into every
+ * checkpoint, so the count survives the crash it is counting.
+ */
+let pendingTries = 0;
 let lastProgress: Record<string, unknown> = {};
 async function report(progress: Record<string, unknown>) {
   // Stamped so the panel can tell a run that is working from one that died with
@@ -420,7 +434,8 @@ window.addEventListener("pagehide", () => {
     searchProgress: {
       ...lastProgress,
       running: false,
-      stopped: "The Discord tab was closed or navigated away mid-run.",
+      stopped:
+        "The Discord tab was closed or navigated away mid-run. Reopening Discord in the next half hour picks the run up where it stopped.",
       at: Date.now(),
     },
   });
@@ -678,66 +693,198 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     });
     return true;
   }
+  // Reply now: a run outlives the click that started it.
+  reply({ ok: true, value: { total: queries.length, note: planNote } });
+  void driveRun({
+    queries,
+    all: queries,
+    offset: 0,
+    pages: Number.isFinite(pages) ? Math.min(20, Math.max(1, pages)) : 1,
+    // Zero is the normal setting: the settle gate paces the run by how fast
+    // Discord actually answers, so there is no floor to enforce here.
+    delayMs: Number.isFinite(delayMs)
+      ? Math.min(60_000, Math.max(0, delayMs))
+      : 0,
+    planNote,
+    run: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    resumedNote: null,
+  });
+  return true;
+});
+/**
+ * One search run, whether it was just started or is being picked up again.
+ *
+ * `offset` is how many queries of the original plan are already behind this
+ * call. A resumed run reports against the plan the user actually asked for
+ * rather than against the remainder, so the progress bar carries on from where
+ * it stopped instead of restarting at 1 of 3.
+ */
+interface RunPlan {
+  /** The queries this call will search: the whole plan, or its tail. */
+  queries: string[];
+  /** The whole plan, in order, which is what a resume needs to read back. */
+  all: string[];
+  offset: number;
+  pages: number;
+  delayMs: number;
+  planNote: string;
+  run: string;
+  /** What to tell the user about the interruption this is recovering from. */
+  resumedNote: string | null;
+}
+
+async function driveRun(plan: RunPlan): Promise<void> {
   searching = true;
   markPanelBusy(true);
   holdWorkerOpen(true);
   searchSignal.cancelled = false;
   // A fresh run counts from zero, so the panel's total reflects this search.
-  runPosts.clear();
+  // A resumed one keeps the posts it already has: they belong to the same
+  // search, and its export is scoped by the run id, which is also carried over.
+  if (!plan.offset) runPosts.clear();
   // Row bookkeeping is only meaningful within a run, and a long browsing
   // session would otherwise accumulate a string per message seen, for ever.
   // Rows still on screen re-assert themselves the next time they are scanned.
   recorded.clear();
   unreadableSince.clear();
   postsReportedAt = 0;
-  searchRun = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  void extensionApi.storage.local.set({ searchRunId: searchRun });
-  // Reply now: a run outlives the click that started it.
-  reply({ ok: true, value: { total: queries.length, note: planNote } });
-  void report({
-    done: 0,
-    total: queries.length,
-    query: "",
-    posts: 0,
-    running: true,
-    planNote,
-  })
-    .then(() =>
-      runSearches(document, queries, {
-        // Zero is the normal setting: the settle gate paces the run by how fast
-        // Discord actually answers, so there is no floor to enforce here.
-        delayMs: Number.isFinite(delayMs)
-          ? Math.min(60_000, Math.max(0, delayMs))
-          : 0,
-        pages: Number.isFinite(pages) ? Math.min(20, Math.max(1, pages)) : 1,
-        signal: searchSignal,
-        probe: captureProbe,
-        onProgress: (progress) =>
-          void report({ ...progress, running: true, planNote }),
-        onQuerySearched: rememberQuery,
-        wait: pace,
-      }),
-    )
-    .then(
-      (run) =>
-        report({ ...run, total: queries.length, running: false, planNote }),
-      (error) =>
-        report({
-          done: 0,
-          total: queries.length,
-          posts: runPosts.size,
-          running: false,
-          stopped: error instanceof Error ? error.message : "Search failed.",
-        }),
-    )
-    .finally(() => {
-      searching = false;
-      markPanelBusy(false);
-      holdWorkerOpen(false);
-      void flushSearched();
+  searchRun = plan.run;
+  const note = plan.resumedNote
+    ? `${plan.resumedNote}${plan.planNote ? ` ${plan.planNote}` : ""}`
+    : plan.planNote;
+  await extensionApi.storage.local.set({ searchRunId: searchRun });
+  await savePending(plan, plan.offset, 0);
+  try {
+    await report({
+      done: plan.offset,
+      total: plan.all.length,
+      query: "",
+      posts: runPosts.size,
+      running: true,
+      planNote: note,
     });
-  return true;
-});
+    const run = await runSearches(document, plan.queries, {
+      delayMs: plan.delayMs,
+      pages: plan.pages,
+      signal: searchSignal,
+      probe: captureProbe,
+      onProgress: (progress) =>
+        void report({
+          ...progress,
+          done: progress.done + plan.offset,
+          total: plan.all.length,
+          running: true,
+          planNote: note,
+        }),
+      onQuerySearched: rememberQuery,
+      // Written before each query is typed, so a tab that dies mid-query comes
+      // back knowing which one to retry.
+      onCheckpoint: (done) => void savePending(plan, plan.offset + done, done),
+      wait: pace,
+    });
+    await clearPending();
+    await report({
+      ...run,
+      done: run.done + plan.offset,
+      total: plan.all.length,
+      running: false,
+      planNote: note,
+    });
+  } catch (error) {
+    // A thrown run is one that will not come good by being retried — a missing
+    // search box, a refused query — so it is not left pending. Only losing the
+    // tab outright is, and that path never reaches here.
+    await clearPending();
+    await report({
+      done: plan.offset,
+      total: plan.all.length,
+      posts: runPosts.size,
+      running: false,
+      stopped: error instanceof Error ? error.message : "Search failed.",
+    });
+  } finally {
+    searching = false;
+    markPanelBusy(false);
+    holdWorkerOpen(false);
+    void flushSearched();
+  }
+}
+
+/**
+ * Write down enough of the run to start it again.
+ *
+ * `tries` counts resumes that began at this same query, and only the resume
+ * path raises it — a checkpoint reached under its own power means the run is
+ * making progress, so it resets.
+ */
+async function savePending(plan: RunPlan, done: number, reached: number) {
+  const pending: PendingRun = {
+    run: plan.run,
+    // The whole plan, so a resume knows the total as well as the remainder.
+    queries: plan.all,
+    done,
+    pages: plan.pages,
+    delayMs: plan.delayMs,
+    planNote: plan.planNote,
+    tab: ownTabId,
+    tries: reached > 0 ? 0 : pendingTries,
+    at: Date.now(),
+  };
+  await extensionApi.storage.local.set({ pendingRun: pending }).catch(() => {});
+}
+
+async function clearPending() {
+  pendingTries = 0;
+  await extensionApi.storage.local.remove("pendingRun").catch(() => {});
+}
+
+/**
+ * Whether this content script should pick up a run its predecessor lost.
+ *
+ * Runs on every load of a Discord page, which is the only moment a crashed run
+ * can be noticed at all, and refuses far more often than it accepts: a run is
+ * only resumed while the automation consent still stands, while nothing else is
+ * running, and inside the window `planResume` enforces.
+ */
+async function resumeInterruptedRun() {
+  // A copy that has been superseded must not start typing: the run it would
+  // adopt belongs to the copy that replaced it, and two of them driving one
+  // search box is the exact failure the takeover exists to prevent.
+  if (searching || orphaned) return;
+  const { pendingRun } = await extensionApi.storage.local.get("pendingRun");
+  const state = readPendingRun(pendingRun);
+  const mine = await tabId();
+  const plan = planResume(state, mine, Date.now());
+  if (plan.action === "drop") {
+    if (state) await clearPending();
+    return;
+  }
+  // Consent is read fresh rather than trusted from the interrupted run: it may
+  // have been withdrawn between the crash and this page loading, and a resume
+  // is still automation of the user's account.
+  const { consent: stored } = await extensionApi.storage.local.get("consent");
+  if (!automationAllowed(stored)) {
+    await clearPending();
+    return;
+  }
+  pendingTries = plan.state.tries + 1;
+  await extensionApi.storage.local.set({
+    pendingRun: nextPending(plan.state, plan.done, mine, Date.now()),
+  });
+  await driveRun({
+    queries: plan.queries,
+    all: plan.state.queries,
+    offset: plan.done,
+    pages: plan.state.pages,
+    delayMs: plan.state.delayMs,
+    planNote: plan.state.planNote,
+    run: plan.state.run,
+    resumedNote: plan.skipped
+      ? `Picked the interrupted run back up, skipping ${plan.skipped} — the tab went down on it ${MAX_TRIES} times.`
+      : "Picked the interrupted run back up where it stopped.",
+  });
+}
+
 extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   const settings: Record<string, unknown> = {};
@@ -755,6 +902,10 @@ void extensionApi.storage.local
     // The panel is a window, so it stays where it was: open across reloads and
     // across channel switches, until it is closed on purpose.
     if (readPanelState(settings.panel).open) void showPanel();
+    // A run that went down with its tab is picked up here, once this copy has
+    // its settings and is the one in charge. A failure is not worth reporting:
+    // it means there was nothing to resume, which is the normal case.
+    void resumeInterruptedRun().catch(() => {});
   });
 /**
  * Watch for the parser quietly losing track of Discord's markup.
