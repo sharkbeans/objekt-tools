@@ -34,9 +34,42 @@ const tabs: {
   query: () => extensionApi.tabs.query({ url: DISCORD_MATCHES }),
 };
 
+/**
+ * Whether this copy of the panel may call `tabs` itself.
+ *
+ * Firefox runs an extension page that a *web page* frames in the content
+ * process rather than the extension process, and that scope has no `tabs` and
+ * no `permissions` at all — they are undefined, not refused (Bugzilla 1443253).
+ * The embedded panel is exactly that frame, so every tab lookup it made threw
+ * and was caught as "no tab": the channel strip said "No Discord tab open."
+ * while sitting inside the tab it was asking about, and the search could not
+ * reach the content script either. Chrome gives the same frame the full API,
+ * which is why this only ever showed up in Firefox.
+ *
+ * The worker is in the privileged process in both browsers, so anything the
+ * frame cannot do itself is asked of the worker instead. A property test, not
+ * a browser test: the pop-out window is the same document in a scope that does
+ * have `tabs`, and it should keep using it.
+ */
+const ownTabsApi: typeof extensionApi.tabs | undefined = extensionApi.tabs;
+const canUseTabs = typeof ownTabsApi?.query === "function";
+
 /** The Discord tab this panel acts on. Throws with something readable if none. */
-function discordTab() {
-  return resolveTab(tabs, pinnedTab);
+async function discordTab(): Promise<{ id: number; url: string }> {
+  if (canUseTabs) return resolveTab(tabs, pinnedTab);
+  return await request("host-tab", { tab: pinnedTab });
+}
+
+/**
+ * Send to a tab, from a scope that may not be allowed to address tabs.
+ *
+ * The worker relays it verbatim and hands back what the tab replied, including
+ * the "Receiving end does not exist" that `toContentScript` reads to decide
+ * whether to inject the content script and try again.
+ */
+function sendToTab(tabId: number, message: Record<string, unknown>) {
+  if (canUseTabs) return extensionApi.tabs.sendMessage(tabId, message);
+  return request("to-tab", { tabId, message });
 }
 
 const status = document.getElementById("status") as HTMLElement;
@@ -505,7 +538,7 @@ async function toContentScript(
   message: Record<string, unknown>,
 ) {
   try {
-    return await extensionApi.tabs.sendMessage(tabId, message);
+    return await sendToTab(tabId, message);
   } catch (error) {
     const text = error instanceof Error ? error.message : "";
     if (
@@ -514,7 +547,7 @@ async function toContentScript(
       throw error;
     await request("ensure", { tabId });
     try {
-      return await extensionApi.tabs.sendMessage(tabId, message);
+      return await sendToTab(tabId, message);
     } catch {
       throw new Error(
         "The extension could not start in that Discord tab. Reload the tab (F5) and try again.",
