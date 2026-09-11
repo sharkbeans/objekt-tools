@@ -4,6 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
+import { isRateLimited } from "@/lib/rate-limit";
 import { redis } from "@/lib/redis";
 
 export async function POST(request: NextRequest) {
@@ -23,11 +24,7 @@ export async function POST(request: NextRequest) {
 
   // Rate limit: 5 attempts per 30 seconds
   const rateLimitKey = `cosmo-verify-rate:${session.user.id}`;
-  const attempts = await redis.incr(rateLimitKey);
-  if (attempts === 1) {
-    await redis.expire(rateLimitKey, 30);
-  }
-  if (attempts > 5) {
+  if (await isRateLimited(rateLimitKey, 5, 30)) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },
       { status: 429 },
