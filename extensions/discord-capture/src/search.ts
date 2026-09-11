@@ -1120,6 +1120,16 @@ export interface SearchOptions {
    * long want list does not search every code again from scratch.
    */
   onQuerySearched?: (query: string) => void;
+  /**
+   * Called before each query is typed, with how many are already behind it.
+   *
+   * This is where a run records enough of itself to be picked up again, so it
+   * fires at the top of the iteration rather than the bottom: the work that is
+   * lost when Discord dies is the query in flight, and the resume has to retry
+   * that one rather than skip it. Re-running a query is harmless — its posts
+   * are deduped on the id they already have.
+   */
+  onCheckpoint?: (done: number) => void;
   /** Injectable for tests. */
   wait?: (ms: number) => Promise<void>;
 }
@@ -1394,7 +1404,8 @@ export async function runSearches(
     }
   };
 
-  for (const query of queries) {
+  for (const [done, query] of queries.entries()) {
+    options.onCheckpoint?.(done);
     matchedNothing = false;
     const blocked = await fire(query);
     if (blocked) return finish(blocked);
