@@ -57,8 +57,22 @@ export async function getCached<T>(
     })
     .catch((error) => {
       if (stale !== undefined) {
-        // Keep stale data so callers aren't broken while the remote is flaky.
-        cache.set(key, { staleValue: stale, expiresAt: now + 60_000 });
+        // Keep stale data so callers aren't broken while the remote is flaky,
+        // and serve it for a minute before trying again.
+        //
+        // This has to be written as `value`, not only as `staleValue`. The
+        // freshness check reads `value`, so an entry holding a stale value
+        // under `staleValue` alone looks like a miss — and the minute this
+        // clause exists to wait out never happened. Every request during an
+        // outage went straight back to the remote, which is when it can least
+        // afford them. `Date.now()` rather than `now`, because the backoff
+        // starts when the failure happened and the load may have taken a while
+        // to fail.
+        cache.set(key, {
+          value: stale,
+          staleValue: stale,
+          expiresAt: Date.now() + 60_000,
+        });
         return stale;
       }
       cache.delete(key);
@@ -103,6 +117,7 @@ export async function getCachedStaleWhileRevalidate<T>(
         // the last known value.
         cache.set(key, {
           value: stale,
+          staleValue: stale,
           expiresAt: Date.now() + 60_000,
         });
         return stale;
