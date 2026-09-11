@@ -749,6 +749,10 @@ async function driveRun(plan: RunPlan): Promise<void> {
   unreadableSince.clear();
   postsReportedAt = 0;
   searchRun = plan.run;
+  // Resolve the tab now rather than reading whatever `tabId()` happens to have
+  // cached. It is what stops a second Discord tab adopting this run, and a
+  // checkpoint written with `null` there is adoptable by any of them.
+  await tabId();
   const note = plan.resumedNote
     ? `${plan.resumedNote}${plan.planNote ? ` ${plan.planNote}` : ""}`
     : plan.planNote;
@@ -871,6 +875,11 @@ async function resumeInterruptedRun() {
   await extensionApi.storage.local.set({
     pendingRun: nextPending(plan.state, plan.done, mine, Date.now()),
   });
+  // Show the panel first, even if it was closed. This types into Discord's
+  // search box on the user's behalf, and doing that with no visible UI — no
+  // progress, and no Stop button — is not something to spring on someone who
+  // has just watched their browser fall over.
+  await showPanel().catch(() => {});
   await driveRun({
     queries: plan.queries,
     all: plan.state.queries,
