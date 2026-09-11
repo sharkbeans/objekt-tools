@@ -51,7 +51,11 @@ export async function issueBan(
   activeTradeId: string,
   reason: string,
 ) {
-  // Don't double-ban for the same trade
+  // Don't double-ban for the same trade. The read is the fast path, not the
+  // guard: two callers reach it together — the expiry cron racing a
+  // check-transfers call is enough — and both find nothing. What actually
+  // prevents the duplicate is the partial unique index this conflict clause
+  // names, so the second insert does nothing and reads back the first.
   const existing = await db.query.tradeBan.findFirst({
     where: and(
       eq(tradeBan.userId, userId),
@@ -64,7 +68,10 @@ export async function issueBan(
   const [ban] = await db
     .insert(tradeBan)
     .values({ cosmoId, userId, reason, activeTradeId })
-    .onConflictDoNothing()
+    .onConflictDoNothing({
+      target: [tradeBan.userId, tradeBan.activeTradeId],
+      where: isNull(tradeBan.liftedAt),
+    })
     .returning();
   if (!ban) {
     return db.query.tradeBan.findFirst({
@@ -180,9 +187,19 @@ export async function tryLiftBan(userId: string, activeTradeId: string) {
   const allConfirmed =
     sides.length > 0 && sides.every((s) => s.status === "confirmed");
   if (allConfirmed) {
+    // Lift by (user, trade) rather than by the one id that was read. The unique
+    // index means there is normally only one, but a database that predates it
+    // may still hold duplicates from the old race — and lifting one of two left
+    // the user banned with their obligations already met and no way to clear it.
     await db
       .update(tradeBan)
       .set({ liftedAt: new Date(), liftedReason: "obligations fulfilled" })
-      .where(eq(tradeBan.id, ban.id));
+      .where(
+        and(
+          eq(tradeBan.userId, userId),
+          eq(tradeBan.activeTradeId, activeTradeId),
+          isNull(tradeBan.liftedAt),
+        ),
+      );
   }
 }

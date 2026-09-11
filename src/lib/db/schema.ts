@@ -494,6 +494,18 @@ export const tradeBan = pgTable(
   (t) => [
     index("trade_ban_cosmo_id_idx").on(t.cosmoId),
     index("trade_ban_user_id_idx").on(t.userId),
+    // One live ban per user per trade, enforced by the database rather than by
+    // reading before inserting: two callers racing — the expiry cron and a
+    // check-transfers call, say — both saw no ban and both wrote one, and
+    // `tryLiftBan` only ever cleared one of them, so fulfilling the trade left
+    // the user banned by the copy.
+    //
+    // Partial, because lifted bans are history and any number of them may exist
+    // for the same trade, and because a ban with no trade attached (activeTradeId
+    // is nullable) is not a duplicate of anything.
+    uniqueIndex("trade_ban_active_per_trade_idx")
+      .on(t.userId, t.activeTradeId)
+      .where(sql`${t.liftedAt} is null`),
   ],
 );
 
