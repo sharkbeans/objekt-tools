@@ -30,8 +30,19 @@ export async function notify(
   // Insert into DB synchronously — this is the source of truth
   await db.insert(tradeNotification).values(items);
 
-  // Fire Discord DMs in the background — failures are logged but never thrown
-  void sendDiscordDMs(items);
+  // Fire Discord DMs in the background — failures are logged but never thrown.
+  //
+  // The catch is the part that makes that sentence true. `sendDiscordDMs`
+  // guards each DM, but the user lookup it does first is a plain await: a
+  // database blip there rejects the whole call, and a rejected promise nobody
+  // is holding is an unhandled rejection, which Node ends the process over.
+  // A best-effort Discord DM must not be able to take the server down with it.
+  void sendDiscordDMs(items).catch((err) => {
+    console.error(
+      "[notify] Discord DM batch failed",
+      err instanceof Error ? err.message : String(err),
+    );
+  });
 }
 
 async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {

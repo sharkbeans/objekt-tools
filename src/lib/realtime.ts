@@ -39,12 +39,14 @@ export async function publishTradeEvent(
   event: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  const pusher = getPusher();
-  if (!pusher) return;
   try {
+    const pusher = getPusher();
+    if (!pusher) return;
     await pusher.trigger(`private-trade-${tradeId}`, event, data);
   } catch {
-    // Non-fatal — realtime is best-effort
+    // Non-fatal — realtime is best-effort. Constructing the client is inside
+    // the try as well: every caller fires this with `void`, so anything that
+    // escapes is an unhandled rejection rather than a missed event.
   }
 }
 
@@ -53,9 +55,9 @@ export async function publishUserEvent(
   event: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  const pusher = getPusher();
-  if (!pusher) return;
   try {
+    const pusher = getPusher();
+    if (!pusher) return;
     await pusher.trigger(`private-user-${userId}`, event, data);
   } catch {
     // Non-fatal — realtime is best-effort
