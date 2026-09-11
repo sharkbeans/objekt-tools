@@ -146,50 +146,76 @@ export async function POST(
     );
   }
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(activeTrade)
-      .set({ status: "cancelled", updatedAt: new Date() })
-      .where(eq(activeTrade.id, tradeId));
-
-    // If the trade had been accepted (posts were hidden), restore them to open
-    if (["accepted", "partial"].includes(trade.status)) {
-      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
-        (id): id is string => id !== null,
-      );
-      if (postIds.length > 0) {
-        await tx
-          .update(tradePost)
-          .set({ status: "open", updatedAt: new Date() })
-          .where(inArray(tradePost.id, postIds));
-      }
-    }
-
-    // For any cancellation: check if either trade post has remaining active trades.
-    // If not, revert "in_trade" posts back to "open" so they aren't stuck.
-    const postIdsToCheck = [trade.tradePostId, trade.matchedTradePostId].filter(
-      (id): id is string => id !== null,
-    );
-    for (const postId of postIdsToCheck) {
-      const remainingTrade = await tx.query.activeTrade.findFirst({
-        where: and(
-          or(
-            eq(activeTrade.tradePostId, postId),
-            eq(activeTrade.matchedTradePostId, postId),
+  try {
+    await db.transaction(async (tx) => {
+      // Cancellable only from the statuses the checks above accepted. The read
+      // at the top of this route is followed by side bookkeeping and, on some
+      // paths, a ban decision, so the trade can be accepted, countered or
+      // completed underneath it — and cancelling a completed trade is not
+      // something running this again puts right.
+      const [updated] = await tx
+        .update(activeTrade)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(
+          and(
+            eq(activeTrade.id, tradeId),
+            inArray(activeTrade.status, ["pending", "accepted", "partial"]),
           ),
-          inArray(activeTrade.status, ["pending", "accepted", "partial"]),
-        ),
-      });
-      if (!remainingTrade) {
-        await tx
-          .update(tradePost)
-          .set({ status: "open", updatedAt: new Date() })
-          .where(
-            and(eq(tradePost.id, postId), eq(tradePost.status, "in_trade")),
-          );
+        )
+        .returning({ id: activeTrade.id });
+      if (!updated) throw new Error("TRADE_NOT_CANCELLABLE");
+
+      // If the trade had been accepted (posts were hidden), restore them to open
+      if (["accepted", "partial"].includes(trade.status)) {
+        const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
+          (id): id is string => id !== null,
+        );
+        if (postIds.length > 0) {
+          await tx
+            .update(tradePost)
+            .set({ status: "open", updatedAt: new Date() })
+            .where(inArray(tradePost.id, postIds));
+        }
       }
+
+      // For any cancellation: check if either trade post has remaining active trades.
+      // If not, revert "in_trade" posts back to "open" so they aren't stuck.
+      const postIdsToCheck = [
+        trade.tradePostId,
+        trade.matchedTradePostId,
+      ].filter((id): id is string => id !== null);
+      for (const postId of postIdsToCheck) {
+        const remainingTrade = await tx.query.activeTrade.findFirst({
+          where: and(
+            or(
+              eq(activeTrade.tradePostId, postId),
+              eq(activeTrade.matchedTradePostId, postId),
+            ),
+            inArray(activeTrade.status, ["pending", "accepted", "partial"]),
+          ),
+        });
+        if (!remainingTrade) {
+          await tx
+            .update(tradePost)
+            .set({ status: "open", updatedAt: new Date() })
+            .where(
+              and(eq(tradePost.id, postId), eq(tradePost.status, "in_trade")),
+            );
+        }
+      }
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "TRADE_NOT_CANCELLABLE") {
+      return NextResponse.json(
+        {
+          error:
+            "Trade can no longer be cancelled (it may have been completed, countered, or already cancelled)",
+        },
+        { status: 409 },
+      );
     }
-  });
+    throw e;
+  }
 
   const cancellerName = session.user.name;
   const otherUserId =
