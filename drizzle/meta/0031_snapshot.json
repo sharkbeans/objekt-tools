@@ -94,13 +94,9 @@
         "account_user_id_user_id_fk": {
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -276,78 +272,54 @@
         "active_trade_trade_post_id_trade_post_id_fk": {
           "name": "active_trade_trade_post_id_trade_post_id_fk",
           "tableFrom": "active_trade",
-          "columnsFrom": [
-            "trade_post_id"
-          ],
+          "columnsFrom": ["trade_post_id"],
           "tableTo": "trade_post",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         },
         "active_trade_matched_trade_post_id_trade_post_id_fk": {
           "name": "active_trade_matched_trade_post_id_trade_post_id_fk",
           "tableFrom": "active_trade",
-          "columnsFrom": [
-            "matched_trade_post_id"
-          ],
+          "columnsFrom": ["matched_trade_post_id"],
           "tableTo": "trade_post",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         },
         "active_trade_initiator_user_id_user_id_fk": {
           "name": "active_trade_initiator_user_id_user_id_fk",
           "tableFrom": "active_trade",
-          "columnsFrom": [
-            "initiator_user_id"
-          ],
+          "columnsFrom": ["initiator_user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "active_trade_recipient_user_id_user_id_fk": {
           "name": "active_trade_recipient_user_id_user_id_fk",
           "tableFrom": "active_trade",
-          "columnsFrom": [
-            "recipient_user_id"
-          ],
+          "columnsFrom": ["recipient_user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "active_trade_counter_offer_to_id_active_trade_id_fk": {
           "name": "active_trade_counter_offer_to_id_active_trade_id_fk",
           "tableFrom": "active_trade",
-          "columnsFrom": [
-            "counter_offer_to_id"
-          ],
+          "columnsFrom": ["counter_offer_to_id"],
           "tableTo": "active_trade",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         },
         "active_trade_resolved_by_trade_id_active_trade_id_fk": {
           "name": "active_trade_resolved_by_trade_id_active_trade_id_fk",
           "tableFrom": "active_trade",
-          "columnsFrom": [
-            "resolved_by_trade_id"
-          ],
+          "columnsFrom": ["resolved_by_trade_id"],
           "tableTo": "active_trade",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         }
@@ -523,26 +495,18 @@
         "active_trade_side_active_trade_id_active_trade_id_fk": {
           "name": "active_trade_side_active_trade_id_active_trade_id_fk",
           "tableFrom": "active_trade_side",
-          "columnsFrom": [
-            "active_trade_id"
-          ],
+          "columnsFrom": ["active_trade_id"],
           "tableTo": "active_trade",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "active_trade_side_user_id_user_id_fk": {
           "name": "active_trade_side_user_id_user_id_fk",
           "tableFrom": "active_trade_side",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -606,13 +570,9 @@
         "cosmo_account_user_id_user_id_fk": {
           "name": "cosmo_account_user_id_user_id_fk",
           "tableFrom": "cosmo_account",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -621,16 +581,12 @@
       "uniqueConstraints": {
         "cosmo_account_user_id_unique": {
           "name": "cosmo_account_user_id_unique",
-          "columns": [
-            "user_id"
-          ],
+          "columns": ["user_id"],
           "nullsNotDistinct": false
         },
         "cosmo_account_address_unique": {
           "name": "cosmo_account_address_unique",
-          "columns": [
-            "address"
-          ],
+          "columns": ["address"],
           "nullsNotDistinct": false
         }
       },
@@ -777,13 +733,9 @@
         "device_code_user_id_user_id_fk": {
           "name": "device_code_user_id_user_id_fk",
           "tableFrom": "device_code",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -863,13 +815,9 @@
         "discord_paste_seen_user_id_user_id_fk": {
           "name": "discord_paste_seen_user_id_user_id_fk",
           "tableFrom": "discord_paste_seen",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1018,13 +966,9 @@
         "poster_user_id_user_id_fk": {
           "name": "poster_user_id_user_id_fk",
           "tableFrom": "poster",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1154,13 +1098,9 @@
         "poster_have_poster_id_poster_id_fk": {
           "name": "poster_have_poster_id_poster_id_fk",
           "tableFrom": "poster_have",
-          "columnsFrom": [
-            "poster_id"
-          ],
+          "columnsFrom": ["poster_id"],
           "tableTo": "poster",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1303,13 +1243,9 @@
         "poster_want_poster_id_poster_id_fk": {
           "name": "poster_want_poster_id_poster_id_fk",
           "tableFrom": "poster_want",
-          "columnsFrom": [
-            "poster_id"
-          ],
+          "columnsFrom": ["poster_id"],
           "tableTo": "poster",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1380,13 +1316,9 @@
         "session_user_id_user_id_fk": {
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1395,9 +1327,7 @@
       "uniqueConstraints": {
         "session_token_unique": {
           "name": "session_token_unique",
-          "columns": [
-            "token"
-          ],
+          "columns": ["token"],
           "nullsNotDistinct": false
         }
       },
@@ -1495,26 +1425,18 @@
         "trade_ban_user_id_user_id_fk": {
           "name": "trade_ban_user_id_user_id_fk",
           "tableFrom": "trade_ban",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "trade_ban_active_trade_id_active_trade_id_fk": {
           "name": "trade_ban_active_trade_id_active_trade_id_fk",
           "tableFrom": "trade_ban",
-          "columnsFrom": [
-            "active_trade_id"
-          ],
+          "columnsFrom": ["active_trade_id"],
           "tableTo": "active_trade",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         }
@@ -1582,26 +1504,18 @@
         "trade_match_seen_notified_trade_post_id_trade_post_id_fk": {
           "name": "trade_match_seen_notified_trade_post_id_trade_post_id_fk",
           "tableFrom": "trade_match_seen",
-          "columnsFrom": [
-            "notified_trade_post_id"
-          ],
+          "columnsFrom": ["notified_trade_post_id"],
           "tableTo": "trade_post",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "trade_match_seen_matched_trade_post_id_trade_post_id_fk": {
           "name": "trade_match_seen_matched_trade_post_id_trade_post_id_fk",
           "tableFrom": "trade_match_seen",
-          "columnsFrom": [
-            "matched_trade_post_id"
-          ],
+          "columnsFrom": ["matched_trade_post_id"],
           "tableTo": "trade_post",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1703,26 +1617,18 @@
         "trade_notification_user_id_user_id_fk": {
           "name": "trade_notification_user_id_user_id_fk",
           "tableFrom": "trade_notification",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "trade_notification_active_trade_id_active_trade_id_fk": {
           "name": "trade_notification_active_trade_id_active_trade_id_fk",
           "tableFrom": "trade_notification",
-          "columnsFrom": [
-            "active_trade_id"
-          ],
+          "columnsFrom": ["active_trade_id"],
           "tableTo": "active_trade",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         }
@@ -1888,26 +1794,18 @@
         "trade_post_user_id_user_id_fk": {
           "name": "trade_post_user_id_user_id_fk",
           "tableFrom": "trade_post",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "trade_post_linked_poster_id_poster_id_fk": {
           "name": "trade_post_linked_poster_id_poster_id_fk",
           "tableFrom": "trade_post",
-          "columnsFrom": [
-            "linked_poster_id"
-          ],
+          "columnsFrom": ["linked_poster_id"],
           "tableTo": "poster",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2025,13 +1923,9 @@
         "trade_post_have_trade_post_id_trade_post_id_fk": {
           "name": "trade_post_have_trade_post_id_trade_post_id_fk",
           "tableFrom": "trade_post_have",
-          "columnsFrom": [
-            "trade_post_id"
-          ],
+          "columnsFrom": ["trade_post_id"],
           "tableTo": "trade_post",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2150,13 +2044,9 @@
         "trade_post_want_trade_post_id_trade_post_id_fk": {
           "name": "trade_post_want_trade_post_id_trade_post_id_fk",
           "tableFrom": "trade_post_want",
-          "columnsFrom": [
-            "trade_post_id"
-          ],
+          "columnsFrom": ["trade_post_id"],
           "tableTo": "trade_post",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2299,52 +2189,36 @@
         "trade_transfer_log_active_trade_id_active_trade_id_fk": {
           "name": "trade_transfer_log_active_trade_id_active_trade_id_fk",
           "tableFrom": "trade_transfer_log",
-          "columnsFrom": [
-            "active_trade_id"
-          ],
+          "columnsFrom": ["active_trade_id"],
           "tableTo": "active_trade",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "trade_transfer_log_active_trade_side_id_active_trade_side_id_fk": {
           "name": "trade_transfer_log_active_trade_side_id_active_trade_side_id_fk",
           "tableFrom": "trade_transfer_log",
-          "columnsFrom": [
-            "active_trade_side_id"
-          ],
+          "columnsFrom": ["active_trade_side_id"],
           "tableTo": "active_trade_side",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "trade_transfer_log_sender_user_id_user_id_fk": {
           "name": "trade_transfer_log_sender_user_id_user_id_fk",
           "tableFrom": "trade_transfer_log",
-          "columnsFrom": [
-            "sender_user_id"
-          ],
+          "columnsFrom": ["sender_user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "trade_transfer_log_recipient_user_id_user_id_fk": {
           "name": "trade_transfer_log_recipient_user_id_user_id_fk",
           "tableFrom": "trade_transfer_log",
-          "columnsFrom": [
-            "recipient_user_id"
-          ],
+          "columnsFrom": ["recipient_user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2430,16 +2304,12 @@
       "uniqueConstraints": {
         "user_email_unique": {
           "name": "user_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "nullsNotDistinct": false
         },
         "user_discord_id_unique": {
           "name": "user_discord_id_unique",
-          "columns": [
-            "discord_id"
-          ],
+          "columns": ["discord_id"],
           "nullsNotDistinct": false
         }
       },

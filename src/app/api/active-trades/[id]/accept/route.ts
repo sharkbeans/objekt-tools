@@ -150,136 +150,160 @@ export async function POST(
 
   const now = new Date();
 
-  await db.transaction(async (tx) => {
-    // Auto-confirm pre-delivered sides
-    for (const { side, objektId, serial } of preDelivered) {
-      await tx
-        .update(activeTradeSide)
+  try {
+    await db.transaction(async (tx) => {
+      // Auto-confirm pre-delivered sides
+      for (const { side, objektId, serial } of preDelivered) {
+        await tx
+          .update(activeTradeSide)
+          .set({
+            status: "confirmed",
+            detectedAt: now,
+            actualObjektId: objektId,
+            actualSerial: serial,
+          })
+          .where(eq(activeTradeSide.id, side.id));
+
+        const recipientUserId =
+          side.userId === trade.initiatorUserId
+            ? trade.recipientUserId
+            : trade.initiatorUserId;
+        await tx.insert(tradeTransferLog).values({
+          activeTradeId: tradeId,
+          activeTradeSideId: side.id,
+          fromAddress: side.address,
+          toAddress: side.recipientAddress,
+          objektId,
+          collectionId: side.collectionId,
+          collectionNo: side.collectionNo,
+          member: side.member,
+          serial,
+          senderUserId: side.userId,
+          recipientUserId,
+          event: "confirmed",
+        });
+      }
+
+      // Determine new status based on how many sides are now confirmed
+      const totalSides = sides.length;
+      const confirmedCount = preDelivered.length;
+      let newStatus: "accepted" | "partial" | "completed";
+      if (confirmedCount === totalSides) {
+        newStatus = "completed";
+      } else if (confirmedCount > 0) {
+        newStatus = "partial";
+      } else {
+        newStatus = "accepted";
+      }
+
+      // acceptanceBlock is null until the indexer exposes blockNumber on transfers.
+      // When available, query the indexer for the latest block and store it here
+      // to enable block-based transfer filtering in check-transfers.
+      // Still pending, checked here rather than only at the top. Everything
+      // between that read and this transaction talks to the indexer — collection
+      // lookups, then an ownership sweep — so the window is a round trip to
+      // another database, not an instant. The initiator can cancel in it, a
+      // counter-offer can land in it, and a second click can arrive in it; all
+      // three used to overwrite the outcome and hide both posts a second time.
+      // This is the guard `counter-offer` already applies to the same column.
+      const [updated] = await tx
+        .update(activeTrade)
         .set({
-          status: "confirmed",
-          detectedAt: now,
-          actualObjektId: objektId,
-          actualSerial: serial,
-        })
-        .where(eq(activeTradeSide.id, side.id));
-
-      const recipientUserId =
-        side.userId === trade.initiatorUserId
-          ? trade.recipientUserId
-          : trade.initiatorUserId;
-      await tx.insert(tradeTransferLog).values({
-        activeTradeId: tradeId,
-        activeTradeSideId: side.id,
-        fromAddress: side.address,
-        toAddress: side.recipientAddress,
-        objektId,
-        collectionId: side.collectionId,
-        collectionNo: side.collectionNo,
-        member: side.member,
-        serial,
-        senderUserId: side.userId,
-        recipientUserId,
-        event: "confirmed",
-      });
-    }
-
-    // Determine new status based on how many sides are now confirmed
-    const totalSides = sides.length;
-    const confirmedCount = preDelivered.length;
-    let newStatus: "accepted" | "partial" | "completed";
-    if (confirmedCount === totalSides) {
-      newStatus = "completed";
-    } else if (confirmedCount > 0) {
-      newStatus = "partial";
-    } else {
-      newStatus = "accepted";
-    }
-
-    // acceptanceBlock is null until the indexer exposes blockNumber on transfers.
-    // When available, query the indexer for the latest block and store it here
-    // to enable block-based transfer filtering in check-transfers.
-    await tx
-      .update(activeTrade)
-      .set({
-        status: newStatus,
-        acceptedAt: now,
-        acceptanceBlock: null,
-        updatedAt: now,
-      })
-      .where(eq(activeTrade.id, tradeId));
-
-    // Temporarily hide both trade posts while the trade is in progress. If it
-    // completed from pre-delivery, consume only the selected post entries.
-    const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
-      (id): id is string => id !== null,
-    );
-    if (newStatus === "completed") {
-      await finalizeCompletedTradePosts(tx, { ...trade, sides }, now);
-    } else if (postIds.length > 0) {
-      await tx
-        .update(tradePost)
-        .set({
-          status: "in_trade",
+          status: newStatus,
+          acceptedAt: now,
+          acceptanceBlock: null,
           updatedAt: now,
         })
-        .where(inArray(tradePost.id, postIds));
-    }
+        .where(
+          and(eq(activeTrade.id, tradeId), eq(activeTrade.status, "pending")),
+        )
+        .returning({ id: activeTrade.id });
+      if (!updated) throw new Error("TRADE_NOT_PENDING");
 
-    // If already completed, handle post-completion tasks
-    if (newStatus === "completed") {
-      await notify([
-        {
-          userId: trade.initiatorUserId,
-          activeTradeId: tradeId,
-          message: `This trade is complete! Objekts from both sides have been transferred.`,
-        },
-        {
-          userId: trade.recipientUserId,
-          activeTradeId: tradeId,
-          message: `This trade is complete! Objekts from both sides have been transferred.`,
-        },
-      ]);
+      // Temporarily hide both trade posts while the trade is in progress. If it
+      // completed from pre-delivery, consume only the selected post entries.
+      const postIds = [trade.tradePostId, trade.matchedTradePostId].filter(
+        (id): id is string => id !== null,
+      );
+      if (newStatus === "completed") {
+        await finalizeCompletedTradePosts(tx, { ...trade, sides }, now);
+      } else if (postIds.length > 0) {
+        await tx
+          .update(tradePost)
+          .set({
+            status: "in_trade",
+            updatedAt: now,
+          })
+          .where(inArray(tradePost.id, postIds));
+      }
 
-      // Cancel all other pending/accepted active trades that involve either of these posts
-      if (postIds.length > 0) {
-        const siblingTrades = await db.query.activeTrade.findMany({
-          where: and(
-            ne(activeTrade.id, tradeId),
-            inArray(activeTrade.status, ["pending", "accepted", "partial"]),
-            or(
-              ...postIds.flatMap((pid) => [
-                eq(activeTrade.tradePostId, pid),
-                eq(activeTrade.matchedTradePostId, pid),
-              ]),
+      // If already completed, handle post-completion tasks
+      if (newStatus === "completed") {
+        await notify([
+          {
+            userId: trade.initiatorUserId,
+            activeTradeId: tradeId,
+            message: `This trade is complete! Objekts from both sides have been transferred.`,
+          },
+          {
+            userId: trade.recipientUserId,
+            activeTradeId: tradeId,
+            message: `This trade is complete! Objekts from both sides have been transferred.`,
+          },
+        ]);
+
+        // Cancel all other pending/accepted active trades that involve either of these posts
+        if (postIds.length > 0) {
+          const siblingTrades = await db.query.activeTrade.findMany({
+            where: and(
+              ne(activeTrade.id, tradeId),
+              inArray(activeTrade.status, ["pending", "accepted", "partial"]),
+              or(
+                ...postIds.flatMap((pid) => [
+                  eq(activeTrade.tradePostId, pid),
+                  eq(activeTrade.matchedTradePostId, pid),
+                ]),
+              ),
             ),
-          ),
-          columns: { id: true, initiatorUserId: true, recipientUserId: true },
-        });
+            columns: { id: true, initiatorUserId: true, recipientUserId: true },
+          });
 
-        if (siblingTrades.length > 0) {
-          const siblingIds = siblingTrades.map((t) => t.id);
-          await tx
-            .update(activeTrade)
-            .set({ status: "cancelled", updatedAt: now })
-            .where(inArray(activeTrade.id, siblingIds));
+          if (siblingTrades.length > 0) {
+            const siblingIds = siblingTrades.map((t) => t.id);
+            await tx
+              .update(activeTrade)
+              .set({ status: "cancelled", updatedAt: now })
+              .where(inArray(activeTrade.id, siblingIds));
 
-          const notifications = siblingTrades.flatMap((t) => [
-            {
-              userId: t.initiatorUserId,
-              activeTradeId: t.id,
-              message: `This trade was cancelled because another trade completed first.`,
-            },
-            {
-              userId: t.recipientUserId,
-              activeTradeId: t.id,
-              message: `This trade was cancelled because another trade completed first.`,
-            },
-          ]);
-          await notify(notifications);
+            const notifications = siblingTrades.flatMap((t) => [
+              {
+                userId: t.initiatorUserId,
+                activeTradeId: t.id,
+                message: `This trade was cancelled because another trade completed first.`,
+              },
+              {
+                userId: t.recipientUserId,
+                activeTradeId: t.id,
+                message: `This trade was cancelled because another trade completed first.`,
+              },
+            ]);
+            await notify(notifications);
+          }
         }
       }
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "TRADE_NOT_PENDING") {
+      return NextResponse.json(
+        {
+          error:
+            "Trade is no longer pending (it may have been cancelled, countered, or already accepted)",
+        },
+        { status: 409 },
+      );
     }
-  });
+    throw e;
+  }
 
   const preDeliveredCount = preDelivered.length;
   const totalSides = sides.length;
