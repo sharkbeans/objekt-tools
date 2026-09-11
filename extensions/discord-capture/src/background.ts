@@ -1,6 +1,6 @@
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
-import { DISCORD_MATCHES, pickTab } from "./host-tab";
+import { DISCORD_MATCHES, pickTab, resolveTab } from "./host-tab";
 import { loadInventory } from "./inventory";
 import { channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
@@ -376,6 +376,25 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     if (request?.type === "open-window") {
       await openPanelWindow();
       return true;
+    }
+    // Firefox gives an extension page framed by a web page no `tabs` API at
+    // all, so the embedded panel cannot look up the tab it is sitting in or
+    // talk to it. Both are answered here, where the API exists. Neither reaches
+    // past what the panel could already do for itself in a window.
+    if (request?.type === "host-tab") {
+      const pinned = Number(request.tab);
+      return await resolveTab(
+        {
+          get: (id) => extensionApi.tabs.get(id),
+          query: () => extensionApi.tabs.query({ url: DISCORD_MATCHES }),
+        },
+        Number.isFinite(pinned) ? pinned : null,
+      );
+    }
+    if (request?.type === "to-tab") {
+      const tabId = Number(request.tabId);
+      if (!Number.isFinite(tabId)) throw new Error("No tab to talk to");
+      return await extensionApi.tabs.sendMessage(tabId, request.message);
     }
     if (request?.type === "ensure") {
       const tabId = Number(request.tabId);

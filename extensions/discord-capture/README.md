@@ -276,7 +276,10 @@ as needing site access, grant access to Discord from the Extensions menu and rel
 The Firefox build uses an MV3 background event page and Firefox's Promise-based
 `browser` API. The parser, storage and UI are shared with Chromium. After source changes,
 rebuild, click **Reload** in about:debugging, and reload Discord (or just reopen the panel —
-the worker reinjects the content script). Temporary add-ons are
+the worker reinjects the content script). Rebuild with `extension:build:firefox`, not
+`extension:build` — the two targets write to different folders and the plain build leaves
+`dist-firefox` on the previous version, which is indistinguishable from a bug in the code
+you just changed. The panel's Troubleshooting section prints the build it is running. Temporary add-ons are
 removed when Firefox restarts; load the manifest again to resume testing. Export before
 ending the test session. Permanent installation requires a Mozilla-signed package,
 which this local prototype does not include.
