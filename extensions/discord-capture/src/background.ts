@@ -1,7 +1,7 @@
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
 import { DISCORD_MATCHES, pickTab, resolveTab } from "./host-tab";
-import { loadInventory } from "./inventory";
+import { INVENTORY_ORIGIN, loadInventory } from "./inventory";
 import { channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
 
@@ -423,6 +423,14 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       await extensionApi.tabs.sendMessage(tabId, { type: "open-panel" });
       return true;
     }
+    // Whether the extension already holds the objekt.my grant. The embedded
+    // panel has no `permissions` API to ask with, and the grant is permanent
+    // and extension-wide once given — so the prompt only has to happen once,
+    // in a scope that can show one, and every panel benefits afterwards.
+    if (request?.type === "has-origin")
+      return await extensionApi.permissions.contains({
+        origins: [INVENTORY_ORIGIN],
+      });
     if (request?.type === "inventory") {
       const owned = await loadInventory(request.nickname);
       await extensionApi.storage.local.set({

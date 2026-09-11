@@ -1,4 +1,13 @@
 import type { ObjektKeyParts } from "@/lib/discord/match";
+
+/**
+ * The one origin the inventory lookup needs, named once.
+ *
+ * It is an optional host permission, so it is granted by a prompt rather than
+ * at install — and the panel, the worker and the manifest all have to agree on
+ * the pattern or the check passes while the fetch is blocked.
+ */
+export const INVENTORY_ORIGIN = "https://objekt.my/*";
 export function inventoryRows(value: unknown): ObjektKeyParts[] {
   if (
     !Array.isArray(value) ||
