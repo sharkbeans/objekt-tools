@@ -1,17 +1,122 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
+import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 
 const profile = await mkdtemp(path.join(os.tmpdir(), "objekt-extension-"));
 const extension = new URL("./dist", import.meta.url).pathname;
+
+/**
+ * A real TLS server standing in for objekt.my and imagedelivery.net.
+ *
+ * `context.route` cannot be trusted for these: a tab the extension opens
+ * itself with `chrome.tabs.create` (rather than one Playwright navigates)
+ * sends its first request — the document itself — before Playwright's CDP
+ * session has attached to the new target, so exactly the one request this
+ * test most needs to control slips through to the real internet. Every
+ * request after that first one *is* caught, which is what made this look
+ * like a hang rather than a wrong response: the mocked reply from a plain
+ * `context.route` never had a chance to apply to the navigation, and the
+ * real page's own script never speaks this test's handoff protocol.
+ *
+ * `--host-resolver-rules` sends both hostnames to this server at the
+ * network layer, before Chromium's request pipeline exists at all, so it
+ * has no such race. The certificate is regenerated per run and never
+ * touches the repo; `--ignore-certificate-errors` is what lets Chromium
+ * accept it without a real CA.
+ */
+const certDir = await mkdtemp(path.join(os.tmpdir(), "objekt-cert-"));
+execFileSync("openssl", [
+  "req",
+  "-x509",
+  "-newkey",
+  "rsa:2048",
+  "-nodes",
+  "-keyout",
+  path.join(certDir, "key.pem"),
+  "-out",
+  path.join(certDir, "cert.pem"),
+  "-days",
+  "1",
+  "-subj",
+  "/CN=objekt.my",
+  "-addext",
+  "subjectAltName=DNS:objekt.my,DNS:imagedelivery.net",
+]);
+const ART = "https://imagedelivery.net/smoke/seoyeon-101/thumbnail";
+const PIXEL = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+  "base64",
+);
+const fakeObjekt = https
+  .createServer(
+    {
+      key: readFileSync(path.join(certDir, "key.pem")),
+      cert: readFileSync(path.join(certDir, "cert.pem")),
+    },
+    (req, res) => {
+      const host = (req.headers.host ?? "").replace(/:\d+$/, "");
+      const url = new URL(req.url ?? "/", `https://${host}`);
+      if (host === "imagedelivery.net") {
+        res.writeHead(200, { "content-type": "image/png" });
+        res.end(PIXEL);
+        return;
+      }
+      if (url.pathname === "/api/objekts/search") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            results: [
+              {
+                member: "SeoYeon",
+                season: url.searchParams.get("season"),
+                collectionNo: "101Z",
+                thumbnailImage: ART,
+              },
+            ],
+          }),
+        );
+        return;
+      }
+      // Stands in for /match: the same handoff protocol the real page speaks
+      // (`readExtensionMessage`/`readPageMessage` in `extension-handoff.ts`),
+      // hydrating late the way a real client-rendered page does.
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><html><body><script>
+        window.received = [];
+        const handled = new Set();
+        const post = (message) => postMessage(message, location.origin);
+        addEventListener("message", (event) => {
+          if (event.source !== window || event.origin !== location.origin) return;
+          const m = event.data;
+          if (!m || m.source !== "objekt-capture") return;
+          if (m.type === "hello") return post({ source: "objekt-match", type: "ready" });
+          if (m.type !== "import") return;
+          if (!handled.has(m.id)) { handled.add(m.id); window.received.push(m); }
+          post({ source: "objekt-match", type: "received", id: m.id, posts: 1 });
+        });
+        setTimeout(() => post({ source: "objekt-match", type: "ready" }), 400);
+      </script></body></html>`);
+    },
+  )
+  .listen(0, "127.0.0.1");
+await new Promise((resolve, reject) =>
+  fakeObjekt.once("listening", resolve).once("error", reject),
+);
+const objektPort = fakeObjekt.address().port;
+
 const context = await chromium.launchPersistentContext(profile, {
   channel: "chromium",
   headless: true,
   args: [
     `--disable-extensions-except=${extension}`,
     `--load-extension=${extension}`,
+    `--host-resolver-rules=MAP objekt.my 127.0.0.1:${objektPort},MAP imagedelivery.net 127.0.0.1:${objektPort}`,
+    "--ignore-certificate-errors",
   ],
 });
 try {
@@ -52,7 +157,7 @@ try {
   await worker.evaluate(() =>
     chrome.storage.local.set({
       channels: ["123"],
-      owned: [{ member: "YooYeon", season: "Cream", collectionNo: "109" }],
+      owned: [{ member: "YooYeon", season: "Cream02", collectionNo: "109" }],
     }),
   );
   const page = await context.newPage();
@@ -155,34 +260,36 @@ try {
   await popup.goto(`chrome-extension://${id}/panel.html`);
   // Nothing may be read before the disclosure is agreed to, so the index is
   // empty however many posts are on screen, and the working UI is not shown.
-  await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("Nothing captured"),
-  );
+  const indexHolds = (text) =>
+    popup.waitForFunction(
+      (expected) =>
+        document.getElementById("index-count").textContent.includes(expected),
+      text,
+    );
+  await indexHolds("0 posts in the index");
   assert.equal(await popup.locator("#consent").isVisible(), true);
-  assert.equal(await popup.locator("#step-wants").isVisible(), false);
+  assert.equal(await popup.locator("#main").isVisible(), false);
   assert.equal(await page.locator("objekt-match-badge").count(), 0);
   await popup.locator("#accept-capture").click();
   // Agreeing attaches the observer, which sweeps what is already rendered —
   // the page is deliberately not re-rendered here.
-  await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("1 post ready"),
-  );
+  await indexHolds("1 post in the index");
   assert.equal(await popup.locator("#consent").isVisible(), false);
   // Every copy of the panel reflects the same agreement, without a reload.
-  await embedded.locator("#step-wants").waitFor();
+  await embedded.locator("#main").waitFor();
   // Capture consent alone must not unlock search automation.
   assert.equal(await popup.locator("#automation-gate").isVisible(), true);
-  assert.equal(await popup.locator("#search-section").isVisible(), false);
-  // Use the actual typed-haves surface so collection key syntax stays shared.
-  await popup.locator("#haves").fill("YooYeon CC109");
-  await popup.locator("#save-haves").click();
+  assert.equal(await popup.locator("#actions").isVisible(), false);
+  // The saved inventory marks the post that wants one of its objekts, and the
+  // mark survives Discord re-rendering the row.
   await page.locator("objekt-match-badge").waitFor();
   await render();
   await page.locator("objekt-match-badge").waitFor();
   await popup.reload();
-  await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("1 post ready"),
-  );
+  await indexHolds("1 post in the index");
+  // The file export still exists, one level down in Settings.
+  await popup.locator("#open-settings").click();
+  await popup.locator("#step-trouble > summary").click();
   const downloadEvent = popup.waitForEvent("download");
   await popup.locator("#export").click();
   const download = await downloadEvent;
@@ -194,14 +301,22 @@ try {
   // A whole search run, end to end and in a real browser: the consent for it,
   // the typing (real execCommand into a real contenteditable), Discord's reply,
   // and the results reaching the index scoped to this run.
-  assert.equal(await popup.locator("#search-section").isVisible(), false);
-  await popup.locator("#accept-automation").click();
-  await popup.locator("#search-section").waitFor();
-  await popup.locator("#wants").fill("SeoYeon CC101");
   await popup.locator("#pages").fill("1");
+  await popup.locator("#close-settings").click();
+  assert.equal(await popup.locator("#actions").isVisible(), false);
+  await popup.locator("#accept-automation").click();
+  await popup.locator("#actions").waitFor();
+  await popup.locator("#wants").fill("SeoYeon CC101");
+  // The want list becomes a card, with its art from objekt.my.
+  await popup.locator("#tiles .tile").waitFor();
+  assert.equal(await popup.locator("#tiles .tile").count(), 1);
+  await popup.waitForFunction(
+    (art) => document.querySelector("#tiles img")?.getAttribute("src") === art,
+    ART,
+  );
   await popup.locator("#run-search").click();
   await popup.waitForFunction(() =>
-    document.getElementById("search-status").textContent.startsWith("Finished"),
+    document.getElementById("run-detail").textContent.startsWith("Finished"),
   );
   assert.match(
     await page.evaluate(
@@ -212,12 +327,37 @@ try {
   );
   await popup.waitForFunction(() =>
     document
-      .getElementById("status")
-      .textContent.includes("1 post from this search"),
+      .getElementById("open-match")
+      .textContent.includes("Open 1 in match"),
   );
   // The Search button hands itself back once the run is over.
   assert.equal(await popup.locator("#run-search").isDisabled(), false);
   assert.equal(await popup.locator("#stop-search").isVisible(), false);
+
+  // Straight into /match: the run's posts, the want list with them, delivered
+  // to a page that only starts listening after it has loaded.
+  await popup.locator("#open-match").click();
+  await popup.waitForFunction(() =>
+    document
+      .getElementById("status")
+      .textContent.includes("Opened in objekt.my/match"),
+  );
+  const matchPages = () =>
+    context
+      .pages()
+      .filter((candidate) =>
+        candidate.url().startsWith("https://objekt.my/match"),
+      );
+  assert.equal(matchPages().length, 1);
+  const delivered = await matchPages()[0].evaluate(() => window.received);
+  assert.equal(delivered.length, 1);
+  assert.match(delivered[0].transcript, /HAVE YooYeon CC101/);
+  assert.equal(delivered[0].wants, "SeoYeon CC101");
+  // A second delivery goes to the same desk, not a second tab.
+  await popup.bringToFront();
+  await popup.locator("#open-match").click();
+  await matchPages()[0].waitForFunction(() => window.received.length === 2);
+  assert.equal(matchPages().length, 1, "the open /match tab is reused");
 
   // A run in progress, stated directly rather than raced against: Stop exists
   // only while there is something to stop, and Search refuses a second run.
@@ -248,9 +388,7 @@ try {
     }),
   );
   await popup.waitForFunction(() =>
-    document
-      .getElementById("search-status")
-      .textContent.includes("Stopped reporting"),
+    document.getElementById("status").textContent.includes("Stopped reporting"),
   );
   assert.equal(await popup.locator("#run-search").isDisabled(), false);
   assert.equal(await popup.locator("#stop-search").isVisible(), false);
@@ -272,9 +410,7 @@ try {
   });
   // Counted against the index rather than the run, because a search has now
   // happened and the status reports both.
-  await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("3 in the index"),
-  );
+  await indexHolds("3 posts in the index");
 
   // Pausing removes annotations, and changing channel does not capture.
   await worker.evaluate(() => chrome.storage.local.set({ channels: [] }));
@@ -288,12 +424,11 @@ try {
   await popup.reload();
   // Counted against the index rather than the run, because a search has now
   // happened and the status reports both.
-  await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("3 in the index"),
-  );
+  await indexHolds("3 posts in the index");
   // Withdrawing detaches the reader: the badge goes, and a fresh post is not
   // taken even with the channel enabled.
   await worker.evaluate(() => chrome.storage.local.set({ channels: ["123"] }));
+  await popup.locator("#open-settings").click();
   await popup.locator("#step-trouble > summary").click();
   popup.once("dialog", (dialog) => dialog.accept());
   await popup.locator("#withdraw").click();
@@ -314,14 +449,14 @@ try {
   await popup.reload();
   // Counted against the index rather than the run, because a search has now
   // happened and the status reports both.
-  await popup.waitForFunction(() =>
-    document.getElementById("status").textContent.includes("3 in the index"),
-  );
+  await indexHolds("3 posts in the index");
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, a whole search run end to end, run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, saved-haves annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, want cards with art, a whole search run end to end, delivery into /match and tab reuse, run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();
+  await new Promise((resolve) => fakeObjekt.close(resolve));
   await rm(profile, { recursive: true, force: true });
+  await rm(certDir, { recursive: true, force: true });
 }

@@ -18,21 +18,26 @@ npm run extension:test
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select
 `extensions/discord-capture/dist`. Open a server trade channel and click the toolbar button:
 the panel appears in the page. **Agree to the disclosure** — until then the content script
-attaches no observer and reads nothing. Then enable capture for that channel. Browse
-normally. The badge counts distinct captured posts (including non-actionable text);
-**Dump index** downloads blocks plus parsed items for inspection. Capture remains enabled
+attaches no observer and reads nothing. Click the chip to enable capture for that channel.
+Browse normally. **Settings → Download this search / everything** writes a file for
+inspection; **Check this tab** and the index count are there too. Capture remains enabled
 across sessions until paused. Enable only channels you intend to collect. Clear captured
-posts through the panel; pause first to prevent recapture.
+posts through Settings; pause first to prevent recapture.
 
 ## The panel
 
-The UI is a floating window inside the Discord page, not a toolbar popup — a popup closes
-the moment it loses focus, and a search run takes minutes, so every glance at Discord used to
-close the thing reporting on it. Drag it by the titlebar (or focus the titlebar and use the
-arrow keys, shift for bigger steps), resize from the bottom-right corner, `—` collapses it to
-the titlebar, `⤢` pops it out into a real browser window, `✕` closes it. Where it was left is
+One wide card, not a long thin column: type what you're looking for at the top, watch it
+turn into card art as you search Discord for it, and open the result straight in
+objekt.my/match. Settings — the nickname, pace, page count, export and Troubleshooting —
+sit behind the gear icon, out of the way of the two things a run actually needs. The UI is a
+floating window inside the Discord page, not a toolbar popup — a popup closes the moment it
+loses focus, and a search run takes minutes, so every glance at Discord used to close the
+thing reporting on it. Drag it by the titlebar (or focus the titlebar and use the arrow keys,
+shift for bigger steps), resize from the bottom-right corner, `—` collapses it to the
+titlebar, `⤢` pops it out into a real browser window, `✕` closes it. Where it was left is
 remembered per browser, including whether it was open, and it is clamped back on screen when
-the window is smaller than it was.
+the window is smaller than it was; a size remembered from before this redesign gives way to
+the new default rather than reopening as a tall column with a wide card inside it.
 
 It is an extension page in an iframe inside a closed shadow root: Discord's CSS cannot reach
 it, Discord's scripts cannot see it, and the privileged calls (permission prompts, downloads)
@@ -40,15 +45,15 @@ happen in an extension document where browsers allow them. `src/panel-frame.ts` 
 window chrome, `panel.html` + `src/panel.ts` own the UI, and `src/panel-geometry.ts` holds the
 placement rules that the tests exercise without a browser.
 
-Inside it: a channel strip at the top saying whether this channel is being collected, with
-the switch for it (that switch used to live under Troubleshooting, which is the wrong place
-for the control that decides whether the extension does anything at all); live counts under
-the haves and wants boxes, saying how many lines the parser actually recognised, because a
-list where half the lines are headings parses to half a list silently; a progress bar and a
-Stop button that only exists while a run does; and per-step status lines that go red when
-something failed rather than reporting errors somewhere else on the page. The palette follows
-Discord's own light/dark setting, reported by the content script — not `prefers-color-scheme`,
-which is a different setting and wrong about as often as it is right.
+The chip at the top says whether this channel is being collected, and is the switch for it
+(that switch used to live under Troubleshooting, which is the wrong place for the control
+that decides whether the extension does anything at all). Typing a want turns it into a card
+— art from objekt.my's collection search where it has it, the code where it doesn't — rather
+than a line of text, because a wall of "SeoYeon CC101" is hard to scan and easy to mistype;
+a small badge on each card counts how many posts from the last search have it, and the card
+dims or glows to say whether it is still queued, being searched now, or already done. The
+palette follows Discord's own light/dark setting, reported by the content script — not
+`prefers-color-scheme`, which is a different setting and wrong about as often as it is right.
 
 The toolbar button toggles the panel on Discord tabs and opens the pop-out window anywhere
 else. Either way the panel acts on a specific Discord tab: the one it is embedded in, or —
@@ -176,28 +181,43 @@ is an observed corpus average, not a selector test or a guaranteed acceptance th
 Synthetic fixtures cannot certify Discord's current DOM. No authenticated Discord browser
 session was available during implementation.
 
-Direct `/match` IndexedDB handoff is deferred. Chrome documents host-origin storage for
-content scripts, but a real-origin spike is still required before introducing that contract.
-Phase 4 search awaits a week of Phase 3 usage and an owner
-decision. Phase 5 pooling remains deferred.
+Phase 4 search awaits a week of Phase 3 usage and an owner decision. Phase 5 pooling
+remains deferred.
 
-## Transcript handoff
+## Straight into /match
 
-Choose **Export transcript (.txt)**, open `https://objekt.my/match`, and use **Import text files**.
-The shared parser now accepts ISO UTC timestamps. Deploy this branch's app parser before
-importing into production; older app versions do not recognize these headers.
-Exports validate every author, timestamp and message boundary before downloading. Ambiguous
-header-like body text stops the export rather than inventing another trader. The JSON dump
-remains available for inspection. `/match` retains its 40,000-post cap, so text exports above
-that limit stop with an explanation; the extension itself keeps the complete local index.
+Press **Open in match** and the panel finds an open `objekt.my/match` tab (or opens one),
+injects a script into it, and hands over the last search's posts directly — no file, no
+Import text files dialog. `src/match-tab.ts` is the extension side of this;
+`src/lib/match/extension-handoff.ts` is the page side and the shared protocol both speak.
+The two can only talk through `window.postMessage`, and `/match` loads its saved posts
+asynchronously, so the handshake exists to avoid a race: the page announces `ready` only
+once it can take posts, answers a `hello` from a script injected before it has hydrated, and
+acknowledges every delivery by id so a retry is neither lost nor applied twice. The tab is
+reused rather than duplicated — `/match` keeps its posts in the browser, so a second tab
+would be a second desk. `objekt.my/*` is consequently a required host permission rather than
+an optional, per-use one; **Settings → Download this search / everything** still writes a
+`.txt` file for anyone who wants one, validating every author, timestamp and message boundary
+first and stopping rather than inventing a trader from ambiguous header-like text. The JSON
+dump remains available for inspection. `/match` retains its 40,000-post cap, so a delivery or
+a text export above that limit stops with an explanation; the extension itself keeps the
+complete local index.
+
+## Card art
+
+As the want list is typed, each recognised objekt becomes a card and asks objekt.my's public
+collection search for its picture (`src/artwork.ts`), the same endpoint `/match`'s own poster
+tool uses. Lookups are cached in `storage.local` by objekt key — a month per hit, a day per
+miss, so a typo is retried rather than remembered forever — and capped at 60 per batch so a
+pasted catalogue is not a request storm. A card also shows how many posts the last search
+found with it, and dims, glows or sits plain depending on whether its code is still queued,
+being searched now, or already done.
 
 ## Inventory and annotations
 
-Type haves and choose **Save typed haves**, or enter a Cosmo nickname and choose **Load
-inventory**. The latter requests optional permission for `https://objekt.my/*` and calls
-only the existing by-nickname endpoint, once per click, without cookies. Errors, rate
-limits and unavailable inventory leave the saved haves intact. Loading replaces typed
-haves; saving typed haves replaces loaded inventory. An empty typed list clears haves.
+Enter a Cosmo nickname in Settings and choose **Load**. It calls the existing by-nickname
+endpoint, once per click, without cookies. Errors, rate limits and unavailable inventory leave
+the saved inventory intact.
 
 Enabled channels show **wants N of yours** for exact matches from the shared matcher.
 Wildcards are deliberately not counted, matching `/match`. Inventory is a saved snapshot;
@@ -210,11 +230,26 @@ also pauses every channel. A `!` toolbar badge and panel error report failed sto
 profile, fulfills Discord navigation with a local fixture, and checks: the floating panel
 (opened the way the toolbar button opens it, dragged by its titlebar, held on screen,
 restored where it was left after a reload, and genuinely closed to the page); both consent
-gates; a whole search run end to end — real `execCommand` typing into a real contenteditable,
-a real Enter, results captured and scoped to the run; the run state machine, including a run
-whose reports stop arriving; capture with Discord behind another window; virtualized
-re-render dedupe; annotation updates; export downloads; pause; and withdrawal. It never
-contacts Discord.
+gates; want cards with art fetched from a mocked objekt.my; a whole search run end to end —
+real `execCommand` typing into a real contenteditable, a real Enter, results captured and
+scoped to the run; delivery into a mocked `/match` and reuse of the tab a second delivery
+goes to; the run state machine, including a run whose reports stop arriving; capture with
+Discord behind another window; virtualized re-render dedupe; inventory annotation updates;
+export downloads; pause; and withdrawal. It never contacts Discord.
+
+Discord and objekt.my are both fulfilled locally, but by different mechanisms, because they
+fail differently when live. Discord is only ever reached through `page.goto`, which Playwright
+routes reliably, so `context.route` is enough. objekt.my is also reached by
+`chrome.tabs.create`, called from the service worker rather than from Playwright itself — and
+that tab's very first request (the navigation) can leave before Playwright's CDP session has
+attached to the new target, slipping straight past `context.route` while every request after
+it is caught. Missing only the one request this test most needs to control turned into a
+30-second hang, not a wrong response: the mocked reply never got a chance to apply, and the
+real page never spoke this test's handoff protocol. `--host-resolver-rules`, pointing both
+hostnames at a throwaway HTTPS server backed by a certificate generated fresh per run
+(`--ignore-certificate-errors` accepts it), sidesteps the race entirely by working below
+Chromium's request pipeline, before there is a race to lose.
+
 Install the Playwright Chromium browser first if it is missing (`npx playwright install chromium`).
 The Node tests cover structural attribution, IndexedDB transactions/reopens, ranges, ISO
 round trips, ambiguous export rejection, and inventory failures. `npm test` includes the

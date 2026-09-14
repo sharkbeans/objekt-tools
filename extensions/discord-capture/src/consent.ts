@@ -19,8 +19,12 @@
  *
  * Consent to an older description of what the extension does is not consent to
  * a newer one.
+ *
+ * 2: posts can be handed to objekt.my/match directly rather than only through
+ * a file the user downloads, and want-list codes are sent to objekt.my for card
+ * art without a button press.
  */
-export const CONSENT_VERSION = 1;
+export const CONSENT_VERSION = 2;
 
 export interface Consent {
   version: number;

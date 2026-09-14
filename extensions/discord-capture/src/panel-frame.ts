@@ -20,6 +20,7 @@ import {
   clampGeometry,
   type Geometry,
   LAYER,
+  LAYOUT,
   type PanelState,
   readPanelState,
   UNPLACED,
@@ -126,7 +127,7 @@ function apply() {
  */
 function save(open: boolean) {
   clearTimeout(saveTimer);
-  const state: PanelState = { ...geometry, open };
+  const state: PanelState = { ...geometry, open, layout: LAYOUT };
   saveTimer = setTimeout(() => {
     void extensionApi.storage.local.set({ panel: state });
   }, 250);
@@ -304,7 +305,7 @@ export async function openPanel(tabId: number | null): Promise<void> {
   dot.className = "dot";
   const title = document.createElement("span");
   title.className = "title";
-  title.textContent = "objekt.my capture";
+  title.textContent = "objekt.my";
   bar.append(dot, title);
   const body = document.createElement("div");
   body.className = "body";

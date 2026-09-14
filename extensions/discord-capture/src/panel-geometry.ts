@@ -5,12 +5,23 @@
  * restored from storage is the part most likely to be wrong, because it was
  * saved on a window that no longer exists.
  */
-const MIN_WIDTH = 300;
-const MIN_HEIGHT = 260;
+const MIN_WIDTH = 340;
+const MIN_HEIGHT = 300;
 /** Collapsed height, which is the titlebar and nothing else. */
 export const BAR_HEIGHT = 34;
-const DEFAULT_WIDTH = 384;
-const DEFAULT_HEIGHT = 640;
+/**
+ * Wide and short. The panel used to be a 384×640 column, which put the want
+ * list, the settings, the run and the export in one long scroll; the card art
+ * wants width, and nothing in the panel needs that much height.
+ */
+const DEFAULT_WIDTH = 540;
+const DEFAULT_HEIGHT = 460;
+/**
+ * Bumped when the default size changes for a reason worth overriding a
+ * remembered one: a panel resized to suit the old layout is the wrong shape for
+ * the new one. Position is kept either way.
+ */
+export const LAYOUT = 2;
 /** Above Discord's modals, below nothing that matters. */
 export const LAYER = 2147483000;
 const MARGIN = 12;
@@ -26,6 +37,8 @@ export interface Geometry {
 export interface PanelState extends Geometry {
   /** Whether the panel was showing when the tab was last used. */
   open: boolean;
+  /** The layout the size was chosen under. */
+  layout: number;
 }
 
 export const UNPLACED: PanelState = {
@@ -35,6 +48,7 @@ export const UNPLACED: PanelState = {
   height: DEFAULT_HEIGHT,
   collapsed: false,
   open: false,
+  layout: LAYOUT,
 };
 
 function number(value: unknown, fallback: number): number {
@@ -45,13 +59,15 @@ function number(value: unknown, fallback: number): number {
 export function readPanelState(value: unknown): PanelState {
   if (!value || typeof value !== "object") return { ...UNPLACED };
   const stored = value as Record<string, unknown>;
+  const current = stored.layout === LAYOUT;
   return {
     x: number(stored.x, UNPLACED.x),
     y: number(stored.y, UNPLACED.y),
-    width: number(stored.width, UNPLACED.width),
-    height: number(stored.height, UNPLACED.height),
+    width: current ? number(stored.width, UNPLACED.width) : UNPLACED.width,
+    height: current ? number(stored.height, UNPLACED.height) : UNPLACED.height,
     collapsed: stored.collapsed === true,
     open: stored.open === true,
+    layout: LAYOUT,
   };
 }
 

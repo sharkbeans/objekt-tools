@@ -32,16 +32,22 @@ import { resultBodies, rowOf } from "./dom";
 export function searchQueries(text: string): string[] {
   const queries = new Set<string>();
   for (const item of parseOffering(text)) {
-    if (!item.collectionNo) continue;
-    // Strips a trailing variant letter, so CC101Z searches as CC101.
-    const query = formatSeasonNumberLabel({
-      ...item,
-      collectionId: "",
-    }).trim();
-    const safe = searchSafe(query);
-    if (safe) queries.add(safe);
+    const query = searchQueryFor(item);
+    if (query) queries.add(query);
   }
   return [...queries];
+}
+
+/** The query one wanted objekt is searched by, or "" when it has none. */
+export function searchQueryFor(item: {
+  season: string;
+  collectionNo: string;
+}): string {
+  if (!item.collectionNo) return "";
+  // Strips a trailing variant letter, so CC101Z searches as CC101.
+  return searchSafe(
+    formatSeasonNumberLabel({ ...item, collectionId: "" }).trim(),
+  );
 }
 
 /**

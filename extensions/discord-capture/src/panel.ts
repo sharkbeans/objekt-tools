@@ -1,4 +1,6 @@
-import { parseOffering } from "@/lib/discord/match";
+import { objektKey, parseOffering } from "@/lib/discord/match";
+import { formatSeasonNumberLabel } from "@/lib/objekt-label";
+import type { ParsedItem } from "@/lib/paste-parser";
 import { extensionApi } from "./browser";
 import {
   acceptAutomation,
@@ -8,7 +10,8 @@ import {
 } from "./consent";
 import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, resolveTab, type TabLike } from "./host-tab";
-import { INVENTORY_ORIGIN } from "./inventory";
+import { searchQueryFor } from "./search";
+import { DEFAULT_COOLDOWN_MS, readSearchedAt } from "./search-plan";
 import { channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
 
@@ -49,15 +52,10 @@ const tabs: {
  * process rather than the extension process, and that scope has no `tabs` and
  * no `permissions` at all — they are undefined, not refused (Bugzilla 1443253).
  * The embedded panel is exactly that frame, so every tab lookup it made threw
- * and was caught as "no tab": the channel strip said "No Discord tab open."
- * while sitting inside the tab it was asking about, and the search could not
- * reach the content script either. Chrome gives the same frame the full API,
- * which is why this only ever showed up in Firefox.
+ * and was caught as "no tab". Chrome gives the same frame the full API.
  *
  * The worker is in the privileged process in both browsers, so anything the
- * frame cannot do itself is asked of the worker instead. A property test, not
- * a browser test: the pop-out window is the same document in a scope that does
- * have `tabs`, and it should keep using it.
+ * frame cannot do itself is asked of the worker instead.
  */
 const ownTabsApi: typeof extensionApi.tabs | undefined = extensionApi.tabs;
 const canUseTabs = typeof ownTabsApi?.query === "function";
@@ -80,27 +78,48 @@ function sendToTab(tabId: number, message: Record<string, unknown>) {
   return request("to-tab", { tabId, message });
 }
 
-const status = document.getElementById("status") as HTMLElement;
+function element<T extends HTMLElement = HTMLElement>(id: string): T {
+  return document.getElementById(id) as T;
+}
+
+const status = element("status");
 async function request(type: string, extra: Record<string, unknown> = {}) {
   const response = await extensionApi.runtime.sendMessage({ type, ...extra });
   if (!response?.ok)
     throw new Error(response?.error ?? "Extension unavailable");
   return response.value;
 }
+
+/** Say something in a region, and colour it by whether it went wrong. */
+function say(target: HTMLElement, message: string, bad = false) {
+  target.textContent = message;
+  target.classList.toggle("bad", bad);
+}
+
+/**
+ * A status set by a click outranks the one `render` derives, for a moment.
+ *
+ * `render` runs every time storage changes — during a run, several times a
+ * second — and would otherwise overwrite "Opened in objekt.my/match" before
+ * anyone could read it.
+ */
+let heldUntil = 0;
+function tell(message: string, bad = false) {
+  say(status, message, bad);
+  heldUntil = Date.now() + 6000;
+}
+
 /**
  * Wire a button, and make it obvious that it is doing something.
  *
  * Every one of these round-trips to the worker or to a tab, so "did my click
  * land" is a real question — and a second click while the first is in flight
- * is how two inventory lookups or two exports happen.
+ * is how two inventory lookups or two deliveries happen.
  */
 function action(
   id: string,
   run: () => Promise<void>,
-  say: (message: string, bad: boolean) => void = (message) => {
-    status.textContent = message;
-    status.classList.add("bad");
-  },
+  onError: (message: string) => void = (message) => tell(message, true),
 ) {
   const button = document.getElementById(id);
   if (!(button instanceof HTMLButtonElement)) return;
@@ -108,11 +127,10 @@ function action(
   button.addEventListener("click", () => {
     if (busy) return;
     busy = true;
-    const label = button.textContent;
     button.disabled = true;
     void run()
       .catch((error) => {
-        say(error instanceof Error ? error.message : String(error), true);
+        onError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
         busy = false;
@@ -122,175 +140,574 @@ function action(
         // button there would offer a second run on top of the first.
         if (button.dataset.hold === "1") return;
         button.disabled = false;
-        if (label !== null) button.textContent = label;
       });
   });
 }
 
-/** Say something in a region, and colour it by whether it went wrong. */
-function say(element: HTMLElement, message: string, bad = false) {
-  element.textContent = message;
-  element.classList.toggle("bad", bad);
-}
+// ---------------------------------------------------------------------------
+// Views
+
+let consent: unknown;
+let settingsOpen = false;
+
 /**
  * Show only what the user has agreed to.
  *
  * Both stores require the disclosure to be in the extension's own UI and to be
- * agreed to before anything is collected, so the rest of the interface stays
- * out of the way until it is — a paused-looking capture panel above an
- * un-read disclosure is exactly the "surprise" the policies are about.
+ * agreed to before anything is collected, so nothing else is shown until it is.
+ * Search needs its own agreement, and until it has one the gate stands where
+ * the Search button would be.
  */
-function showSections(consent: unknown) {
+function showViews() {
   const capture = captureAllowed(consent);
   const automation = automationAllowed(consent);
-  const show = (id: string, on: boolean) => {
-    const element = document.getElementById(id);
-    if (element) element.hidden = !on;
-  };
-  show("consent", !capture);
-  for (const id of [
-    "channel-bar",
-    "step-inventory",
-    "step-wants",
-    "step-match",
-    "step-trouble",
-  ])
-    show(id, capture);
-  show("automation-gate", capture && !automation);
-  show("search-section", capture && automation);
+  element("consent").hidden = capture;
+  element("main").hidden = !capture || settingsOpen;
+  element("settings").hidden = !capture || !settingsOpen;
+  element("automation-gate").hidden = !capture || automation;
+  element("actions").hidden = !automation;
 }
 
+function openSettings(open: boolean) {
+  settingsOpen = open;
+  showViews();
+  (open ? element("close-settings") : element("open-settings")).focus();
+}
+element("open-settings").addEventListener("click", () => openSettings(true));
+element("close-settings").addEventListener("click", () => openSettings(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && settingsOpen) openSettings(false);
+});
+
 async function readConsentSetting(): Promise<unknown> {
-  const { consent } = await extensionApi.storage.local.get("consent");
-  return consent;
+  const stored = await extensionApi.storage.local.get("consent");
+  return stored.consent;
 }
 
 action("accept-capture", async () => {
-  const consent = acceptCapture(await readConsentSetting());
+  consent = acceptCapture(await readConsentSetting());
   await extensionApi.storage.local.set({ consent });
-  showSections(consent);
+  showViews();
   await refresh();
 });
 
 action("accept-automation", async () => {
-  const consent = acceptAutomation(await readConsentSetting());
+  consent = acceptAutomation(await readConsentSetting());
   await extensionApi.storage.local.set({ consent });
-  showSections(consent);
+  showViews();
 });
 
-action("withdraw", async () => {
-  if (
-    !confirm(
-      "Stop reading Discord and forget your agreement? Posts already captured are kept — clear them separately if you want them gone.",
+action(
+  "withdraw",
+  async () => {
+    if (
+      !confirm(
+        "Stop reading Discord and forget your agreement? Posts already captured are kept — clear them separately if you want them gone.",
+      )
     )
-  )
-    return;
-  await extensionApi.storage.local.remove("consent");
-  showSections(undefined);
-});
+      return;
+    await extensionApi.storage.local.remove("consent");
+    consent = undefined;
+    settingsOpen = false;
+    showViews();
+  },
+  (message) => say(element("diagnosis"), message, true),
+);
 
-/** The search whose posts the export is scoped to, or null before any search. */
-async function currentRun(): Promise<string | null> {
-  const { searchRunId } = await extensionApi.storage.local.get("searchRunId");
-  return typeof searchRunId === "string" && searchRunId ? searchRunId : null;
+// ---------------------------------------------------------------------------
+// Wants, as cards
+
+interface Tile {
+  key: string;
+  item: ParsedItem;
+  name: string;
+  code: string;
+  query: string;
 }
 
-async function refresh() {
-  const settings = await extensionApi.storage.local.get([
-    "captureError",
-    "captureHealth",
-    "channels",
-  ]);
-  const tab = await discordTab().catch(() => null);
-  const channel = channelFromUrl(tab?.url);
-  const enabled = Boolean(
-    channel && channelIds(settings.channels).includes(channel),
-  );
-  showHealth(settings.captureHealth);
-  if (typeof settings.captureError === "string") {
-    say(status, settings.captureError, true);
+/**
+ * One card per distinct objekt in the want list, in the order typed.
+ *
+ * "Any member" wants have no objekt key, so they are keyed by code instead —
+ * they still get a card, just never a picture or a count.
+ */
+function tilesFrom(text: string): Tile[] {
+  const tiles = new Map<string, Tile>();
+  for (const item of parseOffering(text)) {
+    if (item.freeform || !item.collectionNo) continue;
+    const code = formatSeasonNumberLabel({ ...item, collectionId: "" });
+    const key =
+      objektKey(item) ??
+      `any|${item.season}|${item.collectionNo}`.toLowerCase();
+    if (tiles.has(key)) continue;
+    tiles.set(key, {
+      key,
+      item,
+      name: item.member ?? "Any",
+      code,
+      query: searchQueryFor(item),
+    });
+  }
+  return [...tiles.values()];
+}
+
+const wants = element<HTMLTextAreaElement>("wants");
+const tileList = element<HTMLUListElement>("tiles");
+let tiles: Tile[] = [];
+const art = new Map<string, string | null>();
+
+interface TileNode {
+  li: HTMLLIElement;
+  img: HTMLImageElement;
+  code: HTMLElement;
+  badge: HTMLElement;
+}
+const tileNodes = new Map<string, TileNode>();
+
+function tileNode(tile: Tile): TileNode {
+  const existing = tileNodes.get(tile.key);
+  if (existing) return existing;
+  const li = document.createElement("li");
+  li.className = "tile";
+  const frame = document.createElement("div");
+  frame.className = "art";
+  const img = document.createElement("img");
+  img.alt = "";
+  img.hidden = true;
+  img.referrerPolicy = "no-referrer";
+  const code = document.createElement("span");
+  code.className = "code";
+  code.textContent = tile.code;
+  img.addEventListener("error", () => {
+    img.hidden = true;
+    code.hidden = false;
+  });
+  img.addEventListener("load", () => {
+    code.hidden = true;
+  });
+  frame.append(img, code);
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.hidden = true;
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = `${tile.name} ${tile.code}`;
+  li.append(frame, badge, name);
+  const node = { li, img, code, badge };
+  tileNodes.set(tile.key, node);
+  return node;
+}
+
+type TileState = "idle" | "queued" | "active" | "done" | "recent";
+
+/**
+ * Where a card's code sits in the run, read off the run's own report.
+ *
+ * `done` counts queries submitted, and a query is submitted before its pages
+ * are walked, so while a run is going the last one counted is the one in hand.
+ */
+function tileState(tile: Tile): TileState {
+  const queries = Array.isArray(progress?.queries) ? progress.queries : [];
+  const index = tile.query ? queries.indexOf(tile.query) : -1;
+  const done = typeof progress?.done === "number" ? progress.done : 0;
+  if (index !== -1) {
+    if (running())
+      return index < done - 1
+        ? "done"
+        : index === done - 1
+          ? "active"
+          : "queued";
+    if (index < done) return "done";
+  }
+  const at = searchedAt.get(tile.query);
+  return at !== undefined && Date.now() - at < DEFAULT_COOLDOWN_MS
+    ? "recent"
+    : "idle";
+}
+
+function renderTiles() {
+  const keep = new Set(tiles.map((tile) => tile.key));
+  for (const [key, node] of tileNodes)
+    if (!keep.has(key)) {
+      node.li.remove();
+      tileNodes.delete(key);
+    }
+  tiles.forEach((tile, index) => {
+    const node = tileNode(tile);
+    if (tileList.children[index] !== node.li)
+      tileList.insertBefore(node.li, tileList.children[index] ?? null);
+    const url = art.get(tile.key);
+    if (url && node.img.getAttribute("src") !== url) {
+      node.img.src = url;
+      node.img.hidden = false;
+    }
+    const state = tileState(tile);
+    node.li.dataset.state = state;
+    // A count only means something for a card this search looked for.
+    const hits = summary.hits[tile.key] ?? 0;
+    const counted = state === "done" || (state !== "queued" && hits > 0);
+    node.badge.hidden = !counted;
+    node.badge.textContent = String(hits);
+    node.badge.classList.toggle("zero", hits === 0);
+    node.li.title = [
+      `${tile.name} ${tile.code}`,
+      counted ? `${hits} post${hits === 1 ? "" : "s"} have it` : "",
+      state === "recent" ? "searched in the last 6 hours" : "",
+      state === "active" ? "searching now" : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  });
+}
+
+/**
+ * Count what the parser will actually recognise, as it is typed.
+ *
+ * A list is only as good as what comes out of the parser, and a stray heading
+ * or a format it does not know reads as nothing at all. Saying so at the point
+ * of typing beats finding out after a run returns nothing.
+ */
+function showWantsCount() {
+  const count = element("wants-count");
+  const text = wants.value.trim();
+  if (!text) {
+    count.textContent = "";
+    count.classList.remove("none");
     return;
   }
-  const captured = Number(await request("count"));
-  const run = await currentRun();
-  const fromRun = run ? Number(await request("count", { run })) : 0;
-  // The index is cumulative — channel browsing and every earlier search — so
-  // the two numbers are different questions and both are worth saying.
-  const parts = [
-    run
-      ? `${fromRun} post${fromRun === 1 ? "" : "s"} from this search ready to export (${captured} in the index).`
-      : captured
-        ? `${captured} post${captured === 1 ? "" : "s"} ready to export.`
-        : "Nothing captured yet — run a search above.",
-  ];
-  // The channel strip says whether this channel is being collected, so the
-  // status does not repeat it.
-  if (!channel) parts.push("Open a Discord trade channel to capture.");
-  say(status, parts.join(" "));
-  showChannel(tab?.url, enabled);
+  const lines = text.split("\n").filter((line) => line.trim()).length;
+  // Fewer objekts than lines means some lines read as nothing — usually a
+  // heading, sometimes a format the parser does not know. Worth a word.
+  const found = parseOffering(wants.value).length;
+  count.classList.toggle("none", tiles.length === 0);
+  count.textContent = !tiles.length
+    ? "Nothing recognised — try “SeoYeon CC101”"
+    : found < lines
+      ? `${tiles.length} · some lines not recognised`
+      : String(tiles.length);
+}
+
+let artTimer: ReturnType<typeof setTimeout> | undefined;
+/** Ask the worker for art the panel does not have yet, once typing pauses. */
+function fetchArt() {
+  clearTimeout(artTimer);
+  artTimer = setTimeout(() => {
+    const missing = tiles.filter(
+      (tile) => tile.item.member && !art.has(tile.key),
+    );
+    if (!missing.length) return;
+    void request("artwork", {
+      items: missing.map(({ item }) => ({
+        member: item.member,
+        season: item.season,
+        collectionNo: item.collectionNo,
+      })),
+    })
+      .then((urls: Record<string, string | null>) => {
+        for (const [key, url] of Object.entries(urls)) art.set(key, url);
+        renderTiles();
+      })
+      .catch(() => {});
+  }, 350);
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+function wantsChanged(save: boolean) {
+  tiles = tilesFrom(wants.value);
+  showWantsCount();
+  renderTiles();
+  render();
+  fetchArt();
+  if (!save) return;
+  // Saved as typed, not only when a run starts: the content script marks posts
+  // that have something on this list, and the next panel opened should find it.
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    void extensionApi.storage.local.set({ wants: wants.value });
+    void refresh();
+  }, 600);
+}
+wants.addEventListener("input", () => wantsChanged(true));
+wants.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    element<HTMLButtonElement>("run-search").click();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The run and what it found
+
+/**
+ * How long a run may go without reporting before it is presumed dead.
+ *
+ * A page settles in fifteen seconds at the outside and reports on every page,
+ * so a minute of silence is not a slow run — it is a tab that navigated away
+ * mid-run and took the content script with it.
+ */
+const STALE_MS = 60_000;
+
+let progress: Record<string, unknown> | null = null;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+let summary: { total: number; run: number; hits: Record<string, number> } = {
+  total: 0,
+  run: 0,
+  hits: {},
+};
+let runId: string | null = null;
+let searchedAt = new Map<string, number>();
+let captureError: string | null = null;
+let hasChannel = false;
+
+function stale(): boolean {
+  const at = typeof progress?.at === "number" ? progress.at : 0;
+  return progress?.running === true && at > 0 && Date.now() - at > STALE_MS;
+}
+/** A run whose reports have stopped is not a run any more, whatever the flag says. */
+function running(): boolean {
+  return progress?.running === true && !stale();
+}
+
+/**
+ * Everything a run reported, for Troubleshooting.
+ *
+ * The main status line says what happened in a few words; this keeps the
+ * detail that makes a misbehaving run diagnosable — retries, which insertion
+ * carried it, why paging stopped — one click away rather than in everyone's
+ * face.
+ */
+function describe(p: Record<string, unknown> | null): string {
+  if (!p) return "";
+  const done = typeof p.done === "number" ? p.done : 0;
+  const total = typeof p.total === "number" ? p.total : 0;
+  const planNote =
+    typeof p.planNote === "string" && p.planNote ? `\n${p.planNote}` : "";
+  if (p.running) {
+    if (stale())
+      return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed — anything captured is still in the index.`;
+    return `Searching ${done}/${total}${p.query ? ` · ${p.query}` : ""}${
+      typeof p.page === "number" ? ` · page ${p.page}` : ""
+    }…${planNote}`;
+  }
+  const pages =
+    typeof p.pagesWalked === "number" ? ` · ${p.pagesWalked} pages walked` : "";
+  const retries =
+    typeof p.retried === "number" && p.retried > 0
+      ? ` · ${p.retried} ${p.retried === 1 ? "retry" : "retries"}`
+      : "";
+  const names = emptyQueries(p);
+  const empty =
+    typeof p.empty === "number" && p.empty > 0
+      ? ` · ${p.empty} with no matches${names.length ? ` (${names.join(", ")})` : ""}`
+      : "";
+  const closed =
+    typeof p.closed === "number" && p.closed > 0
+      ? ` · ${p.closed} cut short by the results closing`
+      : "";
+  const typed =
+    p.typedBy && typeof p.typedBy === "object"
+      ? Object.entries(p.typedBy as Record<string, number>)
+          .map(([name, count]) => `${name}×${count}`)
+          .join(", ")
+      : "";
+  const note = ["pagerNote", "settleNote"]
+    .map((key) => p[key])
+    .filter((text): text is string => typeof text === "string" && text !== "")
+    .map((text) => `\n⚠ ${text}`)
+    .join("");
+  if (typeof p.stopped === "string" && p.stopped)
+    return `Stopped after ${done}/${total}: ${p.stopped}${planNote}${note}`;
+  return total
+    ? `Finished ${done}/${total} searches${pages}${retries}${empty}${closed}.${
+        typed ? `\ntyped via ${typed}` : ""
+      }${planNote}${note}`
+    : "";
+}
+
+function emptyQueries(p: Record<string, unknown>): string[] {
+  return Array.isArray(p.emptyQueries)
+    ? p.emptyQueries
+        .filter((query): query is string => typeof query === "string")
+        .slice(0, 4)
+    : [];
+}
+
+function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** The one line under the cards. Short; the detail is in Troubleshooting. */
+function statusLine(): { text: string; bad: boolean } {
+  if (captureError) return { text: captureError, bad: true };
+  const p = progress;
+  const done = typeof p?.done === "number" ? p.done : 0;
+  const total = typeof p?.total === "number" ? p.total : 0;
+  if (p && stale())
+    return {
+      text: `Stopped reporting after ${done}/${total} — the Discord tab was probably reloaded.`,
+      bad: true,
+    };
+  if (p && running())
+    return {
+      text: `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}`,
+      bad: false,
+    };
+  if (typeof p?.stopped === "string" && p.stopped && p.stopped !== "Cancelled.")
+    return { text: p.stopped, bad: true };
+  if (p && total) {
+    const nothing = emptyQueries(p);
+    return {
+      text: `${p.stopped ? "Stopped · " : ""}${plural(summary.run, "post")} found${
+        nothing.length ? ` · nothing for ${nothing.join(", ")}` : ""
+      }`,
+      bad: false,
+    };
+  }
+  if (!hasChannel && automationAllowed(consent))
+    return {
+      text: "Open your trade channel in Discord, then search.",
+      bad: false,
+    };
+  return { text: "", bad: false };
+}
+
+/** Put the whole main view in step with what is currently known. */
+function render() {
+  const busy = running();
+  showRunning(busy);
+  const line = statusLine();
+  if (Date.now() >= heldUntil || line.bad) say(status, line.text, line.bad);
+  say(element("run-detail"), describe(progress));
+  const ready = runId ? summary.run : summary.total;
+  const open = element<HTMLButtonElement>("open-match");
+  open.hidden = busy || ready === 0;
+  open.textContent = `Open ${ready} in match ↗`;
+  const search = element<HTMLButtonElement>("run-search");
+  search.classList.toggle("primary", open.hidden);
+  if (!busy) {
+    const queries = new Set(tiles.map((tile) => tile.query).filter(Boolean));
+    search.textContent = open.hidden
+      ? queries.size
+        ? `Search ${plural(queries.size, "code")}`
+        : "Search"
+      : "Search again";
+  }
+  renderTiles();
+}
+
+/** Keep the bar and the buttons in step with the run. */
+function showRunning(busy: boolean) {
+  const bar = element("search-progress");
+  const done = typeof progress?.done === "number" ? progress.done : 0;
+  const total = typeof progress?.total === "number" ? progress.total : 0;
+  bar.hidden = !busy;
+  const fill = bar.firstElementChild;
+  if (fill instanceof HTMLElement)
+    fill.style.width = `${total ? Math.min(100, (done / total) * 100) : 0}%`;
+  element("stop-search").hidden = !busy;
+  const start = element<HTMLButtonElement>("run-search");
+  // Claimed for as long as the run lasts, so the click handler that started it
+  // does not hand the button back when it returns.
+  start.dataset.hold = busy ? "1" : "";
+  start.disabled = busy;
+  if (busy) start.textContent = "Searching…";
+}
+
+/**
+ * Re-read storage, the tab and the index, then render.
+ *
+ * Coalesced: during a run storage changes several times a second, and each
+ * refresh reads the index once. A refresh asked for while one is in flight
+ * runs once more afterwards rather than once per request.
+ */
+let refreshing = false;
+let refreshAgain = false;
+async function refresh(): Promise<void> {
+  if (refreshing) {
+    refreshAgain = true;
+    return;
+  }
+  refreshing = true;
+  try {
+    const settings = await extensionApi.storage.local.get([
+      "captureError",
+      "captureHealth",
+      "channels",
+      "searchProgress",
+      "searchRunId",
+      "searchedAt",
+    ]);
+    captureError =
+      typeof settings.captureError === "string" ? settings.captureError : null;
+    progress = asRecord(settings.searchProgress);
+    runId =
+      typeof settings.searchRunId === "string" && settings.searchRunId
+        ? settings.searchRunId
+        : null;
+    searchedAt = readSearchedAt(settings.searchedAt);
+    showHealth(settings.captureHealth);
+    const tab = await discordTab().catch(() => null);
+    const channel = channelFromUrl(tab?.url);
+    hasChannel = channel !== null;
+    showChannel(
+      channel,
+      Boolean(channel && channelIds(settings.channels).includes(channel)),
+    );
+    summary = await request("run-summary", {
+      run: runId,
+      keys: tiles.map((tile) => tile.key),
+    }).catch(() => summary);
+    element("index-count").textContent =
+      `${plural(summary.total, "post")} in the index`;
+    render();
+  } finally {
+    refreshing = false;
+    if (refreshAgain) {
+      refreshAgain = false;
+      setTimeout(() => void refresh().catch(() => {}), 400);
+    }
+  }
 }
 
 /**
  * Say when capture has stopped understanding Discord's markup.
  *
  * This is the failure that otherwise looks like nothing at all: no error, no
- * exception, just a badge that never moves again. Discord rewrites its DOM
- * regularly, so this will eventually be true, and a user who is told can stop
- * relying on the extension and report it.
+ * exception, just a count that never moves again. Discord rewrites its DOM
+ * regularly, so this will eventually be true.
  */
 function showHealth(health: unknown) {
-  const banner = document.getElementById("health");
-  if (!banner) return;
+  const banner = element("health");
   const broken =
     health && typeof health === "object"
       ? (health as Record<string, unknown>)
       : null;
   banner.hidden = !broken;
   if (!broken) return;
-  const elements = typeof broken.elements === "number" ? broken.elements : 0;
-  banner.textContent = `Capture has stopped working: ${elements} messages are on screen and none of them can be read, which means Discord has changed its markup. The extension needs an update — Troubleshooting → Check this tab has the detail to report.`;
+  const count = typeof broken.elements === "number" ? broken.elements : 0;
+  banner.textContent = `Capture has stopped working: ${count} messages are on screen and none can be read, so Discord has changed its markup. The extension needs an update — Settings → Troubleshooting → Check this tab has the detail to report.`;
 }
 
-/**
- * The channel strip: which Discord channel this panel is pointed at, and
- * whether its posts are being kept.
- *
- * This switch used to live in Troubleshooting, which is the wrong place for
- * the control that decides whether the extension does anything at all.
- */
-function showChannel(url: string | undefined, enabled: boolean) {
-  const bar = document.getElementById("channel-bar");
-  const state = document.getElementById("channel-state");
-  const pip = document.getElementById("channel-pip");
-  const button = document.getElementById("toggle");
-  if (!bar || !state || !pip || !(button instanceof HTMLButtonElement)) return;
-  const channel = channelFromUrl(url);
-  pip.classList.toggle("on", enabled);
-  button.hidden = !channel;
-  if (!channel) {
-    state.textContent = url
-      ? "Open a server channel in Discord — this is not one."
-      : "No Discord tab open.";
-    return;
-  }
-  state.innerHTML = "";
-  const label = document.createElement("strong");
-  label.textContent = enabled ? "Capturing" : "Not capturing";
-  state.append(label, ` this channel${enabled ? "" : " — posts are ignored"}`);
-  button.textContent = enabled ? "Pause here" : "Capture here";
+/** Whether this channel is being collected, as one pill that switches it. */
+function showChannel(channel: string | null, enabled: boolean) {
+  const chip = element<HTMLButtonElement>("toggle");
+  chip.hidden = !channel;
+  element("no-channel").hidden = Boolean(channel);
+  chip.classList.toggle("on", enabled);
+  element("channel-state").textContent = enabled ? "Capturing" : "Capture off";
+  chip.title = enabled
+    ? "Posts in this channel are being kept. Click to stop."
+    : "Posts in this channel are ignored while you browse. Click to keep them.";
 }
-function download(text: string, filename: string, type: string) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
+
 action("toggle", async () => {
   const tab = await discordTab();
   const channel = channelFromUrl(tab.url);
-  if (!channel) throw new Error("Open a Discord server trade channel first.");
+  if (!channel) throw new Error("Open a Discord server channel first.");
   const settings = await extensionApi.storage.local.get("channels");
   const channels = channelIds(settings.channels);
   const enabled = channels.includes(channel);
@@ -299,245 +716,8 @@ action("toggle", async () => {
       ? channels.filter((id: string) => id !== channel)
       : [...channels, channel],
   });
-  say(
-    status,
-    enabled
-      ? "Capture paused for this channel."
-      : "Capture enabled. Browse the channel to collect posts.",
-  );
   await refresh();
 });
-action("dump", async () => {
-  const posts: Entry[] = await request("dump");
-  download(
-    JSON.stringify(posts, null, 2),
-    exportName(posts.length, "json"),
-    "application/json",
-  );
-});
-action("clear", async () => {
-  if (confirm("Delete all captured posts from this extension?")) {
-    await request("clear");
-    await refresh();
-  }
-});
-void readConsentSetting().then(showSections);
-void refresh().catch((error) => {
-  status.textContent = error.message;
-});
-
-/**
- * A filename that says what is in it.
- *
- * Every export used to be `objekt-discord-transcript.txt`, so a second one
- * landed as "(1)" and a downloads folder full of them told you nothing about
- * which was which.
- */
-function exportName(count: number, extension: string) {
-  const day = new Date().toISOString().slice(0, 10);
-  return `objekt-trade-${day}-${count}-posts.${extension}`;
-}
-
-/** Export `posts`, or say why there was nothing to write. */
-function exportPosts(posts: Entry[], what: string) {
-  if (!posts.length) {
-    say(status, `No ${what} to export yet.`, true);
-    return;
-  }
-  download(
-    exportTranscript(posts.map((post) => post.block)),
-    exportName(posts.length, "txt"),
-    "text/plain;charset=utf-8",
-  );
-  say(
-    status,
-    `Downloaded ${posts.length} ${what}. Open /match and choose Import text files.`,
-  );
-}
-
-action("export", async () => {
-  const posts: Entry[] = await request("dump");
-  const run = await currentRun();
-  // Scoped to the last search: matching against a whole cumulative index pulls
-  // in channel browsing and stale posts from earlier searches, which is not
-  // what was asked for.
-  exportPosts(
-    run ? posts.filter((post) => post.run === run) : posts,
-    run ? "posts from this search" : "captured posts",
-  );
-});
-
-action("export-all", async () => {
-  const posts: Entry[] = await request("dump");
-  exportPosts(posts, "posts in the index");
-});
-
-const inventoryStatus = document.getElementById(
-  "inventory-status",
-) as HTMLElement;
-const nickname = document.getElementById("nickname") as HTMLInputElement;
-const haves = document.getElementById("haves") as HTMLTextAreaElement;
-const sayInventory = (message: string, bad: boolean) =>
-  say(inventoryStatus, message, bad);
-action(
-  "save-haves",
-  async () => {
-    const owned = parseOffering(haves.value).map(
-      ({ member, season, collectionNo }) => ({ member, season, collectionNo }),
-    );
-    if (haves.value.trim() && !owned.length)
-      throw new Error("No objekts recognized. Try YooYeon CC101.");
-    await extensionApi.storage.local.set({
-      owned,
-      nickname: "",
-      haves: haves.value,
-    });
-    say(inventoryStatus, `${owned.length} typed haves saved`);
-  },
-  sayInventory,
-);
-action(
-  "load-inventory",
-  async () => {
-    // Ask the worker whether the grant is already held before trying to
-    // prompt for it. The grant is permanent and belongs to the extension, not
-    // to the window that obtained it, so after the first time there is nothing
-    // to ask — and that is what makes the embedded panel usable rather than a
-    // button that always deflects to a second window. `permissions` is as
-    // absent from a framed extension page in Firefox as `tabs` is, so the
-    // check has to be the worker's to make.
-    let allowed = await request("has-origin").then(Boolean, () => false);
-    // A permission prompt has to come from a user gesture in an extension
-    // document. That holds here, but a panel embedded in a page is an unusual
-    // enough place for one that browsers have refused it outright before — so a
-    // throw is treated as "ask somewhere else", not as a failure.
-    if (!allowed)
-      try {
-        allowed = await extensionApi.permissions.request({
-          origins: [INVENTORY_ORIGIN],
-        });
-      } catch {
-        if (!embedded)
-          throw new Error("The permission prompt could not be shown.");
-        await request("open-window");
-        throw new Error(
-          "Firefox will not show the permission prompt inside the page. Grant objekt.my access once in the window that just opened, and this panel will work from then on.",
-        );
-      }
-    if (!allowed)
-      throw new Error(
-        "Allow access to objekt.my to load inventory, or type your haves.",
-      );
-    say(inventoryStatus, "Loading inventory…");
-    try {
-      const count = await request("inventory", {
-        nickname: nickname.value.trim(),
-      });
-      say(inventoryStatus, `${count} transferable objekts saved`);
-    } catch (error) {
-      say(inventoryStatus, "Lookup failed; saved haves kept.", true);
-      throw error;
-    }
-  },
-  sayInventory,
-);
-void extensionApi.storage.local
-  .get(["owned", "nickname", "haves"])
-  .then((settings) => {
-    inventoryStatus.textContent = `${Array.isArray(settings.owned) ? settings.owned.length : 0} saved haves`;
-    nickname.value =
-      typeof settings.nickname === "string" ? settings.nickname : "";
-    haves.value = typeof settings.haves === "string" ? settings.haves : "";
-  });
-
-// Only the pop-out window needs a way back into the page; the embedded panel
-// has the pop-out button in its own titlebar.
-const dock = document.getElementById("dock");
-if (dock) dock.hidden = embedded;
-document.body.classList.toggle("embedded", embedded);
-action("dock", async () => {
-  const tab = await discordTab();
-  await request("show-panel", { tabId: tab.id });
-  await request("close-window");
-});
-
-/**
- * Count what the parser will actually recognise, as it is typed.
- *
- * A list is only as good as what comes out of the parser, and the two differ
- * far more often than people expect — a stray heading or a format the parser
- * does not know reads as nothing at all. Saying so at the point of typing beats
- * finding out after a run returns nothing.
- */
-function countCodes(
-  field: HTMLTextAreaElement,
-  into: HTMLElement,
-  noun: string,
-) {
-  const show = () => {
-    const text = field.value.trim();
-    if (!text) {
-      say(into, "");
-      into.classList.remove("none");
-      return;
-    }
-    const found = parseOffering(field.value).length;
-    const lines = text.split("\n").filter((line) => line.trim()).length;
-    into.classList.toggle("none", found === 0);
-    // Saying which lines did not land matters more than the total: a list where
-    // half the lines are section headings parses to half a list, silently.
-    into.textContent = found
-      ? found < lines
-        ? `${found} ${noun}${found === 1 ? "" : "s"} from ${lines} lines — the rest were not recognised`
-        : `${found} ${noun}${found === 1 ? "" : "s"} recognised`
-      : "Nothing recognised yet — try “YooYeon CC101”";
-  };
-  field.addEventListener("input", show);
-  show();
-}
-
-/**
- * Follow Discord's theme, not the operating system's.
- *
- * The panel sits inside Discord, where a light theme next to a dark page (or
- * the reverse) reads as broken. Discord's choice is its own setting, so the
- * content script reports it and this follows.
- */
-function applyTheme(theme: unknown) {
-  document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
-}
-void extensionApi.storage.local
-  .get("discordTheme")
-  .then((settings) => applyTheme(settings.discordTheme));
-
-const build = document.getElementById("build") as HTMLElement;
-const manifest = extensionApi.runtime.getManifest();
-build.textContent = manifest.version_name ?? manifest.version;
-
-const wants = document.getElementById("wants") as HTMLTextAreaElement;
-countCodes(
-  haves,
-  document.getElementById("haves-count") as HTMLElement,
-  "objekt",
-);
-countCodes(
-  wants,
-  document.getElementById("wants-count") as HTMLElement,
-  "objekt",
-);
-const delay = document.getElementById("delay") as HTMLInputElement;
-const pages = document.getElementById("pages") as HTMLInputElement;
-const skipRecent = document.getElementById("skip-recent") as HTMLInputElement;
-const delayValue = document.getElementById("delay-value") as HTMLElement;
-const searchStatus = document.getElementById("search-status") as HTMLElement;
-const searchTotal = document.getElementById("search-total") as HTMLElement;
-
-/** Zero is not "no delay applied" — it is "gated on capture instead". */
-function showDelay() {
-  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
-  delayValue.textContent = seconds ? `+${seconds}s per page` : "Fastest";
-}
-delay.addEventListener("input", showDelay);
 
 /**
  * Talk to the content script, injecting it first if the tab has none.
@@ -545,9 +725,8 @@ delay.addEventListener("input", showDelay);
  * Declared content scripts only run at page load, so a Discord tab that was
  * already open when the extension was installed or updated has nothing
  * listening; the browser reports that as "Receiving end does not exist", which
- * tells the user nothing. The old answer was to tell them to press F5. The
- * worker can simply inject it instead, so the failure is only worth reporting
- * if the retry fails too.
+ * tells the user nothing. The worker can inject it instead, so the failure is
+ * only worth reporting if the retry fails too.
  */
 async function toContentScript(
   tabId: number,
@@ -572,231 +751,192 @@ async function toContentScript(
   }
 }
 
-async function activeDiscordTab() {
-  return (await discordTab()).id;
-}
-
-/**
- * How long a run may go without reporting before it is presumed dead.
- *
- * A page settles in fifteen seconds at the outside and reports on every page,
- * so a minute of silence is not a slow run — it is a tab that navigated away
- * mid-run and took the content script with it.
- */
-const STALE_MS = 60_000;
-
-function describe(progress: unknown): string {
-  if (!progress || typeof progress !== "object") return "";
-  const p = progress as Record<string, unknown>;
-  const done = typeof p.done === "number" ? p.done : 0;
-  const total = typeof p.total === "number" ? p.total : 0;
-  const planNote =
-    typeof p.planNote === "string" && p.planNote ? `\n${p.planNote}` : "";
-  if (p.running) {
-    const at = typeof p.at === "number" ? p.at : 0;
-    if (at && Date.now() - at > STALE_MS)
-      return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed — anything captured is still in the index.`;
-    return `Searching ${done}/${total}${p.query ? ` · ${p.query}` : ""}${
-      typeof p.page === "number" ? ` · page ${p.page}` : ""
-    }…${planNote}`;
-  }
-  const pages =
-    typeof p.pagesWalked === "number" ? ` · ${p.pagesWalked} pages walked` : "";
-  // Worth showing even on a clean run: retries mean Discord's search bar is
-  // misfiring, which is the difference between "slow" and "quietly broken".
-  const retries =
-    typeof p.retried === "number" && p.retried > 0
-      ? ` · ${p.retried} ${p.retried === 1 ? "retry" : "retries"}`
-      : "";
-  // A code nobody has posted is a normal answer, and saying so stops it looking
-  // like the run went wrong.
-  // Named, because "2 with no matches" is a claim the user is the only one who
-  // can check, and they can only check it if they know which two.
-  const names = Array.isArray(p.emptyQueries)
-    ? (p.emptyQueries as unknown[])
-        .filter((query): query is string => typeof query === "string")
-        .slice(0, 6)
-    : [];
-  const empty =
-    typeof p.empty === "number" && p.empty > 0
-      ? ` · ${p.empty} with no matches${names.length ? ` (${names.join(", ")})` : ""}`
-      : "";
-  // A panel closed under the run is a thing the user did, and the fix is
-  // something only they can do.
-  const closed =
-    typeof p.closed === "number" && p.closed > 0
-      ? ` · ${p.closed} cut short by the results closing`
-      : "";
-  // Chrome and Firefox accept different insertions; which one carried the run
-  // is the first thing worth knowing when one browser misbehaves.
-  const typed =
-    p.typedBy && typeof p.typedBy === "object"
-      ? Object.entries(p.typedBy as Record<string, number>)
-          .map(([name, count]) => `${name}×${count}`)
-          .join(", ")
-      : "";
-  // A pager that refuses to advance looks identical to one that worked, and so
-  // does a page abandoned before its posts were recorded, so say which happened
-  // rather than leaving it to be inferred from result counts.
-  const note = ["pagerNote", "settleNote"]
-    .map((key) => p[key])
-    .filter((text): text is string => typeof text === "string" && text !== "")
-    .map((text) => `\n⚠ ${text}`)
-    .join("");
-  if (typeof p.stopped === "string" && p.stopped)
-    return `Stopped after ${done}/${total}: ${p.stopped}${planNote}${note}`;
-  return total
-    ? `Finished ${done}/${total} searches${pages}${retries}${empty}${closed}.${
-        typed ? `\ntyped via ${typed}` : ""
-      }${planNote}${note}`
-    : "";
-}
-
-/** The running total, which accumulates through a run and restarts with the next. */
-function tally(progress: unknown): void {
-  const posts =
-    progress && typeof progress === "object"
-      ? (progress as Record<string, unknown>).posts
-      : 0;
-  searchTotal.textContent = String(typeof posts === "number" ? posts : 0);
-}
-
-async function refreshSearch() {
-  const settings = await extensionApi.storage.local.get([
-    "searchProgress",
-    "wants",
-    "searchDelay",
-    "searchPages",
-    "skipRecent",
-  ]);
-  if (typeof settings.wants === "string" && !wants.value)
-    wants.value = settings.wants;
-  if (typeof settings.searchDelay === "number")
-    delay.value = String(settings.searchDelay);
-  if (typeof settings.searchPages === "number")
-    pages.value = String(settings.searchPages);
-  if (typeof settings.skipRecent === "boolean")
-    skipRecent.checked = settings.skipRecent;
-  showDelay();
-  say(searchStatus, describe(settings.searchProgress));
-  tally(settings.searchProgress);
-  progressBar(settings.searchProgress);
-}
-
-/** Keep the bar and the buttons in step with whatever the run last reported. */
-function progressBar(progress: unknown) {
-  if (!progress || typeof progress !== "object")
-    return showRunning(false, 0, 0);
-  const p = progress as Record<string, unknown>;
-  const at = typeof p.at === "number" ? p.at : 0;
-  // A run whose reports have stopped is not a run any more, whatever the flag
-  // says: it went away with its tab.
-  const running = p.running === true && (!at || Date.now() - at <= STALE_MS);
-  showRunning(
-    running,
-    typeof p.done === "number" ? p.done : 0,
-    typeof p.total === "number" ? p.total : 0,
-  );
-}
-
 /** Searching implies capturing here; a separate toggle only loses results. */
-async function ensureCapturing(url: string | undefined): Promise<string> {
+async function ensureCapturing(url: string | undefined): Promise<void> {
   const channel = channelFromUrl(url);
   if (!channel)
-    throw new Error("Open your trade channel in Discord first, then run.");
+    throw new Error("Open your trade channel in Discord first, then search.");
   const settings = await extensionApi.storage.local.get("channels");
   const channels = channelIds(settings.channels);
   if (!channels.includes(channel))
     await extensionApi.storage.local.set({ channels: [...channels, channel] });
-  return channel;
 }
 
-const saySearch = (message: string, bad: boolean) =>
-  say(searchStatus, message, bad);
-action(
-  "run-search",
-  async () => {
-    const tab = await discordTab();
-    await ensureCapturing(tab.url);
-    const tabId = tab.id;
-    const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
-    const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
-    await extensionApi.storage.local.set({
-      wants: wants.value,
-      searchDelay: seconds,
-      searchPages: pageCount,
-      skipRecent: skipRecent.checked,
-    });
-    const response = await toContentScript(tabId, {
-      type: "run-search",
-      wants: wants.value,
-      delayMs: seconds * 1000,
-      pages: pageCount,
-      skipRecent: skipRecent.checked,
-    });
-    if (!response?.ok) throw new Error(response?.error ?? "Could not start.");
-    const note = response.value.note ? `\n${response.value.note}` : "";
-    say(
-      searchStatus,
-      `Searching 0/${response.value.total}… the panel can be moved or closed while it runs.${note}`,
-    );
-    searchTotal.textContent = "0";
-    showRunning(true, 0, response.value.total);
-    void refresh();
-  },
-  saySearch,
-);
+const delay = element<HTMLInputElement>("delay");
+const pages = element<HTMLInputElement>("pages");
+const skipRecent = element<HTMLInputElement>("skip-recent");
 
+/** Zero is not "no delay applied" — it is "gated on capture instead". */
+function showDelay() {
+  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+  element("delay-value").textContent = seconds
+    ? `+${seconds}s per page`
+    : "Fastest";
+}
+delay.addEventListener("input", showDelay);
+
+/** Settings take effect as they are changed, not on the next run's click. */
+function saveSearchSettings() {
+  void extensionApi.storage.local.set({
+    searchDelay: Math.min(15, Math.max(0, Number(delay.value) || 0)),
+    searchPages: Math.min(20, Math.max(1, Number(pages.value) || 3)),
+    skipRecent: skipRecent.checked,
+  });
+}
+for (const input of [delay, pages, skipRecent])
+  input.addEventListener("change", saveSearchSettings);
+
+action("run-search", async () => {
+  if (!tiles.length) {
+    wants.focus();
+    throw new Error("Type what you are looking for first.");
+  }
+  const tab = await discordTab();
+  await ensureCapturing(tab.url);
+  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+  const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
+  clearTimeout(saveTimer);
+  await extensionApi.storage.local.set({
+    wants: wants.value,
+    searchDelay: seconds,
+    searchPages: pageCount,
+    skipRecent: skipRecent.checked,
+  });
+  const response = await toContentScript(tab.id, {
+    type: "run-search",
+    wants: wants.value,
+    delayMs: seconds * 1000,
+    pages: pageCount,
+    skipRecent: skipRecent.checked,
+  });
+  if (!response?.ok) throw new Error(response?.error ?? "Could not start.");
+  heldUntil = 0;
+  progress = {
+    running: true,
+    done: 0,
+    total: response.value.total,
+    at: Date.now(),
+  };
+  render();
+});
+
+action("stop-search", async () => {
+  await toContentScript((await discordTab()).id, { type: "cancel-search" });
+  tell("Stopping after this page…");
+});
+
+action("open-match", async () => {
+  tell("Opening objekt.my/match…");
+  const { posts } = await request("open-match");
+  tell(`Opened in objekt.my/match · ${plural(posts, "trade post")}`);
+});
+
+// ---------------------------------------------------------------------------
+// Settings and Troubleshooting
+
+const nickname = element<HTMLInputElement>("nickname");
+const inventoryStatus = element("inventory-status");
 action(
-  "stop-search",
+  "load-inventory",
   async () => {
-    await toContentScript(await activeDiscordTab(), { type: "cancel-search" });
-    say(searchStatus, "Stopping after the current page…");
+    say(inventoryStatus, "Loading…");
+    const count = await request("inventory", {
+      nickname: nickname.value.trim(),
+    });
+    say(
+      inventoryStatus,
+      `${count} objekts saved — posts wanting them are marked in Discord`,
+    );
   },
-  saySearch,
+  (message) => say(inventoryStatus, message, true),
 );
+nickname.addEventListener("keydown", (event) => {
+  if (event.key === "Enter")
+    element<HTMLButtonElement>("load-inventory").click();
+});
+
+function download(text: string, filename: string, type: string) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
 
 /**
- * Show a run as a run: a progress bar, and a Stop button that is only there
- * when there is something to stop.
+ * A filename that says what is in it, so a second export is not "(1)" and a
+ * downloads folder full of them still says which was which.
  */
-function showRunning(running: boolean, done: number, total: number) {
-  const bar = document.getElementById("search-progress");
-  const stop = document.getElementById("stop-search");
-  const start = document.getElementById("run-search");
-  if (bar instanceof HTMLProgressElement) {
-    bar.hidden = !running;
-    bar.max = Math.max(1, total);
-    bar.value = Math.min(done, Math.max(1, total));
-  }
-  if (stop) stop.hidden = !running;
-  if (start instanceof HTMLButtonElement) {
-    // Claimed for as long as the run lasts, so the click handler that started
-    // it does not hand the button back when it returns.
-    start.dataset.hold = running ? "1" : "";
-    start.disabled = running;
-    start.textContent = running ? "Searching…" : "Search my wants";
-  }
+function exportName(count: number, extension: string) {
+  const day = new Date().toISOString().slice(0, 10);
+  return `objekt-trade-${day}-${count}-posts.${extension}`;
 }
 
-extensionApi.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  // Another window of this panel may have agreed, or withdrawn.
-  if (changes.consent) showSections(changes.consent.newValue);
-  if (changes.discordTheme) applyTheme(changes.discordTheme.newValue);
-  if (changes.captureHealth) showHealth(changes.captureHealth.newValue);
-  if (changes.searchProgress) {
-    say(searchStatus, describe(changes.searchProgress.newValue));
-    tally(changes.searchProgress.newValue);
-    progressBar(changes.searchProgress.newValue);
-  }
-  // The captured count moves as results render, so keep step 4 current.
-  void refresh().catch(() => {});
-});
+const diagnosis = element("diagnosis");
+const sayDiagnosis = (message: string) => say(diagnosis, message, true);
 
-void refreshSearch().catch((error) => {
-  searchStatus.textContent = error.message;
-});
+function exportPosts(posts: Entry[], what: string) {
+  if (!posts.length) throw new Error(`No ${what} to download yet.`);
+  download(
+    exportTranscript(posts.map((post) => post.block)),
+    exportName(posts.length, "txt"),
+    "text/plain;charset=utf-8",
+  );
+  say(diagnosis, `Downloaded ${plural(posts.length, "post")}.`);
+}
+
+action(
+  "export",
+  async () => {
+    const posts: Entry[] = await request("dump");
+    exportPosts(
+      runId ? posts.filter((post) => post.run === runId) : posts,
+      runId ? "posts from this search" : "captured posts",
+    );
+  },
+  sayDiagnosis,
+);
+action(
+  "export-all",
+  async () => exportPosts(await request("dump"), "posts in the index"),
+  sayDiagnosis,
+);
+action(
+  "dump",
+  async () => {
+    const posts: Entry[] = await request("dump");
+    download(
+      JSON.stringify(posts, null, 2),
+      exportName(posts.length, "json"),
+      "application/json",
+    );
+  },
+  sayDiagnosis,
+);
+action(
+  "clear",
+  async () => {
+    if (!confirm("Delete all captured posts from this extension?")) return;
+    await request("clear");
+    await refresh();
+    say(diagnosis, "Captured posts cleared.");
+  },
+  sayDiagnosis,
+);
+
+// Only the pop-out window needs a way back into the page; the embedded panel
+// has its own titlebar.
+element("dock").hidden = embedded;
+action(
+  "dock",
+  async () => {
+    const tab = await discordTab();
+    await request("show-panel", { tabId: tab.id });
+    await request("close-window");
+  },
+  sayDiagnosis,
+);
 
 /** Bytes, in a unit a person reads. */
 function megabytes(value: unknown): string {
@@ -808,7 +948,7 @@ function megabytes(value: unknown): string {
 action(
   "diagnose",
   async () => {
-    const tabId = await activeDiscordTab();
+    const tabId = (await discordTab()).id;
     const response = await toContentScript(tabId, { type: "diagnose" });
     if (!response?.ok) throw new Error(response?.error ?? "No response.");
     const d = response.value;
@@ -820,10 +960,10 @@ action(
       storage
         ? `storage: ${megabytes(storage.usage)} used of ${megabytes(storage.quota)}, ${storage.persisted ? "protected from eviction" : "evictable — export regularly"}`
         : "storage: unavailable",
-      // The popup and the content script are reloaded by different actions, so
+      // The panel and the content script are reloaded by different actions, so
       // they can disagree — and a stale content script explains almost every
       // "my fix did nothing".
-      `content script build: ${d.build ?? "older than this popup — refresh the Discord tab"}`,
+      `content script build: ${d.build ?? "older than this panel — refresh the Discord tab"}`,
       `channel: ${d.channel ?? "not on a channel"}`,
       `enabled: ${d.enabled.length ? d.enabled.join(", ") : "none"}`,
       `message elements found: ${d.elements}`,
@@ -849,14 +989,97 @@ action(
         "→ Elements found but unreadable; the author/time anchors moved.",
       );
     else if (d.channel && !d.enabled.includes(d.channel))
-      lines.push("→ Readable, but this channel is paused. Click Enable above.");
-    // Run this with a search open: no panel means every "page walked" was walked
-    // against the channel list behind it.
+      lines.push("→ Readable, but capture is off for this channel.");
     if (!d.results?.panel)
       lines.push(
         "→ No search results panel found. Run a search first; if one is open, the row id shapes above say what its markup became.",
       );
-    say(searchStatus, lines.join("\n"));
+    say(diagnosis, lines.join("\n"));
   },
-  saySearch,
+  sayDiagnosis,
 );
+
+// ---------------------------------------------------------------------------
+// Start-up and live updates
+
+/**
+ * Follow Discord's theme, not the operating system's.
+ *
+ * The panel sits inside Discord, where a light panel on a dark page (or the
+ * reverse) reads as broken, and Discord's choice is its own setting.
+ */
+function applyTheme(theme: unknown) {
+  document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
+}
+
+const manifest = extensionApi.runtime.getManifest();
+element("build").textContent = manifest.version_name ?? manifest.version;
+
+void extensionApi.storage.local
+  .get([
+    "consent",
+    "discordTheme",
+    "wants",
+    "searchDelay",
+    "searchPages",
+    "skipRecent",
+    "owned",
+    "nickname",
+  ])
+  .then((settings) => {
+    consent = settings.consent;
+    applyTheme(settings.discordTheme);
+    showViews();
+    if (typeof settings.wants === "string" && !wants.value)
+      wants.value = settings.wants;
+    if (typeof settings.searchDelay === "number")
+      delay.value = String(settings.searchDelay);
+    if (typeof settings.searchPages === "number")
+      pages.value = String(settings.searchPages);
+    if (typeof settings.skipRecent === "boolean")
+      skipRecent.checked = settings.skipRecent;
+    showDelay();
+    nickname.value =
+      typeof settings.nickname === "string" ? settings.nickname : "";
+    const owned = Array.isArray(settings.owned) ? settings.owned.length : 0;
+    if (owned) say(inventoryStatus, `${owned} objekts saved`);
+    wantsChanged(false);
+    return refresh();
+  })
+  .catch((error) =>
+    tell(error instanceof Error ? error.message : String(error), true),
+  );
+
+extensionApi.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  // Another copy of this panel may have agreed, or withdrawn.
+  if (changes.consent) {
+    consent = changes.consent.newValue;
+    if (!captureAllowed(consent)) settingsOpen = false;
+    showViews();
+  }
+  if (changes.discordTheme) applyTheme(changes.discordTheme.newValue);
+  // Keep the cards moving with the run without waiting on a full refresh.
+  if (changes.searchProgress) {
+    progress = asRecord(changes.searchProgress.newValue);
+    render();
+  }
+  if (
+    changes.wants &&
+    document.activeElement !== wants &&
+    typeof changes.wants.newValue === "string" &&
+    changes.wants.newValue !== wants.value
+  ) {
+    wants.value = changes.wants.newValue;
+    wantsChanged(false);
+  }
+  if (changes.owned && Array.isArray(changes.owned.newValue))
+    say(inventoryStatus, `${changes.owned.newValue.length} objekts saved`);
+  void refresh().catch(() => {});
+});
+
+// A stale run is only noticed when something looks at it; nothing writes to
+// storage once its tab has gone, so look now and then.
+setInterval(() => {
+  if (progress?.running === true) render();
+}, 15_000);

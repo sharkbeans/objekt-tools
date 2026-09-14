@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>objekt.my capture</title>
+<!doctype html><html lang="en"><meta charset="utf-8"><title>objekt.my</title>
 <style>
 /* Two palettes, because the panel sits inside Discord and Discord has a light
    theme. The content script reports which one is on; nothing here guesses from
@@ -18,175 +18,180 @@
   --bad:#b42318; --good:#15803d;
 }
 *{box-sizing:border-box}
-body{font:14px/1.45 system-ui,sans-serif;padding:14px;color:var(--text);background:var(--bg);margin:0;
-  /* Sized by whatever hosts it: the floating panel is resizable, the pop-out
-     window is a real window, and only a bare tab needs a width of its own. */
-  max-width:560px}
-body.embedded{padding:10px 14px 20px}
-h1{font-size:15px;margin:0 0 2px}
-h2{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin:0 0 8px;font-weight:600}
-section{border-top:1px solid var(--line);padding:14px 0}
-section:first-of-type{border-top:0;padding-top:8px}
-p{margin:6px 0}
+html,body{height:100%}
+body{margin:0;font:13px/1.4 system-ui,sans-serif;color:var(--text);background:var(--bg)}
+button,input,textarea{font:inherit;color:inherit}
 a{color:var(--accent-line)}
-code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-radius:4px;font-size:12px}
-button,input,textarea{width:100%;margin:4px 0;padding:8px 10px;background:var(--field);color:var(--text);
-  border:1px solid var(--line);border-radius:7px;font:inherit}
-button{background:var(--accent);border-color:var(--accent-line);color:#fff;cursor:pointer;font-weight:500}
+/* Anything given a display of its own has to opt back out of it when hidden,
+   or the [hidden] attribute silently stops working on it. */
+[hidden],.view[hidden],.actions[hidden],.chip[hidden],.art img[hidden]{display:none}
+:focus-visible{outline:2px solid var(--accent-line);outline-offset:1px}
+
+/* Each view fills the frame. The panel is resizable, so the card grid takes
+   whatever height is left over and scrolls on its own; nothing else does. */
+.view{height:100%;display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.row{display:flex;align-items:center;gap:8px}
+.grow{flex:1;min-width:0}
+h1{font-size:14px;margin:0;font-weight:600}
+
+button{border:1px solid var(--line);background:var(--field);border-radius:7px;padding:7px 12px;cursor:pointer}
 button:hover:not(:disabled){filter:brightness(1.12)}
-button.secondary{background:var(--field);border-color:var(--line);color:var(--text);font-weight:400}
 button:disabled{opacity:.55;cursor:default}
-button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent-line);outline-offset:1px}
-textarea{min-height:58px;resize:vertical}
-label{display:block;font-size:12px;color:var(--dim);margin-top:8px}
-.hint{font-size:12px;color:var(--dim)}
-/* The floating panel has its own titlebar carrying the name, so repeating it
-   inside costs a line of a small window for nothing. */
-body.embedded h1{display:none}
-.check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:12px;margin-top:10px}
-.check input{width:auto;margin:0;accent-color:var(--accent-line)}
-input[type=range]{padding:0;height:24px;background:transparent;border:0;accent-color:var(--accent-line);cursor:pointer}
-.count{font-size:12px;color:var(--dim);margin:2px 0 0}
-.count.none{color:var(--bad)}
-/* One live region per step, so a status never lands somewhere the eye is not. */
-.say{white-space:pre-wrap;font-size:12px;color:var(--dim);margin:8px 0 0}
-.say:empty{margin:0}
-.say.bad{color:var(--bad)}
-.tally{font-size:12px;color:var(--dim);margin:10px 0 0}
-.tally strong{font-size:21px;color:var(--accent-text);font-variant-numeric:tabular-nums;margin-right:5px}
-:root[data-theme="light"] .tally strong{color:var(--accent-line)}
+button.primary{background:var(--accent);border-color:var(--accent-line);color:#fff;font-weight:600}
+button.icon{width:30px;height:30px;padding:0;display:grid;place-items:center;font-size:15px;color:var(--dim);background:transparent;border-color:transparent}
+button.icon:hover{background:var(--field);color:var(--text)}
+input,textarea{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%}
 
-/* The channel this panel is pointed at, and whether it is being collected.
-   Promoted out of Troubleshooting: it is the switch that decides whether
-   anything happens at all. */
-#channel-bar{display:flex;align-items:center;gap:10px;border:1px solid var(--line);
-  background:var(--raised);border-radius:8px;padding:8px 10px;margin-top:10px}
-/* An id-level display beats the browser's own [hidden] rule, so the strip has
-   to opt back out of itself — it must not offer "Capture here" before capture
-   has been agreed to. */
-#channel-bar[hidden]{display:none}
-#channel-state{flex:1;min-width:0;font-size:12px;color:var(--dim)}
-#channel-state strong{color:var(--text);font-weight:600}
-#channel-bar button{width:auto;flex:none;margin:0;padding:5px 10px;font-size:12px}
+/* Capture on/off for the open channel: one pill, not a strip and a button. */
+.chip{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 11px 4px 9px;font-size:12px;color:var(--dim)}
 .pip{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
-.pip.on{background:var(--good)}
+.chip.on{color:var(--text)}
+.chip.on .pip{background:var(--good)}
+.note{font-size:12px;color:var(--dim)}
 
-#consent{border:1px solid var(--accent-line);border-radius:9px;padding:14px;background:var(--accent-soft)}
-#consent h2{color:var(--accent-text)}
-:root[data-theme="light"] #consent h2{color:var(--accent-text)}
-#consent ul{margin:8px 0;padding-left:18px;font-size:12px}
-#consent li{margin:4px 0}
-.warn{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:8px;padding:10px;
-  font-size:12px;color:var(--warn-text);margin:8px 0}
+.warn{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--warn-text)}
 .warn a{color:inherit}
-#health[hidden]{display:none}
-#health{display:block;margin-top:10px}
 
-progress{width:100%;height:6px;margin:10px 0 0;border:0;border-radius:3px;
-  background:var(--field);accent-color:var(--accent-line)}
-progress::-webkit-progress-bar{background:var(--field);border-radius:3px}
-progress::-webkit-progress-value{background:var(--accent-line);border-radius:3px}
+.wants{position:relative;flex:none}
+.wants textarea{height:62px;resize:none;padding-bottom:18px;display:block}
+.wants .count{position:absolute;right:9px;bottom:5px;font-size:11px;color:var(--dim);pointer-events:none}
+.wants .count.none{color:var(--bad)}
 
-details{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+/* The want list as cards. The art is the thing people recognise; the name
+   under it is there for the cards the catalogue has no picture for. */
+.tiles{flex:1 1 auto;min-height:96px;overflow-y:auto;margin:0;padding:3px;list-style:none;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:10px 8px;align-content:start}
+.tiles:empty{display:grid;place-items:center;border:1px dashed var(--line);border-radius:8px}
+.tiles:empty::before{content:attr(data-empty);color:var(--dim);font-size:12px}
+.tile{position:relative;min-width:0}
+.art{aspect-ratio:5.5/8.5;border-radius:6px;overflow:hidden;background:var(--raised);border:1px solid var(--line);
+  display:grid;place-items:center;transition:opacity .25s ease}
+.art img{width:100%;height:100%;object-fit:cover;display:block}
+.art .code{font-size:11px;font-weight:600;color:var(--dim);text-align:center;padding:2px}
+.name{display:block;margin-top:3px;font-size:11px;color:var(--dim);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{position:absolute;top:4px;right:4px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+  background:var(--accent);color:#fff;font-size:11px;font-weight:700;line-height:20px;text-align:center;
+  font-variant-numeric:tabular-nums;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.badge.zero{background:var(--raised);color:var(--dim);border:1px solid var(--line);line-height:18px;box-shadow:none}
+.tile[data-state="queued"] .art{opacity:.35}
+.tile[data-state="recent"] .art{opacity:.7}
+.tile[data-state="active"] .art{outline:2px solid var(--accent-line);outline-offset:1px;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){.tile[data-state="active"] .art{animation:none}}
+
+.foot{flex:none;display:flex;flex-direction:column;gap:8px}
+.meter{height:4px;border-radius:2px;background:var(--field);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--accent-line);transition:width .3s ease}
+.say{margin:0;font-size:12px;color:var(--dim);white-space:pre-wrap;min-height:1.4em}
+.say.bad{color:var(--bad)}
+.actions{display:flex;gap:8px}
+.actions .primary{flex:1}
+
+/* Settings: everything a first search does not need. */
+.scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-right:2px}
+.setting > label,.setting > .label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+.inline{display:flex;gap:6px}
+.inline input{flex:1}
+.inline input[type=number]{flex:none;width:72px}
+input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--accent-line)}
+.check{display:flex;align-items:center;gap:8px;font-size:12px}
+.check input{width:auto;margin:0;accent-color:var(--accent-line)}
+details{border-top:1px solid var(--line);padding-top:12px}
 summary{cursor:pointer;font-size:12px;color:var(--dim)}
-details p{margin-top:10px}
+.tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tools button{font-size:12px;padding:5px 9px}
+code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-radius:4px;font-size:11px}
+
+#consent ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+#consent .scroll{gap:10px}
 </style>
 
-<h1>objekt.my capture</h1>
-<p class="hint">Posts stay in this browser. Nothing is sent to Discord.</p>
-
-<div class="warn" id="health" hidden></div>
-
-<div id="channel-bar" hidden>
-  <span class="pip" id="channel-pip"></span>
-  <span id="channel-state">Looking for your Discord tab…</span>
-  <button type="button" class="secondary" id="toggle" hidden>Capture here</button>
-</div>
-
-<section id="consent" hidden>
-  <h2>Before you start</h2>
-  <p class="hint">This extension reads Discord posts you can already see, so you need to
-  agree to that first. Here is exactly what it does:</p>
-  <ul>
-    <li><strong>Collects</strong> the author name, text and timestamp of messages in the
-    channels you switch on — nothing else, and only while you are looking at them.</li>
-    <li><strong>Stores</strong> them in this browser (IndexedDB), on your device.</li>
-    <li><strong>Sends nothing anywhere</strong> on its own. Exports are files you download
-    and hand to objekt.my/match yourself.</li>
-    <li><strong>Optionally</strong> asks objekt.my for the objekts owned by a Cosmo nickname
-    you type. That is the only network request, and only when you press the button.</li>
-    <li>Never reads your Discord token, calls Discord's API, or sends anything to Discord.</li>
-  </ul>
-  <p class="hint">Full detail: <a id="privacy" href="https://objekt.my/extension-privacy" target="_blank" rel="noreferrer">privacy policy</a>.
-  Other people's posts are their words — keep the export to yourself and delete it when you are done.</p>
-  <button type="button" id="accept-capture">I agree — start capturing</button>
-</section>
-
-<section id="step-inventory">
-  <h2>1 · Your objekts</h2>
-  <label for="nickname">Cosmo nickname</label>
-  <input id="nickname" autocomplete="off" maxlength="30" placeholder="yourcosmoname">
-  <button type="button" id="load-inventory">Load inventory</button>
-  <label for="haves">or type them (replaces the loaded inventory)</label>
-  <textarea id="haves" placeholder="YooYeon CC101&#10;Mayu AA101"></textarea>
-  <p class="count" id="haves-count"></p>
-  <button type="button" class="secondary" id="save-haves">Save typed haves</button>
-  <p id="inventory-status" class="say" role="status"></p>
-</section>
-
-<section id="step-wants">
-  <h2>2 · What to look for</h2>
-  <label for="wants">One objekt per line</label>
-  <textarea id="wants" placeholder="SeoYeon CC101&#10;Mayu AA101&#10;Hayeon BB401"></textarea>
-  <p class="count" id="wants-count"></p>
-  <label for="pages">Result pages each</label>
-  <input id="pages" type="number" min="1" max="20" step="1" value="3">
-  <p class="hint">Discord sorts newest first, so later pages are older posts. Three is usually plenty.</p>
-  <label for="delay">Pace &middot; <span id="delay-value">Fastest</span></label>
-  <input id="delay" type="range" min="0" max="15" step="1" value="0">
-  <p class="hint"><strong>Fastest</strong> moves on the moment every post on a page is recorded &mdash; no fixed wait. Drag right to add a pause on top if Discord starts rate-limiting.</p>
-  <label class="check"><input type="checkbox" id="skip-recent" checked> Skip codes searched in the last 6 hours</label>
-  <p class="hint">A run searches at most 40 codes. With this on, the next run picks up where the last one stopped instead of starting the list again.</p>
-</section>
-
-<section id="automation-gate" hidden>
-  <h2>3 · Search Discord</h2>
-  <div class="warn">
-    <strong>Read this first.</strong> Searching types your objekt codes into Discord's own
-    search box for you and clicks through the results — that is automation of your account,
-    which <a href="https://discord.com/terms" target="_blank" rel="noreferrer">Discord's terms</a>
-    do not allow. Discord may action accounts for it. Capture on its own (just browsing the
-    channel) does not do this.
+<section id="consent" class="view" hidden>
+  <div class="scroll">
+    <h1>Before you start</h1>
+    <ul>
+      <li>Reads the <strong>name, text and time</strong> of posts in channels you turn on, and in searches you run.</li>
+      <li>Keeps them <strong>in this browser</strong>.</li>
+      <li>Sends them to <strong>objekt.my/match</strong> only when you press <em>Open in match</em> — they stay in your browser there too.</li>
+      <li>Gets card pictures for your wants, and your inventory if you add a Cosmo nickname, from <strong>objekt.my</strong>.</li>
+      <li>Never reads your Discord token, calls Discord's API, or posts anything.</li>
+    </ul>
+    <p class="note">Other people's posts are their words: keep them to yourself.
+    <a href="https://objekt.my/extension-privacy" target="_blank" rel="noreferrer">Privacy policy</a></p>
   </div>
-  <button type="button" id="accept-automation">I understand the risk — enable search</button>
+  <button type="button" class="primary" id="accept-capture">I agree</button>
 </section>
 
-<section id="search-section">
-  <h2>3 · Search Discord</h2>
-  <p class="hint">Open your trade channel, then run. Searches by objekt code (<code>CC101</code>) — the member name is matched here instead, since searching it floods Discord with unrelated posts. Leave the results panel open while it runs.</p>
-  <button type="button" id="run-search">Search my wants</button>
-  <button type="button" class="secondary" id="stop-search" hidden>Stop</button>
-  <progress id="search-progress" hidden max="1" value="0"></progress>
-  <p class="tally"><strong id="search-total">0</strong> posts recorded this search</p>
-  <p id="search-status" class="say" role="status"></p>
+<section id="main" class="view" hidden>
+  <div class="row">
+    <button type="button" class="chip" id="toggle" hidden><span class="pip"></span><span id="channel-state"></span></button>
+    <span class="note" id="no-channel" hidden>Open a trade channel in Discord</span>
+    <span class="grow"></span>
+    <button type="button" class="icon" id="open-settings" title="Settings" aria-label="Settings">⚙</button>
+  </div>
+  <div class="warn" id="health" hidden></div>
+  <div class="wants">
+    <textarea id="wants" aria-label="Objekts you are looking for" spellcheck="false" placeholder="What are you looking for?&#10;SeoYeon CC101, Mayu AA101"></textarea>
+    <span class="count" id="wants-count"></span>
+  </div>
+  <ul class="tiles" id="tiles" aria-label="Your wants" data-empty="Your wants show up here"></ul>
+  <div class="foot">
+    <div class="meter" id="search-progress" hidden><i></i></div>
+    <p class="say" id="status" role="status"></p>
+    <div id="automation-gate" hidden>
+      <p class="warn">Search types your codes into Discord's search box for you. That is automation, which
+      <a href="https://discord.com/terms" target="_blank" rel="noreferrer">Discord's terms</a> do not allow,
+      and Discord may action accounts for it.</p>
+      <div class="actions" style="margin-top:8px"><button type="button" class="primary" id="accept-automation">I understand — turn on search</button></div>
+    </div>
+    <div class="actions" id="actions">
+      <button type="button" id="stop-search" hidden>Stop</button>
+      <button type="button" class="primary" id="run-search">Search</button>
+      <button type="button" class="primary" id="open-match" hidden>Open in match ↗</button>
+    </div>
+  </div>
 </section>
 
-<section id="step-match">
-  <h2>4 · Match them</h2>
-  <p id="status" class="say" role="status">Loading…</p>
-  <button type="button" id="export">Export this search (.txt)</button>
-  <p class="hint"><a href="https://objekt.my/match" target="_blank" rel="noreferrer">Open objekt.my/match</a> → <strong>Import text files</strong> → pick the download.</p>
+<section id="settings" class="view" hidden>
+  <div class="row">
+    <button type="button" class="icon" id="close-settings" title="Back" aria-label="Back">←</button>
+    <h1 class="grow">Settings</h1>
+  </div>
+  <div class="scroll">
+    <div class="setting">
+      <label for="nickname">Cosmo nickname</label>
+      <div class="inline">
+        <input id="nickname" autocomplete="off" maxlength="30" placeholder="yourcosmoname">
+        <button type="button" id="load-inventory">Load</button>
+      </div>
+      <p class="say" id="inventory-status" role="status"></p>
+    </div>
+    <div class="setting">
+      <label for="pages">Result pages per code</label>
+      <div class="inline"><input id="pages" type="number" min="1" max="20" step="1" value="3"></div>
+    </div>
+    <div class="setting">
+      <label for="delay">Pace · <span id="delay-value">Fastest</span></label>
+      <input id="delay" type="range" min="0" max="15" step="1" value="0">
+    </div>
+    <label class="check"><input type="checkbox" id="skip-recent" checked> Skip codes searched in the last 6 hours</label>
+    <details id="step-trouble">
+      <summary>Troubleshooting</summary>
+      <p class="say" id="run-detail"></p>
+      <p class="note" id="index-count"></p>
+      <div class="tools">
+        <button type="button" id="dock" hidden>Dock into Discord</button>
+        <button type="button" id="diagnose">Check this tab</button>
+        <button type="button" id="export">Download this search (.txt)</button>
+        <button type="button" id="export-all">Download everything (.txt)</button>
+        <button type="button" id="dump">Download index (.json)</button>
+        <button type="button" id="clear">Clear captured posts</button>
+        <button type="button" id="withdraw">Withdraw consent</button>
+      </div>
+      <p class="say" id="diagnosis"></p>
+      <p class="note">Build <code id="build">…</code></p>
+    </details>
+  </div>
 </section>
-
-<details id="step-trouble">
-  <summary>Troubleshooting</summary>
-  <button type="button" class="secondary" id="dock" hidden>Dock into the Discord tab</button>
-  <button type="button" class="secondary" id="diagnose">Check this tab</button>
-  <button type="button" class="secondary" id="export-all">Export whole index (.txt)</button>
-  <button type="button" class="secondary" id="dump">Dump index (.json)</button>
-  <button type="button" class="secondary" id="clear">Clear captured posts</button>
-  <button type="button" class="secondary" id="withdraw">Withdraw consent &amp; stop reading Discord</button>
-  <p class="hint">Loaded build: <code id="build">…</code><br>After rebuilding, reload the extension — the panel reinjects itself, so the Discord tab does not need refreshing.</p>
-</details>
 
 <script src="panel.js"></script></html>

@@ -64,3 +64,20 @@ test("an open flag survives a round trip, and anything else reads as closed", ()
   assert.equal(readPanelState({ ...UNPLACED, open: true }).open, true);
   assert.equal(readPanelState({ open: "true" }).open, false);
 });
+
+test("a size remembered from an older layout gives way to the new default", () => {
+  const old = readPanelState({
+    x: 40,
+    y: 50,
+    width: 384,
+    height: 640,
+    open: true,
+  });
+  assert.deepEqual(
+    { x: old.x, y: old.y, width: old.width, height: old.height },
+    { x: 40, y: 50, width: UNPLACED.width, height: UNPLACED.height },
+  );
+  const kept = readPanelState({ ...old, width: 700, height: 380 });
+  assert.equal(kept.width, 700);
+  assert.equal(kept.height, 380);
+});
