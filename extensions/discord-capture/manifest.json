@@ -16,9 +16,9 @@
   "host_permissions": [
     "https://discord.com/*",
     "https://canary.discord.com/*",
-    "https://ptb.discord.com/*"
+    "https://ptb.discord.com/*",
+    "https://objekt.my/*"
   ],
-  "optional_host_permissions": ["https://objekt.my/*"],
   "background": {
     "service_worker": "background.js",
     "scripts": ["background.js"]

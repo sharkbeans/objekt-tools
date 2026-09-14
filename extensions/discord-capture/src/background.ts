@@ -1,7 +1,17 @@
+import { type ObjektKeyParts, objektKey } from "@/lib/discord/match";
+import { EXTENSION_SOURCE, PAGE_SOURCE } from "@/lib/match/extension-handoff";
+import { lookupArtwork, readArtworkCache } from "./artwork";
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
+import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, pickTab, resolveTab } from "./host-tab";
-import { INVENTORY_ORIGIN, loadInventory } from "./inventory";
+import { loadInventory } from "./inventory";
+import {
+  deliverToMatch,
+  type MatchTabsApi,
+  OBJEKT_ORIGIN,
+  openMatchTab,
+} from "./match-tab";
 import { channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
 
@@ -125,6 +135,145 @@ extensionApi.runtime.onInstalled.addListener((details) => {
         .catch(() => {});
   })().catch(() => {});
 });
+
+/**
+ * Whether objekt.my is reachable from the extension.
+ *
+ * It is a required host permission, but Firefox lets people switch host
+ * permissions off after install, and a fetch refused for that reason reads as
+ * a network error. Checking first turns it into something they can act on.
+ */
+async function objektAllowed(): Promise<boolean> {
+  return extensionApi.permissions
+    .contains({ origins: [OBJEKT_ORIGIN] })
+    .catch(() => false);
+}
+const OBJEKT_BLOCKED =
+  "objekt.my access is switched off for this extension. Allow it from the browser's Extensions menu, then try again.";
+
+const matchTabs: MatchTabsApi = {
+  query: (filter) => extensionApi.tabs.query(filter),
+  create: (options) => extensionApi.tabs.create(options),
+  update: (id, options) => extensionApi.tabs.update(id, options),
+  get: (id) => extensionApi.tabs.get(id),
+  // Firefox for Android has no windows API; the tab is still activated.
+  focusWindow: async (id) =>
+    extensionApi.windows?.update(id, { focused: true }),
+  onComplete: (id, done) => {
+    const listener = (tabId: number, info: { status?: string }) => {
+      if (tabId === id && info.status === "complete") done();
+    };
+    extensionApi.tabs.onUpdated.addListener(listener);
+    return () => extensionApi.tabs.onUpdated.removeListener(listener);
+  },
+};
+
+/**
+ * Put the last search's posts into objekt.my/match.
+ *
+ * Scoped to the last search, exactly as the file export was: the index is
+ * cumulative, and matching against everything ever browsed pulls in stale
+ * posts nobody asked about. Before any search, the whole index goes.
+ */
+async function openInMatch(): Promise<{ posts: number; sent: number }> {
+  if (!(await objektAllowed())) throw new Error(OBJEKT_BLOCKED);
+  const stored = await extensionApi.storage.local.get([
+    "searchRunId",
+    "nickname",
+    "wants",
+  ]);
+  const run =
+    typeof stored.searchRunId === "string" && stored.searchRunId
+      ? stored.searchRunId
+      : null;
+  const posts = (await entries()).filter((post) => !run || post.run === run);
+  if (!posts.length)
+    throw new Error("Nothing to open yet — run a search first.");
+  const transcript = exportTranscript(posts.map((post) => post.block));
+  const tabId = await openMatchTab(matchTabs);
+  const [injection] = await extensionApi.scripting.executeScript({
+    target: { tabId },
+    func: deliverToMatch,
+    args: [
+      {
+        id: `${run ?? "index"}-${Date.now().toString(36)}`,
+        transcript,
+        nickname: typeof stored.nickname === "string" ? stored.nickname : "",
+        wants: typeof stored.wants === "string" ? stored.wants : "",
+      },
+      PAGE_SOURCE,
+      EXTENSION_SOURCE,
+      30_000,
+    ],
+  });
+  const result = injection?.result;
+  if (!result) throw new Error("objekt.my/match could not be reached.");
+  if (!result.ok) throw new Error(result.error);
+  return { posts: result.posts, sent: posts.length };
+}
+
+/**
+ * Card art for the panel's want tiles.
+ *
+ * Lookups are serialised so two quick edits of the want list cannot race each
+ * other's cache writes and lose half of both.
+ */
+let artworkQueue: Promise<unknown> = Promise.resolve();
+function artwork(items: unknown): Promise<Record<string, string | null>> {
+  const parts: ObjektKeyParts[] = Array.isArray(items)
+    ? items.filter(
+        (item): item is ObjektKeyParts =>
+          item &&
+          typeof item === "object" &&
+          typeof item.member === "string" &&
+          typeof item.season === "string" &&
+          typeof item.collectionNo === "string",
+      )
+    : [];
+  const job = artworkQueue.then(async () => {
+    if (!parts.length || !(await objektAllowed())) return {};
+    const { artwork: stored } = await extensionApi.storage.local.get("artwork");
+    const { urls, cache } = await lookupArtwork(
+      parts,
+      readArtworkCache(stored),
+    );
+    await extensionApi.storage.local.set({ artwork: cache });
+    return urls;
+  });
+  artworkQueue = job.catch(() => {});
+  return job;
+}
+
+/**
+ * What the last search found, per wanted objekt.
+ *
+ * A post counts towards a card when it *has* that card — a post that merely
+ * wants it is competition, not a lead. One read of the index answers every
+ * card at once, which matters because the panel asks while a run is landing
+ * posts.
+ */
+async function runSummary(run: unknown, keys: unknown) {
+  const wanted = new Set(
+    Array.isArray(keys)
+      ? keys.filter((key): key is string => typeof key === "string")
+      : [],
+  );
+  const all = await entries();
+  const hits: Record<string, number> = {};
+  let fromRun = 0;
+  for (const post of all) {
+    if (typeof run !== "string" || post.run !== run) continue;
+    fromRun++;
+    const counted = new Set<string>();
+    for (const item of post.parsed.haves) {
+      const key = objektKey(item);
+      if (!key || !wanted.has(key) || counted.has(key)) continue;
+      counted.add(key);
+      hits[key] = (hits[key] ?? 0) + 1;
+    }
+  }
+  return { total: all.length, run: fromRun, hits };
+}
 
 function isBlock(
   value: unknown,
@@ -423,15 +572,12 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       await extensionApi.tabs.sendMessage(tabId, { type: "open-panel" });
       return true;
     }
-    // Whether the extension already holds the objekt.my grant. The embedded
-    // panel has no `permissions` API to ask with, and the grant is permanent
-    // and extension-wide once given — so the prompt only has to happen once,
-    // in a scope that can show one, and every panel benefits afterwards.
-    if (request?.type === "has-origin")
-      return await extensionApi.permissions.contains({
-        origins: [INVENTORY_ORIGIN],
-      });
+    if (request?.type === "open-match") return await openInMatch();
+    if (request?.type === "artwork") return await artwork(request.items);
+    if (request?.type === "run-summary")
+      return await runSummary(request.run, request.keys);
     if (request?.type === "inventory") {
+      if (!(await objektAllowed())) throw new Error(OBJEKT_BLOCKED);
       const owned = await loadInventory(request.nickname);
       await extensionApi.storage.local.set({
         owned,
