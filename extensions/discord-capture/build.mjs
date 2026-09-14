@@ -26,6 +26,18 @@ const output = firefox ? "dist-firefox" : "dist";
 const appOrigin = (
   process.env.NEXT_PUBLIC_APP_URL || "https://objekt.my"
 ).replace(/\/+$/, "");
+// Where Open in match delivers — a local dev server until /match ships. Mirrors
+// `MATCH_ORIGIN` in `src/app-origin.ts`, which says when to change it.
+const matchOrigin = (
+  process.env.EXTENSION_MATCH_URL ||
+  (process.env.NEXT_PUBLIC_APP_URL ? appOrigin : "http://localhost:3000")
+).replace(/\/+$/, "");
+// Mirrors `hostPattern()` there: no port, because Firefox rejects a match
+// pattern that has one and Chrome reads one without it as any port.
+const hostPattern = (origin) => {
+  const url = new URL(origin);
+  return `${url.protocol}//${url.hostname}/*`;
+};
 
 await mkdir(new URL(`${output}/`, root), { recursive: true });
 await build({
@@ -49,20 +61,27 @@ await build({
     "process.env.NEXT_PUBLIC_ROOT_DOMAIN": JSON.stringify(
       process.env.NEXT_PUBLIC_ROOT_DOMAIN || "",
     ),
+    "process.env.EXTENSION_MATCH_URL": JSON.stringify(
+      process.env.EXTENSION_MATCH_URL || "",
+    ),
   },
 });
 const manifest = JSON.parse(
   await readFile(new URL("manifest.json", root), "utf8"),
 );
-// The host permission that lets the extension actually reach `appOrigin`.
-// Left alone (and the checked-in manifest unchanged) for the default build;
-// swapped for a build pointed anywhere else, so the one env var above is
-// enough on its own — nobody has to remember a second place to grant access.
-manifest.host_permissions = manifest.host_permissions.map((pattern) =>
-  pattern === "https://objekt.my/*"
-    ? `${new URL(appOrigin).origin}/*`
-    : pattern,
-);
+// The host permissions that let the extension actually reach `appOrigin` and
+// `matchOrigin`, in place of the checked-in objekt.my one, so the env vars
+// above are enough on their own — nobody has to remember a second place to
+// grant access.
+manifest.host_permissions = [
+  ...new Set(
+    manifest.host_permissions.flatMap((pattern) =>
+      pattern === "https://objekt.my/*"
+        ? [hostPattern(appOrigin), hostPattern(matchOrigin)]
+        : [pattern],
+    ),
+  ),
+];
 // Reloading the extension leaves the old content script running in any Discord
 // tab that is already open, so "did my change take effect" is not answerable by
 // looking at the UI. Stamping the build makes it answerable.
@@ -96,5 +115,5 @@ for (const icon of await readdir(new URL("icons/", root)))
     );
 
 console.log(
-  `Load the built extension from ${new URL(`${output}/manifest.json`, root).pathname}`,
+  `Load the built extension from ${new URL(`${output}/manifest.json`, root).pathname}\n  Open in match → ${matchOrigin}/match\n  card art and inventory → ${appOrigin}`,
 );

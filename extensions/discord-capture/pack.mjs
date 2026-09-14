@@ -112,7 +112,8 @@ function zip(files) {
   return Buffer.concat([...chunks, directory, end]);
 }
 
-async function pack(label, args) {
+/** A clean build for one store, refused before anything is written if unshippable. */
+async function build(label, args) {
   const dir = join(root, label === "firefox" ? "dist-firefox" : "dist");
   await rm(dir, { recursive: true, force: true });
   execFileSync(process.execPath, [join(root, "build.mjs"), ...args], {
@@ -121,6 +122,20 @@ async function pack(label, args) {
   const manifest = JSON.parse(
     await readFile(join(dir, "manifest.json"), "utf8"),
   );
+  // Open in match points at a local dev server until /match ships, and a
+  // package that hands everyone's searches to their own localhost is broken
+  // for every one of them. See `MATCH_ORIGIN` in `src/app-origin.ts`.
+  const local = manifest.host_permissions.filter((pattern) =>
+    /^https?:\/\/(localhost|127\.0\.0\.1)\//.test(pattern),
+  );
+  if (local.length)
+    throw new Error(
+      `Refusing to package a build that reaches ${local.join(", ")}. /match is not on objekt.my yet; once it is, drop UNRELEASED_MATCH_ORIGIN in src/app-origin.ts (or set EXTENSION_MATCH_URL=https://objekt.my for this run).`,
+    );
+  return { label, dir, manifest };
+}
+
+async function pack({ label, dir, manifest }) {
   // The build stamp is for local debugging; it does not belong in a package,
   // where it would make every upload a different file for no reason.
   delete manifest.version_name;
@@ -143,10 +158,14 @@ async function pack(label, args) {
   );
 }
 
+// Both builds first, so a refused one leaves the last good packages in place.
+const builds = [
+  await build("chrome", []),
+  await build("firefox", ["--firefox"]),
+];
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
-await pack("chrome", []);
-await pack("firefox", ["--firefox"]);
+for (const built of builds) await pack(built);
 console.log(
   "\nNext: upload the Chrome zip at https://chrome.google.com/webstore/devconsole and the Firefox zip at https://addons.mozilla.org/developers/ — the answers both dashboards ask for are in STORE.md.",
 );

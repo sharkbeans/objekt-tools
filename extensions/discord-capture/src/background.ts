@@ -8,6 +8,9 @@ import { DISCORD_MATCHES, pickTab, resolveTab } from "./host-tab";
 import { loadInventory } from "./inventory";
 import {
   deliverToMatch,
+  MATCH_LABEL,
+  MATCH_ORIGIN_IS_LOCAL,
+  MATCH_PERMISSION,
   type MatchTabsApi,
   OBJEKT_ORIGIN,
   openMatchTab,
@@ -143,9 +146,9 @@ extensionApi.runtime.onInstalled.addListener((details) => {
  * permissions off after install, and a fetch refused for that reason reads as
  * a network error. Checking first turns it into something they can act on.
  */
-async function objektAllowed(): Promise<boolean> {
+async function objektAllowed(origin = OBJEKT_ORIGIN): Promise<boolean> {
   return extensionApi.permissions
-    .contains({ origins: [OBJEKT_ORIGIN] })
+    .contains({ origins: [origin] })
     .catch(() => false);
 }
 const OBJEKT_BLOCKED =
@@ -176,7 +179,10 @@ const matchTabs: MatchTabsApi = {
  * posts nobody asked about. Before any search, the whole index goes.
  */
 async function openInMatch(): Promise<{ posts: number; sent: number }> {
-  if (!(await objektAllowed())) throw new Error(OBJEKT_BLOCKED);
+  if (!(await objektAllowed(MATCH_PERMISSION)))
+    throw new Error(
+      `${MATCH_LABEL} access is switched off for this extension. Allow it from the browser's Extensions menu, then try again.`,
+    );
   const stored = await extensionApi.storage.local.get([
     "searchRunId",
     "nickname",
@@ -191,23 +197,33 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
     throw new Error("Nothing to open yet — run a search first.");
   const transcript = exportTranscript(posts.map((post) => post.block));
   const tabId = await openMatchTab(matchTabs);
-  const [injection] = await extensionApi.scripting.executeScript({
-    target: { tabId },
-    func: deliverToMatch,
-    args: [
-      {
-        id: `${run ?? "index"}-${Date.now().toString(36)}`,
-        transcript,
-        nickname: typeof stored.nickname === "string" ? stored.nickname : "",
-        wants: typeof stored.wants === "string" ? stored.wants : "",
-      },
-      PAGE_SOURCE,
-      EXTENSION_SOURCE,
-      30_000,
-    ],
-  });
+  // A dev server that is not running still "loads" — as the browser's error
+  // page, which refuses the script with something like "Frame with ID 0 is
+  // showing error page". Say what that means instead.
+  const unreachable = MATCH_ORIGIN_IS_LOCAL
+    ? `Could not reach ${MATCH_LABEL} — is the dev server running (npm run dev)?`
+    : `${MATCH_LABEL} could not be reached.`;
+  const [injection] = await extensionApi.scripting
+    .executeScript({
+      target: { tabId },
+      func: deliverToMatch,
+      args: [
+        {
+          id: `${run ?? "index"}-${Date.now().toString(36)}`,
+          transcript,
+          nickname: typeof stored.nickname === "string" ? stored.nickname : "",
+          wants: typeof stored.wants === "string" ? stored.wants : "",
+        },
+        PAGE_SOURCE,
+        EXTENSION_SOURCE,
+        30_000,
+      ],
+    })
+    .catch(() => {
+      throw new Error(unreachable);
+    });
   const result = injection?.result;
-  if (!result) throw new Error("objekt.my/match could not be reached.");
+  if (!result) throw new Error(unreachable);
   if (!result.ok) throw new Error(result.error);
   return { posts: result.posts, sent: posts.length };
 }

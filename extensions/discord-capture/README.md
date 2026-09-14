@@ -15,18 +15,24 @@ npm run extension:build
 npm run extension:test
 ```
 
-By default the extension points at `https://objekt.my` — where it delivers posts to
-`/match`, fetches card art, and looks up inventory. To build against a local dev server
-instead, set the same variable the app itself uses for its own root URL:
+By default the extension fetches card art and looks up inventory at `https://objekt.my`,
+and **Open in match** delivers to `http://localhost:3000/match` — `/match` is not on
+objekt.my yet, so it goes to a local dev server (`npm run dev`) until it ships. To point
+everything at another server, set the same variable the app itself uses for its own root URL;
+to move only `/match`, set `EXTENSION_MATCH_URL`:
 
 ```sh
-NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run extension:build
+NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run extension:build   # everything
+EXTENSION_MATCH_URL=http://localhost:3001 npm run extension:build   # just /match
 ```
 
-This rewrites the manifest's host permission to match, so the build can actually reach it —
-nobody has to grant a second permission by hand. `src/app-origin.ts` is the one place this is
-decided; see it (and `rootUrl()` in `src/lib/sections.ts`, which it reuses) before adding
-another hardcoded `https://objekt.my` anywhere.
+The build prints where each one goes, and rewrites the manifest's host permissions to match,
+so the build can actually reach them — nobody has to grant a second permission by hand. The
+patterns leave the port out (`http://localhost/*`), because Firefox rejects a match pattern
+with a port in it. `src/app-origin.ts` is the one place this is decided; see it (and
+`rootUrl()` in `src/lib/sections.ts`, which it reuses) before adding another hardcoded
+`https://objekt.my` anywhere. `extension:package` refuses a build that still reaches
+localhost; once `/match` is live, delete `UNRELEASED_MATCH_ORIGIN` there.
 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select
 `extensions/discord-capture/dist`. Open a server trade channel and click the toolbar button:

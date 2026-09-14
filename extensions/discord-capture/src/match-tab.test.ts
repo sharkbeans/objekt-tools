@@ -116,7 +116,9 @@ test("gives up readably on a page that never answers", async () => {
   assert.match(result.ok ? "" : result.error, /never answered/);
 });
 
-function tabsApi(open: { id: number; windowId: number; status: string }[]) {
+function tabsApi(
+  open: { id: number; windowId?: number; status: string; url?: string }[],
+) {
   const calls: string[] = [];
   let complete: (() => void) | null = null;
   const api: MatchTabsApi = {
@@ -149,6 +151,15 @@ test("reuses the open /match tab rather than starting a second desk", async () =
   const { api, calls } = tabsApi([{ id: 4, windowId: 2, status: "complete" }]);
   assert.equal(await openMatchTab(api), 4);
   assert.deepEqual(calls, ["update 4", "focus 2"]);
+});
+
+test("a /match tab on another localhost port is not the desk", async () => {
+  // The query patterns cannot carry a port, so they match every localhost.
+  const { api, calls } = tabsApi([
+    { id: 5, url: "http://localhost:3001/match", status: "complete" },
+  ]);
+  assert.equal(await openMatchTab(api), 99);
+  assert.deepEqual(calls, [`create ${MATCH_URL}`]);
 });
 
 test("opens /match when none is open, and waits for it to load", async () => {

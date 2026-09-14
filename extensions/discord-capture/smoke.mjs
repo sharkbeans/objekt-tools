@@ -13,8 +13,10 @@ const extension = new URL("./dist", import.meta.url).pathname;
 // This mocks objekt.my by hostname, so the build under test has to actually
 // target https://objekt.my regardless of what the ambient shell has set —
 // `npm run extension:smoke` clears `NEXT_PUBLIC_APP_URL` for the build step
-// for exactly that reason (see `src/app-origin.ts`). A build pointed
-// elsewhere would sail straight past every mock below.
+// for exactly that reason (see `src/app-origin.ts`), and sets
+// `EXTENSION_MATCH_URL` so /match, which a normal build sends to localhost
+// until it ships, is delivered to the mock too. A build pointed elsewhere
+// would sail straight past every mock below.
 
 /**
  * A real TLS server standing in for objekt.my and imagedelivery.net.

@@ -6,16 +6,28 @@
  * the /match tab, wait for it to load, and run `deliverToMatch` inside it.
  */
 
-import { APP_ORIGIN } from "./app-origin";
+import { APP_ORIGIN, hostPattern, MATCH_ORIGIN } from "./app-origin";
 
-export const MATCH_URL = `${APP_ORIGIN}/match`;
+export const MATCH_URL = `${MATCH_ORIGIN}/match`;
+/** Whether /match is a dev server on this machine, for a more useful error. */
+export const MATCH_ORIGIN_IS_LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(
+  new URL(MATCH_ORIGIN).hostname,
+);
+/** What the panel calls it: "localhost:3000/match" until /match ships. */
+export const MATCH_LABEL = `${new URL(MATCH_ORIGIN).host}/match`;
 /**
  * Every /match tab. Match patterns ignore the fragment, so a hash needs no
- * pattern of its own; a query string does.
+ * pattern of its own; a query string does. Portless, so `openMatchTab` checks
+ * the origin of what comes back.
  */
-export const MATCH_TABS = [MATCH_URL, `${MATCH_URL}?*`];
-/** The host permission everything on the app's origin goes through. */
-export const OBJEKT_ORIGIN = `${APP_ORIGIN}/*`;
+export const MATCH_TABS = [
+  hostPattern(MATCH_ORIGIN, "/match"),
+  hostPattern(MATCH_ORIGIN, "/match?*"),
+];
+/** The host permission delivering into /match goes through. */
+export const MATCH_PERMISSION = hostPattern(MATCH_ORIGIN);
+/** The host permission card art and inventory lookups go through. */
+export const OBJEKT_ORIGIN = hostPattern(APP_ORIGIN);
 
 export type Delivery =
   | { ok: true; posts: number }
@@ -81,8 +93,8 @@ export function deliverToMatch(
         finish({
           ok: false,
           error: sent
-            ? "objekt.my/match took the posts but never confirmed them. Check the tab."
-            : "objekt.my/match never answered. Reload that tab and try again — if it keeps happening, the site may be on an older version.",
+            ? "The /match page took the posts but never confirmed them. Check the tab."
+            : "The /match page never answered. Reload that tab and try again — if it keeps happening, the site may be on an older version.",
         }),
       timeoutMs,
     );
@@ -91,10 +103,14 @@ export function deliverToMatch(
 
 /** The little of `tabs` this needs, so tests can hand over plain objects. */
 export interface MatchTabsApi {
-  query: (filter: {
-    url: string[];
-  }) => Promise<
-    { id?: number; windowId?: number; status?: string; lastAccessed?: number }[]
+  query: (filter: { url: string[] }) => Promise<
+    {
+      id?: number;
+      url?: string;
+      windowId?: number;
+      status?: string;
+      lastAccessed?: number;
+    }[]
   >;
   create: (options: {
     url: string;
@@ -118,8 +134,14 @@ export async function openMatchTab(
   tabs: MatchTabsApi,
   timeoutMs = 30_000,
 ): Promise<number> {
+  const origin = new URL(MATCH_ORIGIN).origin;
   const open = (await tabs.query({ url: MATCH_TABS }))
-    .filter((tab) => typeof tab.id === "number")
+    // The patterns cannot carry a port, so localhost:3001/match matches too.
+    .filter(
+      (tab) =>
+        typeof tab.id === "number" &&
+        (!tab.url || new URL(tab.url).origin === origin),
+    )
     .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
   let id: number;
   if (open && typeof open.id === "number") {
@@ -130,13 +152,13 @@ export async function openMatchTab(
   } else {
     const created = await tabs.create({ url: MATCH_URL, active: true });
     if (typeof created.id !== "number")
-      throw new Error("Could not open objekt.my/match.");
+      throw new Error(`Could not open ${MATCH_LABEL}.`);
     id = created.id;
   }
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       stop();
-      reject(new Error("objekt.my/match took too long to load."));
+      reject(new Error(`${MATCH_LABEL} took too long to load.`));
     }, timeoutMs);
     const stop = tabs.onComplete(id, () => {
       clearTimeout(timer);
@@ -155,7 +177,7 @@ export async function openMatchTab(
       () => {
         clearTimeout(timer);
         stop();
-        reject(new Error("The objekt.my/match tab was closed."));
+        reject(new Error(`The ${MATCH_LABEL} tab was closed.`));
       },
     );
   });

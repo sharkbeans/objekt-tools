@@ -25,7 +25,7 @@
     "sync-indexer": "tsx scripts/sync-indexer.ts",
     "extension:build": "node extensions/discord-capture/build.mjs",
     "extension:test": "tsx --test extensions/discord-capture/src/*.test.ts",
-    "extension:smoke": "NEXT_PUBLIC_APP_URL= npm run extension:build && node extensions/discord-capture/smoke.mjs",
+    "extension:smoke": "NEXT_PUBLIC_APP_URL= EXTENSION_MATCH_URL=https://objekt.my npm run extension:build && node extensions/discord-capture/smoke.mjs",
     "extension:build:firefox": "node extensions/discord-capture/build.mjs --firefox",
     "extension:package": "node extensions/discord-capture/pack.mjs"
   },

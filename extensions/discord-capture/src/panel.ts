@@ -10,6 +10,7 @@ import {
 } from "./consent";
 import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, resolveTab, type TabLike } from "./host-tab";
+import { MATCH_LABEL } from "./match-tab";
 import {
   continuable,
   type PendingRun,
@@ -862,9 +863,9 @@ action("stop-search", async () => {
 });
 
 action("open-match", async () => {
-  tell("Opening objekt.my/match…");
+  tell(`Opening ${MATCH_LABEL}…`);
   const { posts } = await request("open-match");
-  tell(`Opened in objekt.my/match · ${plural(posts, "trade post")}`);
+  tell(`Opened in ${MATCH_LABEL} · ${plural(posts, "trade post")}`);
 });
 
 // ---------------------------------------------------------------------------
