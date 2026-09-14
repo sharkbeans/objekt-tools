@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
+import { getClientIp } from "@/lib/client-ip";
 import {
   CosmoUnavailableError,
   resolveNickname,
@@ -23,7 +24,7 @@ export async function GET(
   const session = await getSession();
   const rateLimitId = session?.user.id
     ? `user:${session.user.id}`
-    : `ip:${request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown"}`;
+    : `ip:${getClientIp(request)}`;
   const rateLimitKey = `rate-limit:progress-resolve:${rateLimitId}`;
   const limit = session ? 60 : 10;
   try {
