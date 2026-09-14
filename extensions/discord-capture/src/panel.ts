@@ -259,7 +259,6 @@ const art = new Map<string, string | null>();
 interface TileNode {
   li: HTMLLIElement;
   img: HTMLImageElement;
-  code: HTMLElement;
   badge: HTMLElement;
 }
 const tileNodes = new Map<string, TileNode>();
@@ -289,11 +288,17 @@ function tileNode(tile: Tile): TileNode {
   const badge = document.createElement("span");
   badge.className = "badge";
   badge.hidden = true;
+  // Member over code, a line each: on one line a card's width fit "SeoYeon"
+  // and an ellipsis, which dropped the half that tells two cards apart.
   const name = document.createElement("span");
   name.className = "name";
-  name.textContent = `${tile.name} ${tile.code}`;
+  const member = document.createElement("span");
+  member.textContent = tile.name;
+  const collection = document.createElement("span");
+  collection.textContent = tile.code;
+  name.append(member, collection);
   li.append(frame, badge, name);
-  const node = { li, img, code, badge };
+  const node = { li, img, badge };
   tileNodes.set(tile.key, node);
   return node;
 }
