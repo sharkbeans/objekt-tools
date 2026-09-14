@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
+import { getClientIp } from "@/lib/client-ip";
 import {
   expandAzGroupPublicCollectionIds,
   loadOwnedObjektsForPublicCollectionIds,
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   const session = await getSession();
   const rateLimitId = session?.user.id
     ? `user:${session.user.id}`
-    : `ip:${request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown"}`;
+    : `ip:${getClientIp(request)}`;
   const rateLimitKey = `rate-limit:progress-serials:${rateLimitId}`;
   const limit = session ? 120 : 30;
   try {

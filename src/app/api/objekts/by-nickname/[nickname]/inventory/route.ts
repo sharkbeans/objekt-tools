@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
+import { getClientIp } from "@/lib/client-ip";
 import {
   CosmoUnavailableError,
   resolveNickname,
@@ -174,7 +175,7 @@ async function applyRateLimit(
   const session = await getSession();
   const rateLimitId = session?.user.id
     ? `user:${session.user.id}`
-    : `ip:${request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown"}`;
+    : `ip:${getClientIp(request)}`;
   const policy = getRateLimitPolicy(Boolean(session), action);
   const key = `rate-limit:inventory-search:${action}:${rateLimitId}`;
 
