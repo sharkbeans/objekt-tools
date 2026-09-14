@@ -31,7 +31,9 @@ import {
   nextPending,
   type PendingRun,
   planResume,
+  type ResumePlan,
   readPendingRun,
+  STALE_MS,
 } from "./resume";
 import {
   type CaptureProbe,
@@ -381,9 +383,10 @@ function holdWorkerOpen(on: boolean) {
  * When each code was last searched, so a repeat run continues rather than
  * restarts.
  *
- * Held in memory during a run and written once at the end: a storage write per
- * query, on top of everything else a run writes, is a lot of churn for a map
- * nothing reads until the next run.
+ * Held in memory during a run and written alongside each checkpoint rather
+ * than as a write of its own — and not only at the end, because a run whose
+ * tab crashes never reaches the end, and a map written only there forgot every
+ * code that run had already searched.
  */
 let searched = new Map<string, number>();
 let searchedDirty = false;
@@ -391,12 +394,17 @@ function rememberQuery(query: string) {
   searched.set(query, Date.now());
   searchedDirty = true;
 }
-async function flushSearched() {
-  if (!searchedDirty) return;
+/** The map as it should be stored, if it has changed since it last was. */
+function searchedUpdate(): { searchedAt?: Record<string, number> } {
+  if (!searchedDirty) return {};
   searchedDirty = false;
-  await extensionApi.storage.local.set({
+  return {
     searchedAt: pruneSearchedAt(searched, DEFAULT_COOLDOWN_MS, Date.now()),
-  });
+  };
+}
+async function flushSearched() {
+  const update = searchedUpdate();
+  if (update.searchedAt) await extensionApi.storage.local.set(update);
 }
 
 // A full run outlives the panel, which can be closed at any point, so progress
@@ -442,7 +450,7 @@ window.addEventListener("pagehide", () => {
       ...lastProgress,
       running: false,
       stopped:
-        "The Discord tab was closed or navigated away mid-run. Reopening Discord in the next half hour picks the run up where it stopped.",
+        "The Discord tab was closed or reloaded mid-run. Reopening Discord in the next half hour picks the run up where it stopped — or press Continue.",
       at: Date.now(),
     },
   });
@@ -665,7 +673,8 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     reply({ ok: true, value: true });
     return true;
   }
-  if (request?.type !== "run-search") return;
+  if (request?.type !== "run-search" && request?.type !== "continue-search")
+    return;
   if (!automationAllowed(consent)) {
     reply({
       ok: false,
@@ -676,6 +685,23 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   }
   if (searching) {
     reply({ ok: false, error: "A search run is already in progress." });
+    return true;
+  }
+  if (request.type === "continue-search") {
+    // Claimed before the first await, so a second click cannot start a second
+    // run while this one is still reading storage. The run takes the claim
+    // over; a refusal hands it back.
+    searching = true;
+    void continueRun().then(
+      (value) => reply({ ok: true, value }),
+      (error) => {
+        searching = false;
+        reply({
+          ok: false,
+          error: error instanceof Error ? error.message : "Could not continue.",
+        });
+      },
+    );
     return true;
   }
   const wanted = searchQueries(String(request.wants ?? ""));
@@ -702,6 +728,8 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   }
   // Reply now: a run outlives the click that started it.
   reply({ ok: true, value: { total: queries.length, note: planNote } });
+  // A new run owes nothing to crashes an earlier one survived.
+  pendingTries = 0;
   void driveRun({
     queries,
     all: queries,
@@ -738,7 +766,19 @@ interface RunPlan {
   run: string;
   /** What to tell the user about the interruption this is recovering from. */
   resumedNote: string | null;
+  /** How long to wait for Discord's search box before the first query. */
+  loadWaitMs?: number;
 }
+
+/**
+ * How long a run picked up on page load waits for Discord to draw itself.
+ *
+ * The content script loads long before Discord's client has rendered a search
+ * box, and a slow machine that has just crashed is slower still. Typing at once
+ * found no box, stopped the run and threw its place away — so the resume that
+ * was meant to carry on after a crash never once got past the reload.
+ */
+const RELOAD_WAIT_MS = 120_000;
 
 async function driveRun(plan: RunPlan): Promise<void> {
   searching = true;
@@ -748,7 +788,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
   // A fresh run counts from zero, so the panel's total reflects this search.
   // A resumed one keeps the posts it already has: they belong to the same
   // search, and its export is scoped by the run id, which is also carried over.
-  if (!plan.offset) runPosts.clear();
+  if (plan.resumedNote === null) runPosts.clear();
   // Row bookkeeping is only meaningful within a run, and a long browsing
   // session would otherwise accumulate a string per message seen, for ever.
   // Rows still on screen re-assert themselves the next time they are scanned.
@@ -766,6 +806,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
     : plan.planNote;
   await extensionApi.storage.local.set({ searchRunId: searchRun });
   await savePending(plan, plan.offset, 0);
+  let checkpoint = plan.offset;
   try {
     await report({
       done: plan.offset,
@@ -780,6 +821,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
       pages: plan.pages,
       signal: searchSignal,
       probe: captureProbe,
+      loadWaitMs: plan.loadWaitMs,
       onProgress: (progress) =>
         void report({
           ...progress,
@@ -791,22 +833,43 @@ async function driveRun(plan: RunPlan): Promise<void> {
       onQuerySearched: rememberQuery,
       // Written before each query is typed, so a tab that dies mid-query comes
       // back knowing which one to retry.
-      onCheckpoint: (done) => void savePending(plan, plan.offset + done, done),
+      onCheckpoint: (done) => {
+        checkpoint = plan.offset + done;
+        void savePending(plan, checkpoint, done);
+      },
       wait: pace,
     });
-    await clearPending();
+    // A copy that has stood down leaves the record, and the progress, to the
+    // copy that replaced it — which may already be carrying on with this run.
+    // Writing "Cancelled." over that, or deleting the record it is reading, is
+    // how an update used to lose a run it could have kept.
+    if (orphaned) return;
+    const resumeAt = plan.offset + run.resumeFrom;
+    if (run.stopped === null) await clearPending();
+    // Anything short of finished can be continued. Only Discord going away
+    // under the run is picked up by a reload on its own: a run stopped by
+    // Stop, a rate limit or a box that refused the text would stop the same
+    // way again, and restarting it unasked is not backing off.
+    else await savePending(plan, resumeAt, run.resumeFrom, run.interrupted);
+    const next = plan.all[resumeAt];
     await report({
       ...run,
       done: run.done + plan.offset,
       total: plan.all.length,
       running: false,
       planNote: note,
+      ...(run.interrupted && next
+        ? {
+            stopped: `${run.stopped} Reload Discord and it carries on from ${next}.`,
+          }
+        : {}),
     });
   } catch (error) {
-    // A thrown run is one that will not come good by being retried — a missing
-    // search box, a refused query — so it is not left pending. Only losing the
-    // tab outright is, and that path never reaches here.
-    await clearPending();
+    // A thrown run will not come good by being retried on a reload, so it is
+    // not left for one — but it is left for Continue, from the last query it
+    // started.
+    if (orphaned) return;
+    await savePending(plan, checkpoint, checkpoint - plan.offset, false);
     await report({
       done: plan.offset,
       total: plan.all.length,
@@ -828,8 +891,16 @@ async function driveRun(plan: RunPlan): Promise<void> {
  * `tries` counts resumes that began at this same query, and only the resume
  * path raises it — a checkpoint reached under its own power means the run is
  * making progress, so it resets.
+ *
+ * The searched-codes map rides along, so a crash loses neither where the run
+ * was nor which codes it had already covered.
  */
-async function savePending(plan: RunPlan, done: number, reached: number) {
+async function savePending(
+  plan: RunPlan,
+  done: number,
+  reached: number,
+  auto = true,
+) {
   const pending: PendingRun = {
     run: plan.run,
     // The whole plan, so a resume knows the total as well as the remainder.
@@ -841,13 +912,60 @@ async function savePending(plan: RunPlan, done: number, reached: number) {
     tab: ownTabId,
     tries: reached > 0 ? 0 : pendingTries,
     at: Date.now(),
+    auto,
   };
-  await extensionApi.storage.local.set({ pendingRun: pending }).catch(() => {});
+  const searchedAt = searchedUpdate();
+  await extensionApi.storage.local
+    .set({ pendingRun: pending, ...searchedAt })
+    .catch(() => {
+      if (searchedAt.searchedAt) searchedDirty = true;
+    });
 }
 
 async function clearPending() {
   pendingTries = 0;
   await extensionApi.storage.local.remove("pendingRun").catch(() => {});
+}
+
+/**
+ * Carry on with an unfinished run, from where `planResume` says.
+ *
+ * `reopened` is the page-load path: nobody asked for it, so the panel is shown
+ * first, the attempt counts towards stepping over a query that keeps crashing
+ * Discord, and the run waits for Discord to finish loading before it types.
+ * Otherwise this is Continue, pressed in a panel that is already on screen.
+ */
+async function resume(
+  plan: Extract<ResumePlan, { action: "run" }>,
+  mine: number | null,
+  reopened: boolean,
+) {
+  const record = nextPending(plan.state, plan.done, mine, Date.now());
+  // Pressing Continue is not a crash, so it starts the count again; a query
+  // that goes on to crash Discord still earns its own reload attempts.
+  if (!reopened) record.tries = 0;
+  pendingTries = record.tries;
+  await extensionApi.storage.local.set({ pendingRun: record });
+  // Show the panel first, even if it was closed. This types into Discord's
+  // search box on the user's behalf, and doing that with no visible UI — no
+  // progress, and no Stop button — is not something to spring on someone who
+  // has just watched their browser fall over.
+  if (reopened) await showPanel().catch(() => {});
+  void driveRun({
+    queries: plan.queries,
+    all: plan.state.queries,
+    offset: plan.done,
+    pages: plan.state.pages,
+    delayMs: plan.state.delayMs,
+    planNote: plan.state.planNote,
+    run: plan.state.run,
+    resumedNote: plan.skipped
+      ? `Picked the interrupted run back up, skipping ${plan.skipped} — the tab went down on it ${MAX_TRIES} times.`
+      : reopened
+        ? "Picked the interrupted run back up where it stopped."
+        : "Carried on from where the last run stopped.",
+    loadWaitMs: reopened ? RELOAD_WAIT_MS : undefined,
+  });
 }
 
 /**
@@ -868,7 +986,9 @@ async function resumeInterruptedRun() {
   const mine = await tabId();
   const plan = planResume(state, mine, Date.now());
   if (plan.action === "drop") {
-    if (state) await clearPending();
+    // Most refusals only mean "not unasked, not from this tab": the record is
+    // what Continue picks up, so it is kept unless it is finished with.
+    if (plan.forget) await clearPending();
     return;
   }
   // Consent is read fresh rather than trusted from the interrupted run: it may
@@ -879,27 +999,44 @@ async function resumeInterruptedRun() {
     await clearPending();
     return;
   }
-  pendingTries = plan.state.tries + 1;
-  await extensionApi.storage.local.set({
-    pendingRun: nextPending(plan.state, plan.done, mine, Date.now()),
-  });
-  // Show the panel first, even if it was closed. This types into Discord's
-  // search box on the user's behalf, and doing that with no visible UI — no
-  // progress, and no Stop button — is not something to spring on someone who
-  // has just watched their browser fall over.
-  await showPanel().catch(() => {});
-  await driveRun({
-    queries: plan.queries,
-    all: plan.state.queries,
-    offset: plan.done,
-    pages: plan.state.pages,
-    delayMs: plan.state.delayMs,
-    planNote: plan.state.planNote,
-    run: plan.state.run,
-    resumedNote: plan.skipped
-      ? `Picked the interrupted run back up, skipping ${plan.skipped} — the tab went down on it ${MAX_TRIES} times.`
-      : "Picked the interrupted run back up where it stopped.",
-  });
+  if (searching || orphaned) return;
+  await resume(plan, mine, true);
+}
+
+/**
+ * Pick up the unfinished run because the user pressed Continue.
+ *
+ * Unlike a reload this takes a run from any tab, whatever stopped it — a crash,
+ * Stop, a rate limit. The one thing still worth refusing is a run that has not
+ * actually stopped: another tab still reporting on it.
+ */
+async function continueRun(): Promise<{ total: number; done: number }> {
+  const stored = await extensionApi.storage.local.get([
+    "pendingRun",
+    "searchProgress",
+  ]);
+  const progress =
+    stored.searchProgress && typeof stored.searchProgress === "object"
+      ? (stored.searchProgress as Record<string, unknown>)
+      : null;
+  const at = typeof progress?.at === "number" ? progress.at : 0;
+  if (progress?.running === true && Date.now() - at < STALE_MS)
+    throw new Error(
+      "That search is still going in another Discord tab — stop it there first.",
+    );
+  const mine = await tabId();
+  const plan = planResume(
+    readPendingRun(stored.pendingRun),
+    mine,
+    Date.now(),
+    true,
+  );
+  if (plan.action === "drop") {
+    if (plan.forget) await clearPending();
+    throw new Error("There is no unfinished search to continue.");
+  }
+  await resume(plan, mine, false);
+  return { total: plan.state.queries.length, done: plan.done };
 }
 
 extensionApi.storage.onChanged.addListener((changes, area) => {

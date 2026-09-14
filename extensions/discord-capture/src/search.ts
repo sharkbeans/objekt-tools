@@ -1022,6 +1022,11 @@ export interface SearchProgress {
   page?: number;
   /** Posts recorded so far in this run. Resets when a new run starts. */
   posts?: number;
+  /**
+   * Discord's search box is missing and the run is waiting for it to come
+   * back — Discord still loading after a reload, or re-rendering after a crash.
+   */
+  waiting?: boolean;
 }
 
 export interface SearchRun {
@@ -1070,6 +1075,23 @@ export interface SearchRun {
    * carrying a given run.
    */
   typedBy: Record<string, number>;
+  /**
+   * Whether the run stopped because Discord went away under it: the search box
+   * vanished after this run had already submitted a query through it. That is
+   * Discord crashing or reloading, not Discord refusing, so it is worth picking
+   * up again rather than starting over.
+   */
+  interrupted: boolean;
+  /**
+   * Index of the first query whose pages were not all walked — where a run
+   * that is picked up again should start.
+   *
+   * Behind `done` whenever the query in hand was cut short: `done` counts
+   * queries submitted, and a query whose results vanished part-way through
+   * was submitted without being finished. When Discord crashes that is exactly
+   * the query it took down with it.
+   */
+  resumeFrom: number;
 }
 
 export interface SearchOptions {
@@ -1118,12 +1140,29 @@ export interface SearchOptions {
    * into it is how an account gets noticed.
    */
   stallLimit?: number;
+  /**
+   * How long to wait for Discord's search box when it is missing mid-run.
+   *
+   * Discord re-renders its header now and then, and after its own crash screen
+   * it has no header at all; a short wait tells the two apart without typing
+   * into nothing.
+   */
+  boxWaitMs?: number;
+  /**
+   * The same wait, before the first query.
+   *
+   * Longer for a run picked up after a reload, which starts as the page loads
+   * — well before Discord has drawn a search box to type into.
+   */
+  loadWaitMs?: number;
   onProgress?: (progress: SearchProgress) => void;
   /**
-   * Called for each query Discord actually answered.
+   * Called for each query whose pages were all walked.
    *
    * Lets the caller remember what has been searched recently, so re-running a
-   * long want list does not search every code again from scratch.
+   * long want list does not search every code again from scratch. Not called
+   * for a query cut short — by Stop, or by Discord going away — because
+   * skipping that one next time is how its later pages would never be read.
    */
   onQuerySearched?: (query: string) => void;
   /**
@@ -1134,6 +1173,9 @@ export interface SearchOptions {
    * lost when Discord dies is the query in flight, and the resume has to retry
    * that one rather than skip it. Re-running a query is harmless — its posts
    * are deduped on the id they already have.
+   *
+   * The count is `resumeFrom`, not the loop index, so a query whose results
+   * vanished under it is not counted as behind the run.
    */
   onCheckpoint?: (done: number) => void;
   /** Injectable for tests. */
@@ -1178,12 +1220,20 @@ export async function runSearches(
   const emptyQueries: string[] = [];
   /** Result pages abandoned because the panel disappeared under the run. */
   let closed = 0;
+  /** Whether the query in flight lost its results panel before it finished. */
+  let cutShort = false;
+  /** See `SearchRun.resumeFrom`. */
+  let resumeFrom = 0;
+  /** Set when the search box vanished after this run had already used it. */
+  let interrupted = false;
   const typedBy: Record<string, number> = {};
   /** Insertion that last actually moved the results. Index into INSERTIONS. */
   let preferred = 0;
   const attempts = Math.max(1, options.attempts ?? 3);
   const backoffMs = Math.max(0, options.backoffMs ?? 750);
   const stallLimit = Math.max(1, options.stallLimit ?? 3);
+  const boxWaitMs = Math.max(0, options.boxWaitMs ?? 10_000);
+  const loadWaitMs = Math.max(0, options.loadWaitMs ?? boxWaitMs);
   /** Wait longer for each attempt, so a rate limit is given room to clear. */
   const backoff = (attempt: number) =>
     wait(Math.min(8_000, backoffMs * 2 ** (attempt - 1)));
@@ -1209,6 +1259,8 @@ export async function runSearches(
     empty,
     closed,
     typedBy,
+    interrupted,
+    resumeFrom,
   });
   const progress = (query: string, page: number) =>
     options.onProgress?.({
@@ -1218,6 +1270,34 @@ export async function runSearches(
       page,
       posts: probe?.posts() ?? 0,
     });
+
+  /**
+   * Find the search box, giving a missing one a moment to come back.
+   *
+   * Missing is not the same as gone. A run picked up after a reload starts
+   * while Discord is still drawing itself, and a run whose tab showed Discord's
+   * crash screen has no box until that recovers. Either way typing has to wait
+   * — there is nothing to type into — and saying so beats a run that looks
+   * frozen.
+   */
+  const searchBox = async (query: string): Promise<HTMLElement | null> => {
+    const submitted = submittedBy.option + submittedBy.enter > 0;
+    const budgetMs = submitted ? boxWaitMs : loadWaitMs;
+    const pollMs = Math.max(1, options.settlePollMs ?? 150) * 2;
+    for (let waited = 0; ; waited += pollMs) {
+      const box = findSearchBox(doc);
+      if (box || waited >= budgetMs || options.signal.cancelled) return box;
+      if (waited === 0)
+        options.onProgress?.({
+          done,
+          total: queries.length,
+          query,
+          posts: probe?.posts() ?? 0,
+          waiting: true,
+        });
+      await wait(pollMs);
+    }
+  };
 
   /**
    * Hold until this page is recorded, then apply whatever extra pacing is set.
@@ -1289,8 +1369,17 @@ export async function runSearches(
   const fire = async (query: string): Promise<string | null> => {
     for (let attempt = 1; ; attempt++) {
       if (options.signal.cancelled) return "Cancelled.";
-      let box = findSearchBox(doc);
-      if (!box) return "Could not find Discord's search box.";
+      let box = await searchBox(query);
+      if (options.signal.cancelled) return "Cancelled.";
+      if (!box) {
+        // A box this run has already typed into and submitted through does not
+        // disappear for a reason that retrying fixes: Discord crashed, or the
+        // tab was taken somewhere without one.
+        if (submittedBy.option + submittedBy.enter === 0)
+          return "Could not find Discord's search box.";
+        interrupted = true;
+        return "Discord's search box went away part-way through — Discord probably crashed or reloaded.";
+      }
       // Only the recovery pass touches the bar. Clicking it open re-renders
       // it, which detaches the field that was just found — typing into that
       // stale node inserts nothing and reads back as the placeholder, so the
@@ -1346,6 +1435,7 @@ export async function runSearches(
         // bar again and brings it back, so this ends the query, not the run.
         if (sawPanel) {
           closed++;
+          cutShort = true;
           pagerNote ??=
             "the search results closed part-way through — leave the results panel open while a run is going";
           return null;
@@ -1411,8 +1501,9 @@ export async function runSearches(
   };
 
   for (const [done, query] of queries.entries()) {
-    options.onCheckpoint?.(done);
+    options.onCheckpoint?.(resumeFrom);
     matchedNothing = false;
+    cutShort = false;
     const blocked = await fire(query);
     if (blocked) return finish(blocked);
     // Three queries in a row answered with the list already on screen is not a
@@ -1424,16 +1515,15 @@ export async function runSearches(
       return finish(
         `Discord stopped answering: ${stalled} searches in a row returned the results already on screen. That usually means search is rate-limited — wait a few minutes, then run again with a pace of a second or two.`,
       );
-    options.onQuerySearched?.(query);
     pagesWalked++;
 
     const pages = Math.max(1, options.pages ?? 1);
     // A code nobody has posted has no pager of its own: the one on screen is
     // the last query's. Clicking it walks that query's later pages and bills
     // them here — and it filled the run's one note with "no Next control" from
-    // the query least likely to have one, hiding what the rest hit.
-    if (matchedNothing) continue;
-    for (let page = 2; page <= pages; page++) {
+    // the query least likely to have one, hiding what the rest hit. A query
+    // whose results closed under it has no pager left to walk at all.
+    for (let page = 2; page <= pages && !matchedNothing && !cutShort; page++) {
       if (options.signal.cancelled) return finish("Cancelled.");
       const next = await nextPage();
       // Fail soft: fewer results than requested pages is normal, and a missing
@@ -1453,6 +1543,9 @@ export async function runSearches(
       // second.
       if (stopped.result && !stopped.result.panel) {
         pagerNote ??= "the results ran out before the requested page count";
+        // Or Discord went down mid-page. Which one only shows at the next
+        // query, so this one is not counted as finished until that does.
+        cutShort = true;
         break;
       }
       // The numbered buttons confirm the click landed, and counting a page
@@ -1481,6 +1574,11 @@ export async function runSearches(
       }
       pagesWalked++;
     }
+    // A query cut short stays the place to pick up from until a later one
+    // finishes cleanly, which is the evidence that Discord was still there.
+    if (cutShort) continue;
+    resumeFrom = done + 1;
+    options.onQuerySearched?.(query);
   }
   return finish(null);
 }

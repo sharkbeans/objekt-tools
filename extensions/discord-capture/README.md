@@ -130,6 +130,16 @@ poll instead of at the end of the settle budget. A run that dies with its tab re
 interrupted — `pagehide` writes it where it can, and the panel treats a progress stamp older
 than a minute as dead regardless.
 
+A run that stops short is picked up where it stopped, not searched again from the top
+(`resume.ts`). Before each code it writes down how far it has got; a code whose results
+vanished under it — which is what Discord crashing looks like from inside the page — is not
+counted as behind the run, so it is the one searched again. When Discord went away under the
+run, reloading Discord within half an hour carries on by itself, in the same tab, once
+Discord has drawn its search box again (it used to type at once, find no box, and throw the
+run's place away). Anything else unfinished — Stop, a rate limit, a crash noticed from a
+different tab — is offered as **Continue · N left** in the panel for a day, under the same
+search, so **Open in match** still gets every post from it.
+
 ## Running in the background
 
 A run spends most of its life in a tab nobody is looking at, which is the point of the

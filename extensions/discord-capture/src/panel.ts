@@ -10,6 +10,12 @@ import {
 } from "./consent";
 import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, resolveTab, type TabLike } from "./host-tab";
+import {
+  continuable,
+  type PendingRun,
+  readPendingRun,
+  STALE_MS,
+} from "./resume";
 import { searchQueryFor } from "./search";
 import { DEFAULT_COOLDOWN_MS, readSearchedAt } from "./search-plan";
 import { channelFromUrl, channelIds } from "./settings";
@@ -443,15 +449,6 @@ wants.addEventListener("keydown", (event) => {
 // ---------------------------------------------------------------------------
 // The run and what it found
 
-/**
- * How long a run may go without reporting before it is presumed dead.
- *
- * A page settles in fifteen seconds at the outside and reports on every page,
- * so a minute of silence is not a slow run — it is a tab that navigated away
- * mid-run and took the content script with it.
- */
-const STALE_MS = 60_000;
-
 let progress: Record<string, unknown> | null = null;
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
@@ -464,6 +461,8 @@ let summary: { total: number; run: number; hits: Record<string, number> } = {
   hits: {},
 };
 let runId: string | null = null;
+/** The unfinished run Continue would pick up, if there is one. */
+let pending: PendingRun | null = null;
 let searchedAt = new Map<string, number>();
 let captureError: string | null = null;
 let hasChannel = false;
@@ -494,6 +493,8 @@ function describe(p: Record<string, unknown> | null): string {
   if (p.running) {
     if (stale())
       return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed — anything captured is still in the index.`;
+    if (p.waiting)
+      return `Waiting for Discord's search box before ${p.query || "the next code"} · ${done}/${total}…${planNote}`;
     return `Searching ${done}/${total}${p.query ? ` · ${p.query}` : ""}${
       typeof p.page === "number" ? ` · page ${p.page}` : ""
     }…${planNote}`;
@@ -558,7 +559,9 @@ function statusLine(): { text: string; bad: boolean } {
     };
   if (p && running())
     return {
-      text: `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}`,
+      text: p.waiting
+        ? `Waiting for Discord to load · ${done}/${total}`
+        : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}`,
       bad: false,
     };
   if (typeof p?.stopped === "string" && p.stopped && p.stopped !== "Cancelled.")
@@ -588,18 +591,29 @@ function render() {
   if (Date.now() >= heldUntil || line.bad) say(status, line.text, line.bad);
   say(element("run-detail"), describe(progress));
   const ready = runId ? summary.run : summary.total;
+  const queries = new Set(tiles.map((tile) => tile.query).filter(Boolean));
+  // An unfinished run is the thing to do next, so it takes the main button:
+  // after a crash, searching again is how a long list started from nothing.
+  const left = busy ? null : continuable(pending, queries, Date.now());
+  const carryOn = element<HTMLButtonElement>("continue-search");
+  carryOn.hidden = !left;
+  if (left) {
+    carryOn.textContent = `Continue · ${left.left} left`;
+    carryOn.title = `Carries on from ${left.next}, under the same search`;
+  }
   const open = element<HTMLButtonElement>("open-match");
   open.hidden = busy || ready === 0;
   open.textContent = `Open ${ready} in match ↗`;
+  open.classList.toggle("primary", !left);
   const search = element<HTMLButtonElement>("run-search");
-  search.classList.toggle("primary", open.hidden);
+  search.classList.toggle("primary", open.hidden && !left);
   if (!busy) {
-    const queries = new Set(tiles.map((tile) => tile.query).filter(Boolean));
-    search.textContent = open.hidden
-      ? queries.size
-        ? `Search ${plural(queries.size, "code")}`
-        : "Search"
-      : "Search again";
+    search.textContent =
+      open.hidden && !left
+        ? queries.size
+          ? `Search ${plural(queries.size, "code")}`
+          : "Search"
+        : "Search again";
   }
   renderTiles();
 }
@@ -642,6 +656,7 @@ async function refresh(): Promise<void> {
       "captureError",
       "captureHealth",
       "channels",
+      "pendingRun",
       "searchProgress",
       "searchRunId",
       "searchedAt",
@@ -649,6 +664,7 @@ async function refresh(): Promise<void> {
     captureError =
       typeof settings.captureError === "string" ? settings.captureError : null;
     progress = asRecord(settings.searchProgress);
+    pending = readPendingRun(settings.pendingRun);
     runId =
       typeof settings.searchRunId === "string" && settings.searchRunId
         ? settings.searchRunId
@@ -819,6 +835,21 @@ action("run-search", async () => {
   progress = {
     running: true,
     done: 0,
+    total: response.value.total,
+    at: Date.now(),
+  };
+  render();
+});
+
+action("continue-search", async () => {
+  const tab = await discordTab();
+  await ensureCapturing(tab.url);
+  const response = await toContentScript(tab.id, { type: "continue-search" });
+  if (!response?.ok) throw new Error(response?.error ?? "Could not continue.");
+  heldUntil = 0;
+  progress = {
+    running: true,
+    done: response.value.done,
     total: response.value.total,
     at: Date.now(),
   };
@@ -1065,8 +1096,11 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   }
   if (changes.discordTheme) applyTheme(changes.discordTheme.newValue);
   // Keep the cards moving with the run without waiting on a full refresh.
-  if (changes.searchProgress) {
-    progress = asRecord(changes.searchProgress.newValue);
+  if (changes.searchProgress || changes.pendingRun) {
+    if (changes.searchProgress)
+      progress = asRecord(changes.searchProgress.newValue);
+    if (changes.pendingRun)
+      pending = readPendingRun(changes.pendingRun.newValue);
     render();
   }
   if (

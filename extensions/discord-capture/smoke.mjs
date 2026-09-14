@@ -399,6 +399,54 @@ try {
   assert.equal(await popup.locator("#run-search").isDisabled(), false);
   assert.equal(await popup.locator("#stop-search").isVisible(), false);
 
+  // What that dead run left behind is picked up by Continue, from the query it
+  // died on, rather than by searching the whole list again. Another tab's id
+  // and an age past the reload window: only Continue may take it.
+  await worker.evaluate(() =>
+    chrome.storage.local.set({
+      pendingRun: {
+        run: "smoke-crashed",
+        queries: ["AA101", "CC101"],
+        done: 1,
+        pages: 1,
+        delayMs: 0,
+        planNote: "",
+        tab: 999_999,
+        tries: 0,
+        at: Date.now() - 45 * 60_000,
+        auto: true,
+      },
+    }),
+  );
+  await popup.waitForFunction(() => {
+    const button = document.getElementById("continue-search");
+    return !button.hidden && button.textContent === "Continue · 1 left";
+  });
+  await popup.locator("#continue-search").click();
+  await popup.waitForFunction(() =>
+    document
+      .getElementById("run-detail")
+      .textContent.startsWith("Finished 2/2"),
+  );
+  assert.deepEqual(
+    await worker.evaluate(() =>
+      chrome.storage.local
+        .get(["pendingRun", "searchRunId"])
+        .then(({ pendingRun, searchRunId }) => [
+          pendingRun ?? null,
+          searchRunId,
+        ]),
+    ),
+    [null, "smoke-crashed"],
+    "a continued run finishes under its own id and leaves nothing pending",
+  );
+  assert.equal(await popup.locator("#continue-search").isVisible(), false);
+  // And the card names its member and code on a line each, so neither is cut.
+  assert.deepEqual(await popup.locator("#tiles .name span").allTextContents(), [
+    "SeoYeon",
+    "CC101",
+  ]);
+
   // Capture has to keep working while Discord is not the tab in front: that is
   // where a search run spends most of its life.
   // Headless Chromium reports every page as visible, so this checks the part
@@ -415,8 +463,10 @@ try {
       );
   });
   // Counted against the index rather than the run, because a search has now
-  // happened and the status reports both.
-  await indexHolds("3 posts in the index");
+  // happened and the status reports both. Four, not three: this fixture gives
+  // every search answer a fresh message id, so the continued run's result is a
+  // post of its own — real Discord reuses the id, and it would dedupe.
+  await indexHolds("4 posts in the index");
 
   // Pausing removes annotations, and changing channel does not capture.
   await worker.evaluate(() => chrome.storage.local.set({ channels: [] }));
@@ -430,7 +480,7 @@ try {
   await popup.reload();
   // Counted against the index rather than the run, because a search has now
   // happened and the status reports both.
-  await indexHolds("3 posts in the index");
+  await indexHolds("4 posts in the index");
   // Withdrawing detaches the reader: the badge goes, and a fresh post is not
   // taken even with the channel enabled.
   await worker.evaluate(() => chrome.storage.local.set({ channels: ["123"] }));
@@ -455,7 +505,7 @@ try {
   await popup.reload();
   // Counted against the index rather than the run, because a search has now
   // happened and the status reports both.
-  await indexHolds("3 posts in the index");
+  await indexHolds("4 posts in the index");
   assert.deepEqual(failures, []);
   console.log(
     "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, want cards with art, a whole search run end to end, delivery into /match and tab reuse, run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",

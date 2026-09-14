@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  CONTINUE_WINDOW_MS,
+  continuable,
   MAX_TRIES,
   nextPending,
   type PendingRun,
@@ -22,6 +24,7 @@ function pending(over: Partial<PendingRun> = {}): PendingRun {
     tab: 7,
     tries: 0,
     at: NOW,
+    auto: true,
     ...over,
   };
 }
@@ -79,8 +82,49 @@ test("a run left overnight is not picked up by tomorrow's tab", () => {
 });
 
 test("a second Discord tab does not adopt the first one's run", () => {
-  assert.equal(planResume(pending({ tab: 7 }), 9, NOW).action, "drop");
+  const other = planResume(pending({ tab: 7 }), 9, NOW);
+  assert.equal(other.action, "drop");
+  // Refusing to adopt it is not the same as throwing it away: the tab that owns
+  // it may still be running it, and Continue can take it from anywhere.
+  assert.equal(other.action === "drop" && other.forget, false);
   assert.equal(planResume(pending({ tab: 7 }), 7, NOW).action, "run");
+});
+
+test("a run stopped on purpose is not restarted by a reload", () => {
+  // Stop, or a rate limit: the same thing again on the next page load is the
+  // opposite of backing off. It is kept for Continue.
+  const plan = planResume(pending({ auto: false }), 7, NOW);
+  assert.equal(plan.action, "drop");
+  assert.equal(plan.action === "drop" && plan.forget, false);
+  assert.equal(
+    planResume(pending({ auto: false }), 7, NOW, true).action,
+    "run",
+  );
+});
+
+test("Continue takes a run from any tab, and from further back", () => {
+  const later = NOW + RESUME_WINDOW_MS + 1;
+  assert.equal(planResume(pending({ tab: 7 }), 9, later, true).action, "run");
+  const gone = planResume(pending(), 9, NOW + CONTINUE_WINDOW_MS + 1, true);
+  assert.equal(gone.action, "drop");
+  assert.equal(gone.action === "drop" && gone.forget, true);
+});
+
+test("a record written before auto existed reads as a run that was going", () => {
+  const { auto: _, ...old } = pending();
+  assert.equal(readPendingRun(old)?.auto, true);
+});
+
+test("Continue is only offered for codes still on the want list", () => {
+  const state = pending({ done: 1 });
+  assert.deepEqual(
+    continuable(state, new Set(["a cc101", "b cc201", "c aa101"]), NOW),
+    { left: 2, next: "b cc201" },
+  );
+  // Codes already searched may leave the list; codes still to come may not.
+  assert.ok(continuable(state, new Set(["b cc201", "c aa101", "d"]), NOW));
+  assert.equal(continuable(state, new Set(["b cc201"]), NOW), null);
+  assert.equal(continuable(null, new Set(["a cc101"]), NOW), null);
 });
 
 test("a run with no tab recorded is adoptable, because a crash renumbers it", () => {
@@ -98,6 +142,10 @@ test("retrying the same query counts up; moving on starts over", () => {
   // Stepping over the poisoned query is progress, so the next one gets its own
   // budget rather than inheriting a count it did not earn.
   assert.equal(nextPending(state, 2, 7, NOW).tries, 1);
+});
+
+test("a resume is one a later crash picks up again", () => {
+  assert.equal(nextPending(pending({ auto: false }), 1, 7, NOW).auto, true);
 });
 
 test("a resume records the tab it is now running in", () => {

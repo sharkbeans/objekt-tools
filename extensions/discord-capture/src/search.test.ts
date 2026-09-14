@@ -16,6 +16,7 @@ import {
   rowSignature,
   rowsTurnedOver,
   runSearches,
+  type SearchProgress,
   searchQueries,
   searchSafe,
   settlePage,
@@ -289,6 +290,8 @@ test("submits every query in order, pacing between them", async () => {
     emptyQueries: [],
     closed: 0,
     typedBy: { insertText: 3 },
+    interrupted: false,
+    resumeFrom: 3,
   });
   // One pacing wait per page per query, including after the last: that pause is
   // when the results render and the capture observer sees them. The shorter
@@ -1705,6 +1708,81 @@ test("a results panel closed mid-run ends the query, not the run", async () => {
   assert.equal(run.stopped, null, "the run carries on");
   assert.equal(run.closed, 1);
   assert.match(run.pagerNote ?? "", /results closed/);
+});
+
+test("Discord crashing under a run marks it interrupted, at the query it took down", async () => {
+  // Discord's own crash screen: the query in flight loses its results, and the
+  // header with the search box goes with them. Nothing comes back until a
+  // reload, which is a new content script — so the run has to say where to
+  // pick up, and it is the query whose results vanished, not the one after.
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const recorded = new Set([rowId("1"), rowId("2"), rowId("3"), rowId("4")]);
+  let submits = 0;
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Enter") return;
+    submits++;
+    const list = doc.getElementById("search-results");
+    if (submits === 1) {
+      list?.remove();
+      doc.body.insertAdjacentHTML("beforeend", panel(["3", "4"]));
+      return;
+    }
+    list?.remove();
+    doc.querySelector('[role="combobox"]')?.remove();
+  });
+  const searched: string[] = [];
+  const checkpoints: number[] = [];
+  const run = await runSearches(doc, ["CC1", "CC2", "CC3"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    wait: async () => {},
+    settlePollMs: 100,
+    onQuerySearched: (query) => searched.push(query),
+    onCheckpoint: (done) => checkpoints.push(done),
+  });
+  assert.equal(run.interrupted, true);
+  assert.match(run.stopped ?? "", /went away/);
+  assert.equal(run.resumeFrom, 1, "CC2 went down with Discord, so it is next");
+  assert.deepEqual(searched, ["CC1"], "and it is not remembered as searched");
+  assert.deepEqual(
+    checkpoints,
+    [0, 1, 1],
+    "nor checkpointed as behind the run",
+  );
+});
+
+test("a run started before Discord has drawn its search box waits for it", async () => {
+  // A resume starts as the page loads. Typing at once found no box, stopped the
+  // run and discarded its place, so no resume ever survived the reload.
+  const doc = page("<div></div>");
+  const progress: SearchProgress[] = [];
+  let polls = 0;
+  const run = await runSearches(doc, ["CC1"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    loadWaitMs: 60_000,
+    onProgress: (report) => progress.push(report),
+    wait: async () => {
+      if (++polls === 5) doc.body.insertAdjacentHTML("beforeend", SEARCH_BOX);
+    },
+  });
+  assert.equal(run.stopped, null);
+  assert.equal(run.done, 1);
+  assert.equal(progress[0]?.waiting, true, "and says it is waiting");
+});
+
+test("a box that never turns up is not an interruption", async () => {
+  // Nothing was ever submitted, so this is a page without search, not Discord
+  // falling over mid-run; picking it up on the next reload would be wrong.
+  const run = await runSearches(page("<div></div>"), ["CC1", "CC2"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    wait: async () => {},
+  });
+  assert.match(run.stopped ?? "", /Could not find/);
+  assert.equal(run.interrupted, false);
+  assert.equal(run.resumeFrom, 0);
 });
 
 test("reads the pager in a client whose labels are not in English", () => {
