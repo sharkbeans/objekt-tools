@@ -133,6 +133,9 @@ const DEFAULT_COLUMNS = 8;
 const EMPTY_KEYS = new Set<string>();
 const EMPTY_SEEN: ReadonlySet<SeenId> = new Set<SeenId>();
 /** The two ids a post can be hidden by: itself, or its author. */
+/** The server is shedding list imports (429/503); retry later, don't report. */
+class ListImportsPausedError extends Error {}
+
 type PostSeenIds = { post: SeenId; author: SeenId };
 const EMPTY_SEEN_IDS: ReadonlyMap<string, PostSeenIds> = new Map();
 const MODES = [
@@ -672,6 +675,8 @@ export function MatchClient() {
     }
     return { loading, loaded, failed };
   }, [imports, linkedPosts]);
+  const linkedListRemaining =
+    linkedListCount - linkedListProgress.loaded - linkedListProgress.failed;
   const images = useMemo(() => {
     const map = new Map<string, string>();
     for (const item of owned) {
@@ -707,12 +712,16 @@ export function MatchClient() {
       return next;
     });
     const version = generation.current;
+    let paused = false;
+    const deferred: DeskPost[] = [];
     const load = async (post: DeskPost) => {
       const results = await Promise.allSettled(
         post.message.listLinks.map(async (link) => {
           const response = await fetch(
             `/api/external-lists?url=${encodeURIComponent(link.url)}`,
           );
+          if (response.status === 429 || response.status === 503)
+            throw new ListImportsPausedError();
           const data = await response.json();
           if (!response.ok)
             throw new Error(data.error ?? "Could not import list.");
@@ -720,6 +729,20 @@ export function MatchClient() {
         }),
       );
       if (generation.current !== version) return;
+      // A list the server declined to fetch isn't unavailable, just not yet.
+      // Hand the whole post back; any of its lists that did load are cached
+      // server-side, so the retry costs nothing extra.
+      if (
+        results.some(
+          (result) =>
+            result.status === "rejected" &&
+            result.reason instanceof ListImportsPausedError,
+        )
+      ) {
+        paused = true;
+        deferred.push(post);
+        return;
+      }
       const loaded: ExternalListImport[] = [];
       const errors: { link: ExternalListLink; message: string }[] = [];
       results.forEach((result, i) => {
@@ -744,11 +767,23 @@ export function MatchClient() {
     };
     let next = 0;
     const worker = async () => {
-      while (next < pending.length) await load(pending[next++]);
+      while (!paused && next < pending.length) await load(pending[next++]);
     };
     void Promise.all(
       Array.from({ length: Math.min(4, pending.length) }, worker),
-    );
+    ).then(() => {
+      if (!paused || generation.current !== version) return;
+      // Posts that were declined or never started go back to "not loaded",
+      // which brings back the button to load the rest.
+      const retry = [...deferred, ...pending.slice(next)];
+      for (const post of retry) importStarted.current.delete(post.message.key);
+      setImports((previous) => {
+        const cleared = new Map(previous);
+        for (const post of retry) cleared.delete(post.message.key);
+        return cleared;
+      });
+      toast.error("List imports are busy. Try again in a minute.");
+    });
   }, []);
 
   const checkInventory = async (post: DeskPost) => {
@@ -1389,8 +1424,9 @@ export function MatchClient() {
                     size="sm"
                     onClick={() => loadAllLinkedLists(linkedPosts)}
                   >
-                    Load all {linkedListCount}{" "}
-                    {linkedListCount === 1 ? "list" : "lists"}
+                    {linkedListProgress.loaded + linkedListProgress.failed > 0
+                      ? `Load ${linkedListRemaining} more ${linkedListRemaining === 1 ? "list" : "lists"}`
+                      : `Load all ${linkedListCount} ${linkedListCount === 1 ? "list" : "lists"}`}
                   </Button>
                 ) : (
                   <span className="text-xs text-muted-foreground">

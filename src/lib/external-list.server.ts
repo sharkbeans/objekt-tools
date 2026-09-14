@@ -4,12 +4,91 @@ import {
   type ExternalListLink,
   parseExternalListLink,
 } from "@/lib/external-list";
-import { getCached } from "@/lib/server-cache";
+import { isRateLimited } from "@/lib/rate-limit";
+import { createServerCache } from "@/lib/server-cache";
 
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_LIST_ITEMS = 500;
+const CACHE_TTL_MS = 5 * 60_000;
+// Real list responses (Apollo HTML, objekt.top JSON) measured 97–137 KB, so
+// this is several times the largest seen while still bounding what one import
+// can hold in memory.
+const MAX_RESPONSE_BYTES = 1_000_000;
+// Every cache miss is a request from this server's IP to someone else's site.
+// Across all users, stay polite enough not to get that IP blocked.
+const UPSTREAM_BUDGET_KEY = "rate-limit:external-lists:upstream";
+const UPSTREAM_BUDGET_PER_MINUTE = 240;
+const MAX_UPSTREAM_IN_FLIGHT = 6;
 
+// Keys are list URLs, which anyone can vary, so they get their own budget
+// rather than competing with the default cache.
+const listCache = createServerCache("external-lists", { maxEntries: 200 });
+
+/** The list can't be imported, and asking again soon won't change that. */
 export class ExternalListImportError extends Error {}
+
+/** The upstream site couldn't be reached; a later attempt may succeed. */
+export class ExternalListUnavailableError extends ExternalListImportError {}
+
+/** This server is already importing as many lists as it allows itself to. */
+export class ExternalListBusyError extends Error {}
+
+let upstreamInFlight = 0;
+const upstreamWaiting: (() => void)[] = [];
+
+/** Run `task` once fewer than MAX_UPSTREAM_IN_FLIGHT imports are running. */
+async function withUpstreamSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (upstreamInFlight < MAX_UPSTREAM_IN_FLIGHT) upstreamInFlight++;
+  else await new Promise<void>((resolve) => upstreamWaiting.push(resolve));
+  try {
+    return await task();
+  } finally {
+    // Hand the slot straight to the next waiter, if any, so the count stays put.
+    const next = upstreamWaiting.shift();
+    if (next) next();
+    else upstreamInFlight--;
+  }
+}
+
+function upstreamStatusError(site: string, status: number) {
+  const message = `${site} could not open this list (${status}).`;
+  return status === 429 || status >= 500
+    ? new ExternalListUnavailableError(message)
+    : new ExternalListImportError(message);
+}
+
+/** Read a response body as text, refusing anything past MAX_RESPONSE_BYTES. */
+export async function readCappedText(
+  response: Response,
+  site: string,
+): Promise<string> {
+  const tooLarge = () =>
+    new ExternalListImportError(`${site} returned a list too large to import.`);
+  if (Number(response.headers.get("content-length")) > MAX_RESPONSE_BYTES) {
+    throw tooLarge();
+  }
+  if (!response.body) return "";
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw tooLarge();
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof ExternalListImportError) throw error;
+    throw new ExternalListUnavailableError(`Could not reach ${site}.`);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -97,17 +176,14 @@ async function importObjektTop(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch {
-    throw new ExternalListImportError("Could not reach objekt.top.");
+    throw new ExternalListUnavailableError("Could not reach objekt.top.");
   }
-  if (!response.ok) {
-    throw new ExternalListImportError(
-      `objekt.top could not open this list (${response.status}).`,
-    );
-  }
+  if (!response.ok) throw upstreamStatusError("objekt.top", response.status);
 
+  const text = await readCappedText(response, "objekt.top");
   let payload: unknown;
   try {
-    payload = await response.json();
+    payload = JSON.parse(text);
   } catch {
     throw new ExternalListImportError(
       "objekt.top returned an unreadable list.",
@@ -153,7 +229,7 @@ async function fetchApolloPage(
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
     } catch {
-      throw new ExternalListImportError("Could not reach Apollo.");
+      throw new ExternalListUnavailableError("Could not reach Apollo.");
     }
 
     if (response.status >= 300 && response.status < 400) {
@@ -169,12 +245,8 @@ async function fetchApolloPage(
       current = next;
       continue;
     }
-    if (!response.ok) {
-      throw new ExternalListImportError(
-        `Apollo could not open this list (${response.status}).`,
-      );
-    }
-    return { html: await response.text(), url: current };
+    if (!response.ok) throw upstreamStatusError("Apollo", response.status);
+    return { html: await readCappedText(response, "Apollo"), url: current };
   }
   throw new ExternalListImportError(
     "Apollo redirected this list too many times.",
@@ -276,7 +348,41 @@ export async function importExternalList(
       "That is not a supported public list URL.",
     );
   }
-  return getCached(`external-list:v1:${link.url}`, 5 * 60_000, () =>
-    link.source === "objekt.top" ? importObjektTop(link) : importApollo(link),
+  const outcome = await listCache.getCached(
+    `external-list:v2:${link.url}`,
+    CACHE_TTL_MS,
+    async (): Promise<
+      { ok: true; list: ExternalListImport } | { ok: false; message: string }
+    > => {
+      if (
+        await isRateLimited(UPSTREAM_BUDGET_KEY, UPSTREAM_BUDGET_PER_MINUTE, 60)
+      ) {
+        throw new ExternalListBusyError(
+          "List imports are busy. Try again in a minute.",
+        );
+      }
+      try {
+        const list = await withUpstreamSlot(() =>
+          link.source === "objekt.top"
+            ? importObjektTop(link)
+            : importApollo(link),
+        );
+        return { ok: true, list };
+      } catch (error) {
+        // A list that is missing or unreadable will still be that way in five
+        // minutes, so remember the answer instead of asking the site again —
+        // otherwise a stream of made-up slugs is a stream of upstream
+        // requests. Network failures might clear up, so those aren't kept.
+        if (
+          error instanceof ExternalListImportError &&
+          !(error instanceof ExternalListUnavailableError)
+        ) {
+          return { ok: false, message: error.message };
+        }
+        throw error;
+      }
+    },
   );
+  if (!outcome.ok) throw new ExternalListImportError(outcome.message);
+  return outcome.list;
 }

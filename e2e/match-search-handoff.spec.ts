@@ -204,3 +204,67 @@ JiYeon CC102`);
     page.getByRole("button", { name: /^Their Mayu CC345,/ }),
   ).toBeVisible();
 });
+
+test("a rate-limited list import pauses and offers to load the rest", async ({
+  page,
+}) => {
+  await openDesk(page, "JiYeon CC102");
+  let calls = 0;
+  await page.route("**/api/external-lists?*", async (route) => {
+    calls++;
+    if (calls === 2) {
+      await route.fulfill({
+        status: 429,
+        headers: { "Retry-After": "60" },
+        json: { error: "Too many list imports. Try again in a minute." },
+      });
+      return;
+    }
+    const list = new URL(route.request().url()).searchParams.get("url") ?? "";
+    const apollo = list.includes("apollo.cafe");
+    await route.fulfill({
+      json: {
+        source: apollo ? "apollo.cafe" : "objekt.top",
+        url: list,
+        items: [
+          {
+            member: apollo ? "Mayu" : "SeoYeon",
+            season: "Cream02",
+            collectionNo: apollo ? "345" : "344",
+            imageUrl: null,
+          },
+        ],
+        total: 1,
+        partial: false,
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Paste Discord posts" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("textbox", { name: "Discord posts" })
+    .fill(`top — 3:41 PM
+WTT
+HAVE
+https://objekt.top/list/top344
+WANT
+JiYeon CC102
+apollo — 3:42 PM
+WTT
+HAVE
+https://apollo.cafe/@apollo/list/apollo345
+WANT
+JiYeon CC102`);
+  await dialog.getByRole("button", { name: "Add posts" }).click();
+
+  await page.getByText("2 linked lists", { exact: true }).click();
+  await page.getByRole("button", { name: "Load all 2 lists" }).click();
+  await expect(
+    page.getByText("List imports are busy. Try again in a minute."),
+  ).toBeVisible();
+  await expect(page.getByText(/unavailable/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Load 1 more list" }).click();
+  await expect(page.getByText("2 lists loaded", { exact: true })).toBeVisible();
+  expect(calls).toBe(3);
+});

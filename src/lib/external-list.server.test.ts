@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
+import { redis } from "@/lib/redis";
 import {
+  ExternalListImportError,
   normalizeExternalListItem,
   parseApolloListHtml,
+  readCappedText,
 } from "./external-list.server";
+
+// The module imports the shared ioredis client, which connects eagerly and
+// would otherwise keep the runner alive after these network-free tests.
+after(() => {
+  redis.disconnect();
+});
 
 describe("normalizeExternalListItem", () => {
   it("strips A/Z from the matcher number and preserves the variant", () => {
@@ -52,5 +61,40 @@ describe("parseApolloListHtml", () => {
         },
       ],
     });
+  });
+});
+
+describe("readCappedText", () => {
+  const tooLarge = (error: unknown) =>
+    error instanceof ExternalListImportError &&
+    error.message === "Apollo returned a list too large to import.";
+
+  it("reads a normal-sized body", async () => {
+    assert.equal(
+      await readCappedText(new Response("x".repeat(140_000)), "Apollo"),
+      "x".repeat(140_000),
+    );
+  });
+
+  it("refuses a declared length past the cap without reading the body", async () => {
+    const response = new Response("small", {
+      headers: { "content-length": "2000000" },
+    });
+    await assert.rejects(readCappedText(response, "Apollo"), tooLarge);
+  });
+
+  it("stops reading once an undeclared body passes the cap", async () => {
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(400_000));
+      },
+    });
+    await assert.rejects(
+      readCappedText(new Response(body), "Apollo"),
+      tooLarge,
+    );
+    assert.ok(pulls <= 4, "an endless body is abandoned, not read to the end");
   });
 });
