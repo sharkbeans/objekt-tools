@@ -13,14 +13,15 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "../src/lib/db/schema";
 
-loadEnvConfig(process.cwd());
+loadEnvConfig(process.cwd(), true);
 
 // ============================================================
-// Cosmo token — fill these in to enable Cosmo API features.
-// Leave blank to skip (search and objekt lookup won't work).
+// Optional Cosmo tokens — set COSMO_ACCESS_TOKEN and COSMO_REFRESH_TOKEN
+// in the gitignored .env.development.local file. Never paste tokens here.
+// Leave unset to skip (search and objekt lookup will not work).
 // ============================================================
-const COSMO_ACCESS_TOKEN = "";
-const COSMO_REFRESH_TOKEN = "";
+const COSMO_ACCESS_TOKEN = process.env.COSMO_ACCESS_TOKEN ?? "";
+const COSMO_REFRESH_TOKEN = process.env.COSMO_REFRESH_TOKEN ?? "";
 // ============================================================
 
 const db = drizzle(process.env.DATABASE_URL ?? "", { schema });
@@ -60,7 +61,13 @@ async function main() {
 
     const res = await fetch("http://localhost:3000/api/auth/sign-up/email", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Better Auth rejects origin-less requests (MISSING_OR_NULL_ORIGIN);
+      // node's fetch sends none, so state it explicitly. Must match a
+      // trustedOrigins entry — i.e. BETTER_AUTH_URL.
+      headers: {
+        "Content-Type": "application/json",
+        Origin: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+      },
       body: JSON.stringify({
         email: TEST_EMAIL,
         password: TEST_PASSWORD,

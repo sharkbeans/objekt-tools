@@ -4,9 +4,15 @@ import { type NextRequest, NextResponse } from "next/server";
 import { mirror } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
 import { resolveObjektMemberAlias } from "@/lib/objekt-search";
-import { getCached } from "@/lib/server-cache";
+import { createServerCache } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
+
+// Card artwork looks up one objekt per request, so a single /match session can
+// write hundreds of keys in minutes. Its own budget keeps that churn from
+// evicting progress and trade-list entries in the default cache, where a miss
+// costs far more than re-reading a row or two of the collection mirror.
+const searchCache = createServerCache("objekts-search", { maxEntries: 500 });
 
 function toIndexerArtist(artist: string) {
   return artist === "tripleS" ? "triples" : artist;
@@ -102,7 +108,7 @@ export async function GET(request: NextRequest) {
     conditions.push(eq(collections.onOffline, onOffline[0]));
   }
 
-  const rows = await getCached(
+  const rows = await searchCache.getCached(
     `objekts:search:v2:${normalizeCacheKey(params)}`,
     5 * 60_000,
     () =>

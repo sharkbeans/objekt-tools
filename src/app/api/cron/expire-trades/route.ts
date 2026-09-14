@@ -35,6 +35,15 @@ export async function GET(request: NextRequest) {
   cutoff.setDate(cutoff.getDate() - 30);
   const now = new Date();
 
+  // Every trade this run actually moved to `cancelled`, as opposed to every
+  // trade it read and intended to. Each section's update is guarded on the
+  // status it read, so the two lists differ exactly when something else got
+  // there first — and the work that hangs off cancelling (chain resolution,
+  // and the counts this endpoint reports) has to follow the write, not the
+  // intention. Resolving a chain against a trade that is still live is not
+  // recoverable by running the cron again.
+  const cancelledTradeIds: string[] = [];
+
   // 1. Expire old trade posts — close them so they no longer appear in browse
   const expiredPosts = await db
     .update(tradePost)
@@ -63,23 +72,37 @@ export async function GET(request: NextRequest) {
   if (expiredTrades.length > 0) {
     const expiredIds = expiredTrades.map((t) => t.id);
 
-    await db
+    // Guarded on the status that was read, and driven by what the write
+    // actually changed. A trade accepted between the read above and this update
+    // would otherwise be cancelled out from under both parties — and told it
+    // "expired with no response" moments after someone responded.
+    const cancelled = await db
       .update(activeTrade)
       .set({ status: "cancelled", updatedAt: now })
-      .where(inArray(activeTrade.id, expiredIds));
+      .where(
+        and(
+          inArray(activeTrade.id, expiredIds),
+          eq(activeTrade.status, "pending"),
+        ),
+      )
+      .returning({ id: activeTrade.id });
+    cancelledTradeIds.push(...cancelled.map((t) => t.id));
+    const cancelledIds = new Set(cancelled.map((t) => t.id));
 
-    const tradeNotifications = expiredTrades.flatMap((t) => [
-      {
-        userId: t.initiatorUserId,
-        message: `This trade expired after 30 days with no response.`,
-      },
-      {
-        userId: t.recipientUserId,
-        message: `This trade expired after 30 days — the trade request was not accepted in time.`,
-      },
-    ]);
+    const tradeNotifications = expiredTrades
+      .filter((t) => cancelledIds.has(t.id))
+      .flatMap((t) => [
+        {
+          userId: t.initiatorUserId,
+          message: `This trade expired after 30 days with no response.`,
+        },
+        {
+          userId: t.recipientUserId,
+          message: `This trade expired after 30 days — the trade request was not accepted in time.`,
+        },
+      ]);
 
-    await notify(tradeNotifications);
+    if (tradeNotifications.length > 0) await notify(tradeNotifications);
   }
 
   // 3. Cancel pending counter-offers past their expiresAt deadline
@@ -95,23 +118,33 @@ export async function GET(request: NextRequest) {
   if (expiredCounterOffers.length > 0) {
     const expiredCoIds = expiredCounterOffers.map((t) => t.id);
 
-    await db
+    const cancelledCo = await db
       .update(activeTrade)
       .set({ status: "cancelled", updatedAt: now })
-      .where(inArray(activeTrade.id, expiredCoIds));
+      .where(
+        and(
+          inArray(activeTrade.id, expiredCoIds),
+          eq(activeTrade.status, "pending"),
+        ),
+      )
+      .returning({ id: activeTrade.id });
+    cancelledTradeIds.push(...cancelledCo.map((t) => t.id));
+    const cancelledCoIds = new Set(cancelledCo.map((t) => t.id));
 
-    const coNotifications = expiredCounterOffers.flatMap((t) => [
-      {
-        userId: t.initiatorUserId,
-        message: `Your counter-offer expired after 48 hours with no response.`,
-      },
-      {
-        userId: t.recipientUserId,
-        message: `A counter-offer expired after 48 hours — it was not accepted in time.`,
-      },
-    ]);
+    const coNotifications = expiredCounterOffers
+      .filter((t) => cancelledCoIds.has(t.id))
+      .flatMap((t) => [
+        {
+          userId: t.initiatorUserId,
+          message: `Your counter-offer expired after 48 hours with no response.`,
+        },
+        {
+          userId: t.recipientUserId,
+          message: `A counter-offer expired after 48 hours — it was not accepted in time.`,
+        },
+      ]);
 
-    await notify(coNotifications);
+    if (coNotifications.length > 0) await notify(coNotifications);
   }
 
   // 4. Expire stale accepted/partial trades (30 days since acceptance)
@@ -136,13 +169,28 @@ export async function GET(request: NextRequest) {
   if (staleAcceptedTrades.length > 0) {
     const staleIds = staleAcceptedTrades.map((t) => t.id);
 
-    await db
+    // The guard matters most here, because bans hang off this list. A trade
+    // that completed between the read and this write would otherwise be
+    // cancelled after the fact and both parties banned for defaulting on a
+    // trade they had just finished.
+    const cancelledStale = await db
       .update(activeTrade)
       .set({ status: "cancelled", updatedAt: now })
-      .where(inArray(activeTrade.id, staleIds));
+      .where(
+        and(
+          inArray(activeTrade.id, staleIds),
+          inArray(activeTrade.status, ["accepted", "partial"]),
+        ),
+      )
+      .returning({ id: activeTrade.id });
+    cancelledTradeIds.push(...cancelledStale.map((t) => t.id));
+    const cancelledStaleIds = new Set(cancelledStale.map((t) => t.id));
+    const expiredStale = staleAcceptedTrades.filter((t) =>
+      cancelledStaleIds.has(t.id),
+    );
 
     // Revert trade posts to "open"
-    const postIdsToRevert = staleAcceptedTrades
+    const postIdsToRevert = expiredStale
       .flatMap((t) => [t.tradePostId, t.matchedTradePostId])
       .filter((id): id is string => id !== null);
     if (postIdsToRevert.length > 0) {
@@ -152,7 +200,7 @@ export async function GET(request: NextRequest) {
         .where(inArray(tradePost.id, postIdsToRevert));
     }
 
-    const staleNotifications = staleAcceptedTrades.flatMap((t) => [
+    const staleNotifications = expiredStale.flatMap((t) => [
       {
         userId: t.initiatorUserId,
         message: `This trade expired after 30 days without completion.`,
@@ -162,11 +210,11 @@ export async function GET(request: NextRequest) {
         message: `This trade expired after 30 days without completion.`,
       },
     ]);
-    await notify(staleNotifications);
+    if (staleNotifications.length > 0) await notify(staleNotifications);
 
     // Issue bans to users with unsent sides, but only if the other party had confirmed.
     // If both parties ghosted (both sides still pending), nobody gets banned.
-    for (const t of staleAcceptedTrades) {
+    for (const t of expiredStale) {
       const sides = await db.query.activeTradeSide.findMany({
         where: eq(activeTradeSide.activeTradeId, t.id),
       });
@@ -257,12 +305,23 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    await db
+    const cancelledWr = await db
       .update(activeTrade)
       .set({ status: "cancelled", updatedAt: now })
-      .where(inArray(activeTrade.id, tradesToExpireForWrongRecipient));
+      .where(
+        and(
+          inArray(activeTrade.id, tradesToExpireForWrongRecipient),
+          inArray(activeTrade.status, ["accepted", "partial"]),
+        ),
+      )
+      .returning({ id: activeTrade.id });
+    cancelledTradeIds.push(...cancelledWr.map((t) => t.id));
+    const cancelledWrIds = new Set(cancelledWr.map((t) => t.id));
+    const expiredWr = wrongRecipientTrades.filter((t) =>
+      cancelledWrIds.has(t.id),
+    );
 
-    const wrPostIds = wrongRecipientTrades
+    const wrPostIds = expiredWr
       .flatMap((t) => [t.tradePostId, t.matchedTradePostId])
       .filter((id): id is string => id !== null);
     if (wrPostIds.length > 0) {
@@ -272,7 +331,7 @@ export async function GET(request: NextRequest) {
         .where(inArray(tradePost.id, wrPostIds));
     }
 
-    const wrNotifications = wrongRecipientTrades.flatMap((t) => [
+    const wrNotifications = expiredWr.flatMap((t) => [
       {
         userId: t.initiatorUserId,
         message: `This trade was cancelled because a misrouted transfer was not recovered within 7 days.`,
@@ -282,10 +341,10 @@ export async function GET(request: NextRequest) {
         message: `This trade was cancelled because a misrouted transfer was not recovered within 7 days.`,
       },
     ]);
-    await notify(wrNotifications);
+    if (wrNotifications.length > 0) await notify(wrNotifications);
 
     // Issue bans to users who sent to the wrong recipient and it wasn't recovered
-    for (const t of wrongRecipientTrades) {
+    for (const t of expiredWr) {
       // Find the wrong_recipient logs for this trade that aren't recovered
       const tradeWrongLogs = wrongRecipientLogs.filter(
         (l) => l.activeTradeId === t.id,
@@ -320,14 +379,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Propagate chain resolution for all cancelled trades
-  const allCancelledIds = [
-    ...expiredTrades.map((t) => t.id),
-    ...expiredCounterOffers.map((t) => t.id),
-    ...staleAcceptedTrades.map((t) => t.id),
-    ...tradesToExpireForWrongRecipient,
-  ];
-  await Promise.all(allCancelledIds.map((id) => propagateResolution(id)));
+  // Propagate chain resolution for the trades this run actually cancelled.
+  await Promise.all(cancelledTradeIds.map((id) => propagateResolution(id)));
 
   return NextResponse.json({
     expiredPosts: expiredPosts.length,
@@ -335,5 +388,8 @@ export async function GET(request: NextRequest) {
     expiredCounterOffers: expiredCounterOffers.length,
     expiredAcceptedTrades: staleAcceptedTrades.length,
     expiredWrongRecipientTrades: tradesToExpireForWrongRecipient.length,
+    // What the run read is above; this is what it changed. They differ when
+    // another request reached a trade first, which is the case worth seeing.
+    cancelled: cancelledTradeIds.length,
   });
 }

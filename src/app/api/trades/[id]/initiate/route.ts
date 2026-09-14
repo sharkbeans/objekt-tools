@@ -9,8 +9,8 @@ import {
   tradePost,
 } from "@/lib/db/schema";
 import { notify } from "@/lib/notify";
+import { isRateLimited } from "@/lib/rate-limit";
 import { publishUserEvent } from "@/lib/realtime";
-import { redis } from "@/lib/redis";
 import {
   checkTradeOfferQuota,
   getActiveBan,
@@ -57,11 +57,7 @@ export async function POST(
 
   // Rate limit: 10 requests per 60 seconds
   const rateLimitKey = `rate-limit:initiate:${session.user.id}`;
-  const attempts = await redis.incr(rateLimitKey);
-  if (attempts === 1) {
-    await redis.expire(rateLimitKey, 60);
-  }
-  if (attempts > 10) {
+  if (await isRateLimited(rateLimitKey, 10, 60)) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again later." },
       { status: 429 },

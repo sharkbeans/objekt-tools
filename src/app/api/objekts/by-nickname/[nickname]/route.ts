@@ -7,7 +7,7 @@ import {
 } from "@/lib/cosmo/resolve-nickname";
 import { loadTransferableInventoryRows } from "@/lib/indexer-owned-objekts";
 import { withTimeout } from "@/lib/promise-timeout";
-import { redis } from "@/lib/redis";
+import { isRateLimited } from "@/lib/rate-limit";
 import { decodeRouteParam } from "@/lib/route-params";
 import { getCached } from "@/lib/server-cache";
 
@@ -34,9 +34,7 @@ export async function GET(
     : `ip:${request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown"}`;
   const rateLimitKey = `rate-limit:by-nickname:${rateLimitId}`;
   const limit = session ? 60 : 10;
-  const attempts = await redis.incr(rateLimitKey);
-  if (attempts === 1) await redis.expire(rateLimitKey, 60);
-  if (attempts > limit) {
+  if (await isRateLimited(rateLimitKey, limit, 60)) {
     return NextResponse.json(
       { error: "Too many requests. Try again later." },
       { status: 429 },

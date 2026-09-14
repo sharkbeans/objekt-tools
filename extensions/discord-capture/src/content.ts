@@ -1,0 +1,1139 @@
+import {
+  indexOwned,
+  matchTranscript,
+  objektKey,
+  parseOffering,
+} from "@/lib/discord/match";
+import { extensionApi } from "./browser";
+import { automationAllowed, captureAllowed } from "./consent";
+import {
+  MESSAGE_BODY,
+  MESSAGE_SELECTOR,
+  readMessage,
+  resultBodies,
+  rowKey,
+  rowOf,
+} from "./dom";
+import { type Health, HealthWatch } from "./health";
+import { inventoryRows } from "./inventory";
+import {
+  closePanel,
+  discardPanel,
+  markPanelBusy,
+  openPanel,
+  showPanelNotice,
+  togglePanel,
+  watchPanelPlacement,
+} from "./panel-frame";
+import { readPanelState } from "./panel-geometry";
+import {
+  MAX_TRIES,
+  nextPending,
+  type PendingRun,
+  planResume,
+  type ResumePlan,
+  readPendingRun,
+  STALE_MS,
+} from "./resume";
+import {
+  type CaptureProbe,
+  currentPage,
+  findNextPage,
+  findSearchBox,
+  resultRows,
+  resultsPanel,
+  runSearches,
+  searchQueries,
+} from "./search";
+import {
+  DEFAULT_COOLDOWN_MS,
+  describePlan,
+  planQueries,
+  pruneSearchedAt,
+  readSearchedAt,
+} from "./search-plan";
+import { channelFromUrl, channelIds } from "./settings";
+import type { Entry } from "./store";
+import { waitFor } from "./wait";
+
+/**
+ * Whether this content script still belongs to a live extension.
+ *
+ * Reloading or updating the extension orphans every content script already
+ * running: their `chrome.runtime` stops working and every message throws
+ * "Extension context invalidated". The old code caught that and carried on
+ * scanning, which meant capture stopped for good and said nothing at all —
+ * the badge simply never moved again.
+ */
+let orphaned = false;
+function contextGone(error: unknown): boolean {
+  return (
+    !extensionApi.runtime?.id ||
+    /context invalidated|Extension context/i.test(
+      error instanceof Error ? error.message : String(error ?? ""),
+    )
+  );
+}
+function orphan(superseded = false) {
+  if (orphaned) return;
+  orphaned = true;
+  searchSignal.cancelled = true;
+  watch(false);
+  // Superseded: a newer copy of this script is taking over the page, so the
+  // panel is being replaced rather than dismissed and there is nothing to
+  // report. Otherwise there is no replacement coming, and saying so is the
+  // only way the user learns why capture stopped.
+  if (superseded) discardPanel();
+  else
+    showPanelNotice(
+      "The extension was reloaded or updated, so this tab is running an old copy of it. Reload Discord to carry on capturing — anything already captured is safe.",
+    );
+}
+
+/**
+ * Stand down when a newer copy of this script is injected into the page.
+ *
+ * Updating an extension orphans the content scripts already running, and the
+ * usual answer is to tell everyone to reload their tabs. The worker can inject
+ * the new version instead — but then two copies share the page, both observing
+ * and both drawing a panel. DOM events cross isolated worlds, so the arriving
+ * copy simply says so and the older one steps aside.
+ */
+const CLAIM = "objekt-capture-claim";
+const instance = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+document.addEventListener(CLAIM, (event) => {
+  const claimant = (event as CustomEvent<string>).detail;
+  if (typeof claimant === "string" && claimant !== instance) orphan(true);
+});
+document.dispatchEvent(new CustomEvent(CLAIM, { detail: instance }));
+
+let owned = indexOwned([]);
+// The viewer's typed wants, keyed the same way `matchTranscript` keys a
+// poster's haves — lets the badge report a return leg, not just one direction.
+let wantedKeys = new Set<string>();
+let revision = 0;
+function annotate(element: Element, entry: Entry) {
+  element.querySelector(":scope > objekt-match-badge")?.remove();
+  const match = matchTranscript([entry.parsed], owned, wantedKeys)[0];
+  const wantCount = match?.theyWantYouHave.length ?? 0;
+  const giveCount = match?.theyHaveYouWant.length ?? 0;
+  if (!wantCount && !giveCount) return;
+  const host = document.createElement("objekt-match-badge");
+  const shadow = host.attachShadow({ mode: "closed" });
+  const badge = document.createElement("span");
+  badge.textContent = match?.isMutual
+    ? `objekt.my · mutual — wants ${wantCount}, has ${giveCount} you want`
+    : wantCount
+      ? `objekt.my · wants ${wantCount} of yours`
+      : `objekt.my · has ${giveCount} you want`;
+  badge.style.cssText =
+    "display:inline-block;margin:4px 0;padding:3px 8px;border-radius:8px;background:#312e81;color:#eef2ff;font:12px system-ui";
+  shadow.append(badge);
+  element.append(host);
+}
+
+let channels: string[] = [];
+const enabled = (channel: string | null) =>
+  channel !== null && channels.includes(channel);
+// Search covers the whole server, so results arrive from channels the user
+// never enabled. Counting them separates "the pager never moved" from "it
+// moved and everything it found was filtered out".
+const skipped = new Map<string, number>();
+let seen = new WeakMap<Element, string>();
+const pending = new WeakSet<Element>();
+
+// What capture did with each rendered row, keyed by Discord's row id. A search
+// page is only finished when every row on it lands in one of these — otherwise
+// the run would page past posts it never recorded, which is exactly what a
+// fixed delay used to do whenever Discord was a beat slower than usual.
+/** Rows confirmed written to the index. */
+const recorded = new Set<string>();
+/** Rows from channels the user has not enabled. Never going to be recorded. */
+const pausedRows = new Set<string>();
+/**
+ * Rows the parser cannot read, and when they were first seen that way.
+ *
+ * Attachment-only posts read as unreadable forever, so they cannot hold a page
+ * open indefinitely; a row caught mid-hydration reads the same way for a frame
+ * or two, so they cannot be written off instantly either. The grace window is
+ * the compromise.
+ */
+const unreadableSince = new Map<string, number>();
+const UNREADABLE_GRACE_MS = 1500;
+
+async function scan(element: Element) {
+  if (!watching || orphaned || pending.has(element)) return;
+  const message = readMessage(element);
+  // The channel toggle governs passive browsing of a channel. A search result
+  // is here because the user asked for it by name, so it is kept wherever in
+  // the server it was posted — filtering those by the one channel that happens
+  // to be open is how a search of the whole guild returned almost nothing.
+  if (message && message.source === "channel" && !enabled(message.channel)) {
+    const key = message.channel ?? "unknown";
+    skipped.set(key, (skipped.get(key) ?? 0) + 1);
+    pausedRows.add(rowKey(element));
+    return;
+  }
+  if (!message) {
+    const key = rowKey(element);
+    if (!unreadableSince.has(key)) unreadableSince.set(key, Date.now());
+    element.querySelector(":scope > objekt-match-badge")?.remove();
+    return;
+  }
+  unreadableSince.delete(rowKey(element));
+  const signature = JSON.stringify([message, revision]);
+  if (seen.get(element) === signature) {
+    // Already stored, and unchanged since. Re-assert that to the run's
+    // accounting, which is what lets the bookkeeping below be cleared between
+    // runs without a settled page turning back into an unfinished one.
+    recorded.add(rowKey(element));
+    return;
+  }
+  pending.add(element);
+  try {
+    const response = await extensionApi.runtime.sendMessage({
+      type: "capture",
+      channel: message.channel,
+      source: message.source,
+      run: searchRun,
+      id: message.id,
+      block: {
+        author: message.author,
+        body: message.body,
+        time: message.time.raw,
+      },
+    });
+    if (response?.ok) {
+      recorded.add(rowKey(element));
+      // Only results count towards the run. The open channel keeps taking posts
+      // the whole time a search is running, and those are not what was searched
+      // for.
+      if (message.source === "search") countPost(rowKey(element));
+      // A virtualized row may have been recycled while the worker was saving.
+      const current = readMessage(element);
+      if (
+        element.isConnected &&
+        current &&
+        (current.source === "search" || enabled(current.channel)) &&
+        JSON.stringify([current, revision]) === signature
+      ) {
+        seen.set(element, signature);
+        annotate(element, response.value);
+      }
+    }
+  } catch (error) {
+    // A worker that is merely restarting will take the next attempt; an
+    // extension that has been reloaded never will.
+    if (contextGone(error)) orphan();
+  } finally {
+    pending.delete(element);
+    const current = readMessage(element);
+    if (!current)
+      element.querySelector(":scope > objekt-match-badge")?.remove();
+    if (current && JSON.stringify([current, revision]) !== signature)
+      void scan(element);
+  }
+}
+function visit(node: Node) {
+  if (!(node instanceof Element)) {
+    if (node.parentElement) visit(node.parentElement);
+    return;
+  }
+  const parent = node.closest(MESSAGE_SELECTOR);
+  if (parent) void scan(parent);
+  for (const element of node.querySelectorAll(MESSAGE_SELECTOR))
+    void scan(element);
+  // Search results carry no chat-messages wrapper, so the selector above walks
+  // straight past them — which is why an entire index turned out to hold
+  // nothing but the channel list.
+  const body = node.closest(MESSAGE_BODY);
+  if (body && !body.closest(MESSAGE_SELECTOR)) void scan(rowOf(body));
+  for (const found of resultBodies(node)) void scan(rowOf(found));
+}
+const observer = new MutationObserver((records) => {
+  for (const record of records) {
+    const target =
+      record.target instanceof Element
+        ? record.target
+        : record.target.parentElement;
+    const message = target?.closest(MESSAGE_SELECTOR);
+    if (message) void scan(message);
+    for (const node of record.addedNodes) visit(node);
+  }
+});
+/**
+ * Nothing observes the page until the user has agreed to capture.
+ *
+ * The disclosure requirement is about handling, not only about storing: an
+ * observer that reads message bodies and decides they are unreadable has still
+ * read them. So the observer is attached on consent and detached when it is
+ * withdrawn, rather than left running behind a flag.
+ */
+let watching = false;
+function watch(on: boolean) {
+  if (on && orphaned) return;
+  if (on === watching) return;
+  watching = on;
+  if (!on) {
+    observer.disconnect();
+    for (const badge of document.querySelectorAll("objekt-match-badge"))
+      badge.remove();
+    return;
+  }
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["id", "datetime", "aria-labelledby"],
+  });
+}
+let consent: unknown;
+function update(settings: Record<string, unknown>) {
+  if ("consent" in settings) consent = settings.consent;
+  if ("channels" in settings) channels = channelIds(settings.channels);
+  if ("owned" in settings) {
+    try {
+      owned = indexOwned(inventoryRows(settings.owned ?? []));
+    } catch {
+      owned = indexOwned([]);
+    }
+  }
+  if ("wants" in settings) {
+    const keys = new Set<string>();
+    for (const item of parseOffering(String(settings.wants ?? ""))) {
+      const key = objektKey(item);
+      if (key) keys.add(key);
+    }
+    wantedKeys = keys;
+  }
+  revision++;
+  seen = new WeakMap();
+  // Enabling a channel makes its rows capturable, so the old verdicts no longer
+  // hold. What was already recorded stays recorded.
+  pausedRows.clear();
+  unreadableSince.clear();
+  for (const badge of document.querySelectorAll("objekt-match-badge"))
+    badge.remove();
+  const allowed = captureAllowed(consent);
+  // Withdrawing consent mid-run stops the run as well as the reading.
+  if (!allowed) searchSignal.cancelled = true;
+  watch(allowed);
+  // Re-reads what is already on screen, so enabling a channel or changing the
+  // haves list takes effect without waiting for Discord to render something.
+  if (allowed) visit(document.body);
+}
+/**
+ * Wait, in a tab whose timers may be throttled.
+ *
+ * The rule and the racing live in `wait.ts`; this supplies the two timers and
+ * the answer to "is this page hidden".
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function pace(ms: number): Promise<void> {
+  return waitFor(ms, {
+    hidden: () => document.visibilityState === "hidden",
+    local: sleep,
+    remote: (delay) =>
+      extensionApi.runtime
+        .sendMessage({ type: "wake", ms: delay })
+        .then(() => undefined),
+  });
+}
+
+/**
+ * Hold the worker open for the length of a run.
+ *
+ * An MV3 worker is torn down after thirty seconds without work, which mid-run
+ * takes the timer above and the open database with it. A connected port with
+ * traffic on it is the documented way to say "still working"; the ping is well
+ * inside the idle timeout, and both ends tolerate the port going away.
+ */
+let keepalive: ReturnType<typeof extensionApi.runtime.connect> | null = null;
+let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
+function holdWorkerOpen(on: boolean) {
+  if (!on) {
+    clearInterval(keepaliveTimer);
+    keepaliveTimer = undefined;
+    keepalive?.disconnect();
+    keepalive = null;
+    return;
+  }
+  if (keepalive) return;
+  try {
+    keepalive = extensionApi.runtime.connect({ name: "objekt-run" });
+    keepalive.onDisconnect.addListener(() => {
+      keepalive = null;
+    });
+    keepaliveTimer = setInterval(() => {
+      try {
+        keepalive?.postMessage({ tick: Date.now() });
+      } catch {
+        keepalive = null;
+      }
+    }, 20_000);
+  } catch {
+    /* Worker unavailable; the run still works, it just may pause on restarts. */
+  }
+}
+
+/**
+ * When each code was last searched, so a repeat run continues rather than
+ * restarts.
+ *
+ * Held in memory during a run and written alongside each checkpoint rather
+ * than as a write of its own — and not only at the end, because a run whose
+ * tab crashes never reaches the end, and a map written only there forgot every
+ * code that run had already searched.
+ */
+let searched = new Map<string, number>();
+let searchedDirty = false;
+function rememberQuery(query: string) {
+  searched.set(query, Date.now());
+  searchedDirty = true;
+}
+/** The map as it should be stored, if it has changed since it last was. */
+function searchedUpdate(): { searchedAt?: Record<string, number> } {
+  if (!searchedDirty) return {};
+  searchedDirty = false;
+  return {
+    searchedAt: pruneSearchedAt(searched, DEFAULT_COOLDOWN_MS, Date.now()),
+  };
+}
+async function flushSearched() {
+  const update = searchedUpdate();
+  if (update.searchedAt) await extensionApi.storage.local.set(update);
+}
+
+// A full run outlives the panel, which can be closed at any point, so progress
+// goes to storage and the panel reads it whenever it is shown.
+const searchSignal = { cancelled: false };
+let searching = false;
+/**
+ * Resumes that have begun at the query currently in flight.
+ *
+ * Carried in memory for the life of this content script and written into every
+ * checkpoint, so the count survives the crash it is counting.
+ */
+let pendingTries = 0;
+let lastProgress: Record<string, unknown> = {};
+/**
+ * The whole plan of the run in flight, in order.
+ *
+ * Carried on every report so the panel can put each wanted card in its place —
+ * searched, being searched, still to come — from `done` alone.
+ */
+let runQueries: string[] = [];
+async function report(progress: Record<string, unknown>) {
+  // Stamped so the panel can tell a run that is working from one that died with
+  // the tab it was running in. Nothing else can: a content script that goes
+  // away leaves `running: true` behind it, and the panel reported "Searching
+  // 3/10…" until something else overwrote it.
+  lastProgress = { ...progress, queries: runQueries, at: Date.now() };
+  await extensionApi.storage.local.set({ searchProgress: lastProgress });
+}
+
+/**
+ * A run does not survive its tab.
+ *
+ * Reloading Discord, following a link out of it, or closing the tab all tear
+ * the content script down mid-run. This is best effort — the write may not
+ * land before the page goes — which is why the panel also treats a progress
+ * stamp that has stopped moving as an interrupted run.
+ */
+window.addEventListener("pagehide", () => {
+  if (!searching) return;
+  void extensionApi.storage.local.set({
+    searchProgress: {
+      ...lastProgress,
+      running: false,
+      stopped:
+        "The Discord tab was closed or reloaded mid-run. Reopening Discord in the next half hour picks the run up where it stopped — or press Continue.",
+      at: Date.now(),
+    },
+  });
+});
+
+/**
+ * Posts this run has recorded, deduped by row id and cleared when a run starts.
+ *
+ * Counted here rather than from the index total because the index is
+ * cumulative: the number worth watching is what this search is pulling in, not
+ * how much was already sitting in storage.
+ */
+const runPosts = new Set<string>();
+let postsReportedAt = 0;
+/** Identifies the run in flight, so its posts can be exported on their own. */
+let searchRun = "";
+/**
+ * Push the running total to the popup, rate-limited to keep storage writes sane.
+ *
+ * Skipping a write costs nothing: the run reports its own total on every page
+ * and again when it finishes, so the number always lands even if the last few
+ * posts arrive inside the window.
+ */
+function countPost(id: string) {
+  if (!searching || runPosts.has(id)) return;
+  runPosts.add(id);
+  const now = Date.now();
+  if (now - postsReportedAt < 400 || !lastProgress.running) return;
+  postsReportedAt = now;
+  void report({ ...lastProgress, posts: runPosts.size });
+}
+
+/**
+ * The run's view of capture: how many rows on this results page are still
+ * unaccounted for, and how many posts the run has banked.
+ *
+ * Rows are re-kicked here rather than only waited on. The mutation observer
+ * catches rows as they are inserted, but a row re-rendered in place with the
+ * same subtree can slip past it — polling from the settle loop closes that gap
+ * instead of letting the page look finished when it is not.
+ */
+const captureProbe: CaptureProbe = {
+  account: (rows) => {
+    const now = Date.now();
+    const tally = { recorded: 0, pending: 0, unreadable: 0 };
+    for (const row of rows) {
+      const key = rowKey(row);
+      if (recorded.has(key)) {
+        tally.recorded++;
+        countPost(key);
+        continue;
+      }
+      if (pausedRows.has(key)) continue;
+      const since = unreadableSince.get(key);
+      if (since !== undefined && now - since >= UNREADABLE_GRACE_MS) {
+        tally.unreadable++;
+        continue;
+      }
+      tally.pending++;
+      void scan(row);
+    }
+    return tally;
+  },
+  posts: () => runPosts.size,
+};
+/**
+ * This tab's id, asked for once and remembered.
+ *
+ * The panel needs it to act on the tab it is embedded in rather than on
+ * whichever tab is active, and a content script cannot read it directly.
+ */
+let ownTabId: number | null = null;
+async function tabId(): Promise<number | null> {
+  if (ownTabId !== null) return ownTabId;
+  try {
+    const response = await extensionApi.runtime.sendMessage({ type: "tab-id" });
+    if (response?.ok && typeof response.value === "number")
+      ownTabId = response.value;
+  } catch {
+    /* Worker restarting; the panel still works, just against the active tab. */
+  }
+  return ownTabId;
+}
+async function showPanel() {
+  await openPanel(await tabId());
+}
+extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
+  if (sender.id !== extensionApi.runtime.id) return;
+  // A copy that has stood down answers nothing. Its listeners outlive it when
+  // it was superseded rather than invalidated — the extension is still
+  // perfectly alive, this instance is simply not the one in charge — and two
+  // instances both accepting "run a search" means two runs typing into the
+  // same box. Returning without replying leaves the live copy to answer.
+  if (orphaned) return;
+  // Proof of life for the worker, which injects this script when there is none.
+  if (request?.type === "ping") {
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type === "toggle-panel") {
+    void tabId().then((id) => togglePanel(id));
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type === "open-panel") {
+    void showPanel();
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type === "close-panel") {
+    closePanel();
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type === "diagnose") {
+    // Structure only, and only once capture has been agreed to: the readable
+    // count is produced by parsing message bodies, which is the thing consent
+    // governs.
+    if (!captureAllowed(consent)) {
+      reply({
+        ok: false,
+        error:
+          "Agree to capture first — nothing on the page is read before that.",
+      });
+      return true;
+    }
+    // Reports which layer is failing: no reply at all means the content script
+    // is not running; zero elements means the selector no longer matches
+    // Discord's DOM; elements but nothing readable means the author/time
+    // anchors moved; readable but not enabled means the channel is paused.
+    const elements = [...document.querySelectorAll(MESSAGE_SELECTOR)];
+    const readable = elements.filter((element) => readMessage(element));
+    // Probe the anchors independently. If the container id changed but the
+    // content/username ids did not, the selector is the only thing to fix.
+    const count = (selector: string) =>
+      document.querySelectorAll(selector).length;
+    // Row shapes, take two. The first version stopped at the timestamp's own
+    // id wrapper and only ever reported "message-timestamp-#", which says
+    // nothing about the row. Walk out from each message body instead, past the
+    // per-part ids, to whatever actually contains the message.
+    const shape = (id: string) => id.replace(/\d{5,}/g, "#");
+    const PART = /^message-(content|username|timestamp|accessories|reply)-/;
+    const rowShapes = new Map<string, number>();
+    for (const body of document.querySelectorAll(MESSAGE_BODY)) {
+      const kind = body.closest(MESSAGE_SELECTOR) ? "channel" : "result";
+      let owner: Element | null = body.parentElement;
+      while (owner && (!owner.id || PART.test(owner.id)))
+        owner = owner.parentElement;
+      const key = `${kind}: ${owner ? `${owner.tagName.toLowerCase()}#${shape(owner.id)}` : "(no id above the body)"}`;
+      rowShapes.set(key, (rowShapes.get(key) ?? 0) + 1);
+    }
+    // Structure only — tags, ids and roles, never message text — so one real
+    // result row can be pasted back without leaking anyone's post.
+    const outline = (node: Element | null, depth = 0): string[] => {
+      if (!node || depth > 3) return [];
+      const attrs = [
+        node.id && `#${shape(node.id)}`,
+        node.getAttribute("role") && `role=${node.getAttribute("role")}`,
+        node.hasAttribute("data-list-item-id") &&
+          `data-list-item-id=${shape(node.getAttribute("data-list-item-id") ?? "")}`,
+        node.tagName === "A" &&
+          `href=${shape(node.getAttribute("href") ?? "")}`,
+        node.tagName === "TIME" && "time",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return [
+        `${"  ".repeat(depth)}${node.tagName.toLowerCase()}${attrs ? ` ${attrs}` : ""}`,
+        ...[...node.children]
+          .slice(0, 6)
+          .flatMap((child) => outline(child, depth + 1)),
+      ];
+    };
+    const firstResult = resultBodies(document.body)[0];
+    const panel = resultsPanel(document);
+    reply({
+      ok: true,
+      value: {
+        build:
+          extensionApi.runtime.getManifest().version_name ??
+          extensionApi.runtime.getManifest().version,
+        url: location.href,
+        channel: channelFromUrl(location.href),
+        enabled: channels,
+        elements: elements.length,
+        readable: readable.length,
+        sampleId: elements[0]?.id ?? null,
+        searchBox: Boolean(findSearchBox(document)),
+        skippedByChannel: Object.fromEntries(skipped),
+        // Everything about the results panel, which is where captures were
+        // silently coming from nowhere.
+        results: {
+          panel: panel
+            ? panel.tagName.toLowerCase() + (panel.id ? `#${panel.id}` : "")
+            : null,
+          rows: resultRows(document).length,
+          page: currentPage(document),
+          nextControl: Boolean(findNextPage(document)),
+          numberedPages: count('[aria-label^="Page "]'),
+          rowShapes: Object.fromEntries(rowShapes),
+          // The one thing a count cannot give: what a result row is made of.
+          sampleRow: firstResult
+            ? outline(rowOf(firstResult)).join("\n")
+            : null,
+        },
+        probes: {
+          chatMessages: count('[id^="chat-messages-"]'),
+          messageContent: count('[id^="message-content-"]'),
+          messageUsername: count('[id^="message-username-"]'),
+          listItems: count("li[id]"),
+          dataListItem: count("[data-list-item-id]"),
+          times: count("time[datetime]"),
+        },
+      },
+    });
+    return true;
+  }
+  if (request?.type === "cancel-search") {
+    searchSignal.cancelled = true;
+    reply({ ok: true, value: true });
+    return true;
+  }
+  if (request?.type !== "run-search" && request?.type !== "continue-search")
+    return;
+  if (!automationAllowed(consent)) {
+    reply({
+      ok: false,
+      error:
+        "Agree to run searches in the extension panel first — it types into Discord's own search box on your behalf.",
+    });
+    return true;
+  }
+  if (searching) {
+    reply({ ok: false, error: "A search run is already in progress." });
+    return true;
+  }
+  if (request.type === "continue-search") {
+    // Claimed before the first await, so a second click cannot start a second
+    // run while this one is still reading storage. The run takes the claim
+    // over; a refusal hands it back.
+    searching = true;
+    void continueRun().then(
+      (value) => reply({ ok: true, value }),
+      (error) => {
+        searching = false;
+        reply({
+          ok: false,
+          error: error instanceof Error ? error.message : "Could not continue.",
+        });
+      },
+    );
+    return true;
+  }
+  const wanted = searchQueries(String(request.wants ?? ""));
+  if (!wanted.length) {
+    reply({ ok: false, error: "No objekts recognized. Try YooYeon CC101." });
+    return true;
+  }
+  const delayMs = Number(request.delayMs);
+  const pages = Number(request.pages);
+  // Skipping is opt-out rather than automatic: a run that quietly searched
+  // nothing because everything was searched an hour ago would look broken.
+  const cooldownMs = request.skipRecent === false ? 0 : DEFAULT_COOLDOWN_MS;
+  const plan = planQueries(wanted, { searched, cooldownMs });
+  const queries = plan.queries;
+  const planNote = describePlan(plan);
+  if (!queries.length) {
+    reply({
+      ok: false,
+      error: plan.skipped.length
+        ? `All ${plan.skipped.length} codes were searched in the last few hours. Untick “skip codes searched recently” to search them again.`
+        : "Nothing to search.",
+    });
+    return true;
+  }
+  // Reply now: a run outlives the click that started it.
+  reply({ ok: true, value: { total: queries.length, note: planNote } });
+  // A new run owes nothing to crashes an earlier one survived.
+  pendingTries = 0;
+  void driveRun({
+    queries,
+    all: queries,
+    offset: 0,
+    pages: Number.isFinite(pages) ? Math.min(20, Math.max(1, pages)) : 1,
+    // Zero is the normal setting: the settle gate paces the run by how fast
+    // Discord actually answers, so there is no floor to enforce here.
+    delayMs: Number.isFinite(delayMs)
+      ? Math.min(60_000, Math.max(0, delayMs))
+      : 0,
+    planNote,
+    run: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    resumedNote: null,
+  });
+  return true;
+});
+/**
+ * One search run, whether it was just started or is being picked up again.
+ *
+ * `offset` is how many queries of the original plan are already behind this
+ * call. A resumed run reports against the plan the user actually asked for
+ * rather than against the remainder, so the progress bar carries on from where
+ * it stopped instead of restarting at 1 of 3.
+ */
+interface RunPlan {
+  /** The queries this call will search: the whole plan, or its tail. */
+  queries: string[];
+  /** The whole plan, in order, which is what a resume needs to read back. */
+  all: string[];
+  offset: number;
+  pages: number;
+  delayMs: number;
+  planNote: string;
+  run: string;
+  /** What to tell the user about the interruption this is recovering from. */
+  resumedNote: string | null;
+  /** How long to wait for Discord's search box before the first query. */
+  loadWaitMs?: number;
+}
+
+/**
+ * How long a run picked up on page load waits for Discord to draw itself.
+ *
+ * The content script loads long before Discord's client has rendered a search
+ * box, and a slow machine that has just crashed is slower still. Typing at once
+ * found no box, stopped the run and threw its place away — so the resume that
+ * was meant to carry on after a crash never once got past the reload.
+ */
+const RELOAD_WAIT_MS = 120_000;
+
+async function driveRun(plan: RunPlan): Promise<void> {
+  searching = true;
+  markPanelBusy(true);
+  holdWorkerOpen(true);
+  searchSignal.cancelled = false;
+  // A fresh run counts from zero, so the panel's total reflects this search.
+  // A resumed one keeps the posts it already has: they belong to the same
+  // search, and its export is scoped by the run id, which is also carried over.
+  if (plan.resumedNote === null) runPosts.clear();
+  // Row bookkeeping is only meaningful within a run, and a long browsing
+  // session would otherwise accumulate a string per message seen, for ever.
+  // Rows still on screen re-assert themselves the next time they are scanned.
+  recorded.clear();
+  unreadableSince.clear();
+  postsReportedAt = 0;
+  searchRun = plan.run;
+  runQueries = plan.all;
+  // Resolve the tab now rather than reading whatever `tabId()` happens to have
+  // cached. It is what stops a second Discord tab adopting this run, and a
+  // checkpoint written with `null` there is adoptable by any of them.
+  await tabId();
+  const note = plan.resumedNote
+    ? `${plan.resumedNote}${plan.planNote ? ` ${plan.planNote}` : ""}`
+    : plan.planNote;
+  await extensionApi.storage.local.set({ searchRunId: searchRun });
+  await savePending(plan, plan.offset, 0);
+  let checkpoint = plan.offset;
+  try {
+    await report({
+      done: plan.offset,
+      total: plan.all.length,
+      query: "",
+      posts: runPosts.size,
+      running: true,
+      planNote: note,
+    });
+    const run = await runSearches(document, plan.queries, {
+      delayMs: plan.delayMs,
+      pages: plan.pages,
+      signal: searchSignal,
+      probe: captureProbe,
+      loadWaitMs: plan.loadWaitMs,
+      onProgress: (progress) =>
+        void report({
+          ...progress,
+          done: progress.done + plan.offset,
+          total: plan.all.length,
+          running: true,
+          planNote: note,
+        }),
+      onQuerySearched: rememberQuery,
+      // Written before each query is typed, so a tab that dies mid-query comes
+      // back knowing which one to retry.
+      onCheckpoint: (done) => {
+        checkpoint = plan.offset + done;
+        void savePending(plan, checkpoint, done);
+      },
+      wait: pace,
+    });
+    // A copy that has stood down leaves the record, and the progress, to the
+    // copy that replaced it — which may already be carrying on with this run.
+    // Writing "Cancelled." over that, or deleting the record it is reading, is
+    // how an update used to lose a run it could have kept.
+    if (orphaned) return;
+    const resumeAt = plan.offset + run.resumeFrom;
+    if (run.stopped === null) await clearPending();
+    // Anything short of finished can be continued. Only Discord going away
+    // under the run is picked up by a reload on its own: a run stopped by
+    // Stop, a rate limit or a box that refused the text would stop the same
+    // way again, and restarting it unasked is not backing off.
+    else await savePending(plan, resumeAt, run.resumeFrom, run.interrupted);
+    const next = plan.all[resumeAt];
+    await report({
+      ...run,
+      done: run.done + plan.offset,
+      total: plan.all.length,
+      running: false,
+      planNote: note,
+      ...(run.interrupted && next
+        ? {
+            stopped: `${run.stopped} Reload Discord and it carries on from ${next}.`,
+          }
+        : {}),
+    });
+  } catch (error) {
+    // A thrown run will not come good by being retried on a reload, so it is
+    // not left for one — but it is left for Continue, from the last query it
+    // started.
+    if (orphaned) return;
+    await savePending(plan, checkpoint, checkpoint - plan.offset, false);
+    await report({
+      done: plan.offset,
+      total: plan.all.length,
+      posts: runPosts.size,
+      running: false,
+      stopped: error instanceof Error ? error.message : "Search failed.",
+    });
+  } finally {
+    searching = false;
+    markPanelBusy(false);
+    holdWorkerOpen(false);
+    void flushSearched();
+  }
+}
+
+/**
+ * Write down enough of the run to start it again.
+ *
+ * `tries` counts resumes that began at this same query, and only the resume
+ * path raises it — a checkpoint reached under its own power means the run is
+ * making progress, so it resets.
+ *
+ * The searched-codes map rides along, so a crash loses neither where the run
+ * was nor which codes it had already covered.
+ */
+async function savePending(
+  plan: RunPlan,
+  done: number,
+  reached: number,
+  auto = true,
+) {
+  const pending: PendingRun = {
+    run: plan.run,
+    // The whole plan, so a resume knows the total as well as the remainder.
+    queries: plan.all,
+    done,
+    pages: plan.pages,
+    delayMs: plan.delayMs,
+    planNote: plan.planNote,
+    tab: ownTabId,
+    tries: reached > 0 ? 0 : pendingTries,
+    at: Date.now(),
+    auto,
+  };
+  const searchedAt = searchedUpdate();
+  await extensionApi.storage.local
+    .set({ pendingRun: pending, ...searchedAt })
+    .catch(() => {
+      if (searchedAt.searchedAt) searchedDirty = true;
+    });
+}
+
+async function clearPending() {
+  pendingTries = 0;
+  await extensionApi.storage.local.remove("pendingRun").catch(() => {});
+}
+
+/**
+ * Carry on with an unfinished run, from where `planResume` says.
+ *
+ * `reopened` is the page-load path: nobody asked for it, so the panel is shown
+ * first, the attempt counts towards stepping over a query that keeps crashing
+ * Discord, and the run waits for Discord to finish loading before it types.
+ * Otherwise this is Continue, pressed in a panel that is already on screen.
+ */
+async function resume(
+  plan: Extract<ResumePlan, { action: "run" }>,
+  mine: number | null,
+  reopened: boolean,
+) {
+  const record = nextPending(plan.state, plan.done, mine, Date.now());
+  // Pressing Continue is not a crash, so it starts the count again; a query
+  // that goes on to crash Discord still earns its own reload attempts.
+  if (!reopened) record.tries = 0;
+  pendingTries = record.tries;
+  await extensionApi.storage.local.set({ pendingRun: record });
+  // Show the panel first, even if it was closed. This types into Discord's
+  // search box on the user's behalf, and doing that with no visible UI — no
+  // progress, and no Stop button — is not something to spring on someone who
+  // has just watched their browser fall over.
+  if (reopened) await showPanel().catch(() => {});
+  void driveRun({
+    queries: plan.queries,
+    all: plan.state.queries,
+    offset: plan.done,
+    pages: plan.state.pages,
+    delayMs: plan.state.delayMs,
+    planNote: plan.state.planNote,
+    run: plan.state.run,
+    resumedNote: plan.skipped
+      ? `Picked the interrupted run back up, skipping ${plan.skipped} — the tab went down on it ${MAX_TRIES} times.`
+      : reopened
+        ? "Picked the interrupted run back up where it stopped."
+        : "Carried on from where the last run stopped.",
+    loadWaitMs: reopened ? RELOAD_WAIT_MS : undefined,
+  });
+}
+
+/**
+ * Whether this content script should pick up a run its predecessor lost.
+ *
+ * Runs on every load of a Discord page, which is the only moment a crashed run
+ * can be noticed at all, and refuses far more often than it accepts: a run is
+ * only resumed while the automation consent still stands, while nothing else is
+ * running, and inside the window `planResume` enforces.
+ */
+async function resumeInterruptedRun() {
+  // A copy that has been superseded must not start typing: the run it would
+  // adopt belongs to the copy that replaced it, and two of them driving one
+  // search box is the exact failure the takeover exists to prevent.
+  if (searching || orphaned) return;
+  const { pendingRun } = await extensionApi.storage.local.get("pendingRun");
+  const state = readPendingRun(pendingRun);
+  const mine = await tabId();
+  const plan = planResume(state, mine, Date.now());
+  if (plan.action === "drop") {
+    // Most refusals only mean "not unasked, not from this tab": the record is
+    // what Continue picks up, so it is kept unless it is finished with.
+    if (plan.forget) await clearPending();
+    return;
+  }
+  // Consent is read fresh rather than trusted from the interrupted run: it may
+  // have been withdrawn between the crash and this page loading, and a resume
+  // is still automation of the user's account.
+  const { consent: stored } = await extensionApi.storage.local.get("consent");
+  if (!automationAllowed(stored)) {
+    await clearPending();
+    return;
+  }
+  if (searching || orphaned) return;
+  await resume(plan, mine, true);
+}
+
+/**
+ * Pick up the unfinished run because the user pressed Continue.
+ *
+ * Unlike a reload this takes a run from any tab, whatever stopped it — a crash,
+ * Stop, a rate limit. The one thing still worth refusing is a run that has not
+ * actually stopped: another tab still reporting on it.
+ */
+async function continueRun(): Promise<{ total: number; done: number }> {
+  const stored = await extensionApi.storage.local.get([
+    "pendingRun",
+    "searchProgress",
+  ]);
+  const progress =
+    stored.searchProgress && typeof stored.searchProgress === "object"
+      ? (stored.searchProgress as Record<string, unknown>)
+      : null;
+  const at = typeof progress?.at === "number" ? progress.at : 0;
+  if (progress?.running === true && Date.now() - at < STALE_MS)
+    throw new Error(
+      "That search is still going in another Discord tab — stop it there first.",
+    );
+  const mine = await tabId();
+  const plan = planResume(
+    readPendingRun(stored.pendingRun),
+    mine,
+    Date.now(),
+    true,
+  );
+  if (plan.action === "drop") {
+    if (plan.forget) await clearPending();
+    throw new Error("There is no unfinished search to continue.");
+  }
+  await resume(plan, mine, false);
+  return { total: plan.state.queries.length, done: plan.done };
+}
+
+extensionApi.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  const settings: Record<string, unknown> = {};
+  if (changes.searchedAt && !searchedDirty)
+    searched = readSearchedAt(changes.searchedAt.newValue);
+  for (const key of ["consent", "channels", "owned", "wants"])
+    if (changes[key]) settings[key] = changes[key].newValue;
+  if (Object.keys(settings).length) update(settings);
+});
+void extensionApi.storage.local
+  .get(["consent", "channels", "owned", "wants", "panel", "searchedAt"])
+  .then((settings) => {
+    searched = readSearchedAt(settings.searchedAt);
+    update(settings);
+    // The panel is a window, so it stays where it was: open across reloads and
+    // across channel switches, until it is closed on purpose.
+    if (readPanelState(settings.panel).open) void showPanel();
+    // A run that went down with its tab is picked up here, once this copy has
+    // its settings and is the one in charge. A failure is not worth reporting:
+    // it means there was nothing to resume, which is the normal case.
+    void resumeInterruptedRun().catch(() => {});
+  });
+/**
+ * Watch for the parser quietly losing track of Discord's markup.
+ *
+ * Nothing throws when Discord rewrites its DOM — the selectors stop matching,
+ * every row reads as unreadable, and capture collects nothing while looking
+ * exactly like a quiet channel. Sampling for that shape is the only way the
+ * user finds out before wondering why a week of browsing produced nothing.
+ *
+ * Cheap: one `querySelectorAll` and at most a dozen reads, twice a minute, and
+ * only while capture is actually on.
+ */
+const HEALTH_EVERY_MS = 30_000;
+const HEALTH_SAMPLE = 12;
+const healthWatch = new HealthWatch();
+function sampleHealth() {
+  if (!watching || orphaned) return;
+  const rows = [...document.querySelectorAll(MESSAGE_SELECTOR)];
+  const capturing = rows.some(
+    (row) => row.id.match(/^chat-messages-(\d+)-/)?.[1] !== undefined,
+  )
+    ? enabled(channelFromUrl(location.href))
+    : false;
+  let readable = 0;
+  for (const row of rows.slice(0, HEALTH_SAMPLE))
+    if (readMessage(row)) readable++;
+  const verdict = healthWatch.add({
+    elements: rows.length,
+    readable,
+    capturing,
+  });
+  if (verdict) void reportHealth(verdict);
+}
+async function reportHealth(health: Health) {
+  try {
+    if (health.state === "broken")
+      await extensionApi.storage.local.set({
+        captureHealth: {
+          at: Date.now(),
+          elements: health.elements,
+          build:
+            extensionApi.runtime.getManifest().version_name ??
+            extensionApi.runtime.getManifest().version,
+        },
+      });
+    else await extensionApi.storage.local.remove("captureHealth");
+  } catch (error) {
+    if (contextGone(error)) orphan();
+  }
+}
+setInterval(sampleHealth, HEALTH_EVERY_MS);
+
+/**
+ * Report Discord's theme, so the panel can match it.
+ *
+ * Discord marks its own root with `theme-light` / `theme-dark`; that is a
+ * Discord setting rather than an operating-system one, so `prefers-color-scheme`
+ * would be wrong here about as often as it was right.
+ */
+function publishTheme() {
+  const theme = document.documentElement.classList.contains("theme-light")
+    ? "light"
+    : "dark";
+  void extensionApi.storage.local
+    .get("discordTheme")
+    .then((settings) => {
+      if (settings.discordTheme !== theme)
+        return extensionApi.storage.local.set({ discordTheme: theme });
+    })
+    .catch(() => {});
+}
+publishTheme();
+new MutationObserver(publishTheme).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ["class"],
+});
+watchPanelPlacement();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   createActiveTrade,
   createBan,
@@ -59,9 +59,7 @@ describe("trade-guards (integration)", {
     assert.equal(bans.length, 1, "exactly one ban in DB");
   });
 
-  it("issueBan concurrent race condition", {
-    todo: "documents real bug: no unique constraint on (userId, activeTradeId) — concurrent calls can insert duplicate bans",
-  }, async () => {
+  it("issueBan survives two callers racing", async () => {
     const u = await createUser();
     const u2 = await createUser();
     const t = await createActiveTrade({
@@ -79,6 +77,42 @@ describe("trade-guards (integration)", {
       where: eq(schema.tradeBan.userId, u.id),
     });
     assert.equal(bans.length, 1, "exactly one ban despite concurrent calls");
+  });
+
+  it("a ban lifts even when the database already held a duplicate", async () => {
+    const u = await createUser();
+    const u2 = await createUser();
+    const t = await createActiveTrade({
+      initiatorUserId: u.id,
+      recipientUserId: u2.id,
+    });
+    await createTradeSide(t.id, u.id, { status: "confirmed" });
+    const db = await getDb();
+    // A database that predates the unique index can hold two live bans for one
+    // trade, and lifting only the one that was read left the user banned with
+    // their obligations met. The index is dropped to reproduce that state,
+    // because it is now the thing that makes it unreachable.
+    await db.execute(sql`drop index "trade_ban_active_per_trade_idx"`);
+    try {
+      await db.insert(schema.tradeBan).values([
+        { cosmoId: u.id, userId: u.id, reason: "first", activeTradeId: t.id },
+        {
+          cosmoId: u.id,
+          userId: u.id,
+          reason: "duplicate",
+          activeTradeId: t.id,
+        },
+      ]);
+
+      await guards.tryLiftBan(u.id, t.id);
+
+      const still = await guards.getActiveBan(u.id);
+      assert.equal(still, undefined, "neither ban is left standing");
+    } finally {
+      await db.execute(
+        sql`create unique index "trade_ban_active_per_trade_idx" on "trade_ban" ("user_id","active_trade_id") where "lifted_at" is null`,
+      );
+    }
   });
 
   it("propagateResolution walks the chain", async () => {

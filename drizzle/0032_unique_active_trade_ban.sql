@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "trade_ban_active_per_trade_idx" ON "trade_ban" USING btree ("user_id","active_trade_id") WHERE "trade_ban"."lifted_at" is null;

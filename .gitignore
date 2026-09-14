@@ -89,3 +89,7 @@ next-env.d.ts
 # markdowns
 *.md
 !README.md
+
+/extensions/discord-capture/dist/
+/extensions/discord-capture/dist-firefox/
+/extensions/discord-capture/packages/

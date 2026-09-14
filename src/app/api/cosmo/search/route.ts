@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { searchUsers } from "@/lib/cosmo/client";
-import { redis } from "@/lib/redis";
+import { isRateLimited } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
   let session: Awaited<ReturnType<typeof requireSession>>;
@@ -13,9 +13,7 @@ export async function GET(request: NextRequest) {
 
   // Rate limit: 10 requests per 60 seconds
   const rateLimitKey = `rate-limit:cosmo-search:${session.user.id}`;
-  const attempts = await redis.incr(rateLimitKey);
-  if (attempts === 1) await redis.expire(rateLimitKey, 60);
-  if (attempts > 10) {
+  if (await isRateLimited(rateLimitKey, 10, 60)) {
     return NextResponse.json(
       { error: "Too many requests. Try again later." },
       { status: 429 },

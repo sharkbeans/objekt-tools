@@ -494,6 +494,50 @@ export const tradeBan = pgTable(
   (t) => [
     index("trade_ban_cosmo_id_idx").on(t.cosmoId),
     index("trade_ban_user_id_idx").on(t.userId),
+    // One live ban per user per trade, enforced by the database rather than by
+    // reading before inserting: two callers racing — the expiry cron and a
+    // check-transfers call, say — both saw no ban and both wrote one, and
+    // `tryLiftBan` only ever cleared one of them, so fulfilling the trade left
+    // the user banned by the copy.
+    //
+    // Partial, because lifted bans are history and any number of them may exist
+    // for the same trade, and because a ban with no trade attached (activeTradeId
+    // is nullable) is not a duplicate of anything.
+    uniqueIndex("trade_ban_active_per_trade_idx")
+      .on(t.userId, t.activeTradeId)
+      .where(sql`${t.liftedAt} is null`),
+  ],
+);
+
+// Which Discord paste posts a signed-in user has already triaged, and which
+// traders they have muted.
+//
+// Hashes only, never content. The /match feature reads other people's messages
+// out of the user's own clipboard; persisting those server-side would make
+// objekt.my a mirror of a channel it has no business republishing (see
+// docs/plans/035-discord-paste-match.md, "Hard constraints"). A SHA-256 of the
+// normalised author and body is enough to recognise a post the user has seen,
+// and is not reversible into the post. An edited list hashes differently and
+// correctly resurfaces.
+export const discordPasteSeen = pgTable(
+  "discord_paste_seen",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** "post" for a triaged post, "author" for a muted trader. */
+    kind: text("kind").notNull(),
+    /** Hex SHA-256. Deliberately not the FNV key used in-browser. */
+    hash: text("hash").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("discord_paste_seen_user_kind_hash_unique").on(
+      t.userId,
+      t.kind,
+      t.hash,
+    ),
   ],
 );
 
