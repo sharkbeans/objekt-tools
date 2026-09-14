@@ -23,8 +23,11 @@
  * 2: posts can be handed to objekt.my/match directly rather than only through
  * a file the user downloads, and want-list codes are sent to objekt.my for card
  * art without a button press.
+ * 3: capture requires an explicit acknowledgement that it reads other people's
+ * visible Discord posts and that the user is responsible for enabling it only
+ * where they are allowed to handle that content.
  */
-export const CONSENT_VERSION = 2;
+export const CONSENT_VERSION = 3;
 
 export interface Consent {
   version: number;

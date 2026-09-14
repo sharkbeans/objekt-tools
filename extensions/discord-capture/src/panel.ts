@@ -168,6 +168,10 @@ let settingsOpen = false;
 function showViews() {
   const capture = captureAllowed(consent);
   const automation = automationAllowed(consent);
+  const captureRisk = element<HTMLInputElement>("accept-capture-risk");
+  const acceptCapture = element<HTMLButtonElement>("accept-capture");
+  if (!capture) captureRisk.checked = false;
+  acceptCapture.disabled = !captureRisk.checked;
   element("consent").hidden = capture;
   element("main").hidden = !capture || settingsOpen;
   element("settings").hidden = !capture || !settingsOpen;
@@ -190,6 +194,15 @@ async function readConsentSetting(): Promise<unknown> {
   const stored = await extensionApi.storage.local.get("consent");
   return stored.consent;
 }
+
+element<HTMLInputElement>("accept-capture-risk").addEventListener(
+  "change",
+  (event) => {
+    element<HTMLButtonElement>("accept-capture").disabled = !(
+      event.currentTarget as HTMLInputElement
+    ).checked;
+  },
+);
 
 action("accept-capture", async () => {
   consent = acceptCapture(await readConsentSetting());

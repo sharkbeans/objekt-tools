@@ -118,10 +118,12 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
       <li>Gets card pictures for your wants, and your inventory if you add a Cosmo nickname, from <strong>objekt.my</strong>.</li>
       <li>Never reads your Discord token, calls Discord's API, or posts anything.</li>
     </ul>
+    <p class="warn"><strong>Read this first:</strong> capture reads the visible posts in every channel you enable, including other people's names and messages. Captured content may include personal or sensitive information. Only turn it on in channels where you are allowed to collect and handle those posts.</p>
     <p class="note">Other people's posts are their words: keep them to yourself.
     <a href="https://objekt.my/extension-privacy" target="_blank" rel="noreferrer">Privacy policy</a></p>
+    <label class="check"><input type="checkbox" id="accept-capture-risk"> I understand that capture reads visible Discord posts, and I accept responsibility for using it only where I am allowed.</label>
   </div>
-  <button type="button" class="primary" id="accept-capture">I agree</button>
+  <button type="button" class="primary" id="accept-capture" disabled>I agree</button>
 </section>
 
 <section id="main" class="view" hidden>

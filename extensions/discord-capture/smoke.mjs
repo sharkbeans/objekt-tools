@@ -278,6 +278,9 @@ try {
   assert.equal(await popup.locator("#consent").isVisible(), true);
   assert.equal(await popup.locator("#main").isVisible(), false);
   assert.equal(await page.locator("objekt-match-badge").count(), 0);
+  assert.equal(await popup.locator("#accept-capture").isDisabled(), true);
+  await popup.locator("#accept-capture-risk").check();
+  assert.equal(await popup.locator("#accept-capture").isDisabled(), false);
   await popup.locator("#accept-capture").click();
   // Agreeing attaches the observer, which sweeps what is already rendered —
   // the page is deliberately not re-rendered here.
