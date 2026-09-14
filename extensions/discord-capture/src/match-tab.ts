@@ -6,17 +6,16 @@
  * the /match tab, wait for it to load, and run `deliverToMatch` inside it.
  */
 
-export const MATCH_URL = "https://objekt.my/match";
+import { APP_ORIGIN } from "./app-origin";
+
+export const MATCH_URL = `${APP_ORIGIN}/match`;
 /**
  * Every /match tab. Match patterns ignore the fragment, so a hash needs no
  * pattern of its own; a query string does.
  */
-export const MATCH_TABS = [
-  "https://objekt.my/match",
-  "https://objekt.my/match?*",
-];
-/** The host permission everything on objekt.my goes through. */
-export const OBJEKT_ORIGIN = "https://objekt.my/*";
+export const MATCH_TABS = [MATCH_URL, `${MATCH_URL}?*`];
+/** The host permission everything on the app's origin goes through. */
+export const OBJEKT_ORIGIN = `${APP_ORIGIN}/*`;
 
 export type Delivery =
   | { ok: true; posts: number }

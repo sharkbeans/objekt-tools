@@ -1,4 +1,5 @@
 import type { ObjektKeyParts } from "@/lib/discord/match";
+import { APP_ORIGIN } from "./app-origin";
 
 export function inventoryRows(value: unknown): ObjektKeyParts[] {
   if (
@@ -30,7 +31,7 @@ export async function loadInventory(
   )
     throw new Error("Enter a Cosmo nickname (up to 30 characters, no spaces).");
   const response = await fetch(
-    `https://objekt.my/api/objekts/by-nickname/${encodeURIComponent(nickname)}`,
+    `${APP_ORIGIN}/api/objekts/by-nickname/${encodeURIComponent(nickname)}`,
     {
       credentials: "omit",
       redirect: "error",

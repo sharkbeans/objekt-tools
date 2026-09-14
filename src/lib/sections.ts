@@ -55,6 +55,10 @@ export function subdomainsEnabled(): boolean {
   return rootDomain() !== null;
 }
 
+// Also read by `extensions/discord-capture/src/app-origin.ts` — the capture
+// extension points its /match delivery, card art and inventory lookups at
+// this exact origin, so a build pointed at a local dev server needs only this
+// one variable, not a second place to edit.
 export function rootUrl(): string {
   const raw = process.env.NEXT_PUBLIC_APP_URL || "https://objekt.my";
   return raw.replace(/\/+$/, "");

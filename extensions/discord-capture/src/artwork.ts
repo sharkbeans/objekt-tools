@@ -1,5 +1,6 @@
 import { type ObjektKeyParts, objektKey } from "@/lib/discord/match";
 import { stripVariantSuffix } from "@/lib/season-prefix";
+import { APP_ORIGIN } from "./app-origin";
 
 /**
  * Card art for the want list, from objekt.my's public collection search.
@@ -13,7 +14,7 @@ import { stripVariantSuffix } from "@/lib/season-prefix";
  * does not change, so a hit is kept for a month; a miss is usually a typo or a
  * collection the mirror has not synced yet, so it is retried after a day.
  */
-export const ARTWORK_ENDPOINT = "https://objekt.my/api/objekts/search";
+export const ARTWORK_ENDPOINT = `${APP_ORIGIN}/api/objekts/search`;
 
 const HIT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MISS_TTL_MS = 24 * 60 * 60 * 1000;

@@ -15,6 +15,19 @@ npm run extension:build
 npm run extension:test
 ```
 
+By default the extension points at `https://objekt.my` — where it delivers posts to
+`/match`, fetches card art, and looks up inventory. To build against a local dev server
+instead, set the same variable the app itself uses for its own root URL:
+
+```sh
+NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run extension:build
+```
+
+This rewrites the manifest's host permission to match, so the build can actually reach it —
+nobody has to grant a second permission by hand. `src/app-origin.ts` is the one place this is
+decided; see it (and `rootUrl()` in `src/lib/sections.ts`, which it reuses) before adding
+another hardcoded `https://objekt.my` anywhere.
+
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select
 `extensions/discord-capture/dist`. Open a server trade channel and click the toolbar button:
 the panel appears in the page. **Agree to the disclosure** — until then the content script

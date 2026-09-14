@@ -10,6 +10,23 @@ import { build } from "esbuild";
 const root = new URL("./", import.meta.url);
 const firefox = process.argv.includes("--firefox");
 const output = firefox ? "dist-firefox" : "dist";
+
+// The origin the built extension points at — where it delivers posts, fetches
+// card art, and looks up inventory. Mirrors `rootUrl()` in `src/lib/sections.ts`
+// exactly (default included), so setting the one variable the app itself
+// already reads for its own root URL is enough to build against a local dev
+// server instead of production:
+//
+//   NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run extension:build
+//
+// Duplicated rather than imported: this script runs under plain Node, not a
+// TypeScript loader, so it cannot `import` a `.ts` file the way the bundled
+// extension source can (`src/app-origin.ts` imports the real thing, and every
+// URL the extension builds comes from there, not from a literal).
+const appOrigin = (
+  process.env.NEXT_PUBLIC_APP_URL || "https://objekt.my"
+).replace(/\/+$/, "");
+
 await mkdir(new URL(`${output}/`, root), { recursive: true });
 await build({
   entryPoints: ["content", "background", "panel"].map(
@@ -21,9 +38,30 @@ await build({
   target: firefox ? "firefox128" : "chrome116",
   format: "iife",
   tsconfig: "tsconfig.json",
+  // `src/app-origin.ts` reads these through the app's own `rootUrl()`, which
+  // is shared with server and client code that has a real `process.env` —
+  // the browser bundle here has none, so esbuild inlines the values this
+  // script read instead of leaving a `process` reference that would throw.
+  define: {
+    "process.env.NEXT_PUBLIC_APP_URL": JSON.stringify(
+      process.env.NEXT_PUBLIC_APP_URL || "",
+    ),
+    "process.env.NEXT_PUBLIC_ROOT_DOMAIN": JSON.stringify(
+      process.env.NEXT_PUBLIC_ROOT_DOMAIN || "",
+    ),
+  },
 });
 const manifest = JSON.parse(
   await readFile(new URL("manifest.json", root), "utf8"),
+);
+// The host permission that lets the extension actually reach `appOrigin`.
+// Left alone (and the checked-in manifest unchanged) for the default build;
+// swapped for a build pointed anywhere else, so the one env var above is
+// enough on its own — nobody has to remember a second place to grant access.
+manifest.host_permissions = manifest.host_permissions.map((pattern) =>
+  pattern === "https://objekt.my/*"
+    ? `${new URL(appOrigin).origin}/*`
+    : pattern,
 );
 // Reloading the extension leaves the old content script running in any Discord
 // tab that is already open, so "did my change take effect" is not answerable by
