@@ -311,7 +311,7 @@ to any material change in what the extension collects.
 ```sh
 npm run typecheck && npm run lint && npm run extension:test && npm run extension:smoke
 npx web-ext lint --source-dir extensions/discord-capture/dist-firefox
-npm run extension:package
+EXTENSION_MATCH_URL=https://objekt.my npm run extension:package
 ```
 
 `extension:package` rebuilds both targets from scratch and writes
@@ -319,6 +319,12 @@ npm run extension:package
 whatever is on disk, because uploading the wrong folder costs review days, and it strips the
 `version_name` build stamp so a package is not a different file every time it is built —
 two builds of the same source produce byte-identical zips.
+
+The release command above is required while `UNRELEASED_MATCH_ORIGIN` exists: it embeds
+`https://objekt.my/match` in both packages. Deploying `/match` does not change an extension
+that has already been built or installed. Once `/match` is live on objekt.my, remove that
+temporary localhost default from `src/app-origin.ts`; production will then be the normal
+package target.
 
 Before uploading: bump `version` in `manifest.json`; bump `CONSENT_VERSION` in
 `src/consent.ts` as well if what the extension collects has changed materially, which
