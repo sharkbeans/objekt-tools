@@ -146,7 +146,10 @@ services:
       PUSHER_CLUSTER: ${PUSHER_CLUSTER:-}
       CRON_SECRET: ${CRON_SECRET:-}
     ports:
-      - "3000:3000"
+      # Localhost only: nginx on the host proxies to it. Docker-published ports
+      # bypass ufw, so binding every interface would expose the app directly and
+      # let clients forge X-Forwarded-For past the IP rate limits.
+      - "127.0.0.1:3000:3000"
 
   # Cron triggers:
   #   "0 2 * * *"   → /api/cron/expire-trades        (daily)
