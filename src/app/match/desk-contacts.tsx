@@ -18,6 +18,7 @@ import type { VerificationState } from "@/lib/discord/verify";
 import type { SeenKind } from "@/lib/match/seen-id";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { ContactGallery } from "./contact-gallery";
+import { type DeskQuery, matchesDeskQuery } from "./desk-search";
 import { CopyDiscordHandle } from "./post-dialog";
 
 const PAGE_SIZE = 6;
@@ -36,6 +37,8 @@ export function ContactResults({
   verified,
   onMarkSeen,
   canMarkSeen,
+  emptyText,
+  search,
 }: {
   posts: DeskPost[];
   mode: DeskMode;
@@ -51,6 +54,9 @@ export function ContactResults({
   onMarkSeen: (messageKey: string, kind: SeenKind) => void;
   /** False until the ids have been hashed, which is a beat after a paste. */
   canMarkSeen: boolean;
+  emptyText?: string;
+  /** Their-objekts search in force, or null when nothing is being searched. */
+  search: DeskQuery | null;
 }) {
   const [page, setPage] = useState(0);
   const [previous, setPrevious] = useState(posts);
@@ -64,11 +70,12 @@ export function ContactResults({
     <div className="space-y-3">
       {posts.length === 0 && (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          {mode === "wtb"
-            ? "No seller in this paste lists all of these cards. Remove a selection or import more WTS posts."
-            : mode === "wts"
-              ? "No cash buyer in this paste matches these cards. Try WTT to find people who want a swap, or import more WTB posts."
-              : "No single WTT post connects these selections. Remove a card or import more posts to find another offer."}
+          {emptyText ??
+            (mode === "wtb"
+              ? "No seller in this paste lists all of these cards. Remove a selection or import more WTS posts."
+              : mode === "wts"
+                ? "No cash buyer in this paste matches these cards. Try WTT to find people who want a swap, or import more WTB posts."
+                : "No single WTT post connects these selections. Remove a card or import more posts to find another offer.")}
         </div>
       )}
       <div
@@ -80,11 +87,19 @@ export function ContactResults({
             const theirWants = [...post.wants].filter(
               ([key]) => mine.has(key) && (give.size === 0 || give.has(key)),
             );
-            const theirOffers = [...post.haves]
-              .filter(([key]) => get.size === 0 || get.has(key))
-              .sort(
-                ([a], [b]) => Number(wanted.has(b)) - Number(wanted.has(a)),
-              );
+            // Every have, so none is out of reach — but the gallery leads
+            // with, and until asked shows only, the cards this trader is here
+            // for: the ones picked on the right, or else the ones searched for.
+            const theirOffers = [...post.haves].sort(
+              ([a], [b]) => Number(wanted.has(b)) - Number(wanted.has(a)),
+            );
+            const lookingFor =
+              get.size > 0
+                ? (key: string) => get.has(key)
+                : search
+                  ? (_key: string, item: ParsedItem) =>
+                      matchesDeskQuery(item, search)
+                  : undefined;
             const state = post.message.nickname
               ? verified.get(post.message.nickname)
               : undefined;
@@ -109,6 +124,9 @@ export function ContactResults({
                     {post.message.time?.raw ?? "Pasted post"}
                     {post.message.repeats > 1
                       ? ` · posted ${post.message.repeats}×`
+                      : ""}
+                    {post.replaced > 0
+                      ? ` · updates ${post.replaced} earlier post${post.replaced === 1 ? "" : "s"}`
                       : ""}
                   </span>
                 </div>
@@ -142,6 +160,7 @@ export function ContactResults({
                         items={theirOffers}
                         images={images}
                         wanted={wanted}
+                        focus={lookingFor}
                         title={
                           mode === "wtb"
                             ? "Cards for sale"

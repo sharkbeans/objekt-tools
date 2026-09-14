@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   collectDeskCards,
+  deskLabelLines,
   indexDeskPosts,
+  latestDeskPosts,
   selectDeskPosts,
 } from "./trade-desk";
-import { parseTranscript } from "./transcript";
+import { collect, parseMessageTime, parseTranscript } from "./transcript";
 
 const posts = indexDeskPosts(
   parseTranscript(`Alice — 3:41 PM
@@ -120,5 +122,105 @@ JiYeon CC102`),
       ),
       ["Buyer"],
     );
+  });
+});
+
+/** Posts as the capture extension delivers them: one block each, ISO-stamped. */
+function stamped(...blocks: [author: string, time: string, body: string][]) {
+  return indexDeskPosts(
+    collect(
+      blocks.map(([author, time, body]) => ({
+        author,
+        body,
+        time: parseMessageTime(time),
+      })),
+    ),
+  );
+}
+
+const FULL =
+  "WTT\nHAVE\nHyeRin BB206 JiWoo CC201 YooYeon CC202 NaKyoung CC201\nWANT\nSeoYeon CC203 CC204";
+
+describe("a trader's updated list", () => {
+  it("replaces the list it updated, and says how many it replaced", () => {
+    const latest = latestDeskPosts(
+      stamped(
+        ["M31WAV", "2026-09-13T11:22:47.764Z", FULL],
+        ["M31WAV", "2026-09-13T17:06:03.374Z", `${FULL} CC205`],
+        [
+          "M31WAV",
+          "2026-09-14T01:08:47.180Z",
+          FULL.replace(" NaKyoung CC201", ""),
+        ],
+      ),
+    );
+    assert.equal(latest.length, 1);
+    assert.equal(latest[0].message.time?.raw, "2026-09-14T01:08:47.180Z");
+    assert.equal(latest[0].replaced, 2);
+  });
+  it("keeps a list split across two messages, which share no cards", () => {
+    const latest = latestDeskPosts(
+      stamped(
+        [
+          "Alice",
+          "2026-09-13T11:00:00.000Z",
+          "WTT\nHAVE\nSeoYeon CC101 CC102 CC103",
+        ],
+        [
+          "Alice",
+          "2026-09-13T11:00:05.000Z",
+          "WTT\nHAVE\nJiYeon CC201 CC202 CC203",
+        ],
+      ),
+    );
+    assert.equal(latest.length, 2);
+  });
+  it("never lets one trader's post replace another's", () => {
+    const latest = latestDeskPosts(
+      stamped(
+        ["Alice", "2026-09-13T11:00:00.000Z", FULL],
+        ["Bob", "2026-09-13T12:00:00.000Z", FULL],
+      ),
+    );
+    assert.equal(latest.length, 2);
+  });
+  it("keeps both when a sell post follows a trade post", () => {
+    const latest = latestDeskPosts(
+      stamped(
+        ["Alice", "2026-09-13T11:00:00.000Z", "WTT\nHAVE\nSeoYeon CC101 CC102"],
+        ["Alice", "2026-09-13T12:00:00.000Z", "WTS\nSeoYeon CC101 CC102 $5"],
+      ),
+    );
+    assert.equal(latest.length, 2);
+  });
+  it("keeps both when it cannot be sure which is newer", () => {
+    // 9 AM today is later than 11 PM yesterday, and earlier on the clock.
+    const latest = latestDeskPosts(
+      stamped(
+        ["Alice", "Yesterday at 11:00 PM", FULL],
+        ["Alice", "Today at 9:00 AM", FULL.replace(" CC204", "")],
+      ),
+    );
+    assert.equal(latest.length, 2);
+  });
+  it("orders clock times under the same day word", () => {
+    const latest = latestDeskPosts(
+      stamped(
+        ["Alice", "Today at 9:00 AM", FULL],
+        ["Alice", "Today at 11:00 AM", FULL.replace(" CC204", "")],
+      ),
+    );
+    assert.deepEqual(
+      latest.map((post) => post.message.time?.raw),
+      ["Today at 11:00 AM"],
+    );
+  });
+});
+
+describe("card names", () => {
+  it("put the member and the code on a line each", () => {
+    const [item] = parseTranscript("Alice — 3:41 PM\nHAVE\nSeoYeon E317")[0]
+      .haves;
+    assert.deepEqual(deskLabelLines(item), ["SeoYeon", "E317"]);
   });
 });

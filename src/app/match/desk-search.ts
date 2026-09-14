@@ -1,5 +1,6 @@
+import { parseOffering } from "@/lib/discord/match";
 import type { ParsedItem } from "@/lib/paste-parser";
-import { getSeasonPrefix } from "@/lib/season-prefix";
+import { getSeasonPrefix, stripVariantSuffix } from "@/lib/season-prefix";
 import { parseTradeSearchShortcuts } from "@/lib/trade/trade-search-shortcuts";
 
 /**
@@ -14,6 +15,7 @@ import { parseTradeSearchShortcuts } from "@/lib/trade/trade-search-shortcuts";
  */
 
 export interface DeskQuery {
+  alternatives: ParsedItem[];
   members: Set<string>;
   seasons: Set<string>;
   terms: string[];
@@ -22,6 +24,12 @@ export interface DeskQuery {
 export function parseDeskQuery(search: string): DeskQuery {
   const parsed = parseTradeSearchShortcuts(search);
   return {
+    // Preserve member/season pairs and inherited codes from the want list.
+    // Each listed card is an alternative, not a required bundle.
+    alternatives: parseOffering(search).filter(
+      (item) =>
+        item.season && item.collectionNo && !item.isAny && !item.freeform,
+    ),
     members: new Set(parsed.member.map((m) => m.toLowerCase())),
     seasons: new Set(parsed.season.map((s) => s.toLowerCase())),
     terms: parsed.effectiveSearch.toLowerCase().split(/\s+/).filter(Boolean),
@@ -30,6 +38,16 @@ export function parseDeskQuery(search: string): DeskQuery {
 
 export function matchesDeskQuery(item: ParsedItem, query: DeskQuery): boolean {
   const { member, season, collectionNo } = item;
+  if (query.alternatives.length) {
+    return query.alternatives.some(
+      (wanted) =>
+        (!wanted.member ||
+          wanted.member.toLowerCase() === member?.toLowerCase()) &&
+        wanted.season?.toLowerCase() === season?.toLowerCase() &&
+        stripVariantSuffix(wanted.collectionNo ?? "").toLowerCase() ===
+          stripVariantSuffix(collectionNo ?? "").toLowerCase(),
+    );
+  }
   if (query.members.size > 0) {
     if (!member || !query.members.has(member.toLowerCase())) return false;
   }

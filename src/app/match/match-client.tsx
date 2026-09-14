@@ -59,6 +59,7 @@ import {
   deskLabel,
   indexDeskPosts,
   keyedItems,
+  latestDeskPosts,
   selectDeskPosts,
 } from "@/lib/discord/trade-desk";
 import {
@@ -117,10 +118,12 @@ import { resolveForPoster } from "@/lib/poster/poster-resolver";
 import { stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionHref } from "@/lib/sections";
 import { ContactResults } from "./desk-contacts";
-import { DeskGrid } from "./desk-grid";
+import { type DeskBadge, DeskGrid } from "./desk-grid";
+import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
 import { PostDialog } from "./post-dialog";
 
 const NICK_KEY = "match:nickname:v1";
+const THEIR_SEARCH_KEY = "match:their-search:v1";
 const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
 const PICKED_KEY = "match:picked:v1";
@@ -234,6 +237,7 @@ export function MatchClient() {
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
   const [offering, setOffering] = useState("");
   const [wanting, setWanting] = useState("");
+  const [theirSearch, setTheirSearch] = useState("");
   const [nickname, setNickname] = useState("");
   const [owned, setOwned] = useState<OwnedEntry[]>([]);
   const [loadingInv, setLoadingInv] = useState(false);
@@ -250,7 +254,6 @@ export function MatchClient() {
   );
   const [building, setBuilding] = useState(false);
   const [sort, setSort] = useState<"popular" | "member" | "price">("popular");
-  const [listLimit, setListLimit] = useState(12);
   const [columns, setColumns] = useState<number>(DEFAULT_COLUMNS);
   const [storedCount, setStoredCount] = useState(0);
   const [seen, setSeen] = useState<ReadonlySet<SeenId>>(EMPTY_SEEN);
@@ -271,6 +274,7 @@ export function MatchClient() {
     try {
       setOffering(localStorage.getItem(OFFERING_KEY) ?? "");
       setWanting(localStorage.getItem(WANTING_KEY) ?? "");
+      setTheirSearch(localStorage.getItem(THEIR_SEARCH_KEY) ?? "");
       setNickname(localStorage.getItem(NICK_KEY) ?? "");
       const savedCols = Number(localStorage.getItem(COLS_KEY));
       if (COLUMN_CHOICES.some((choice) => choice === savedCols))
@@ -310,12 +314,13 @@ export function MatchClient() {
     try {
       localStorage.setItem(OFFERING_KEY, offering);
       localStorage.setItem(WANTING_KEY, wanting);
+      localStorage.setItem(THEIR_SEARCH_KEY, theirSearch);
       localStorage.setItem(NICK_KEY, nickname);
       localStorage.setItem(COLS_KEY, String(columns));
     } catch {
       /* Keep the in-memory lists usable. */
     }
-  }, [ready, offering, wanting, nickname, columns]);
+  }, [ready, offering, wanting, theirSearch, nickname, columns]);
 
   // Hashing is async, so ids arrive a beat after the messages do. Until then a
   // post has no id and stays visible, which is the right way round: a brief
@@ -446,6 +451,12 @@ export function MatchClient() {
       if (posts === undefined) {
         posts = addPaste(message.transcript);
         handled.set(message.id, posts);
+        // Every new delivery opens its own search, including in an existing
+        // desk tab with old selections. Saved personal wants stay separate.
+        setTheirSearch(message.wants.trim().replace(/\s*\n\s*/g, ", "));
+        setMode("wtt");
+        setGive(new Set());
+        setGet(new Set());
         if (message.wants.trim())
           setWanting((previous) =>
             previous.trim() ? previous : message.wants,
@@ -501,19 +512,24 @@ export function MatchClient() {
       }),
     [messages, imports],
   );
+  // A trader's updated list replaces the one it updated before anything is
+  // hidden, so marking the newest handled cannot bring an older copy back.
+  const current = useMemo(
+    () => latestDeskPosts(indexDeskPosts(enriched)),
+    [enriched],
+  );
   // Triaged posts and muted traders drop out of the whole desk, not just the
   // contact list: a post the user has dealt with should not keep contributing
   // cards to the grids either.
-  const visible = useMemo(() => {
-    if (!hideSeen) return enriched;
-    return enriched.filter((message) => {
-      const ids = seenIds.get(message.key);
+  const indexed = useMemo(() => {
+    if (!hideSeen) return current;
+    return current.filter((post) => {
+      const ids = seenIds.get(post.message.key);
       if (!ids) return true;
       return !seen.has(ids.post) && !seen.has(ids.author);
     });
-  }, [enriched, hideSeen, seen, seenIds]);
-  const hiddenCount = enriched.length - visible.length;
-  const indexed = useMemo(() => indexDeskPosts(visible), [visible]);
+  }, [current, hideSeen, seen, seenIds]);
+  const hiddenCount = current.length - indexed.length;
   const allTheirItems = useMemo(() => {
     const items = new Map(savedWants);
     for (const post of indexed)
@@ -524,9 +540,18 @@ export function MatchClient() {
     () => new Set([...give].filter((key) => mine.has(key))),
     [give, mine],
   );
+  const theirQuery = useMemo(() => parseDeskQuery(theirSearch), [theirSearch]);
+  const searchingTheirCards = mode !== "wts" && theirSearch.trim().length > 0;
   const candidates = useMemo(
-    () => selectDeskPosts(indexed, mode, activeGive, get),
-    [indexed, mode, activeGive, get],
+    () =>
+      selectDeskPosts(indexed, mode, activeGive, get).filter(
+        (post) =>
+          !searchingTheirCards ||
+          [...post.haves.values()].some((item) =>
+            matchesDeskQuery(item, theirQuery),
+          ),
+      ),
+    [indexed, mode, activeGive, get, searchingTheirCards, theirQuery],
   );
   // Card order comes from the whole mode pool, never from the current
   // selection: picking a card would otherwise make it the most-wanted card
@@ -600,9 +625,6 @@ export function MatchClient() {
       candidates
         .filter((post) => {
           if (mode === "wtb") return post.haves.size > 0;
-          if (mode === "wts")
-            return [...post.wants.keys()].some((key) => mine.has(key));
-          if (activeGive.size || get.size) return true;
           return [...post.wants.keys()].some((key) => mine.has(key));
         })
         .sort((a, b) => {
@@ -610,12 +632,46 @@ export function MatchClient() {
             [...post.wants.keys()].filter((key) => mine.has(key)).length;
           return score(b) - score(a);
         }),
-    [candidates, mine, mode, activeGive, get],
+    [candidates, mine, mode],
   );
+  const searchSummary = !searchingTheirCards
+    ? null
+    : loadingInv && mode === "wtt"
+      ? `Checking your inventory for trades matching “${theirSearch}”…`
+      : mode === "wtt" && mine.size === 0
+        ? `Searching for “${theirSearch}”. Add your objekts to check who wants something you own.`
+        : candidates.length === 0
+          ? `No ${mode === "wtb" ? "WTS" : "WTT"} posts in this paste offer cards matching “${theirSearch}”${activeGive.size || get.size ? " with your current selections" : ""}. Try clearing selections or importing more posts.`
+          : mode === "wtt" && contactPosts.length === 0
+            ? `No mutual trades found for “${theirSearch}” in this paste. ${candidates.length} WTT post${candidates.length === 1 ? " offers" : "s offer"} matching cards, but none lists any of your objekts in return.`
+            : `${contactPosts.length} ${mode === "wtb" ? "WTS" : "WTT"} post${contactPosts.length === 1 ? " offers" : "s offer"} cards matching “${theirSearch}”${mode === "wtt" ? ` and ${contactPosts.length === 1 ? "lists" : "list"} objekts you own in return` : ""}.`;
   const linkedPosts = useMemo(
     () => indexed.filter((post) => post.message.listLinks.length > 0),
     [indexed],
   );
+  const linkedListCount = useMemo(
+    () =>
+      linkedPosts.reduce(
+        (count, post) => count + post.message.listLinks.length,
+        0,
+      ),
+    [linkedPosts],
+  );
+  const linkedListProgress = useMemo(() => {
+    let loading = 0;
+    let loaded = 0;
+    let failed = 0;
+    for (const post of linkedPosts) {
+      const state = imports.get(post.message.key);
+      if (!state) continue;
+      if (state.status === "loading") loading += state.links.length;
+      else {
+        loaded += state.imports.length;
+        failed += state.errors.length;
+      }
+    }
+    return { loading, loaded, failed };
+  }, [imports, linkedPosts]);
   const images = useMemo(() => {
     const map = new Map<string, string>();
     for (const item of owned) {
@@ -632,30 +688,37 @@ export function MatchClient() {
     return map;
   }, [owned, imports]);
 
-  // Fetch only after opening a post. Clearing the paste invalidates pending work.
-  useEffect(() => {
-    const message = messages.find((post) => post.key === openPost);
-    if (!message?.listLinks.length || importStarted.current.has(message.key))
-      return;
-    importStarted.current.add(message.key);
-    const version = generation.current;
-    setImports((previous) =>
-      new Map(previous).set(message.key, {
-        status: "loading",
-        links: message.listLinks,
-      }),
+  /** Load every linked public list, four posts at a time. */
+  const loadAllLinkedLists = useCallback((posts: DeskPost[]) => {
+    const pending = posts.filter(
+      (post) =>
+        post.message.listLinks.length > 0 &&
+        !importStarted.current.has(post.message.key),
     );
-    void Promise.allSettled(
-      message.listLinks.map(async (link) => {
-        const response = await fetch(
-          `/api/external-lists?url=${encodeURIComponent(link.url)}`,
-        );
-        const data = await response.json();
-        if (!response.ok)
-          throw new Error(data.error ?? "Could not import list.");
-        return data as ExternalListImport;
-      }),
-    ).then((results) => {
+    if (!pending.length) return;
+    for (const post of pending) importStarted.current.add(post.message.key);
+    setImports((previous) => {
+      const next = new Map(previous);
+      for (const post of pending)
+        next.set(post.message.key, {
+          status: "loading",
+          links: post.message.listLinks,
+        });
+      return next;
+    });
+    const version = generation.current;
+    const load = async (post: DeskPost) => {
+      const results = await Promise.allSettled(
+        post.message.listLinks.map(async (link) => {
+          const response = await fetch(
+            `/api/external-lists?url=${encodeURIComponent(link.url)}`,
+          );
+          const data = await response.json();
+          if (!response.ok)
+            throw new Error(data.error ?? "Could not import list.");
+          return data as ExternalListImport;
+        }),
+      );
       if (generation.current !== version) return;
       const loaded: ExternalListImport[] = [];
       const errors: { link: ExternalListLink; message: string }[] = [];
@@ -663,7 +726,7 @@ export function MatchClient() {
         if (result.status === "fulfilled") loaded.push(result.value);
         else
           errors.push({
-            link: message.listLinks[i],
+            link: post.message.listLinks[i],
             message:
               result.reason instanceof Error
                 ? result.reason.message
@@ -671,15 +734,22 @@ export function MatchClient() {
           });
       });
       setImports((previous) =>
-        new Map(previous).set(message.key, {
+        new Map(previous).set(post.message.key, {
           status: "loaded",
-          links: message.listLinks,
+          links: post.message.listLinks,
           imports: loaded,
           errors,
         }),
       );
-    });
-  }, [messages, openPost]);
+    };
+    let next = 0;
+    const worker = async () => {
+      while (next < pending.length) await load(pending[next++]);
+    };
+    void Promise.all(
+      Array.from({ length: Math.min(4, pending.length) }, worker),
+    );
+  }, []);
 
   const checkInventory = async (post: DeskPost) => {
     const nick = post.message.nickname;
@@ -720,6 +790,7 @@ export function MatchClient() {
     setGive(new Set());
     setGet(new Set());
     setSavedPicks([]);
+    setTheirSearch("");
     setOpenPost(null);
     setConfirmClear(false);
     try {
@@ -820,6 +891,7 @@ export function MatchClient() {
     )[0];
   }, [enriched, openPost, mine, activeGive, get, mode]);
   const selectionCount = activeGive.size + get.size;
+  const needsInventory = mode !== "wtb" && mine.size === 0;
   const contactTitle =
     mode === "wts"
       ? "Buyers for your objekts"
@@ -839,10 +911,17 @@ export function MatchClient() {
     verified,
     onMarkSeen: markSeen,
     canMarkSeen: seenIds.size > 0,
+    search: searchingTheirCards ? theirQuery : null,
+    emptyText:
+      searchSummary ??
+      (mode === "wtt" && mine.size === 0
+        ? "Add your objekts to check who wants something you own."
+        : undefined),
   };
+  // Lowest asking price for a card in "Their objekts" — wtb only, where a
+  // price matters more than a trader count. Every other mode badges the
+  // count instead; see `theirBadge` below.
   const priceCaption = (card: DeskCard) => {
-    if (mode !== "wtb")
-      return `${card.posts.length} trader${card.posts.length === 1 ? "" : "s"}`;
     const prices = card.posts
       .flatMap((post) => {
         const price = askingPrice(post.message.pricing, card.key);
@@ -850,6 +929,38 @@ export function MatchClient() {
       })
       .sort((a, b) => a.amount - b.amount);
     return prices[0] ? `From ${formatPrice(prices[0])}` : "Ask for price";
+  };
+  // "My objekts": how many traders want each of the viewer's own cards — a
+  // "want" badge, colored to match "Your side" above the grid.
+  // Traders, not posts: one person's two separate lists are still one trader.
+  const traders = (card: DeskCard) =>
+    new Set(card.posts.map((post) => post.message.author)).size;
+  const mineBadge = (card: DeskCard): DeskBadge => {
+    const count = traders(card);
+    const who = mode === "wts" ? "buyer" : "trader";
+    const plural = count === 1 ? "" : "s";
+    const wants = count === 1 ? "wants" : "want";
+    const rest = mode === "wts" ? "to buy this" : "this";
+    return {
+      kind: "count",
+      count,
+      tone: "want",
+      full: `${count} ${who}${plural} ${wants} ${rest}`,
+    };
+  };
+  // "Their objekts": how many traders have each card to offer — a "have"
+  // badge, colored to match "From your Discord paste" above the grid. wtb
+  // shows the asking price instead; a count of sellers is not what a buyer
+  // is scanning for.
+  const theirBadge = (card: DeskCard): DeskBadge => {
+    if (mode === "wtb") return { kind: "text", text: priceCaption(card) };
+    const count = traders(card);
+    return {
+      kind: "count",
+      count,
+      tone: "have",
+      full: `${count} trader${count === 1 ? "" : "s"} ${count === 1 ? "has" : "have"} this`,
+    };
   };
 
   return (
@@ -941,21 +1052,42 @@ export function MatchClient() {
         aria-live="polite"
       >
         <p className="text-sm">
-          <span className="font-semibold">
-            {contactPosts.length}{" "}
-            {mode === "wtb" ? "WTS" : mode === "wts" ? "WTB" : "WTT"} post
-            {contactPosts.length === 1 ? "" : "s"}
-          </span>
-          {selectionCount
-            ? " match your selections"
-            : mode === "wtb"
-              ? " with cards for sale"
-              : " want cards you have"}
-          .{" "}
-          {selectionCount > 1 && (
-            <span className="text-muted-foreground">
-              Each post must match every selected card.
-            </span>
+          {needsInventory ? (
+            <>
+              <span className="block font-semibold">
+                {loadingInv
+                  ? "Loading your Cosmo inventory…"
+                  : mode === "wtt"
+                    ? "Add your haves to find mutual trades"
+                    : "Add your haves to find buyers"}
+              </span>
+              <span className="text-muted-foreground">
+                {loadingInv
+                  ? "Matches will update when your cards are loaded."
+                  : mode === "wtt"
+                    ? "Load your Cosmo inventory or type the objekts you can offer. We’ll check who offers the cards you’re looking for and wants something you own in return."
+                    : "Load your Cosmo inventory or type the objekts you can sell to find buyers who want them."}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">
+                {contactPosts.length}{" "}
+                {mode === "wtb" ? "WTS" : mode === "wts" ? "WTB" : "WTT"} post
+                {contactPosts.length === 1 ? "" : "s"}
+              </span>
+              {selectionCount
+                ? " match your selections"
+                : mode === "wtb"
+                  ? " with cards for sale"
+                  : " want cards you have"}
+              {searchingTheirCards && ` matching “${theirSearch}”`}.{" "}
+              {selectionCount > 1 && (
+                <span className="text-muted-foreground">
+                  Each post must match every selected card.
+                </span>
+              )}
+            </>
           )}
           {storedCount >= MAX_BLOCKS && (
             <span className="text-muted-foreground">
@@ -965,6 +1097,15 @@ export function MatchClient() {
           )}
         </p>
         <div className="flex gap-2">
+          {needsInventory && (
+            <Button
+              size="sm"
+              disabled={loadingInv}
+              onClick={() => setEditor("mine")}
+            >
+              Add haves or Cosmo inventory
+            </Button>
+          )}
           {(hiddenCount > 0 || (!hideSeen && seen.size > 0)) && (
             <Button size="sm" variant="ghost" onClick={toggleHideSeen}>
               {hideSeen ? `Show ${hiddenCount} handled` : "Hide handled posts"}
@@ -1001,7 +1142,9 @@ export function MatchClient() {
           )}
         </div>
       </div>
-      <div className="grid items-start gap-4 md:grid-cols-2">
+      {/* Stretched, not top-aligned: the two sides are read against each
+          other, and panels of different heights made that harder. */}
+      <div className="grid gap-4 md:grid-cols-2">
         <section
           className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
           aria-label={mode === "wtb" ? "Buying list" : "My objekts"}
@@ -1080,10 +1223,15 @@ export function MatchClient() {
               {mine.size === 0 ? (
                 <div className="space-y-3 py-12 text-center">
                   <p className="text-sm text-muted-foreground">
-                    Load your Cosmo inventory or type the cards you’re offering.
+                    {mode === "wtt"
+                      ? "Your haves help narrow down which traders can offer the objekts you want in return."
+                      : "Add your haves to see which buyers want your objekts."}
                   </p>
-                  <Button onClick={() => setEditor("mine")}>
-                    Add my objekts
+                  <Button
+                    disabled={loadingInv}
+                    onClick={() => setEditor("mine")}
+                  >
+                    {loadingInv ? "Loading inventory…" : "Add my objekts"}
                   </Button>
                 </div>
               ) : (
@@ -1093,9 +1241,7 @@ export function MatchClient() {
                   onToggle={toggleGive}
                   images={images}
                   side="mine"
-                  caption={(card) =>
-                    `${card.posts.length} ${mode === "wts" ? "buying" : "want this"}`
-                  }
+                  badge={mineBadge}
                   emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
                   columns={columns}
                   poolKey={`${mode}|${mine.size}|${pool.length}`}
@@ -1168,6 +1314,15 @@ export function MatchClient() {
                     ? "Only offers from traders who want your selected cards."
                     : "Choose either side to start. Offers update as you select cards."}
               </p>
+              {searchSummary && (
+                <p
+                  role="status"
+                  className="rounded-lg border bg-muted/30 p-3 text-sm"
+                  data-testid="search-match-summary"
+                >
+                  {searchSummary}
+                </p>
+              )}
               {messages.length === 0 ? (
                 <div className="space-y-3 py-12 text-center">
                   <p className="text-sm text-muted-foreground">
@@ -1184,7 +1339,18 @@ export function MatchClient() {
                   onToggle={toggleGet}
                   images={images}
                   side="theirs"
-                  caption={priceCaption}
+                  search={theirSearch}
+                  onSearchChange={setTheirSearch}
+                  clearFilters={
+                    theirSearch.trim() || activeGive.size || get.size
+                      ? () => {
+                          setTheirSearch("");
+                          setGive(new Set());
+                          setGet(new Set());
+                        }
+                      : undefined
+                  }
+                  badge={theirBadge}
                   emptyText={
                     mode === "wtb"
                       ? "No listed sale cards match. Remove a selection, open a linked list below, or add WTS posts."
@@ -1197,42 +1363,45 @@ export function MatchClient() {
             </>
           )}
           {linkedPosts.length > 0 && (
-            <details className="rounded-lg border bg-background px-3 py-2">
-              <summary className="cursor-pointer text-sm font-medium">
-                {linkedPosts.length} linked post
-                {linkedPosts.length === 1 ? "" : "s"} to explore
-              </summary>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Open a post to import its Objekt.top or Apollo cards. These
-                lists may reveal more matches.
-              </p>
-              <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-                {linkedPosts.slice(0, listLimit).map((post) => (
-                  <button
-                    type="button"
-                    key={post.message.key}
-                    onClick={() => setOpenPost(post.message.key)}
-                    className="flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-muted"
-                  >
-                    <span className="truncate">{post.message.author}</span>
-                    <span className="shrink-0 text-xs text-primary">
-                      {imports.get(post.message.key)?.status === "loaded"
-                        ? "View post"
-                        : "Open & import"}
-                    </span>
-                  </button>
-                ))}
-                {linkedPosts.length > listLimit && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setListLimit((limit) => limit + 12)}
-                  >
-                    Show more linked posts
+            <div className="rounded-lg border bg-background px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="max-w-2xl space-y-1">
+                  <p className="text-sm font-medium">
+                    {linkedListCount} linked{" "}
+                    {linkedListCount === 1 ? "list" : "lists"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Found public Objekt.top and Apollo.cafe lists in these
+                    posts. Load them to include the cards traders list there and
+                    surface more possible matches.
+                  </p>
+                </div>
+                {linkedListProgress.loading > 0 ? (
+                  <Button size="sm" disabled>
+                    <Loader2Icon className="size-4 animate-spin" />
+                    Loading{" "}
+                    {linkedListProgress.loaded + linkedListProgress.failed} of{" "}
+                    {linkedListCount}
                   </Button>
+                ) : linkedListProgress.loaded + linkedListProgress.failed <
+                  linkedListCount ? (
+                  <Button
+                    size="sm"
+                    onClick={() => loadAllLinkedLists(linkedPosts)}
+                  >
+                    Load all {linkedListCount}{" "}
+                    {linkedListCount === 1 ? "list" : "lists"}
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {linkedListProgress.loaded}{" "}
+                    {linkedListProgress.loaded === 1 ? "list" : "lists"} loaded
+                    {linkedListProgress.failed > 0 &&
+                      ` · ${linkedListProgress.failed} unavailable`}
+                  </span>
                 )}
               </div>
-            </details>
+            </div>
           )}
         </section>
       </div>
@@ -1411,8 +1580,8 @@ export function MatchClient() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Your pasted text stays in this browser. Linked public lists load
-                when you open their post.
+                Your pasted text stays in this browser. You can choose to load
+                any linked public lists together after importing posts.
               </p>
             </div>
           )}
