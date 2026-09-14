@@ -137,6 +137,7 @@ export function ContactGallery({
                       fill
                       sizes="84px"
                       className="object-cover"
+                      unoptimized
                     />
                   ) : (
                     <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-muted-foreground">

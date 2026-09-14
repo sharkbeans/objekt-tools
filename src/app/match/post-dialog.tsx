@@ -139,7 +139,14 @@ function DialogObjektImage({
       aria-hidden="true"
     >
       {url ? (
-        <Image src={url} alt="" fill sizes="56px" className="object-cover" />
+        <Image
+          src={url}
+          alt=""
+          fill
+          sizes="56px"
+          className="object-cover"
+          unoptimized
+        />
       ) : (
         <span className="absolute inset-0 flex items-center justify-center p-1 text-center text-[9px] leading-tight text-muted-foreground">
           {label}
@@ -260,6 +267,7 @@ function LinkedListImports({
                             fill
                             sizes="(min-width: 640px) 96px, 22vw"
                             className="object-cover"
+                            unoptimized
                           />
                         </div>
                       ) : (

@@ -157,6 +157,7 @@ export function DeskGrid({
                         fill
                         sizes={`(min-width: 768px) ${Math.round(46 / columns)}vw, 30vw`}
                         className="object-cover"
+                        unoptimized
                       />
                     ) : (
                       <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-sm text-muted-foreground">
