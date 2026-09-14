@@ -81,6 +81,11 @@ import {
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
 import {
+  PAGE_SOURCE,
+  type PageMessage,
+  readExtensionMessage,
+} from "@/lib/match/extension-handoff";
+import {
   authorSeenId,
   postSeenId,
   type SeenId,
@@ -354,13 +359,14 @@ export function MatchClient() {
     };
   }, [ready, userId]);
 
-  const addPaste = useCallback((text: string) => {
+  /** Merge a transcript into the desk. Returns how many posts it held. */
+  const addPaste = useCallback((text: string): number => {
     const parsed = analyzeTranscript(text);
     if (!parsed.messages.length) {
       toast.error(
         "No trade posts found. Include the message text and Discord name/time lines when available.",
       );
-      return;
+      return 0;
     }
     setMessages((previous) => mergeTranscripts(previous, parsed.messages));
     // Dedupe before storing: the paste-scroll-paste workflow guarantees
@@ -381,6 +387,7 @@ export function MatchClient() {
         `Ignored ${parsed.orphanLines} lines above the first Discord name.`,
       );
     toast.success(`Read ${parsed.messages.length} posts. Matching updated.`);
+    return parsed.messages.length;
   }, []);
   const importFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -395,15 +402,16 @@ export function MatchClient() {
       input.value = "";
     }
   };
-  const loadInventory = async () => {
-    if (!nickname.trim()) return;
+  const loadInventory = useCallback(async (name: string) => {
+    const nick = name.trim();
+    if (!nick) return;
     setLoadingInv(true);
     try {
-      const entries = await fetchInventoryByNickname(nickname.trim());
+      const entries = await fetchInventoryByNickname(nick);
       setOwned(entries);
       setGive(new Set());
       setEditor(null);
-      toast.success(`Loaded ${entries.length} objekts for ${nickname.trim()}.`);
+      toast.success(`Loaded ${entries.length} objekts for ${nick}.`);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not load inventory.",
@@ -411,7 +419,49 @@ export function MatchClient() {
     } finally {
       setLoadingInv(false);
     }
-  };
+  }, []);
+
+  // Posts handed over by the capture extension, which injects a script into
+  // this tab rather than making the user download and re-import a file. The
+  // protocol and the reason for the handshake are in `extension-handoff.ts`.
+  const ownedCount = useRef(0);
+  ownedCount.current = owned.length;
+  useEffect(() => {
+    if (!ready) return;
+    const handled = new Map<string, number>();
+    const post = (message: PageMessage) =>
+      window.postMessage(message, window.location.origin);
+    const onMessage = (event: MessageEvent) => {
+      // Only this window: an injected script posts as the page itself, while
+      // a frame or an opener on another origin cannot pass both checks.
+      if (event.source !== window || event.origin !== window.location.origin)
+        return;
+      const message = readExtensionMessage(event.data);
+      if (!message) return;
+      if (message.type === "hello") {
+        post({ source: PAGE_SOURCE, type: "ready" });
+        return;
+      }
+      let posts = handled.get(message.id);
+      if (posts === undefined) {
+        posts = addPaste(message.transcript);
+        handled.set(message.id, posts);
+        if (message.wants.trim())
+          setWanting((previous) =>
+            previous.trim() ? previous : message.wants,
+          );
+        const nick = message.nickname.trim();
+        if (nick) {
+          setNickname(nick);
+          if (!ownedCount.current) void loadInventory(nick);
+        }
+      }
+      post({ source: PAGE_SOURCE, type: "received", id: message.id, posts });
+    };
+    window.addEventListener("message", onMessage);
+    post({ source: PAGE_SOURCE, type: "ready" });
+    return () => window.removeEventListener("message", onMessage);
+  }, [ready, addPaste, loadInventory]);
 
   const mine = useMemo(
     () =>
@@ -1249,12 +1299,12 @@ export function MatchClient() {
                     value={nickname}
                     onChange={(event) => setNickname(event.target.value)}
                     onKeyDown={(event) =>
-                      event.key === "Enter" && void loadInventory()
+                      event.key === "Enter" && void loadInventory(nickname)
                     }
                   />
                   <Button
                     disabled={loadingInv || !nickname.trim()}
-                    onClick={loadInventory}
+                    onClick={() => loadInventory(nickname)}
                   >
                     {loadingInv ? (
                       <Loader2Icon className="size-4 animate-spin" />
