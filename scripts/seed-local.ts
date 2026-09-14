@@ -16,13 +16,12 @@ import * as schema from "../src/lib/db/schema";
 loadEnvConfig(process.cwd(), true);
 
 // ============================================================
-// Cosmo token — fill these in to enable Cosmo API features.
-// Leave blank to skip (search and objekt lookup won't work).
+// Optional Cosmo tokens — set COSMO_ACCESS_TOKEN and COSMO_REFRESH_TOKEN
+// in the gitignored .env.development.local file. Never paste tokens here.
+// Leave unset to skip (search and objekt lookup will not work).
 // ============================================================
-const COSMO_ACCESS_TOKEN =
-  "REMOVED_EXPOSED_COSMO_TOKEN";
-const COSMO_REFRESH_TOKEN =
-  "REMOVED_EXPOSED_COSMO_TOKEN";
+const COSMO_ACCESS_TOKEN = process.env.COSMO_ACCESS_TOKEN ?? "";
+const COSMO_REFRESH_TOKEN = process.env.COSMO_REFRESH_TOKEN ?? "";
 // ============================================================
 
 const db = drizzle(process.env.DATABASE_URL ?? "", { schema });
