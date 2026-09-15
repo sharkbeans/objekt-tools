@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "objekt.my trade capture",
+  "name": "Objekt Match",
   "version": "1.0.0",
   "description": "Collect the trade posts you can already see in Discord into a local index, then export them to objekt.my/match.",
   "author": "objekt.my",
@@ -24,7 +24,7 @@
     "scripts": ["background.js"]
   },
   "action": {
-    "default_title": "objekt.my trade capture \u2014 show the panel",
+    "default_title": "Objekt Match \u2014 show the panel",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

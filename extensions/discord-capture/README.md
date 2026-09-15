@@ -1,4 +1,4 @@
-# objekt.my trade capture
+# Objekt Match
 
 Chrome/Chromium and Firefox MV3 extension, built directly from the shared engine in `src/lib`.
 

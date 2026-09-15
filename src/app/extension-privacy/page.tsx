@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-// The privacy policy for the "objekt.my trade capture" browser extension.
+// The privacy policy for the "Objekt Match" browser extension.
 //
 // Both the Chrome Web Store and addons.mozilla.org require a reachable policy
 // URL, and the extension's own panel links here. It is a page in the app rather
@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 export const metadata: Metadata = {
   title: "Extension privacy policy | objekt.my",
   description:
-    "What the objekt.my trade capture browser extension collects, where it keeps it, and what leaves your device.",
+    "What the Objekt Match browser extension collects, where it keeps it, and what leaves your device.",
 };
 
 const LAST_UPDATED = "2026-09-15";
@@ -51,12 +51,10 @@ export default function ExtensionPrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl space-y-8 px-4 py-10 text-sm leading-relaxed sm:text-base">
       <header className="space-y-2">
-        <h1 className="text-3xl font-bold">
-          Privacy policy — objekt.my trade capture
-        </h1>
+        <h1 className="text-3xl font-bold">Privacy policy — Objekt Match</h1>
         <p className="text-muted-foreground">
           Last updated {LAST_UPDATED}. Applies to the browser extension
-          &ldquo;objekt.my trade capture&rdquo; for Chrome/Chromium and Firefox.
+          &ldquo;Objekt Match&rdquo; for Chrome/Chromium and Firefox.
         </p>
       </header>
 

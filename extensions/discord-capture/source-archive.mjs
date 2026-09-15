@@ -52,8 +52,8 @@ const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root })
 const nodeVersion = execFileSync("node", ["--version"]).toString().trim();
 const npmVersion = execFileSync("npm", ["--version"]).toString().trim();
 
-const readme = `objekt.my trade capture — source for Mozilla review
-====================================================
+const readme = `Objekt Match — source for Mozilla review
+=========================================
 
 This archive is the git tree at commit ${commit}, in full — not just the
 extension folder. The extension imports parser and routing code from the
