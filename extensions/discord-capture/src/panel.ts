@@ -178,6 +178,7 @@ function showViews() {
   element("settings").hidden = !capture || !settingsOpen;
   element("automation-gate").hidden = !capture || automation;
   element("actions").hidden = !automation;
+  element("tuning").hidden = !automation;
 }
 
 function openSettings(open: boolean) {
@@ -817,15 +818,34 @@ async function ensureCapturing(url: string | undefined): Promise<void> {
 const delay = element<HTMLInputElement>("delay");
 const pages = element<HTMLInputElement>("pages");
 const skipRecent = element<HTMLInputElement>("skip-recent");
+// The same two settings on the main view. Settings stays the one the run reads;
+// each copy writes through to the other as it changes.
+const delayMain = element<HTMLInputElement>("delay-main");
+const pagesMain = element<HTMLInputElement>("pages-main");
 
 /** Zero is not "no delay applied" — it is "gated on capture instead". */
 function showDelay() {
   const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+  delayMain.value = String(seconds);
+  pagesMain.value = pages.value;
   element("delay-value").textContent = seconds
     ? `+${seconds}s per page`
     : "Instant";
+  element("delay-main-value").textContent = seconds
+    ? `+${seconds}s/page`
+    : "Instant";
 }
 delay.addEventListener("input", showDelay);
+delayMain.addEventListener("input", () => {
+  delay.value = delayMain.value;
+  showDelay();
+});
+pagesMain.addEventListener("input", () => {
+  pages.value = pagesMain.value;
+});
+pages.addEventListener("input", () => {
+  pagesMain.value = pages.value;
+});
 
 /** Settings take effect as they are changed, not on the next run's click. */
 function saveSearchSettings() {
@@ -835,7 +855,7 @@ function saveSearchSettings() {
     skipRecent: skipRecent.checked,
   });
 }
-for (const input of [delay, pages, skipRecent])
+for (const input of [delay, pages, skipRecent, delayMain, pagesMain])
   input.addEventListener("change", saveSearchSettings);
 
 action("run-search", async () => {

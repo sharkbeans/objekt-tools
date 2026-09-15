@@ -24,7 +24,7 @@ button,input,textarea{font:inherit;color:inherit}
 a{color:var(--accent-line)}
 /* Anything given a display of its own has to opt back out of it when hidden,
    or the [hidden] attribute silently stops working on it. */
-[hidden],.view[hidden],.actions[hidden],.chip[hidden],.art img[hidden]{display:none}
+[hidden],.view[hidden],.actions[hidden],.tuning[hidden],.chip[hidden],.art img[hidden]{display:none}
 :focus-visible{outline:2px solid var(--accent-line);outline-offset:1px}
 
 /* Each view fills the frame. The panel is resizable, so the card grid takes
@@ -87,6 +87,12 @@ input,textarea{background:var(--field);border:1px solid var(--line);border-radiu
 .say{margin:0;font-size:12px;color:var(--dim);white-space:pre-wrap;min-height:1.4em}
 .say.bad{color:var(--bad)}
 .actions{display:flex;gap:8px}
+/* The two settings a run is tuned with, mirrored from Settings onto the main view. */
+.tuning{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--dim)}
+.tuning label{display:flex;align-items:center;gap:6px}
+.tuning input[type=range]{width:110px}
+.tuning input[type=number]{width:56px;padding:3px 6px}
+.tuning output{min-width:4.5em;font-variant-numeric:tabular-nums}
 .actions .primary{flex:1}
 
 /* Settings: everything a first search does not need. */
@@ -147,6 +153,13 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
       <a href="https://discord.com/terms" target="_blank" rel="noreferrer">Discord's terms</a> do not allow,
       and Discord may action accounts for it.</p>
       <div class="actions" style="margin-top:8px"><button type="button" class="primary" id="accept-automation">I understand — turn on search</button></div>
+    </div>
+    <div class="tuning" id="tuning">
+      <label title="Lower delays are faster, but may trigger Discord rate limits and a forced wait.">Pace
+        <input id="delay-main" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
+        <output id="delay-main-value" for="delay-main">+5s/page</output></label>
+      <label>Pages per objekt
+        <input id="pages-main" type="number" min="1" max="20" step="1" value="3"></label>
     </div>
     <div class="actions" id="actions">
       <button type="button" id="stop-search" hidden>Stop</button>
