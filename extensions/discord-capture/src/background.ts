@@ -181,6 +181,39 @@ const matchTabs: MatchTabsApi = {
 };
 
 /**
+ * Which server each channel belongs to, as learned from captures.
+ *
+ * A message link needs the server id, and posts captured before links were
+ * kept have only their channel and message id. Any later capture in the same
+ * channel supplies the server, so those older posts can be linked too.
+ */
+let channelGuilds: Promise<Record<string, string>> | null = null;
+function knownGuilds(): Promise<Record<string, string>> {
+  channelGuilds ??= extensionApi.storage.local
+    .get("channelGuilds")
+    .then((stored) =>
+      stored.channelGuilds && typeof stored.channelGuilds === "object"
+        ? (stored.channelGuilds as Record<string, string>)
+        : {},
+    )
+    .catch(() => ({}));
+  return channelGuilds;
+}
+async function rememberGuild(channel: string, guild: string) {
+  const guilds = await knownGuilds();
+  if (guilds[channel] === guild) return;
+  guilds[channel] = guild;
+  await extensionApi.storage.local.set({ channelGuilds: guilds });
+}
+
+/** The post's link, or one built from its `<channel>-<message>` key. */
+function linkFor(post: Entry, guilds: Record<string, string>): string | null {
+  if (post.link) return post.link;
+  const ids = post.key.match(/^(\d+)-(\d+)$/);
+  return ids ? messageLink(guilds[ids[1]], ids[1], ids[2]) : null;
+}
+
+/**
  * Put the last search's posts into objekt.my/match.
  *
  * Scoped to the last search, exactly as the file export was: the index is
@@ -207,9 +240,11 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
   const transcript = exportTranscript(posts.map((post) => post.block));
   // Keyed the way /match keys a post, so each can link back to its message.
   const links: Record<string, string> = {};
-  for (const post of posts)
-    if (post.link)
-      links[messageKey(post.block.author, post.block.body)] = post.link;
+  const guilds = await knownGuilds();
+  for (const post of posts) {
+    const link = linkFor(post, guilds);
+    if (link) links[messageKey(post.block.author, post.block.body)] = link;
+  }
   const tabId = await openMatchTab(matchTabs);
   // A dev server that is not running still "loads" — as the browser's error
   // page, which refuses the script with something like "Frame with ID 0 is
@@ -530,17 +565,14 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
           : null;
       if (!fromSearch && (!guild || !capturing(channel, current.paused)))
         throw new Error("Capture is paused");
+      if (guild && channel) void rememberGuild(channel, guild).catch(() => {});
       let entry: Entry;
       try {
         entry = await capture(
           request.block,
           channel ? `${channel}-${messageId}` : messageId,
           searchRun,
-          messageLink(
-            typeof request.guild === "string" ? request.guild : null,
-            channel,
-            messageId,
-          ) ?? undefined,
+          messageLink(guild, channel, messageId) ?? undefined,
         );
       } catch {
         reportedError = true;

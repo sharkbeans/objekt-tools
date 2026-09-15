@@ -555,16 +555,38 @@ export function MatchClient() {
   );
   const theirQuery = useMemo(() => parseDeskQuery(theirSearch), [theirSearch]);
   const searchingTheirCards = mode !== "wts" && theirSearch.trim().length > 0;
+  const matchesTheirSearch = useCallback(
+    (post: DeskPost) =>
+      !searchingTheirCards ||
+      [...post.haves.values()].some((item) =>
+        matchesDeskQuery(item, theirQuery),
+      ),
+    [searchingTheirCards, theirQuery],
+  );
+  // Posts matching both sides' picks: the traders to contact.
   const candidates = useMemo(
     () =>
       selectDeskPosts(indexed, mode, activeGive, get).filter(
-        (post) =>
-          !searchingTheirCards ||
-          [...post.haves.values()].some((item) =>
-            matchesDeskQuery(item, theirQuery),
-          ),
+        matchesTheirSearch,
       ),
-    [indexed, mode, activeGive, get, searchingTheirCards, theirQuery],
+    [indexed, mode, activeGive, get, matchesTheirSearch],
+  );
+  // Each grid is narrowed only by the picks on the other side. Narrowing it by
+  // its own picks too made every card picked there hide or zero the rest of
+  // that same grid — pick a card nobody wants and every count went to 0.
+  const mineCandidates = useMemo(
+    () =>
+      selectDeskPosts(indexed, mode, EMPTY_KEYS, get).filter(
+        matchesTheirSearch,
+      ),
+    [indexed, mode, get, matchesTheirSearch],
+  );
+  const theirCandidates = useMemo(
+    () =>
+      selectDeskPosts(indexed, mode, activeGive, EMPTY_KEYS).filter(
+        matchesTheirSearch,
+      ),
+    [indexed, mode, activeGive, matchesTheirSearch],
   );
   // Card order comes from the whole mode pool, never from the current
   // selection: picking a card would otherwise make it the most-wanted card
@@ -576,12 +598,12 @@ export function MatchClient() {
   const poolDemand = useMemo(() => collectDeskCards(pool, "wants"), [pool]);
   const poolSupply = useMemo(() => collectDeskCards(pool, "haves"), [pool]);
   const offered = useMemo(
-    () => collectDeskCards(candidates, "haves"),
-    [candidates],
+    () => collectDeskCards(theirCandidates, "haves"),
+    [theirCandidates],
   );
   const demanded = useMemo(
-    () => collectDeskCards(candidates, "wants"),
-    [candidates],
+    () => collectDeskCards(mineCandidates, "wants"),
+    [mineCandidates],
   );
   const myCards = useMemo(
     () =>

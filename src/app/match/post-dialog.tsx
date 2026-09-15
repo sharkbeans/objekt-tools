@@ -95,7 +95,11 @@ export function CopyDiscordHandle({
 export function JumpToMessage({ href }: { href: string | undefined }) {
   if (!href) return null;
   return (
-    <Button size="sm" variant="outline" className="h-8" asChild>
+    <Button
+      size="sm"
+      className="h-8 bg-[#5865F2] font-semibold text-white shadow-sm hover:bg-[#4752C4]"
+      asChild
+    >
       <a
         href={href}
         target="_blank"
@@ -103,6 +107,7 @@ export function JumpToMessage({ href }: { href: string | undefined }) {
         title="Open this post in Discord"
         onClick={(event) => event.stopPropagation()}
       >
+        <DiscordIcon className="size-3.5 shrink-0" />
         Jump to message
         <ExternalLinkIcon className="shrink-0" />
       </a>

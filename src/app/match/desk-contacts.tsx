@@ -121,15 +121,20 @@ export function ContactResults({
                           : `${theirWants.length} of your cards on their want list`}
                     </p>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {post.message.time?.raw ?? "Pasted post"}
-                    {post.message.repeats > 1
-                      ? ` · posted ${post.message.repeats}×`
-                      : ""}
-                    {post.replaced > 0
-                      ? ` · updates ${post.replaced} earlier post${post.replaced === 1 ? "" : "s"}`
-                      : ""}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {post.message.time?.raw ?? "Pasted post"}
+                      {post.message.repeats > 1
+                        ? ` · posted ${post.message.repeats}×`
+                        : ""}
+                      {post.replaced > 0
+                        ? ` · updates ${post.replaced} earlier post${post.replaced === 1 ? "" : "s"}`
+                        : ""}
+                    </span>
+                    {/* Up top, where the eye lands on a trader, not among the
+                        footer's buttons. */}
+                    <JumpToMessage href={links.get(post.message.key)} />
+                  </div>
                 </div>
                 <div
                   className={`grid gap-6 p-4 sm:p-5 ${mode === "wtt" && theirOffers.length > 0 ? "md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : ""}`}
@@ -205,7 +210,6 @@ export function ContactResults({
                         : "Review trade"}
                   </Button>
                   <CopyDiscordHandle name={post.message.author} explicit />
-                  <JumpToMessage href={links.get(post.message.key)} />
                   {post.message.nickname && (
                     <Button
                       size="sm"
