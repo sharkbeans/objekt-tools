@@ -26,25 +26,21 @@ import { rootUrl } from "@/lib/sections";
 export const APP_ORIGIN = rootUrl();
 
 /**
- * Where Open in match sends a search: a local dev server, until /match ships.
+ * Where Open in match sends a search: `APP_ORIGIN`, like everything else.
  *
- * /match is not on objekt.my yet, while the collection search behind card art
- * and the by-nickname inventory lookup already are — so only /match is
- * pointed away from production, and everything else keeps `APP_ORIGIN`.
- * Pointing a whole build somewhere with `NEXT_PUBLIC_APP_URL` takes /match
- * with it; `EXTENSION_MATCH_URL` moves /match alone:
+ * This pointed at a local dev server while /match was not yet on objekt.my.
+ * It is now, so a default build delivers to production. Pointing a whole build
+ * somewhere with `NEXT_PUBLIC_APP_URL` still takes /match with it, and
+ * `EXTENSION_MATCH_URL` still moves /match alone, for testing the page side of
+ * the handoff against a dev server without moving card art and inventory:
  *
  *   EXTENSION_MATCH_URL=http://localhost:3001 npm run extension:build
  *
- * Once /match is live, delete `UNRELEASED_MATCH_ORIGIN` and let this fall back
- * to `APP_ORIGIN` like everything else. `build.mjs` mirrors this, for the host
- * permission, and `pack.mjs` refuses to package a build that still points
- * /match at localhost.
+ * `build.mjs` mirrors this for the host permission, and `pack.mjs` refuses to
+ * package a build that points anywhere at localhost.
  */
-const UNRELEASED_MATCH_ORIGIN = "http://localhost:3000";
 export const MATCH_ORIGIN = (
-  process.env.EXTENSION_MATCH_URL ||
-  (process.env.NEXT_PUBLIC_APP_URL ? APP_ORIGIN : UNRELEASED_MATCH_ORIGIN)
+  process.env.EXTENSION_MATCH_URL || APP_ORIGIN
 ).replace(/\/+$/, "");
 
 /**

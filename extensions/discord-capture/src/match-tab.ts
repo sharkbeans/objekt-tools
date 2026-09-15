@@ -13,7 +13,7 @@ export const MATCH_URL = `${MATCH_ORIGIN}/match`;
 export const MATCH_ORIGIN_IS_LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(
   new URL(MATCH_ORIGIN).hostname,
 );
-/** What the panel calls it: "localhost:3000/match" until /match ships. */
+/** What the panel calls it: "objekt.my/match", or a dev server's host. */
 export const MATCH_LABEL = `${new URL(MATCH_ORIGIN).host}/match`;
 /**
  * Every /match tab. Match patterns ignore the fragment, so a hash needs no
