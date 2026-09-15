@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-// The privacy policy for the "objekt.my trade capture" browser extension.
+// The privacy policy for the "Objekt Match" browser extension.
 //
 // Both the Chrome Web Store and addons.mozilla.org require a reachable policy
 // URL, and the extension's own panel links here. It is a page in the app rather
@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 export const metadata: Metadata = {
   title: "Extension privacy policy | objekt.my",
   description:
-    "What the objekt.my trade capture browser extension collects, where it keeps it, and what leaves your device.",
+    "What the Objekt Match browser extension collects, where it keeps it, and what leaves your device.",
 };
 
 const LAST_UPDATED = "2026-09-15";
@@ -51,12 +51,10 @@ export default function ExtensionPrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl space-y-8 px-4 py-10 text-sm leading-relaxed sm:text-base">
       <header className="space-y-2">
-        <h1 className="text-3xl font-bold">
-          Privacy policy — objekt.my trade capture
-        </h1>
+        <h1 className="text-3xl font-bold">Privacy policy — Objekt Match</h1>
         <p className="text-muted-foreground">
           Last updated {LAST_UPDATED}. Applies to the browser extension
-          &ldquo;objekt.my trade capture&rdquo; for Chrome/Chromium and Firefox.
+          &ldquo;Objekt Match&rdquo; for Chrome/Chromium and Firefox.
         </p>
       </header>
 
@@ -73,8 +71,10 @@ export default function ExtensionPrivacyPage() {
 
       <Section title="What it collects">
         <p>
-          Only while you have switched capture on for a channel, and only from
-          messages already rendered on screen in your own Discord tab:
+          From the server channels you open, unless you have paused capture in
+          that channel, and only from messages already rendered on screen in
+          your own Discord tab. Capture is on in every server channel by default
+          once you agree to it:
         </p>
         <List>
           <li>the message author&rsquo;s displayed name,</li>
@@ -95,7 +95,7 @@ export default function ExtensionPrivacyPage() {
         <List>
           <li>Your Discord token, password, email or account id.</li>
           <li>
-            Direct messages, private channels, or anything you have not opened.
+            Direct messages or group DMs, or anything you have not opened.
           </li>
           <li>Attachments, images, voice, or embeds — text bodies only.</li>
           <li>
@@ -198,8 +198,9 @@ export default function ExtensionPrivacyPage() {
       <Section title="Your choices">
         <List>
           <li>
-            Capture is off until you agree, and off per channel until you switch
-            it on.
+            Capture is off until you agree. After that it is on in every server
+            channel you open; pause it from the panel in any channel you do not
+            want read.
           </li>
           <li>
             <em>Withdraw consent</em> stops the extension reading Discord at
