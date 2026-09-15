@@ -1119,7 +1119,7 @@ export function MatchClient() {
               {searchingTheirCards && ` matching “${theirSearch}”`}.{" "}
               {selectionCount > 1 && (
                 <span className="text-muted-foreground">
-                  Each post must match every selected card.
+                  Each post matches at least one selected card on each side.
                 </span>
               )}
             </>

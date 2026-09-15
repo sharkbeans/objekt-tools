@@ -158,18 +158,21 @@ export function latestDeskPosts(posts: DeskPost[]): DeskPost[] {
     });
 }
 
-function containsEvery(
+/** Whether the post lists any of the selected cards. No selection filters nothing. */
+function containsAny(
   items: ReadonlyMap<string, ParsedItem>,
   keys: ReadonlySet<string>,
 ) {
-  for (const key of keys) if (!items.has(key)) return false;
-  return true;
+  if (keys.size === 0) return true;
+  for (const key of keys) if (items.has(key)) return true;
+  return false;
 }
 
 /**
  * Both legs must occur in the same post. Never join a want from Alice with an
  * offer from Bob (or even a different, possibly stale post by Alice).
- * Multiple selected collections mean ALL, not an implicit bundle valuation.
+ * Several selected cards on one side mean ANY of them: picking a card nobody
+ * wants must not empty the results for the cards somebody does.
  */
 export function selectDeskPosts(
   posts: DeskPost[],
@@ -181,8 +184,8 @@ export function selectDeskPosts(
   return posts.filter(
     (post) =>
       post.message.intent.intents.includes(intent) &&
-      (mode === "wtb" || containsEvery(post.wants, give)) &&
-      (mode === "wts" || containsEvery(post.haves, get)),
+      (mode === "wtb" || containsAny(post.wants, give)) &&
+      (mode === "wts" || containsAny(post.haves, get)),
   );
 }
 

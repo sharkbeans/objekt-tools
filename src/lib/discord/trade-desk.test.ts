@@ -72,7 +72,7 @@ JiYeon CC102`),
       0,
     );
   });
-  it("requires every selected card within a single post", () => {
+  it("matches any selected card on a side, but still one from each side", () => {
     assert.equal(
       selectDeskPosts(
         posts,
@@ -82,10 +82,24 @@ JiYeon CC102`),
       ).length,
       1,
     );
-    assert.equal(
-      selectDeskPosts(posts, "wtt", new Set([jiyeon]), new Set([seoyeon, mayu]))
-        .length,
-      0,
+    // Bob has Mayu but does not want JiYeon, so only Alice's post qualifies.
+    assert.deepEqual(
+      selectDeskPosts(
+        posts,
+        "wtt",
+        new Set([jiyeon]),
+        new Set([seoyeon, mayu]),
+      ).map((post) => post.message.author),
+      ["Alice"],
+    );
+  });
+  it("a selected card nobody wants does not empty the others' results", () => {
+    const nobody = "haseul|cream02|199";
+    assert.deepEqual(
+      selectDeskPosts(posts, "wtt", new Set([jiyeon, nobody]), empty).map(
+        (post) => post.message.author,
+      ),
+      ["Alice"],
     );
   });
   it("credits every post offering the same objekt", () => {
