@@ -122,15 +122,16 @@ async function build(label, args) {
   const manifest = JSON.parse(
     await readFile(join(dir, "manifest.json"), "utf8"),
   );
-  // Open in match points at a local dev server until /match ships, and a
-  // package that hands everyone's searches to their own localhost is broken
-  // for every one of them. See `MATCH_ORIGIN` in `src/app-origin.ts`.
+  // A build pointed at a dev server with `NEXT_PUBLIC_APP_URL` or
+  // `EXTENSION_MATCH_URL` still in the shell hands everyone's searches and
+  // lookups to their own localhost, which is broken for every one of them.
+  // See `src/app-origin.ts`.
   const local = manifest.host_permissions.filter((pattern) =>
     /^https?:\/\/(localhost|127\.0\.0\.1)\//.test(pattern),
   );
   if (local.length)
     throw new Error(
-      `Refusing to package a build that reaches ${local.join(", ")}. /match is not on objekt.my yet; once it is, drop UNRELEASED_MATCH_ORIGIN in src/app-origin.ts (or set EXTENSION_MATCH_URL=https://objekt.my for this run).`,
+      `Refusing to package a build that reaches ${local.join(", ")}. Unset NEXT_PUBLIC_APP_URL and EXTENSION_MATCH_URL (or point them at https://objekt.my) and run this again.`,
     );
   return { label, dir, manifest };
 }

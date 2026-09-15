@@ -26,12 +26,12 @@ const output = firefox ? "dist-firefox" : "dist";
 const appOrigin = (
   process.env.NEXT_PUBLIC_APP_URL || "https://objekt.my"
 ).replace(/\/+$/, "");
-// Where Open in match delivers — a local dev server until /match ships. Mirrors
-// `MATCH_ORIGIN` in `src/app-origin.ts`, which says when to change it.
-const matchOrigin = (
-  process.env.EXTENSION_MATCH_URL ||
-  (process.env.NEXT_PUBLIC_APP_URL ? appOrigin : "http://localhost:3000")
-).replace(/\/+$/, "");
+// Where Open in match delivers — the app origin unless overridden. Mirrors
+// `MATCH_ORIGIN` in `src/app-origin.ts`.
+const matchOrigin = (process.env.EXTENSION_MATCH_URL || appOrigin).replace(
+  /\/+$/,
+  "",
+);
 // Mirrors `hostPattern()` there: no port, because Firefox rejects a match
 // pattern that has one and Chrome reads one without it as any port.
 const hostPattern = (origin) => {

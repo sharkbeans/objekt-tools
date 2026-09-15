@@ -45,6 +45,9 @@ const ROOT_ONLY_PREFIXES = [
   // Device-authorization approval page. Must be root-only: it is the
   // verification_uri handed to other devices, so it needs one stable URL.
   "/device",
+  // The browser extension's privacy policy. One stable URL, because it is
+  // entered into both extension stores and linked from the extension itself.
+  "/extension-privacy",
 ];
 
 export function rootDomain(): string | null {

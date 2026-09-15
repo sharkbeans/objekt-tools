@@ -168,6 +168,10 @@ describe("sections (enabled)", () => {
     assert.equal(isRootOnlyPath("/sign-in"), true);
     assert.equal(isRootOnlyPath("/@nick"), true);
     assert.equal(isRootOnlyPath("/%40nick"), true);
+    // The extension store listings and the extension's own panel link here —
+    // one stable URL. Before this was root-only it fell through to the
+    // [address] profile route and rendered an empty profile with a 200.
+    assert.equal(isRootOnlyPath("/extension-privacy"), true);
     assert.equal(isRootOnlyPath("/"), false);
     assert.equal(isRootOnlyPath("/linkage"), false);
     assert.equal(isRootOnlyPath("/trades"), false);

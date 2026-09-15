@@ -15,11 +15,10 @@ npm run extension:build
 npm run extension:test
 ```
 
-By default the extension fetches card art and looks up inventory at `https://objekt.my`,
-and **Open in match** delivers to `http://localhost:3000/match` — `/match` is not on
-objekt.my yet, so it goes to a local dev server (`npm run dev`) until it ships. To point
-everything at another server, set the same variable the app itself uses for its own root URL;
-to move only `/match`, set `EXTENSION_MATCH_URL`:
+By default the extension fetches card art, looks up inventory and delivers **Open in match**
+all at `https://objekt.my`. To point everything at another server, set the same variable the
+app itself uses for its own root URL; to move only `/match` — for working on the page side of
+the handoff — set `EXTENSION_MATCH_URL`:
 
 ```sh
 NEXT_PUBLIC_APP_URL=http://localhost:3000 npm run extension:build   # everything
@@ -31,8 +30,8 @@ so the build can actually reach them — nobody has to grant a second permission
 patterns leave the port out (`http://localhost/*`), because Firefox rejects a match pattern
 with a port in it. `src/app-origin.ts` is the one place this is decided; see it (and
 `rootUrl()` in `src/lib/sections.ts`, which it reuses) before adding another hardcoded
-`https://objekt.my` anywhere. `extension:package` refuses a build that still reaches
-localhost; once `/match` is live, delete `UNRELEASED_MATCH_ORIGIN` there.
+`https://objekt.my` anywhere. `extension:package` refuses a build that reaches localhost, so
+a dev override left in the shell cannot end up in a store upload.
 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select
 `extensions/discord-capture/dist`. Open a server trade channel and click the toolbar button:
@@ -311,7 +310,7 @@ to any material change in what the extension collects.
 ```sh
 npm run typecheck && npm run lint && npm run extension:test && npm run extension:smoke
 npx web-ext lint --source-dir extensions/discord-capture/dist-firefox
-EXTENSION_MATCH_URL=https://objekt.my npm run extension:package
+npm run extension:package
 ```
 
 `extension:package` rebuilds both targets from scratch and writes
@@ -320,17 +319,18 @@ whatever is on disk, because uploading the wrong folder costs review days, and i
 `version_name` build stamp so a package is not a different file every time it is built —
 two builds of the same source produce byte-identical zips.
 
-The release command above is required while `UNRELEASED_MATCH_ORIGIN` exists: it embeds
-`https://objekt.my/match` in both packages. Deploying `/match` does not change an extension
-that has already been built or installed. Once `/match` is live on objekt.my, remove that
-temporary localhost default from `src/app-origin.ts`; production will then be the normal
-package target.
-
 Before uploading: bump `version` in `manifest.json`; bump `CONSENT_VERSION` in
 `src/consent.ts` as well if what the extension collects has changed materially, which
 re-asks everyone. [`STORE.md`](./STORE.md) has the listing copy and every answer the two
 dashboards ask for; [`COMPLIANCE.md`](./COMPLIANCE.md) has the checklist of what is still
 outstanding, including the automated-search decision.
+
+For the Firefox submission specifically, commit first, then run
+`npm run extension:source-archive` — it writes
+`packages/objekt-capture-source-<version>.zip`, a `git archive` of the exact commit the
+build came from plus a short README with the two build commands. AMO requires a source
+upload whenever the reviewed build was produced by a bundler, which esbuild is, regardless
+of whether its output is readable. Upload it in the same submission as the `.xpi`.
 
 Persisted parsed entries use the parser schema they were captured with, so a parser change
 that is not backwards compatible needs a clear-and-recapture, not just a version bump.
