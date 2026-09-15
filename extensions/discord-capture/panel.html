@@ -56,6 +56,7 @@ input,textarea{background:var(--field);border:1px solid var(--line);border-radiu
 .wants textarea{height:62px;resize:none;padding-bottom:18px;display:block}
 .wants .count{position:absolute;right:9px;bottom:5px;font-size:11px;color:var(--dim);pointer-events:none}
 .wants .count.none{color:var(--bad)}
+.wants .restore{position:absolute;left:9px;bottom:3px;border:0;background:none;padding:0 2px;font-size:11px;color:var(--accent-line);border-radius:4px}
 
 /* The want list as cards. The art is the thing people recognise; the name
    under it is there for the cards the catalogue has no picture for. */
@@ -83,6 +84,13 @@ input,textarea{background:var(--field);border:1px solid var(--line);border-radiu
 .badge{position:absolute;top:4px;right:4px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;
   background:var(--accent);color:#fff;font-size:11px;font-weight:700;line-height:20px;text-align:center;
   font-variant-numeric:tabular-nums;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+/* Take a card out of the search without editing the text: a red ✕ over the
+   badge corner, shown on hover or keyboard focus. */
+.remove{position:absolute;top:1px;right:1px;z-index:2;width:24px;height:24px;padding:0;border-radius:50%;
+  border:2px solid var(--bg);background:#dc2626;color:#fff;font-size:11px;font-weight:700;line-height:1;
+  display:grid;place-items:center;opacity:0;pointer-events:none;transition:opacity .12s ease;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.tile:hover .remove,.remove:focus-visible{opacity:1;pointer-events:auto}
+.remove:hover:not(:disabled){filter:none;background:#b91c1c}
 .badge.zero{background:var(--raised);color:var(--dim);border:1px solid var(--line);line-height:18px;box-shadow:none}
 .tile[data-state="queued"] .art{opacity:.35}
 .tile[data-state="recent"] .art{opacity:.7}
@@ -152,6 +160,7 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
   <div class="wants">
     <textarea id="wants" aria-label="Objekts you are looking for" spellcheck="false" placeholder="What are you looking for?&#10;SeoYeon CC101, Mayu AA101"></textarea>
     <span class="count" id="wants-count"></span>
+    <button type="button" class="restore" id="restore-wants" hidden></button>
   </div>
   <ul class="tiles" id="tiles" aria-label="Your wants"></ul>
   <ul class="tiles skeletons" aria-hidden="true">

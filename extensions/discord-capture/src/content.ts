@@ -720,9 +720,24 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     );
     return true;
   }
-  const wanted = searchQueries(String(request.wants ?? ""));
+  // Codes whose every card was removed in the panel stay in the text but are
+  // not searched.
+  const exclude = new Set(
+    Array.isArray(request.exclude)
+      ? request.exclude.filter(
+          (query: unknown): query is string => typeof query === "string",
+        )
+      : [],
+  );
+  const recognised = searchQueries(String(request.wants ?? ""));
+  const wanted = recognised.filter((query) => !exclude.has(query));
   if (!wanted.length) {
-    reply({ ok: false, error: "No objekts recognized. Try YooYeon CC101." });
+    reply({
+      ok: false,
+      error: recognised.length
+        ? "Every card is removed from this search. Restore some first."
+        : "No objekts recognized. Try YooYeon CC101.",
+    });
     return true;
   }
   const delayMs = Number(request.delayMs);

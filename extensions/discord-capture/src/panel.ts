@@ -277,11 +277,63 @@ const wants = element<HTMLTextAreaElement>("wants");
 const tileList = element<HTMLUListElement>("tiles");
 let tiles: Tile[] = [];
 const art = new Map<string, string | null>();
+/**
+ * Cards taken out of the search with their ✕. The text keeps them — "sy
+ * cc101-116" still reads as a range — so this is what the run skips, and a key
+ * is forgotten once its code is no longer typed at all.
+ */
+let removed = new Set<string>();
+
+/** The cards a search will actually look for. */
+function searchTiles(): Tile[] {
+  return tiles.filter((tile) => !removed.has(tile.key));
+}
+
+function readRemoved(value: unknown): Set<string> {
+  return new Set(
+    Array.isArray(value)
+      ? value.filter((key): key is string => typeof key === "string")
+      : [],
+  );
+}
+
+function setRemoved(next: Set<string>) {
+  removed = next;
+  void extensionApi.storage.local.set({ removedWants: [...next] });
+}
+
+/** Drop removals whose card has left the want list. */
+function pruneRemoved() {
+  const present = new Set(tiles.map((tile) => tile.key));
+  const kept = new Set([...removed].filter((key) => present.has(key)));
+  if (kept.size !== removed.size) setRemoved(kept);
+}
+
+function removeTile(key: string) {
+  const shown = searchTiles();
+  const at = shown.findIndex((tile) => tile.key === key);
+  setRemoved(new Set([...removed, key]));
+  showWantsCount();
+  render();
+  // Keep keyboard focus in the grid rather than dropping it on the page.
+  const next = shown[at + 1] ?? shown[at - 1];
+  const button = next && tileNodes.get(next.key)?.remove;
+  if (button) button.focus();
+  else wants.focus();
+}
+
+element("restore-wants").addEventListener("click", () => {
+  setRemoved(new Set());
+  showWantsCount();
+  render();
+  wants.focus();
+});
 
 interface TileNode {
   li: HTMLLIElement;
   img: HTMLImageElement;
   badge: HTMLElement;
+  remove: HTMLButtonElement;
 }
 const tileNodes = new Map<string, TileNode>();
 
@@ -319,8 +371,18 @@ function tileNode(tile: Tile): TileNode {
   const collection = document.createElement("span");
   collection.textContent = tile.code;
   name.append(member, collection);
-  li.append(frame, badge, name);
-  const node = { li, img, badge };
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "remove";
+  remove.textContent = "✕";
+  remove.title = "Leave this one out of the search";
+  remove.setAttribute(
+    "aria-label",
+    `Remove ${tile.name} ${tile.code} from the search`,
+  );
+  remove.addEventListener("click", () => removeTile(tile.key));
+  li.append(frame, badge, remove, name);
+  const node = { li, img, badge, remove };
   tileNodes.set(tile.key, node);
   return node;
 }
@@ -353,13 +415,14 @@ function tileState(tile: Tile): TileState {
 }
 
 function renderTiles() {
-  const keep = new Set(tiles.map((tile) => tile.key));
+  const shown = searchTiles();
+  const keep = new Set(shown.map((tile) => tile.key));
   for (const [key, node] of tileNodes)
     if (!keep.has(key)) {
       node.li.remove();
       tileNodes.delete(key);
     }
-  tiles.forEach((tile, index) => {
+  shown.forEach((tile, index) => {
     const node = tileNode(tile);
     if (tileList.children[index] !== node.li)
       tileList.insertBefore(node.li, tileList.children[index] ?? null);
@@ -400,18 +463,23 @@ function showWantsCount() {
   if (!text) {
     count.textContent = "";
     count.classList.remove("none");
+    element("restore-wants").hidden = true;
     return;
   }
   const lines = text.split("\n").filter((line) => line.trim()).length;
   // Fewer objekts than lines means some lines read as nothing — usually a
   // heading, sometimes a format the parser does not know. Worth a word.
   const found = parseOffering(wants.value).length;
+  const shown = searchTiles().length;
+  const restore = element<HTMLButtonElement>("restore-wants");
+  restore.hidden = removed.size === 0;
+  restore.textContent = `${removed.size} removed · restore`;
   count.classList.toggle("none", tiles.length === 0);
   count.textContent = !tiles.length
     ? "Nothing recognised — try “SeoYeon CC101”"
     : found < lines
-      ? `${tiles.length} · some lines not recognised`
-      : String(tiles.length);
+      ? `${shown} · some lines not recognised`
+      : String(shown);
 }
 
 let artTimer: ReturnType<typeof setTimeout> | undefined;
@@ -441,6 +509,7 @@ function fetchArt() {
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function wantsChanged(save: boolean) {
   tiles = tilesFrom(wants.value);
+  pruneRemoved();
   showWantsCount();
   renderTiles();
   render();
@@ -623,7 +692,11 @@ function render() {
   if (Date.now() >= heldUntil || line.bad) say(status, line.text, line.bad);
   say(element("run-detail"), describe(progress));
   const ready = runId ? summary.run : summary.total;
-  const queries = new Set(tiles.map((tile) => tile.query).filter(Boolean));
+  const queries = new Set(
+    searchTiles()
+      .map((tile) => tile.query)
+      .filter(Boolean),
+  );
   // An unfinished run is the thing to do next, so it takes the main button:
   // after a crash, searching again is how a long list started from nothing.
   const left = busy ? null : continuable(pending, queries, Date.now());
@@ -863,6 +936,21 @@ action("run-search", async () => {
     wants.focus();
     throw new Error("Type what you are looking for first.");
   }
+  const kept = searchTiles();
+  if (!kept.length)
+    throw new Error(
+      "Every card is removed from this search. Restore some first.",
+    );
+  // A code is skipped only when every card searched by it was removed: SeoYeon
+  // CC101 and Mayu CC101 are one search.
+  const keptQueries = new Set(kept.map((tile) => tile.query));
+  const exclude = [
+    ...new Set(
+      tiles
+        .filter((tile) => removed.has(tile.key) && !keptQueries.has(tile.query))
+        .map((tile) => tile.query),
+    ),
+  ];
   const tab = await discordTab();
   await ensureCapturing(tab.url);
   const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
@@ -877,6 +965,7 @@ action("run-search", async () => {
   const response = await toContentScript(tab.id, {
     type: "run-search",
     wants: wants.value,
+    exclude,
     delayMs: seconds * 1000,
     pages: pageCount,
     skipRecent: skipRecent.checked,
@@ -1112,8 +1201,10 @@ void extensionApi.storage.local
     "skipRecent",
     "owned",
     "nickname",
+    "removedWants",
   ])
   .then((settings) => {
+    removed = readRemoved(settings.removedWants);
     consent = settings.consent;
     applyTheme(settings.discordTheme);
     showViews();
@@ -1146,6 +1237,12 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
     showViews();
   }
   if (changes.discordTheme) applyTheme(changes.discordTheme.newValue);
+  // Another copy of the panel removed or restored a card.
+  if (changes.removedWants) {
+    removed = readRemoved(changes.removedWants.newValue);
+    showWantsCount();
+    render();
+  }
   // Keep the cards moving with the run without waiting on a full refresh.
   if (changes.searchProgress || changes.pendingRun) {
     if (changes.searchProgress)
