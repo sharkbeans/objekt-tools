@@ -151,7 +151,7 @@ async function pack({ label, dir, manifest }) {
       body: await readFile(join(dir, name)),
     })),
   );
-  const path = join(out, `objekt-capture-${label}-${manifest.version}.zip`);
+  const path = join(out, `objekt-match-${label}-${manifest.version}.zip`);
   await writeFile(path, zip(files));
   const { size } = await stat(path);
   console.log(

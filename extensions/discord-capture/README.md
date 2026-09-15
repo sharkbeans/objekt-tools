@@ -1,4 +1,4 @@
-# objekt.my trade capture
+# Objekt Match
 
 Chrome/Chromium and Firefox MV3 extension, built directly from the shared engine in `src/lib`.
 
@@ -314,7 +314,7 @@ npm run extension:package
 ```
 
 `extension:package` rebuilds both targets from scratch and writes
-`packages/objekt-capture-{chrome,firefox}-<version>.zip`. It rebuilds rather than zipping
+`packages/objekt-match-{chrome,firefox}-<version>.zip`. It rebuilds rather than zipping
 whatever is on disk, because uploading the wrong folder costs review days, and it strips the
 `version_name` build stamp so a package is not a different file every time it is built —
 two builds of the same source produce byte-identical zips.
@@ -327,7 +327,7 @@ outstanding, including the automated-search decision.
 
 For the Firefox submission specifically, commit first, then run
 `npm run extension:source-archive` — it writes
-`packages/objekt-capture-source-<version>.zip`, a `git archive` of the exact commit the
+`packages/objekt-match-source-<version>.zip`, a `git archive` of the exact commit the
 build came from plus a short README with the two build commands. AMO requires a source
 upload whenever the reviewed build was produced by a bundler, which esbuild is, regardless
 of whether its output is readable. Upload it in the same submission as the `.xpi`.

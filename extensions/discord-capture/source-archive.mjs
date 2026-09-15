@@ -52,8 +52,8 @@ const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root })
 const nodeVersion = execFileSync("node", ["--version"]).toString().trim();
 const npmVersion = execFileSync("npm", ["--version"]).toString().trim();
 
-const readme = `objekt.my trade capture — source for Mozilla review
-====================================================
+const readme = `Objekt Match — source for Mozilla review
+=========================================
 
 This archive is the git tree at commit ${commit}, in full — not just the
 extension folder. The extension imports parser and routing code from the
@@ -98,7 +98,7 @@ await mkdir(out, { recursive: true });
 const readmePath = join(out, "SOURCE-README.txt");
 await writeFile(readmePath, readme);
 
-const archivePath = join(out, `objekt-capture-source-${manifest.version}.zip`);
+const archivePath = join(out, `objekt-match-source-${manifest.version}.zip`);
 // `--add-file` inserts one extra file into the archive tree alongside HEAD's
 // tracked files, without needing a real commit — the README describes a build
 // it isn't part of.
