@@ -825,6 +825,12 @@ function showChannel(channel: string | null, enabled: boolean) {
   element("no-channel").hidden = Boolean(channel);
   chip.classList.toggle("on", enabled);
   element("channel-state").textContent = enabled ? "Capturing" : "Capture off";
+  chip.setAttribute(
+    "aria-label",
+    enabled
+      ? "Capturing this channel. Click to stop."
+      : "Capture off for this channel. Click to keep its posts.",
+  );
   chip.title = enabled
     ? "Posts in this channel are being kept. Click to stop."
     : "Posts in this channel are ignored while you browse. Click to keep them.";

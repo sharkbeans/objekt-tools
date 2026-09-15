@@ -42,9 +42,13 @@ button.icon{width:30px;height:30px;padding:0;display:grid;place-items:center;fon
 button.icon:hover{background:var(--field);color:var(--text)}
 input,textarea{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%}
 
-/* Capture on/off for the open channel: one pill, not a strip and a button. */
-.chip{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:4px 11px 4px 9px;font-size:12px;color:var(--dim)}
-.pip{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+/* The want box shares its row with the gear and the capture switch for the open
+   channel, a dot and a word beside it rather than a row of their own. */
+.top{display:flex;gap:6px;flex:none}
+.corner{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;flex:none}
+.chip{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;border-radius:999px;padding:2px 6px;font-size:11px;color:var(--dim);white-space:nowrap}
+button.chip:hover{background:var(--field)}
+.pip{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
 .chip.on{color:var(--text)}
 .chip.on .pip{background:var(--good)}
 .note{font-size:12px;color:var(--dim)}
@@ -52,7 +56,7 @@ input,textarea{background:var(--field);border:1px solid var(--line);border-radiu
 .warn{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--warn-text)}
 .warn a{color:inherit}
 
-.wants{position:relative;flex:none}
+.wants{position:relative;flex:1;min-width:0}
 .wants textarea{height:62px;resize:none;padding-bottom:18px;display:block}
 .wants .count{position:absolute;right:9px;bottom:5px;font-size:11px;color:var(--dim);pointer-events:none}
 .wants .count.none{color:var(--bad)}
@@ -151,17 +155,18 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
 </section>
 
 <section id="main" class="view" hidden>
-  <div class="row">
-    <button type="button" class="chip" id="toggle" hidden><span class="pip"></span><span id="channel-state"></span></button>
-    <span class="note" id="no-channel" hidden>Open a trade channel in Discord</span>
-    <span class="grow"></span>
-    <button type="button" class="icon" id="open-settings" title="Settings" aria-label="Settings">⚙</button>
-  </div>
   <div class="warn" id="health" hidden></div>
-  <div class="wants">
-    <textarea id="wants" aria-label="Objekts you are looking for" spellcheck="false" placeholder="What are you looking for?&#10;SeoYeon CC101, Mayu AA101"></textarea>
-    <span class="count" id="wants-count"></span>
-    <button type="button" class="restore" id="restore-wants" hidden></button>
+  <div class="top">
+    <div class="wants">
+      <textarea id="wants" aria-label="Objekts you are looking for" spellcheck="false" placeholder="What are you looking for?&#10;SeoYeon CC101, Mayu AA101"></textarea>
+      <span class="count" id="wants-count"></span>
+      <button type="button" class="restore" id="restore-wants" hidden></button>
+    </div>
+    <div class="corner">
+      <button type="button" class="icon" id="open-settings" title="Settings" aria-label="Settings">⚙</button>
+      <button type="button" class="chip" id="toggle" hidden><span class="pip"></span><span id="channel-state"></span></button>
+      <span class="chip" id="no-channel" title="Open a trade channel in Discord" hidden><span class="pip"></span>No channel</span>
+    </div>
   </div>
   <ul class="tiles" id="tiles" aria-label="Your wants"></ul>
   <ul class="tiles skeletons" aria-hidden="true">
