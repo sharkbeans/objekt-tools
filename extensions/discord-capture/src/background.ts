@@ -17,7 +17,7 @@ import {
   OBJEKT_ORIGIN,
   openMatchTab,
 } from "./match-tab";
-import { channelIds, isDiscordUrl } from "./settings";
+import { capturing, channelIds, isDiscordUrl } from "./settings";
 import { capture, clear, count, type Entry, entries } from "./store";
 
 /**
@@ -343,16 +343,16 @@ function isBlock(
  * dropped whenever either changes, and dies with the worker — which is the
  * right lifetime, because a worker that has been torn down re-reads anyway.
  */
-let settings: { consent: unknown; channels: string[] } | null = null;
+let settings: { consent: unknown; paused: string[] } | null = null;
 async function currentSettings() {
   if (!settings) {
     const stored = await extensionApi.storage.local.get([
       "consent",
-      "channels",
+      "pausedChannels",
     ]);
     settings = {
       consent: stored.consent,
-      channels: channelIds(stored.channels),
+      paused: channelIds(stored.pausedChannels),
     };
   }
   return settings;
@@ -456,7 +456,7 @@ extensionApi.runtime.onConnect.addListener((port) => {
 
 extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  if (changes.consent || changes.channels) settings = null;
+  if (changes.consent || changes.pausedChannels) settings = null;
   if (changes.captureError)
     reportedError = typeof changes.captureError.newValue === "string";
   if (changes.consent && captureAllowed(changes.consent.newValue))
@@ -520,7 +520,15 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
         throw new Error("Capture has not been agreed to yet");
       if (fromSearch && !automationAllowed(current.consent))
         throw new Error("Search has not been agreed to yet");
-      if (!fromSearch && (!channel || !current.channels.includes(channel)))
+      // Browsing a channel is captured unless it is paused — and only in a
+      // server. A post with no numeric guild came from a DM, which the content
+      // script already refuses; a stale or modified one would not, and this is
+      // the last place a private conversation can be kept out of the index.
+      const guild =
+        typeof request.guild === "string" && /^\d+$/.test(request.guild)
+          ? request.guild
+          : null;
+      if (!fromSearch && (!guild || !capturing(channel, current.paused)))
         throw new Error("Capture is paused");
       let entry: Entry;
       try {
@@ -639,8 +647,8 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       return count(typeof request.run === "string" ? request.run : undefined);
     if (request?.type === "clear") {
       // Clears posts only. Pausing capture is a separate, deliberate action —
-      // wiping the enabled channels here silently stopped collection and the
-      // button name gave no hint that it would.
+      // touching the channel settings here would change what gets collected
+      // next, and the button name gives no hint that it would.
       await clear();
       publishedAt = Date.now();
       await extensionApi.action.setBadgeText({ text: "" });

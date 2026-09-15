@@ -32,7 +32,14 @@ import {
   searchFilters,
   searchLoad,
 } from "./search-plan";
-import { channelFromUrl, channelIds } from "./settings";
+import {
+  type ChannelLabel,
+  capturing,
+  channelFromUrl,
+  channelIds,
+  channelLabelFromTitle,
+  formatChannelLabel,
+} from "./settings";
 import type { Entry } from "./store";
 
 /**
@@ -81,7 +88,11 @@ const ownTabsApi: typeof extensionApi.tabs | undefined = extensionApi.tabs;
 const canUseTabs = typeof ownTabsApi?.query === "function";
 
 /** The Discord tab this panel acts on. Throws with something readable if none. */
-async function discordTab(): Promise<{ id: number; url: string }> {
+async function discordTab(): Promise<{
+  id: number;
+  url: string;
+  title: string | null;
+}> {
   if (canUseTabs) return resolveTab(tabs, pinnedTab);
   return await request("host-tab", { tab: pinnedTab });
 }
@@ -781,6 +792,11 @@ function showRunning(busy: boolean) {
  */
 let refreshing = false;
 let refreshAgain = false;
+/** The channel the chip names, as `channelKey` spells it. */
+let shownChannel = "";
+function channelKey(channel: string | null, label: ChannelLabel | null) {
+  return `${channel ?? ""}\n${label ? formatChannelLabel(label) : ""}`;
+}
 async function refresh(): Promise<void> {
   if (refreshing) {
     refreshAgain = true;
@@ -791,7 +807,7 @@ async function refresh(): Promise<void> {
     const settings = await extensionApi.storage.local.get([
       "captureError",
       "captureHealth",
-      "channels",
+      "pausedChannels",
       "pendingRun",
       "searchProgress",
       "searchRunId",
@@ -811,10 +827,13 @@ async function refresh(): Promise<void> {
     showHealth(settings.captureHealth);
     const tab = await discordTab().catch(() => null);
     const channel = channelFromUrl(tab?.url);
+    const label = channel ? channelLabelFromTitle(tab?.title) : null;
     hasChannel = channel !== null;
+    shownChannel = channelKey(channel, label);
     showChannel(
       channel,
-      Boolean(channel && channelIds(settings.channels).includes(channel)),
+      capturing(channel, channelIds(settings.pausedChannels)),
+      label,
     );
     summary = await request("run-summary", {
       run: runId,
@@ -852,34 +871,43 @@ function showHealth(health: unknown) {
 }
 
 /** Whether this channel is being collected, as one pill that switches it. */
-function showChannel(channel: string | null, enabled: boolean) {
+function showChannel(
+  channel: string | null,
+  enabled: boolean,
+  label: ChannelLabel | null,
+) {
   const chip = element<HTMLButtonElement>("toggle");
   chip.hidden = !channel;
   element("no-channel").hidden = Boolean(channel);
   chip.classList.toggle("on", enabled);
-  element("channel-state").textContent = enabled ? "Capturing" : "Capture off";
+  element("channel-state").textContent = enabled ? "Capturing" : "Paused";
+  // The name is truncated by CSS to fit beside the want box, so the title and
+  // the accessible name carry it in full.
+  const where = label ? formatChannelLabel(label) : "";
+  element("channel-name").textContent = where;
+  element("channel-name").hidden = !where;
+  const place = where || "this channel";
   chip.setAttribute(
     "aria-label",
     enabled
-      ? "Capturing this channel. Click to stop."
-      : "Capture off for this channel. Click to keep its posts.",
+      ? `Capturing ${place}. Click to pause.`
+      : `Capture paused in ${place}. Click to resume.`,
   );
   chip.title = enabled
-    ? "Posts in this channel are being kept. Click to stop."
-    : "Posts in this channel are ignored while you browse. Click to keep them.";
+    ? `Posts in ${place} are being kept. Click to pause this channel.`
+    : `Posts in ${place} are ignored while you browse. Click to resume.`;
 }
 
 action("toggle", async () => {
   const tab = await discordTab();
   const channel = channelFromUrl(tab.url);
   if (!channel) throw new Error("Open a Discord server channel first.");
-  const settings = await extensionApi.storage.local.get("channels");
-  const channels = channelIds(settings.channels);
-  const enabled = channels.includes(channel);
+  const settings = await extensionApi.storage.local.get("pausedChannels");
+  const paused = channelIds(settings.pausedChannels);
   await extensionApi.storage.local.set({
-    channels: enabled
-      ? channels.filter((id: string) => id !== channel)
-      : [...channels, channel],
+    pausedChannels: paused.includes(channel)
+      ? paused.filter((id: string) => id !== channel)
+      : [...paused, channel],
   });
   await refresh();
 });
@@ -916,15 +944,17 @@ async function toContentScript(
   }
 }
 
-/** Searching implies capturing here; a separate toggle only loses results. */
+/** Searching implies capturing here; a paused channel only loses results. */
 async function ensureCapturing(url: string | undefined): Promise<void> {
   const channel = channelFromUrl(url);
   if (!channel)
     throw new Error("Open your trade channel in Discord first, then search.");
-  const settings = await extensionApi.storage.local.get("channels");
-  const channels = channelIds(settings.channels);
-  if (!channels.includes(channel))
-    await extensionApi.storage.local.set({ channels: [...channels, channel] });
+  const settings = await extensionApi.storage.local.get("pausedChannels");
+  const paused = channelIds(settings.pausedChannels);
+  if (paused.includes(channel))
+    await extensionApi.storage.local.set({
+      pausedChannels: paused.filter((id: string) => id !== channel),
+    });
 }
 
 const delay = element<HTMLInputElement>("delay");
@@ -1369,6 +1399,25 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
     say(inventoryStatus, `${changes.owned.newValue.length} objekts saved`);
   void refresh().catch(() => {});
 });
+
+// Switching channels in Discord is a pushState: it writes nothing to storage,
+// so nothing above notices, and the chip went on naming — and toggling the
+// capture state of — the channel you had just left. A tab lookup every couple
+// of seconds while this panel is on screen is cheap; the full refresh only runs
+// when the channel or its name has actually changed. The key uses the parsed
+// label, not the raw title, so Discord's unread counter ticking over in the
+// title does not count as a change.
+setInterval(() => {
+  if (document.visibilityState !== "visible" || refreshing) return;
+  void discordTab()
+    .catch(() => null)
+    .then((tab) => {
+      const channel = channelFromUrl(tab?.url);
+      const label = channel ? channelLabelFromTitle(tab?.title) : null;
+      if (channelKey(channel, label) !== shownChannel)
+        void refresh().catch(() => {});
+    });
+}, 2_000);
 
 // A stale run is only noticed when something looks at it; nothing writes to
 // storage once its tab has gone, so look now and then.

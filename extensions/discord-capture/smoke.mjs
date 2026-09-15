@@ -136,7 +136,7 @@ try {
   await context.route("https://discord.com/**", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: `<!doctype html><html lang="en"><body>
+      body: `<!doctype html><html lang="en"><head><title>Discord | #trade | Smoke Server</title></head><body>
         <div role="combobox" contenteditable="true" aria-label="Search"></div>
         <ol id="messages"></ol>
         <div id="search-results"></div>
@@ -163,8 +163,9 @@ try {
     }),
   );
   await worker.evaluate(() =>
+    // No channel is switched on here: capture is on by default, and the first
+    // post being kept after consent is what proves it.
     chrome.storage.local.set({
-      channels: ["123"],
       owned: [{ member: "YooYeon", season: "Cream02", collectionNo: "109" }],
     }),
   );
@@ -288,6 +289,16 @@ try {
   assert.equal(await popup.locator("#consent").isVisible(), false);
   // Every copy of the panel reflects the same agreement, without a reload.
   await embedded.locator("#main").waitFor();
+  // The chip names where capture is happening, from Discord's tab title.
+  await popup.waitForFunction(
+    () =>
+      document.getElementById("channel-name")?.textContent ===
+      "#trade - Smoke Server",
+  );
+  assert.equal(
+    await popup.locator("#channel-state").textContent(),
+    "Capturing",
+  );
   // Capture consent alone must not unlock search automation.
   assert.equal(await popup.locator("#automation-gate").isVisible(), true);
   assert.equal(await popup.locator("#actions").isVisible(), false);
@@ -474,7 +485,9 @@ try {
   await indexHolds("4 posts in the index");
 
   // Pausing removes annotations, and changing channel does not capture.
-  await worker.evaluate(() => chrome.storage.local.set({ channels: [] }));
+  await worker.evaluate(() =>
+    chrome.storage.local.set({ pausedChannels: ["123"] }),
+  );
   await page.waitForFunction(
     () => !document.querySelector("objekt-match-badge"),
   );
@@ -486,9 +499,36 @@ try {
   // Counted against the index rather than the run, because a search has now
   // happened and the status reports both.
   await indexHolds("4 posts in the index");
+  await popup.waitForFunction(
+    () => document.getElementById("channel-state")?.textContent === "Paused",
+  );
+  await worker.evaluate(() => chrome.storage.local.set({ pausedChannels: [] }));
+  await popup.waitForFunction(
+    () => document.getElementById("channel-state")?.textContent === "Capturing",
+  );
+  // A direct message is never captured, even with capture on and nothing
+  // paused. Discord moves between a server and DMs by pushState, so the content
+  // script stays put and sees the row arrive; the channel id is deliberately
+  // one that is not paused, so only the missing guild can keep it out.
+  await page.evaluate(() => {
+    history.pushState(null, "", "/channels/@me/123");
+    document
+      .getElementById("messages")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<li id="chat-messages-123-1001" aria-labelledby="message-username-1001"><span id="message-username-1001">Friend</span><time datetime="2026-09-09T04:10:00.000Z"></time><div id="message-content-1001">HAVE YooYeon CC109</div></li>',
+      );
+  });
+  await page.waitForTimeout(1500);
+  await popup.reload();
+  // Four still: a kept DM would have been a fifth post, under its own id.
+  await indexHolds("4 posts in the index");
+  await page.evaluate(() => {
+    document.getElementById("chat-messages-123-1001")?.remove();
+    history.pushState(null, "", "/channels/111/123");
+  });
   // Withdrawing detaches the reader: the badge goes, and a fresh post is not
-  // taken even with the channel enabled.
-  await worker.evaluate(() => chrome.storage.local.set({ channels: ["123"] }));
+  // taken even with the channel capturing.
   await popup.locator("#open-settings").click();
   await popup.locator("#step-trouble > summary").click();
   popup.once("dialog", (dialog) => dialog.accept());

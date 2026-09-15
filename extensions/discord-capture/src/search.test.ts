@@ -359,10 +359,15 @@ test("recognises Discord's hosts and channel URLs", async () => {
   assert.equal(isDiscordUrl(undefined), false);
 
   assert.equal(channelFromUrl("https://discord.com/channels/123/456"), "456");
-  // Guild id is "@me" for DMs, and canary must resolve the same way.
+  assert.equal(
+    channelFromUrl("https://canary.discord.com/channels/123/456/789"),
+    "456",
+  );
+  // A DM is not a channel. Capture is on by default in every channel this
+  // returns, and the privacy policy promises direct messages are never read.
   assert.equal(
     channelFromUrl("https://canary.discord.com/channels/@me/99"),
-    "99",
+    null,
   );
   assert.equal(channelFromUrl("https://discord.com/channels/@me"), null);
   assert.equal(channelFromUrl("https://evil.example/channels/1/2"), null);

@@ -36,10 +36,11 @@ a dev override left in the shell cannot end up in a store upload.
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select
 `extensions/discord-capture/dist`. Open a server trade channel and click the toolbar button:
 the panel appears in the page. **Agree to the disclosure** — until then the content script
-attaches no observer and reads nothing. Click the chip to enable capture for that channel.
+attaches no observer and reads nothing. Capture then starts in the open server channel; the chip
+beside the gear names it (`#channel - server`) and pauses it on click. DMs are never captured.
 Browse normally. **Settings → Download this search / everything** writes a file for
 inspection; **Check this tab** and the index count are there too. Capture remains enabled
-across sessions until paused. Enable only channels you intend to collect. Clear captured
+across sessions until paused. Pause any channel you do not intend to collect. Clear captured
 posts through Settings; pause first to prevent recapture.
 
 ## The panel
@@ -340,7 +341,7 @@ that is not backwards compatible needs a clear-and-recapture, not just a version
 Run `npm run extension:build:firefox`. In Firefox 140 or newer, open
 `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select
 `extensions/discord-capture/dist-firefox/manifest.json`. Click the toolbar button on a
-Discord tab to show the panel, then enable capture for the trade channel from it. If Firefox shows the extension
+Discord tab to show the panel and agree to the disclosure; capture starts in the open channel. If Firefox shows the extension
 as needing site access, grant access to Discord from the Extensions menu and reload.
 
 The Firefox build uses an MV3 background event page and Firefox's Promise-based

@@ -52,7 +52,7 @@ import {
   pruneSearchedAt,
   readSearchedAt,
 } from "./search-plan";
-import { channelFromUrl, channelIds } from "./settings";
+import { capturing, channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
 import { waitFor } from "./wait";
 
@@ -132,9 +132,25 @@ function annotate(element: Element, entry: Entry) {
   element.append(host);
 }
 
-let channels: string[] = [];
-const enabled = (channel: string | null) =>
-  channel !== null && channels.includes(channel);
+/** Channels the user has paused. Every other server channel is captured. */
+let paused: string[] = [];
+const enabled = (channel: string | null) => capturing(channel, paused);
+/**
+ * Whether a row may be kept: any search result, or a post in a server channel
+ * that is not paused.
+ *
+ * The guild is the DM check. A channel row's guild comes from the page's own
+ * `/channels/<guild>/<channel>` path and is null under `/channels/@me`, so a
+ * direct message never passes — which matters now that capture is on without
+ * the user choosing a channel first.
+ */
+const capturable = (message: {
+  source: string;
+  guild: string | null;
+  channel: string | null;
+}) =>
+  message.source === "search" ||
+  (message.guild !== null && enabled(message.channel));
 // Search covers the whole server, so results arrive from channels the user
 // never enabled. Counting them separates "the pager never moved" from "it
 // moved and everything it found was filtered out".
@@ -148,7 +164,7 @@ const pending = new WeakSet<Element>();
 // fixed delay used to do whenever Discord was a beat slower than usual.
 /** Rows confirmed written to the index. */
 const recorded = new Set<string>();
-/** Rows from channels the user has not enabled. Never going to be recorded. */
+/** Rows from paused channels and DMs. Never going to be recorded. */
 const pausedRows = new Set<string>();
 /**
  * Rows the parser cannot read, and when they were first seen that way.
@@ -168,7 +184,7 @@ async function scan(element: Element) {
   // is here because the user asked for it by name, so it is kept wherever in
   // the server it was posted — filtering those by the one channel that happens
   // to be open is how a search of the whole guild returned almost nothing.
-  if (message && message.source === "channel" && !enabled(message.channel)) {
+  if (message && !capturable(message)) {
     const key = message.channel ?? "unknown";
     skipped.set(key, (skipped.get(key) ?? 0) + 1);
     pausedRows.add(rowKey(element));
@@ -215,7 +231,7 @@ async function scan(element: Element) {
       if (
         element.isConnected &&
         current &&
-        (current.source === "search" || enabled(current.channel)) &&
+        capturable(current) &&
         JSON.stringify([current, revision]) === signature
       ) {
         seen.set(element, signature);
@@ -292,7 +308,8 @@ function watch(on: boolean) {
 let consent: unknown;
 function update(settings: Record<string, unknown>) {
   if ("consent" in settings) consent = settings.consent;
-  if ("channels" in settings) channels = channelIds(settings.channels);
+  if ("pausedChannels" in settings)
+    paused = channelIds(settings.pausedChannels);
   if ("owned" in settings) {
     try {
       owned = indexOwned(inventoryRows(settings.owned ?? []));
@@ -310,7 +327,7 @@ function update(settings: Record<string, unknown>) {
   }
   revision++;
   seen = new WeakMap();
-  // Enabling a channel makes its rows capturable, so the old verdicts no longer
+  // Resuming a channel makes its rows capturable, so the old verdicts no longer
   // hold. What was already recorded stays recorded.
   pausedRows.clear();
   unreadableSince.clear();
@@ -320,7 +337,7 @@ function update(settings: Record<string, unknown>) {
   // Withdrawing consent mid-run stops the run as well as the reading.
   if (!allowed) searchSignal.cancelled = true;
   watch(allowed);
-  // Re-reads what is already on screen, so enabling a channel or changing the
+  // Re-reads what is already on screen, so resuming a channel or changing the
   // haves list takes effect without waiting for Discord to render something.
   if (allowed) visit(document.body);
 }
@@ -650,7 +667,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
           extensionApi.runtime.getManifest().version,
         url: location.href,
         channel: channelFromUrl(location.href),
-        enabled: channels,
+        paused,
         elements: elements.length,
         readable: readable.length,
         sampleId: elements[0]?.id ?? null,
@@ -1081,12 +1098,12 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   const settings: Record<string, unknown> = {};
   if (changes.searchedAt && !searchedDirty)
     searched = readSearchedAt(changes.searchedAt.newValue);
-  for (const key of ["consent", "channels", "owned", "wants"])
+  for (const key of ["consent", "pausedChannels", "owned", "wants"])
     if (changes[key]) settings[key] = changes[key].newValue;
   if (Object.keys(settings).length) update(settings);
 });
 void extensionApi.storage.local
-  .get(["consent", "channels", "owned", "wants", "panel", "searchedAt"])
+  .get(["consent", "pausedChannels", "owned", "wants", "panel", "searchedAt"])
   .then((settings) => {
     searched = readSearchedAt(settings.searchedAt);
     update(settings);

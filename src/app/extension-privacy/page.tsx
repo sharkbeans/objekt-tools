@@ -73,8 +73,10 @@ export default function ExtensionPrivacyPage() {
 
       <Section title="What it collects">
         <p>
-          Only while you have switched capture on for a channel, and only from
-          messages already rendered on screen in your own Discord tab:
+          From the server channels you open, unless you have paused capture in
+          that channel, and only from messages already rendered on screen in
+          your own Discord tab. Capture is on in every server channel by default
+          once you agree to it:
         </p>
         <List>
           <li>the message author&rsquo;s displayed name,</li>
@@ -95,7 +97,7 @@ export default function ExtensionPrivacyPage() {
         <List>
           <li>Your Discord token, password, email or account id.</li>
           <li>
-            Direct messages, private channels, or anything you have not opened.
+            Direct messages or group DMs, or anything you have not opened.
           </li>
           <li>Attachments, images, voice, or embeds — text bodies only.</li>
           <li>
@@ -198,8 +200,9 @@ export default function ExtensionPrivacyPage() {
       <Section title="Your choices">
         <List>
           <li>
-            Capture is off until you agree, and off per channel until you switch
-            it on.
+            Capture is off until you agree. After that it is on in every server
+            channel you open; pause it from the panel in any channel you do not
+            want read.
           </li>
           <li>
             <em>Withdraw consent</em> stops the extension reading Discord at

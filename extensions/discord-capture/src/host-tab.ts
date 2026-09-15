@@ -21,6 +21,8 @@ export const DISCORD_MATCHES = [
 export interface TabLike {
   id?: number;
   url?: string;
+  /** Discord's tab title, which names the open channel and its server. */
+  title?: string;
   active?: boolean;
   windowId?: number;
   lastAccessed?: number;
@@ -70,13 +72,17 @@ export class NoDiscordTab extends Error {
 export async function resolveTab(
   source: TabSource,
   pinned: number | null,
-): Promise<{ id: number; url: string }> {
+): Promise<{ id: number; url: string; title: string | null }> {
   if (pinned !== null) {
     const tab = await source.get(pinned).catch(() => undefined);
     if (tab && typeof tab.id === "number" && isDiscordUrl(tab.url))
-      return { id: tab.id, url: tab.url as string };
+      return { id: tab.id, url: tab.url as string, title: tab.title ?? null };
   }
   const found = pickTab(await source.query());
   if (!found || typeof found.id !== "number") throw new NoDiscordTab();
-  return { id: found.id, url: found.url as string };
+  return {
+    id: found.id,
+    url: found.url as string,
+    title: found.title ?? null,
+  };
 }

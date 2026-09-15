@@ -26,8 +26,11 @@
  * 3: capture requires an explicit acknowledgement that it reads other people's
  * visible Discord posts and that the user is responsible for enabling it only
  * where they are allowed to handle that content.
+ * 4: capture is on in every server channel by default rather than off until a
+ * channel is switched on, so agreeing now starts collection in whatever channel
+ * is open; the user pauses channels instead of enabling them.
  */
-export const CONSENT_VERSION = 3;
+export const CONSENT_VERSION = 4;
 
 export interface Consent {
   version: number;

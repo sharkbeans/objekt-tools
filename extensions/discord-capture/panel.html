@@ -42,6 +42,9 @@ button:disabled{opacity:.55;cursor:default}
 button.primary{background:var(--accent);border-color:var(--accent-line);color:#fff;font-weight:600}
 button.icon{width:30px;height:30px;padding:0;display:grid;place-items:center;font-size:15px;color:var(--dim);background:transparent;border-color:transparent}
 button.icon:hover{background:var(--field);color:var(--text)}
+/* The gear is the only way into Settings; at the shared icon size the glyph
+   rendered smaller than the text beside it and was easy to miss. */
+#open-settings{width:36px;height:36px;font-size:24px;line-height:1}
 input,textarea{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%}
 
 /* The want box shares its row with the gear and the capture switch for the open
@@ -53,6 +56,12 @@ button.chip:hover{background:var(--field)}
 .pip{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
 .chip.on{color:var(--text)}
 .chip.on .pip{background:var(--good)}
+/* The open channel and its server, cut short with an ellipsis rather than
+   pushing the want box aside; the chip's title carries the full name. Capped
+   relative to the panel so a narrow panel keeps its want box usable. */
+#toggle{max-width:min(260px,48vw)}
+.chip .where{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--dim)}
+.chip .where::before{content:"·";margin-right:5px}
 .note{font-size:12px;color:var(--dim)}
 
 .warn{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--warn-text)}
@@ -172,16 +181,16 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
   <div class="scroll">
     <h1>Before you start</h1>
     <ul>
-      <li>Reads the <strong>name, text and time</strong> of posts in channels you turn on, and in searches you run.</li>
+      <li>Reads the <strong>name, text and time</strong> of posts in the server channels you open, and in searches you run. Capture is <strong>on in every server channel</strong> until you pause it there. Direct messages are never read.</li>
       <li>Keeps them <strong>in this browser</strong>.</li>
-      <li>Sends them to <strong>objekt.my/match</strong> only when you press <em>Open in match</em> — they stay in your browser there too.</li>
+      <li>Sends them to <strong>objekt.my/match</strong> only when you press <em>Open in match</em>.</li>
       <li>Gets card pictures for your wants, and your inventory if you add a Cosmo nickname, from <strong>objekt.my</strong>.</li>
       <li>Never reads your Discord token, calls Discord's API, or posts anything.</li>
     </ul>
-    <p class="warn"><strong>Read this first:</strong> capture reads the visible posts in every channel you enable, including other people's names and messages. Captured content may include personal or sensitive information. Only turn it on in channels where you are allowed to collect and handle those posts.</p>
+    <p class="warn"><strong>Read this first:</strong> capture reads the visible posts in every server channel you open, including other people's names and messages, without asking again per channel. Captured content may include personal or sensitive information. Pause it in any channel where you are not allowed to collect and handle those posts.</p>
     <p class="note">Other people's posts are their words: keep them to yourself.
     <a href="https://objekt.my/extension-privacy" target="_blank" rel="noreferrer">Privacy policy</a></p>
-    <label class="check"><input type="checkbox" id="accept-capture-risk"> I understand that capture reads visible Discord posts, and I accept responsibility for using it only where I am allowed.</label>
+    <label class="check"><input type="checkbox" id="accept-capture-risk"> I understand that capture reads visible posts in every server channel I open until I pause it, and I accept responsibility for using it only where I am allowed.</label>
   </div>
   <button type="button" class="primary" id="accept-capture" disabled>I agree</button>
 </section>
@@ -196,7 +205,7 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
     </div>
     <div class="corner">
       <button type="button" class="icon" id="open-settings" title="Settings" aria-label="Settings">⚙</button>
-      <button type="button" class="chip" id="toggle" hidden><span class="pip"></span><span id="channel-state"></span></button>
+      <button type="button" class="chip" id="toggle" hidden><span class="pip"></span><span id="channel-state"></span><span class="where" id="channel-name" hidden></span></button>
       <span class="chip" id="no-channel" title="Open a trade channel in Discord" hidden><span class="pip"></span>No channel</span>
     </div>
   </div>
