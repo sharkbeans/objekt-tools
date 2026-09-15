@@ -426,12 +426,27 @@ let lastProgress: Record<string, unknown> = {};
  * searched, being searched, still to come — from `done` alone.
  */
 let runQueries: string[] = [];
+/**
+ * When this call of the run started, where in the plan, and at what pace — the
+ * panel's completion estimate is worked out from these and `done`.
+ */
+let runTiming: {
+  startedAt: number;
+  startDone: number;
+  pages: number;
+  delayMs: number;
+} | null = null;
 async function report(progress: Record<string, unknown>) {
   // Stamped so the panel can tell a run that is working from one that died with
   // the tab it was running in. Nothing else can: a content script that goes
   // away leaves `running: true` behind it, and the panel reported "Searching
   // 3/10…" until something else overwrote it.
-  lastProgress = { ...progress, queries: runQueries, at: Date.now() };
+  lastProgress = {
+    ...progress,
+    queries: runQueries,
+    ...runTiming,
+    at: Date.now(),
+  };
   await extensionApi.storage.local.set({ searchProgress: lastProgress });
 }
 
@@ -797,6 +812,12 @@ async function driveRun(plan: RunPlan): Promise<void> {
   postsReportedAt = 0;
   searchRun = plan.run;
   runQueries = plan.all;
+  runTiming = {
+    startedAt: Date.now(),
+    startDone: plan.offset,
+    pages: plan.pages,
+    delayMs: plan.delayMs,
+  };
   // Resolve the tab now rather than reading whatever `tabId()` happens to have
   // cached. It is what stops a second Discord tab adopting this run, and a
   // checkpoint written with `null` there is adoptable by any of them.

@@ -17,6 +17,7 @@ import {
   readPendingRun,
   STALE_MS,
 } from "./resume";
+import { formatAsOf, formatRemaining, remainingMs } from "./run-clock";
 import { searchQueryFor } from "./search";
 import { DEFAULT_COOLDOWN_MS, readSearchedAt } from "./search-plan";
 import { channelFromUrl, channelIds } from "./settings";
@@ -469,7 +470,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     ? (value as Record<string, unknown>)
     : null;
 }
-let summary: { total: number; run: number; hits: Record<string, number> } = {
+let summary: {
+  total: number;
+  run: number;
+  hits: Record<string, number>;
+  /** Newest post time (ms) in the index, and in the current run. */
+  newest?: number | null;
+  newestRun?: number | null;
+} = {
   total: 0,
   run: 0,
   hits: {},
@@ -571,21 +579,25 @@ function statusLine(): { text: string; bad: boolean } {
       text: `Stopped reporting after ${done}/${total} — the Discord tab was probably reloaded.`,
       bad: true,
     };
-  if (p && running())
+  if (p && running()) {
+    const left = remainingMs(p, Date.now());
+    const eta = left === null ? "" : ` · ${formatRemaining(left)}`;
     return {
       text: p.waiting
-        ? `Waiting for Discord to load · ${done}/${total}`
-        : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}`,
+        ? `Waiting for Discord to load · ${done}/${total}${eta}`
+        : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}${eta}`,
       bad: false,
     };
+  }
   if (typeof p?.stopped === "string" && p.stopped && p.stopped !== "Cancelled.")
     return { text: p.stopped, bad: true };
   if (p && total) {
     const nothing = emptyQueries(p);
+    const newest = runId ? summary.newestRun : summary.newest;
     return {
       text: `${p.stopped ? "Stopped · " : ""}${plural(summary.run, "post")} found${
-        nothing.length ? ` · nothing for ${nothing.join(", ")}` : ""
-      }`,
+        newest ? ` · ${formatAsOf(newest)}` : ""
+      }${nothing.length ? ` · nothing for ${nothing.join(", ")}` : ""}`,
       bad: false,
     };
   }

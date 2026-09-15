@@ -277,9 +277,15 @@ async function runSummary(run: unknown, keys: unknown) {
   const all = await entries();
   const hits: Record<string, number> = {};
   let fromRun = 0;
+  /** Newest post time, in the index and in this run: what the results are "as of". */
+  let newest = 0;
+  let newestRun = 0;
   for (const post of all) {
+    const time = post.block.time ? Date.parse(post.block.time) : Number.NaN;
+    if (Number.isFinite(time)) newest = Math.max(newest, time);
     if (typeof run !== "string" || post.run !== run) continue;
     fromRun++;
+    if (Number.isFinite(time)) newestRun = Math.max(newestRun, time);
     const counted = new Set<string>();
     for (const item of post.parsed.haves) {
       const key = objektKey(item);
@@ -288,7 +294,13 @@ async function runSummary(run: unknown, keys: unknown) {
       hits[key] = (hits[key] ?? 0) + 1;
     }
   }
-  return { total: all.length, run: fromRun, hits };
+  return {
+    total: all.length,
+    run: fromRun,
+    hits,
+    newest: newest || null,
+    newestRun: newestRun || null,
+  };
 }
 
 function isBlock(
