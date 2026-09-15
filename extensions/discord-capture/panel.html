@@ -8,6 +8,7 @@
   --text:#ececee; --dim:#a1a1aa;
   --accent:#4f46e5; --accent-line:#6366f1; --accent-soft:#1e1b4b; --accent-text:#c7d2fe;
   --warn-line:#854d0e; --warn-bg:#27200a; --warn-text:#fde68a;
+  --track:#f4f4f5;
   --bad:#fca5a5; --good:#4ade80;
 }
 :root[data-theme="light"]{
@@ -15,6 +16,7 @@
   --text:#1e1f22; --dim:#5c5f66;
   --accent:#4f46e5; --accent-line:#4338ca; --accent-soft:#eef2ff; --accent-text:#3730a3;
   --warn-line:#d9b45f; --warn-bg:#fdf7e7; --warn-text:#6d5106;
+  --track:#d4d4d8;
   --bad:#b42318; --good:#15803d;
 }
 *{box-sizing:border-box}
@@ -117,6 +119,16 @@ button.chip:hover{background:var(--field)}
 .inline input{flex:1}
 .inline input[type=number]{flex:none;width:72px}
 input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--accent-line)}
+/* The pace slider's fill is coloured by how much of the page budget the run
+   uses (set from panel.ts), over a plain track. The fill stops at the thumb's
+   centre, which travels 7px in from either end. */
+input[type=range].risk{--risk:hsl(120 80% 50%);--fill:0;appearance:none;-webkit-appearance:none;height:14px}
+input[type=range].risk::-webkit-slider-runnable-track{height:4px;border-radius:2px;
+  background:linear-gradient(to right,var(--risk) calc(7px + (100% - 14px) * var(--fill)),var(--track) 0)}
+input[type=range].risk::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--track);border:3px solid var(--risk)}
+input[type=range].risk::-moz-range-track{height:4px;border-radius:2px;background:var(--track)}
+input[type=range].risk::-moz-range-progress{height:4px;border-radius:2px;background:var(--risk)}
+input[type=range].risk::-moz-range-thumb{box-sizing:border-box;width:14px;height:14px;border-radius:50%;background:var(--track);border:3px solid var(--risk)}
 .check{display:flex;align-items:center;gap:8px;font-size:12px}
 .check input{width:auto;margin:0;accent-color:var(--accent-line)}
 details{border-top:1px solid var(--line);padding-top:12px}
@@ -125,12 +137,22 @@ summary{cursor:pointer;font-size:12px;color:var(--dim)}
 .tools button{font-size:12px;padding:5px 9px}
 code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-radius:4px;font-size:11px}
 
-/* The two settings a run is tuned with, mirrored from Settings onto the main view. */
-.tuning{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--dim)}
-.tuning label{display:flex;align-items:center;gap:6px}
-.tuning input[type=range]{width:110px}
-.tuning input[type=number]{width:56px;padding:3px 6px}
+/* The settings a run is tuned with, mirrored from Settings onto the main view.
+   One row at the panel's usual widths; it only wraps when squeezed narrower. */
+/* Two rows regardless of width: the pace/pages knobs, then what they add up
+   to (estimate, skip-recent) — rather than an incidental wrap that reorders
+   itself as the panel is resized. */
+.tuning{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--dim)}
+.tuning-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.tuning label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tuning .pace{flex:1 1 auto;max-width:280px}
+.tuning input[type=range]{flex:1 1 72px;min-width:72px;width:72px}
+.tuning input[type=number]{width:52px;padding:3px 6px}
+.tuning input[type=checkbox]{width:auto;margin:0;accent-color:var(--accent-line)}
 .tuning output{min-width:4.5em;font-variant-numeric:tabular-nums}
+.tuning-eta{flex:1 1 auto;font-variant-numeric:tabular-nums}
+.tuning-eta:empty{display:none}
+.tuning-warn{margin:0;color:var(--warn-text)}
 
 #consent ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
 #consent .scroll{gap:10px}
@@ -193,11 +215,18 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
       <div class="actions" style="margin-top:8px"><button type="button" class="primary" id="accept-automation">I understand — turn on search</button></div>
     </div>
     <div class="tuning" id="tuning">
-      <label title="Lower delays are faster, but may trigger Discord rate limits and a forced wait.">Pace
-        <input id="delay-main" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
-        <output id="delay-main-value" for="delay-main">+5s/page</output></label>
-      <label>Pages per objekt
-        <input id="pages-main" type="number" min="1" max="20" step="1" value="3"></label>
+      <div class="tuning-row">
+        <label class="pace" title="Lower delays are faster, but may trigger Discord rate limits and a forced wait.">Pace
+          <input id="delay-main" class="risk" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
+          <output id="delay-main-value" for="delay-main">+5s/page</output></label>
+        <label>Pages per objekt
+          <input id="pages-main" type="number" min="1" max="20" step="1" value="3" aria-describedby="tuning-warn"></label>
+      </div>
+      <div class="tuning-row">
+        <span class="tuning-eta" id="tuning-eta" title="Estimated time for this search, from its codes, pace and pages"></span>
+        <label title="Skip codes searched in the last 6 hours"><input type="checkbox" id="skip-recent-main" checked> Skip recent</label>
+      </div>
+      <p class="tuning-warn" id="tuning-warn" role="status" hidden></p>
     </div>
     <div class="actions" id="actions">
       <button type="button" id="stop-search" hidden>Stop</button>
@@ -228,7 +257,7 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
     </div>
     <div class="setting">
       <label for="delay">Pace · <span id="delay-value">+5s per page</span></label>
-      <input id="delay" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
+      <input id="delay" class="risk" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
       <p class="note" id="delay-note">Lower delays are faster, but may trigger Discord rate limits and a forced wait.</p>
     </div>
     <label class="check"><input type="checkbox" id="skip-recent" checked> Skip codes searched in the last 6 hours</label>

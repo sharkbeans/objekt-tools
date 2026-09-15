@@ -8,7 +8,7 @@
  * A page's time before anything has been measured: Discord answering and
  * capture settling take a few seconds on top of the configured pause.
  */
-const PAGE_GUESS_MS = 4_000;
+export const PAGE_GUESS_MS = 4_000;
 
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -50,14 +50,19 @@ export function remainingMs(
   return left * perQuery;
 }
 
-/** "under a minute left", "~4 min left", "~1 h 5 min left". */
-export function formatRemaining(ms: number): string {
+/** "under a minute", "~4 min", "~1 h", "~1 h 5 min" — a span, not a target. */
+export function describeDuration(ms: number): string {
   const minutes = Math.round(ms / 60_000);
-  if (minutes < 1) return "under a minute left";
-  if (minutes < 60) return `~${minutes} min left`;
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `~${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return `~${hours} h${rest ? ` ${rest} min` : ""} left`;
+  return `~${hours} h${rest ? ` ${rest} min` : ""}`;
+}
+
+/** "under a minute left", "~4 min left", "~1 h 5 min left". */
+export function formatRemaining(ms: number): string {
+  return `${describeDuration(ms)} left`;
 }
 
 /**

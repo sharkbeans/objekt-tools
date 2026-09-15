@@ -67,13 +67,18 @@ async function openPanelWindow(): Promise<void> {
   const { panelWindow } = await extensionApi.storage.local.get("panelWindow");
   if (typeof panelWindow === "number") {
     try {
-      await extensionApi.windows.update(panelWindow, {
-        focused: true,
-        drawAttention: true,
-      });
-      return;
+      const current = await extensionApi.windows.get(panelWindow);
+      // Already the front window and not minimised: nothing to do. Anything
+      // else — minimised, behind another window, or just not focused —
+      // is fixed below rather than patched in place: asking the OS to
+      // hand focus to an existing window from the background is the part
+      // that is unreliable (window managers apply their own focus-stealing
+      // prevention to it), not window creation, so replacing it with a
+      // fresh window is the more reliable fix than updating this one.
+      if (current.focused && current.state !== "minimized") return;
+      await extensionApi.windows.remove(panelWindow);
     } catch {
-      /* Closed since it was recorded. */
+      /* Already closed. */
     }
   }
   const created = await extensionApi.windows.create({
@@ -81,6 +86,8 @@ async function openPanelWindow(): Promise<void> {
     type: "popup",
     width: 820,
     height: 760,
+    state: "normal",
+    focused: true,
   });
   await extensionApi.storage.local.set({ panelWindow: created?.id ?? null });
 }

@@ -11,6 +11,8 @@
  * without a browser.
  */
 
+import { PAGE_GUESS_MS } from "./run-clock";
+
 /** Queries one run will fire. Beyond this it is not searching, it is scraping. */
 export const QUERY_CAP = 40;
 
@@ -82,6 +84,60 @@ export function planQueries(
     else due.push(query);
   }
   return { queries: due.slice(0, cap), skipped, overflow: due.slice(cap) };
+}
+
+/** The pause between result pages the extension defaults to and recommends. */
+export const RECOMMENDED_DELAY_MS = 5_000;
+
+/**
+ * Result pages one run should walk at the recommended pace. Plan 036 sized a
+ * 30-objekt refresh at 1–2 pages each: about sixty requests.
+ */
+export const RECOMMENDED_PAGE_BUDGET = 60;
+
+/**
+ * How many result pages a run at this pace can walk before it is past the
+ * recommendation.
+ *
+ * Neither setting is risky alone — one objekt over ten pages is ten requests.
+ * What Discord limits is requests arriving close together, so the budget is
+ * the recommended one scaled by how long each page takes: a faster pace packs
+ * the same pages into less time and gets fewer of them.
+ */
+export function pageBudget(delayMs: number): number {
+  const perPage = Math.max(0, delayMs) + PAGE_GUESS_MS;
+  return Math.floor(
+    (RECOMMENDED_PAGE_BUDGET * perPage) /
+      (RECOMMENDED_DELAY_MS + PAGE_GUESS_MS),
+  );
+}
+
+/** The most result pages a run will walk, against what its pace allows. */
+export function searchLoad(
+  queryCount: number,
+  pages: number,
+  delayMs: number,
+): { pages: number; budget: number; over: boolean; estimatedMs: number } {
+  const walked = Math.max(0, queryCount) * Math.max(1, pages);
+  const budget = pageBudget(delayMs);
+  return {
+    pages: walked,
+    budget,
+    over: walked > budget,
+    // Same guess remainingMs falls back on before a run has measured itself.
+    estimatedMs: walked * (Math.max(0, delayMs) + PAGE_GUESS_MS),
+  };
+}
+
+/**
+ * Hue for how much of the budget a run uses: green when light, through yellow
+ * to orange at the budget, and red only once past it — the same point the
+ * warning appears.
+ */
+export function loadHue(load: { pages: number; budget: number }): number {
+  if (load.pages > load.budget) return 0;
+  const used = load.budget > 0 ? load.pages / load.budget : 1;
+  return Math.round(120 - 90 * used);
 }
 
 /** One line saying what was left out, or nothing when nothing was. */

@@ -2,11 +2,60 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   describePlan,
+  loadHue,
+  pageBudget,
   planQueries,
   pruneSearchedAt,
   QUERY_CAP,
+  RECOMMENDED_DELAY_MS,
+  RECOMMENDED_PAGE_BUDGET,
   readSearchedAt,
+  searchLoad,
 } from "./search-plan";
+
+test("the recommended pace gets the recommended page budget", () => {
+  assert.equal(pageBudget(RECOMMENDED_DELAY_MS), RECOMMENDED_PAGE_BUDGET);
+});
+
+test("a faster pace gets fewer pages, a slower one more", () => {
+  assert.ok(pageBudget(0) < RECOMMENDED_PAGE_BUDGET);
+  assert.ok(pageBudget(15_000) > RECOMMENDED_PAGE_BUDGET);
+  assert.equal(pageBudget(-1_000), pageBudget(0));
+});
+
+test("many pages of one objekt is not a warning on its own", () => {
+  assert.equal(searchLoad(1, 10, RECOMMENDED_DELAY_MS).over, false);
+  assert.equal(searchLoad(1, 20, 0).over, false);
+});
+
+test("a fast pace is not a warning on its own", () => {
+  assert.equal(searchLoad(5, 2, 0).over, false);
+});
+
+test("the slider hue runs green to orange, and red only past the budget", () => {
+  assert.equal(loadHue({ pages: 0, budget: 60 }), 120);
+  assert.equal(loadHue({ pages: 30, budget: 60 }), 75);
+  assert.equal(loadHue({ pages: 60, budget: 60 }), 30);
+  assert.equal(loadHue({ pages: 61, budget: 60 }), 0);
+});
+
+test("codes, pages and pace together decide the warning", () => {
+  assert.equal(searchLoad(30, 2, RECOMMENDED_DELAY_MS).over, false);
+  assert.equal(searchLoad(30, 3, RECOMMENDED_DELAY_MS).over, true);
+  assert.equal(searchLoad(30, 3, 15_000).over, false);
+  assert.equal(searchLoad(20, 2, 0).over, true);
+  assert.deepEqual(searchLoad(0, 20, 0), {
+    pages: 0,
+    budget: pageBudget(0),
+    over: false,
+    estimatedMs: 0,
+  });
+});
+
+test("the time estimate scales with pages walked and pace", () => {
+  assert.equal(searchLoad(4, 3, 5_000).estimatedMs, 4 * 3 * 9_000);
+  assert.equal(searchLoad(0, 20, 5_000).estimatedMs, 0);
+});
 
 const hour = 60 * 60 * 1000;
 const now = Date.UTC(2026, 8, 10, 12);

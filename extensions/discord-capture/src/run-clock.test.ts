@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatAsOf, formatRemaining, remainingMs } from "./run-clock";
+import {
+  describeDuration,
+  formatAsOf,
+  formatRemaining,
+  remainingMs,
+} from "./run-clock";
 
 const now = Date.UTC(2026, 8, 15, 12);
 
@@ -84,6 +89,12 @@ test("remaining time reads in minutes and hours", () => {
   assert.equal(formatRemaining(4 * 60_000), "~4 min left");
   assert.equal(formatRemaining(60 * 60_000), "~1 h left");
   assert.equal(formatRemaining(65 * 60_000), "~1 h 5 min left");
+});
+
+test("a bare duration reads the same but without a target", () => {
+  assert.equal(describeDuration(20_000), "under a minute");
+  assert.equal(describeDuration(4 * 60_000), "~4 min");
+  assert.equal(describeDuration(65 * 60_000), "~1 h 5 min");
 });
 
 test("as of names the timezone", () => {

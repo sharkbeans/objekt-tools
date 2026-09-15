@@ -17,9 +17,20 @@ import {
   readPendingRun,
   STALE_MS,
 } from "./resume";
-import { formatAsOf, formatRemaining, remainingMs } from "./run-clock";
+import {
+  describeDuration,
+  formatAsOf,
+  formatRemaining,
+  remainingMs,
+} from "./run-clock";
 import { searchQueryFor } from "./search";
-import { DEFAULT_COOLDOWN_MS, readSearchedAt } from "./search-plan";
+import {
+  DEFAULT_COOLDOWN_MS,
+  loadHue,
+  planQueries,
+  readSearchedAt,
+  searchLoad,
+} from "./search-plan";
 import { channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
 
@@ -721,6 +732,7 @@ function render() {
         : "Search again";
   }
   renderTiles();
+  showTuning();
 }
 
 /** Keep the bar and the buttons in step with the run. */
@@ -897,22 +909,61 @@ async function ensureCapturing(url: string | undefined): Promise<void> {
 const delay = element<HTMLInputElement>("delay");
 const pages = element<HTMLInputElement>("pages");
 const skipRecent = element<HTMLInputElement>("skip-recent");
-// The same two settings on the main view. Settings stays the one the run reads;
+// The same settings on the main view. Settings stays the one the run reads;
 // each copy writes through to the other as it changes.
 const delayMain = element<HTMLInputElement>("delay-main");
 const pagesMain = element<HTMLInputElement>("pages-main");
+const skipRecentMain = element<HTMLInputElement>("skip-recent-main");
+
+/**
+ * Keep the pace slider's colour, the page-budget warning and the time
+ * estimate in step with the want list, pages, pace and skip-recent together —
+ * the same inputs "Search" itself plans from, via the same `planQueries`, so
+ * what is shown here is what clicking it would actually do right now.
+ */
+function showTuning() {
+  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+  const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
+  const codes = [
+    ...new Set(
+      searchTiles()
+        .map((tile) => tile.query)
+        .filter(Boolean),
+    ),
+  ];
+  const plan = planQueries(codes, {
+    searched: searchedAt,
+    cooldownMs: skipRecent.checked ? DEFAULT_COOLDOWN_MS : 0,
+  });
+  const load = searchLoad(plan.queries.length, pageCount, seconds * 1000);
+  const risk = `hsl(${loadHue(load)} 80% 50%)`;
+  for (const slider of [delay, delayMain]) {
+    slider.style.setProperty("--risk", risk);
+    slider.style.setProperty("--fill", String(seconds / 15));
+  }
+  const warning = element("tuning-warn");
+  warning.hidden = !load.over;
+  warning.textContent = load.over
+    ? `${load.pages}/${load.budget} pages — Discord may rate-limit.`
+    : "";
+  const eta = element("tuning-eta");
+  eta.hidden = load.pages === 0;
+  eta.textContent = describeDuration(load.estimatedMs);
+}
 
 /** Zero is not "no delay applied" — it is "gated on capture instead". */
 function showDelay() {
   const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
   delayMain.value = String(seconds);
   pagesMain.value = pages.value;
+  skipRecentMain.checked = skipRecent.checked;
   element("delay-value").textContent = seconds
     ? `+${seconds}s per page`
     : "Instant";
   element("delay-main-value").textContent = seconds
     ? `+${seconds}s/page`
     : "Instant";
+  showTuning();
 }
 delay.addEventListener("input", showDelay);
 delayMain.addEventListener("input", () => {
@@ -921,9 +972,21 @@ delayMain.addEventListener("input", () => {
 });
 pagesMain.addEventListener("input", () => {
   pages.value = pagesMain.value;
+  showTuning();
 });
 pages.addEventListener("input", () => {
   pagesMain.value = pages.value;
+  showTuning();
+});
+// Registered before the save below, so the copy the run reads is already
+// updated when it is written.
+skipRecentMain.addEventListener("change", () => {
+  skipRecent.checked = skipRecentMain.checked;
+  showTuning();
+});
+skipRecent.addEventListener("change", () => {
+  skipRecentMain.checked = skipRecent.checked;
+  showTuning();
 });
 
 /** Settings take effect as they are changed, not on the next run's click. */
@@ -934,7 +997,14 @@ function saveSearchSettings() {
     skipRecent: skipRecent.checked,
   });
 }
-for (const input of [delay, pages, skipRecent, delayMain, pagesMain])
+for (const input of [
+  delay,
+  pages,
+  skipRecent,
+  delayMain,
+  pagesMain,
+  skipRecentMain,
+])
   input.addEventListener("change", saveSearchSettings);
 
 action("run-search", async () => {
