@@ -62,17 +62,6 @@ input,textarea{background:var(--field);border:1px solid var(--line);border-radiu
    under it is there for the cards the catalogue has no picture for. */
 .tiles{flex:1 1 auto;min-height:96px;overflow-y:auto;margin:0;padding:3px;list-style:none;
   display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:10px 8px;align-content:start}
-/* With no wants yet, placeholder cards stand where the real ones will go. */
-.tiles:empty{display:none}
-.tiles:not(:empty) + .skeletons{display:none}
-.skeletons{overflow:hidden}
-.skeletons .art{border-style:dashed}
-.skeletons .art,.skeletons .bar{background:linear-gradient(100deg,var(--raised) 30%,var(--field) 50%,var(--raised) 70%) 0 0/300% 100%;
-  animation:shimmer 1.6s ease-in-out infinite}
-.skeletons .bar{display:block;height:8px;border-radius:4px;margin:5px auto 0;width:70%}
-.skeletons .bar + .bar{width:45%;margin-top:4px}
-@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
-@media (prefers-reduced-motion:reduce){.skeletons .art,.skeletons .bar{animation:none}}
 .tile{position:relative;min-width:0}
 .art{aspect-ratio:5.5/8.5;border-radius:6px;overflow:hidden;background:var(--raised);border:1px solid var(--line);
   display:grid;place-items:center;transition:opacity .25s ease}
@@ -97,6 +86,17 @@ input,textarea{background:var(--field);border:1px solid var(--line);border-radiu
 .tile[data-state="active"] .art{outline:2px solid var(--accent-line);outline-offset:1px;animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){.tile[data-state="active"] .art{animation:none}}
+/* With no wants yet, placeholder cards stand where the real ones will go. */
+.skeletons{overflow:hidden}
+.tiles:empty{display:none}
+.tiles:not(:empty) + .skeletons{display:none}
+.skeletons .art{border-style:dashed}
+.skeletons .art,.skeletons .bar{background:linear-gradient(100deg,var(--raised) 30%,var(--field) 50%,var(--raised) 70%) 0 0/300% 100%;
+  animation:shimmer 1.6s ease-in-out infinite}
+.skeletons .bar{display:block;height:8px;border-radius:4px;margin:5px auto 0;width:70%}
+.skeletons .bar + .bar{width:45%;margin-top:4px}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
+@media (prefers-reduced-motion:reduce){.skeletons .art,.skeletons .bar{animation:none}}
 
 .foot{flex:none;display:flex;flex-direction:column;gap:8px}
 .meter{height:4px;border-radius:2px;background:var(--field);overflow:hidden}
@@ -104,12 +104,6 @@ input,textarea{background:var(--field);border:1px solid var(--line);border-radiu
 .say{margin:0;font-size:12px;color:var(--dim);white-space:pre-wrap;min-height:1.4em}
 .say.bad{color:var(--bad)}
 .actions{display:flex;gap:8px}
-/* The two settings a run is tuned with, mirrored from Settings onto the main view. */
-.tuning{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--dim)}
-.tuning label{display:flex;align-items:center;gap:6px}
-.tuning input[type=range]{width:110px}
-.tuning input[type=number]{width:56px;padding:3px 6px}
-.tuning output{min-width:4.5em;font-variant-numeric:tabular-nums}
 .actions .primary{flex:1}
 
 /* Settings: everything a first search does not need. */
@@ -126,6 +120,13 @@ summary{cursor:pointer;font-size:12px;color:var(--dim)}
 .tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .tools button{font-size:12px;padding:5px 9px}
 code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-radius:4px;font-size:11px}
+
+/* The two settings a run is tuned with, mirrored from Settings onto the main view. */
+.tuning{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--dim)}
+.tuning label{display:flex;align-items:center;gap:6px}
+.tuning input[type=range]{width:110px}
+.tuning input[type=number]{width:56px;padding:3px 6px}
+.tuning output{min-width:4.5em;font-variant-numeric:tabular-nums}
 
 #consent ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
 #consent .scroll{gap:10px}
