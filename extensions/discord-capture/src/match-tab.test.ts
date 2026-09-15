@@ -78,6 +78,7 @@ const payload = {
   transcript: "trader — 2026-09-09T03:41:00.000Z\nHAVE\nSeoYeon CC101",
   nickname: "",
   wants: "SeoYeon CC101",
+  links: {},
 };
 
 test("delivers once to a page that was already listening", async () => {

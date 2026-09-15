@@ -15,6 +15,7 @@ const delivery = {
   transcript: "trader — 2026-09-09T03:41:00.000Z\nHAVE\nSeoYeon CC101",
   nickname: "yourcosmoname",
   wants: "SeoYeon CC101",
+  links: { "0a1b2c3d": "https://discord.com/channels/700/800/456" },
 };
 
 describe("readExtensionMessage", () => {
@@ -58,11 +59,28 @@ describe("readExtensionMessage", () => {
   });
 
   it("tolerates missing optional fields", () => {
-    const { nickname: _n, wants: _w, ...bare } = delivery;
+    const { nickname: _n, wants: _w, links: _l, ...bare } = delivery;
     assert.deepEqual(readExtensionMessage(bare), {
       ...bare,
       nickname: "",
       wants: "",
+      links: {},
+    });
+  });
+
+  it("keeps only links that open a Discord message", () => {
+    const message = readExtensionMessage({
+      ...delivery,
+      links: {
+        "0a1b2c3d": "https://discord.com/channels/700/800/456",
+        "11111111": "https://evil.example/channels/1/2/3",
+        "22222222": "javascript:alert(1)",
+        "not-a-key": "https://discord.com/channels/700/800/457",
+        "33333333": 42,
+      },
+    });
+    assert.deepEqual(message?.type === "import" && message.links, {
+      "0a1b2c3d": "https://discord.com/channels/700/800/456",
     });
   });
 });

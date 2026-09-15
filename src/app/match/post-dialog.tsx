@@ -88,6 +88,28 @@ export function CopyDiscordHandle({
   );
 }
 
+/**
+ * Open the post itself in Discord. Only posts the capture extension delivered
+ * carry a message link; a pasted transcript has no message id to link to.
+ */
+export function JumpToMessage({ href }: { href: string | undefined }) {
+  if (!href) return null;
+  return (
+    <Button size="sm" variant="outline" className="h-8" asChild>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        title="Open this post in Discord"
+        onClick={(event) => event.stopPropagation()}
+      >
+        Jump to message
+        <ExternalLinkIcon className="shrink-0" />
+      </a>
+    </Button>
+  );
+}
+
 function itemLabel(item: {
   member: string | null;
   season: string;
@@ -162,6 +184,8 @@ interface PostDialogProps {
   verification: VerificationState | undefined;
   picked: ReadonlySet<string>;
   onToggle: (key: string) => void;
+  /** The post's Discord message link, when the extension delivered one. */
+  link?: string;
   linkedImport:
     | {
         status: "loading";
@@ -320,6 +344,7 @@ export function PostDialog({
   verification,
   picked,
   onToggle,
+  link,
   linkedImport,
   onOpenChange,
 }: PostDialogProps) {
@@ -386,10 +411,12 @@ export function PostDialog({
         <DialogHeader className="gap-3">
           <DialogTitle className="flex flex-wrap items-center gap-2 text-xl">
             <CopyDiscordHandle name={message.author} />
+            <JumpToMessage href={link} />
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Copy the name, then paste it into Discord member or channel search
-            to contact this trader.
+            {link
+              ? "Jump to the post in Discord, or copy the name to find this trader."
+              : "Copy the name, then paste it into Discord member or channel search to contact this trader."}
           </p>
         </DialogHeader>
 

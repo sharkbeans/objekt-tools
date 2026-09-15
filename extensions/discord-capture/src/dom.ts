@@ -61,7 +61,13 @@ export function readMessage(element: Element) {
   // The channel list names its channel in the row id. A result does not, so it
   // comes from the link Discord puts on each result back to where it was posted
   // — and is null when that link is not there.
-  const channel = own ? own[1] : channelFromRow(element);
+  const origin = own ? null : whereFromRow(element);
+  const channel = own ? own[1] : (origin?.channel ?? null);
+  // The guild is only needed to link back to the message. A channel row is in
+  // the channel the page has open; a result says where it was posted.
+  const guild = own
+    ? guildOfOpenChannel(element.ownerDocument, own[1])
+    : (origin?.guild ?? null);
   // Keyed to this message where possible, which is stricter than "the only
   // timestamp in the row"; that rule stays as the fallback.
   const times = element.querySelectorAll("time[datetime]");
@@ -94,6 +100,7 @@ export function readMessage(element: Element) {
     // Discord's own message id. Unique and stable, unlike the rendered author
     // name, which gains a server tag as the row hydrates.
     id,
+    guild,
     author,
     body: text,
     time: parseMessageTime(new Date(iso).toISOString()),
@@ -101,20 +108,43 @@ export function readMessage(element: Element) {
 }
 
 /**
- * The channel a search result was posted in.
+ * The guild and channel a search result was posted in.
  *
  * Every result links back to where it came from — /channels/<guild>/<channel>
  * — which is the only place the channel appears once the chat-messages wrapper
- * is gone.
+ * is gone. The guild is null for a link that does not name a numeric one.
  */
-function channelFromRow(element: Element): string | null {
+function whereFromRow(
+  element: Element,
+): { guild: string | null; channel: string } | null {
   for (const link of element.querySelectorAll('a[href*="/channels/"]')) {
-    const channel = link
+    const match = link
       .getAttribute("href")
-      ?.match(/\/channels\/[^/]+\/(\d+)/)?.[1];
-    if (channel) return channel;
+      ?.match(/\/channels\/([^/]+)\/(\d+)/);
+    if (match)
+      return {
+        guild: /^\d+$/.test(match[1]) ? match[1] : null,
+        channel: match[2],
+      };
   }
   return null;
+}
+
+/** The guild of the channel the page has open, if that is `channel`. */
+function guildOfOpenChannel(doc: Document, channel: string): string | null {
+  const open = doc.location?.pathname.match(/^\/channels\/(\d+)\/(\d+)/);
+  return open && open[2] === channel ? open[1] : null;
+}
+
+/** A link that opens one message in Discord, or null without a guild and channel. */
+export function messageLink(
+  guild: string | null | undefined,
+  channel: string | null | undefined,
+  id: string,
+): string | null {
+  return guild && channel && /^\d+$/.test(guild) && /^\d+$/.test(channel)
+    ? `https://discord.com/channels/${guild}/${channel}/${id}`
+    : null;
 }
 function readText(node: Node): string {
   if (node.nodeType === 3) return node.textContent ?? "";

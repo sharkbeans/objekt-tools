@@ -17,6 +17,8 @@ export interface Entry {
    * total. Absent on posts collected by browsing a channel.
    */
   run?: string;
+  /** Opens this message in Discord. Absent when the guild was not known. */
+  link?: string;
 }
 /**
  * The open database, kept for as long as the worker lives.
@@ -98,6 +100,7 @@ export function capture(
   block: StoredBlock,
   id: string,
   run?: string,
+  link?: string,
 ): Promise<Entry> {
   return transaction("readwrite", (store, done) => {
     const key = id;
@@ -110,6 +113,11 @@ export function capture(
         // was first seen.
         if (run && existing.run !== run) {
           existing.run = run;
+          changed = true;
+        }
+        // Posts captured before links were kept pick one up when seen again.
+        if (link && !existing.link) {
+          existing.link = link;
           changed = true;
         }
         if (
@@ -136,9 +144,13 @@ export function capture(
       const parsed = collect([
         { ...block, time: block.time ? parseMessageTime(block.time) : null },
       ])[0];
-      const entry: Entry = run
-        ? { key, block, parsed, run }
-        : { key, block, parsed };
+      const entry: Entry = {
+        key,
+        block,
+        parsed,
+        ...(run ? { run } : {}),
+        ...(link ? { link } : {}),
+      };
       store.add(entry);
       done(entry);
     };

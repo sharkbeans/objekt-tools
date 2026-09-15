@@ -19,7 +19,7 @@ import type { SeenKind } from "@/lib/match/seen-id";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { ContactGallery } from "./contact-gallery";
 import { type DeskQuery, matchesDeskQuery } from "./desk-search";
-import { CopyDiscordHandle } from "./post-dialog";
+import { CopyDiscordHandle, JumpToMessage } from "./post-dialog";
 
 const PAGE_SIZE = 6;
 
@@ -39,6 +39,7 @@ export function ContactResults({
   canMarkSeen,
   emptyText,
   search,
+  links,
 }: {
   posts: DeskPost[];
   mode: DeskMode;
@@ -57,6 +58,8 @@ export function ContactResults({
   emptyText?: string;
   /** Their-objekts search in force, or null when nothing is being searched. */
   search: DeskQuery | null;
+  /** Post content key -> Discord message link, for posts that have one. */
+  links: ReadonlyMap<string, string>;
 }) {
   const [page, setPage] = useState(0);
   const [previous, setPrevious] = useState(posts);
@@ -204,6 +207,7 @@ export function ContactResults({
                         : "Review trade"}
                   </Button>
                   <CopyDiscordHandle name={post.message.author} explicit />
+                  <JumpToMessage href={links.get(post.message.key)} />
                   {post.message.nickname && (
                     <Button
                       size="sm"

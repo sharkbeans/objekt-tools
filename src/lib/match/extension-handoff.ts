@@ -35,6 +35,11 @@ export interface HandoffPayload {
   nickname: string;
   /** The want list the search ran on, one objekt per line. */
   wants: string;
+  /**
+   * Post content key (`messageKey(author, body)`) -> a link that opens that
+   * message in Discord. Posts whose guild was not known have none.
+   */
+  links: Record<string, string>;
 }
 
 export type ExtensionMessage =
@@ -48,6 +53,25 @@ function record(data: unknown): Record<string, unknown> | null {
 }
 
 const ID = /^[\w-]{1,64}$/;
+const CONTENT_KEY = /^[0-9a-f]{8}$/;
+/** The only link a delivery may attach to a post: one Discord message. */
+export const DISCORD_MESSAGE_URL =
+  /^https:\/\/(?:canary\.|ptb\.)?discord\.com\/channels\/\d{1,20}\/\d{1,20}\/\d{1,20}$/;
+
+/** Only well-formed keys pointing at Discord messages survive. */
+function readLinks(value: unknown): Record<string, string> {
+  const links: Record<string, string> = {};
+  const entries = record(value);
+  if (!entries) return links;
+  for (const [key, url] of Object.entries(entries))
+    if (
+      CONTENT_KEY.test(key) &&
+      typeof url === "string" &&
+      DISCORD_MESSAGE_URL.test(url)
+    )
+      links[key] = url;
+  return links;
+}
 
 /**
  * An extension message, or null for anything else on the channel.
@@ -78,6 +102,7 @@ export function readExtensionMessage(data: unknown): ExtensionMessage | null {
       typeof message.nickname === "string" ? message.nickname.slice(0, 30) : "",
     wants:
       typeof message.wants === "string" ? message.wants.slice(0, 20_000) : "",
+    links: readLinks(message.links),
   };
 }
 

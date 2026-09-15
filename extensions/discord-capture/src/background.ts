@@ -1,8 +1,10 @@
 import { type ObjektKeyParts, objektKey } from "@/lib/discord/match";
+import { messageKey } from "@/lib/discord/transcript";
 import { EXTENSION_SOURCE, PAGE_SOURCE } from "@/lib/match/extension-handoff";
 import { lookupArtwork, readArtworkCache } from "./artwork";
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
+import { messageLink } from "./dom";
 import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, pickTab, resolveTab } from "./host-tab";
 import { loadInventory } from "./inventory";
@@ -196,6 +198,11 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
   if (!posts.length)
     throw new Error("Nothing to open yet — run a search first.");
   const transcript = exportTranscript(posts.map((post) => post.block));
+  // Keyed the way /match keys a post, so each can link back to its message.
+  const links: Record<string, string> = {};
+  for (const post of posts)
+    if (post.link)
+      links[messageKey(post.block.author, post.block.body)] = post.link;
   const tabId = await openMatchTab(matchTabs);
   // A dev server that is not running still "loads" — as the browser's error
   // page, which refuses the script with something like "Frame with ID 0 is
@@ -213,6 +220,7 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
           transcript,
           nickname: typeof stored.nickname === "string" ? stored.nickname : "",
           wants: typeof stored.wants === "string" ? stored.wants : "",
+          links,
         },
         PAGE_SOURCE,
         EXTENSION_SOURCE,
@@ -513,6 +521,11 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
           request.block,
           channel ? `${channel}-${messageId}` : messageId,
           searchRun,
+          messageLink(
+            typeof request.guild === "string" ? request.guild : null,
+            channel,
+            messageId,
+          ) ?? undefined,
         );
       } catch {
         reportedError = true;

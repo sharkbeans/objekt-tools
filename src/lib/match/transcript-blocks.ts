@@ -19,6 +19,7 @@ import {
   splitTranscript,
   UNKNOWN_AUTHOR,
 } from "@/lib/discord/transcript";
+import { DISCORD_MESSAGE_URL } from "./extension-handoff";
 
 export interface StoredBlock {
   /** Discord display name, exactly as the header carried it. */
@@ -29,6 +30,8 @@ export interface StoredBlock {
    */
   time: string | null;
   body: string;
+  /** Opens the message in Discord. Only posts the capture extension delivered have one. */
+  link?: string;
 }
 
 // Re-parsing every stored block on load costs about 0.25 ms each, so history is
@@ -58,6 +61,7 @@ const NO_TIME = "00:00";
 export function mergeBlocks(
   existing: StoredBlock[],
   pasted: string,
+  links: Readonly<Record<string, string>> = {},
 ): StoredBlock[] {
   const { blocks } = splitTranscript(pasted);
 
@@ -80,12 +84,28 @@ export function mergeBlocks(
   );
   for (const block of incoming) {
     const key = messageKey(block.author, block.body);
+    // A post pasted as plain text keeps the link an earlier delivery gave it.
+    const link = Object.hasOwn(links, key) ? links[key] : byKey.get(key)?.link;
     // Delete before setting so a re-sighted post moves to the end rather than
     // keeping the position of its first sighting.
     byKey.delete(key);
-    byKey.set(key, block);
+    byKey.set(key, link ? { ...block, link } : block);
   }
   return trimBlocks([...byKey.values()]);
+}
+
+/**
+ * Post content key -> its Discord message link, for the blocks that have one.
+ *
+ * Checked again here rather than trusted from storage: the link becomes an
+ * href, and anything else in the browser's store could have written it.
+ */
+export function linksOf(blocks: StoredBlock[]): Map<string, string> {
+  const links = new Map<string, string>();
+  for (const block of blocks)
+    if (block.link && DISCORD_MESSAGE_URL.test(block.link))
+      links.set(messageKey(block.author, block.body), block.link);
+  return links;
 }
 
 /** Drop the least recently seen blocks once past the load-time budget. */

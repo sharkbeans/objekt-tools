@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { analyzeTranscript, UNKNOWN_AUTHOR } from "@/lib/discord/transcript";
+import {
+  analyzeTranscript,
+  messageKey,
+  UNKNOWN_AUTHOR,
+} from "@/lib/discord/transcript";
 import {
   blocksToTranscript,
+  linksOf,
   MAX_BLOCKS,
   mergeBlocks,
   trimBlocks,
@@ -47,6 +52,22 @@ const keysOf = (transcript: string) =>
 describe("mergeBlocks", () => {
   it("keeps one block per message", () => {
     assert.equal(mergeBlocks([], SAMPLE).length, 3);
+  });
+
+  it("keeps a delivered message link through a later plain paste", () => {
+    const [first] = mergeBlocks([], SAMPLE);
+    const key = messageKey(first.author, first.body);
+    const url = "https://discord.com/channels/700/800/456";
+    const linked = mergeBlocks([], SAMPLE, { [key]: url });
+    assert.equal(linksOf(linked).get(key), url);
+    const pastedAgain = mergeBlocks(linked, SAMPLE);
+    assert.equal(linksOf(pastedAgain).get(key), url);
+    assert.equal(linksOf(pastedAgain).size, 1);
+  });
+
+  it("drops a stored link that is not a Discord message", () => {
+    const [first] = mergeBlocks([], SAMPLE);
+    assert.equal(linksOf([{ ...first, link: "javascript:alert(1)" }]).size, 0);
   });
 
   it("collapses a paste repeated verbatim", () => {

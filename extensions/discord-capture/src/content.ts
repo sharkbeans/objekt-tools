@@ -197,6 +197,7 @@ async function scan(element: Element) {
       source: message.source,
       run: searchRun,
       id: message.id,
+      guild: message.guild,
       block: {
         author: message.author,
         body: message.body,

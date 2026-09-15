@@ -104,6 +104,7 @@ import {
 } from "@/lib/match/seen-store";
 import {
   blocksToTranscript,
+  linksOf,
   MAX_BLOCKS,
   mergeBlocks,
   type StoredBlock,
@@ -252,6 +253,10 @@ export function MatchClient() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [openPost, setOpenPost] = useState<string | null>(null);
   const [imports, setImports] = useState<Map<string, ImportState>>(new Map());
+  /** Post content key -> Discord message link, from extension deliveries. */
+  const [links, setLinks] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
   const [verified, setVerified] = useState<Map<string, VerificationState>>(
     new Map(),
   );
@@ -303,6 +308,7 @@ export function MatchClient() {
         if (cancelled) return;
         blocksRef.current = saved;
         setStoredCount(saved.length);
+        setLinks(linksOf(saved));
         setMessages(analyzeTranscript(blocksToTranscript(saved)).messages);
       })
       .finally(() => {
@@ -368,35 +374,39 @@ export function MatchClient() {
   }, [ready, userId]);
 
   /** Merge a transcript into the desk. Returns how many posts it held. */
-  const addPaste = useCallback((text: string): number => {
-    const parsed = analyzeTranscript(text);
-    if (!parsed.messages.length) {
-      toast.error(
-        "No trade posts found. Include the message text and Discord name/time lines when available.",
-      );
-      return 0;
-    }
-    setMessages((previous) => mergeTranscripts(previous, parsed.messages));
-    // Dedupe before storing: the paste-scroll-paste workflow guarantees
-    // overlapping selections, and traders repost the same list constantly.
-    const next = mergeBlocks(blocksRef.current, text);
-    blocksRef.current = next;
-    setStoredCount(next.length);
-    void saveBlocks(next).then((stored) => {
-      if (!stored)
-        toast.warning(
-          "This paste is available for this session, but could not be saved in your browser.",
+  const addPaste = useCallback(
+    (text: string, messageLinks: Record<string, string> = {}): number => {
+      const parsed = analyzeTranscript(text);
+      if (!parsed.messages.length) {
+        toast.error(
+          "No trade posts found. Include the message text and Discord name/time lines when available.",
         );
-    });
-    setRaw("");
-    setEditor(null);
-    if (parsed.orphanLines)
-      toast.warning(
-        `Ignored ${parsed.orphanLines} lines above the first Discord name.`,
-      );
-    toast.success(`Read ${parsed.messages.length} posts. Matching updated.`);
-    return parsed.messages.length;
-  }, []);
+        return 0;
+      }
+      setMessages((previous) => mergeTranscripts(previous, parsed.messages));
+      // Dedupe before storing: the paste-scroll-paste workflow guarantees
+      // overlapping selections, and traders repost the same list constantly.
+      const next = mergeBlocks(blocksRef.current, text, messageLinks);
+      blocksRef.current = next;
+      setStoredCount(next.length);
+      setLinks(linksOf(next));
+      void saveBlocks(next).then((stored) => {
+        if (!stored)
+          toast.warning(
+            "This paste is available for this session, but could not be saved in your browser.",
+          );
+      });
+      setRaw("");
+      setEditor(null);
+      if (parsed.orphanLines)
+        toast.warning(
+          `Ignored ${parsed.orphanLines} lines above the first Discord name.`,
+        );
+      toast.success(`Read ${parsed.messages.length} posts. Matching updated.`);
+      return parsed.messages.length;
+    },
+    [],
+  );
   const importFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
     const files = Array.from(input.files ?? []);
@@ -452,7 +462,7 @@ export function MatchClient() {
       }
       let posts = handled.get(message.id);
       if (posts === undefined) {
-        posts = addPaste(message.transcript);
+        posts = addPaste(message.transcript, message.links);
         handled.set(message.id, posts);
         // Every new delivery opens its own search, including in an existing
         // desk tab with old selections. Saved personal wants stay separate.
@@ -819,6 +829,7 @@ export function MatchClient() {
     setMessages([]);
     blocksRef.current = [];
     setStoredCount(0);
+    setLinks(new Map());
     void clearBlocks();
     setImports(new Map());
     setVerified(new Map());
@@ -947,6 +958,7 @@ export function MatchClient() {
     onMarkSeen: markSeen,
     canMarkSeen: seenIds.size > 0,
     search: searchingTheirCards ? theirQuery : null,
+    links,
     emptyText:
       searchSummary ??
       (mode === "wtt" && mine.size === 0
@@ -1633,6 +1645,7 @@ export function MatchClient() {
         }
         picked={get}
         onToggle={toggleGet}
+        link={openPost ? links.get(openPost) : undefined}
         linkedImport={openPost ? imports.get(openPost) : undefined}
         onOpenChange={(open) => !open && setOpenPost(null)}
       />

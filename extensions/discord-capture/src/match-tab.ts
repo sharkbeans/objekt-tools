@@ -45,7 +45,13 @@ export type Delivery =
  * page has hydrated — and a page that is not listening yet cannot answer.
  */
 export function deliverToMatch(
-  payload: { id: string; transcript: string; nickname: string; wants: string },
+  payload: {
+    id: string;
+    transcript: string;
+    nickname: string;
+    wants: string;
+    links: Record<string, string>;
+  },
   pageSource: string,
   extensionSource: string,
   timeoutMs: number,

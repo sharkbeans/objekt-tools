@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 import "fake-indexeddb/auto";
-import { readMessage } from "./dom";
+import { messageLink, readMessage } from "./dom";
 import { capture, clear, count, entries } from "./store";
 
 function fixture(extra = "") {
@@ -130,6 +130,18 @@ test("reads a search result that has no chat-messages wrapper", () => {
   // The channel survives only through the link back to where it was posted —
   // /channels/<guild>/<channel>/<message>, so the second segment.
   assert.equal(message?.channel, "800");
+  assert.equal(message?.guild, "700");
+  assert.equal(
+    messageLink(message?.guild, message?.channel, message?.id ?? ""),
+    "https://discord.com/channels/700/800/456",
+  );
+});
+
+test("no message link without a guild to put in it", () => {
+  const message = readMessage(searchResult("").querySelector("li") as Element);
+  assert.equal(message?.guild, null);
+  assert.equal(messageLink(message?.guild, message?.channel, "456"), null);
+  assert.equal(messageLink("@me", "800", "456"), null);
 });
 
 test("a result still reads when Discord links no channel", () => {
