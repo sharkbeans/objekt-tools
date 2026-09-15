@@ -735,11 +735,11 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     all: queries,
     offset: 0,
     pages: Number.isFinite(pages) ? Math.min(20, Math.max(1, pages)) : 1,
-    // Zero is the normal setting: the settle gate paces the run by how fast
-    // Discord actually answers, so there is no floor to enforce here.
+    // Default to a five-second pause after capture settles. An explicit zero
+    // keeps Instant available, paced only by Discord answering and capture.
     delayMs: Number.isFinite(delayMs)
       ? Math.min(60_000, Math.max(0, delayMs))
-      : 0,
+      : 5_000,
     planNote,
     run: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     resumedNote: null,

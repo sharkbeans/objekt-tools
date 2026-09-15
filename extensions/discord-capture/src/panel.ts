@@ -806,7 +806,7 @@ function showDelay() {
   const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
   element("delay-value").textContent = seconds
     ? `+${seconds}s per page`
-    : "Fastest";
+    : "Instant";
 }
 delay.addEventListener("input", showDelay);
 
