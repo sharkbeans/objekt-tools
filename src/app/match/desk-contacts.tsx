@@ -81,9 +81,7 @@ export function ContactResults({
                 : "No single WTT post connects these selections. Remove a card or import more posts to find another offer.")}
         </div>
       )}
-      <div
-        className={`grid gap-3 ${mode === "wts" ? "max-h-[560px] overflow-y-auto" : ""}`}
-      >
+      <div className="grid gap-3">
         {posts
           .slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE)
           .map((post) => {

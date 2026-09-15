@@ -118,7 +118,10 @@ export function DeskGrid({
           </button>
         )}
       </div>
-      <div className="max-h-[420px] min-h-48 overflow-y-auto overscroll-contain p-1">
+      {/* Grows with its rows and lets the page scroll: pages already bound
+          how many cards show, and a box scrolling inside the page trapped the
+          wheel halfway down it. */}
+      <div className="min-h-48 p-1">
         {visible.length === 0 ? (
           <p className="px-4 py-14 text-center text-sm text-muted-foreground">
             {query
