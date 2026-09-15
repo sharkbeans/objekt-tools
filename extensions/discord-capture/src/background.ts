@@ -79,8 +79,8 @@ async function openPanelWindow(): Promise<void> {
   const created = await extensionApi.windows.create({
     url: `${extensionApi.runtime.getURL("panel.html")}?window=1`,
     type: "popup",
-    width: 560,
-    height: 500,
+    width: 820,
+    height: 760,
   });
   await extensionApi.storage.local.set({ panelWindow: created?.id ?? null });
 }

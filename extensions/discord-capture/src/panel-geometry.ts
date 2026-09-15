@@ -14,14 +14,15 @@ export const BAR_HEIGHT = 34;
  * list, the settings, the run and the export in one long scroll; the card art
  * wants width, and nothing in the panel needs that much height.
  */
-const DEFAULT_WIDTH = 540;
-const DEFAULT_HEIGHT = 460;
+const DEFAULT_WIDTH = 720;
+// Room for two rows of cards above the pace controls and the buttons.
+const DEFAULT_HEIGHT = 620;
 /**
  * Bumped when the default size changes for a reason worth overriding a
  * remembered one: a panel resized to suit the old layout is the wrong shape for
  * the new one. Position is kept either way.
  */
-export const LAYOUT = 2;
+export const LAYOUT = 3;
 /** Above Discord's modals, below nothing that matters. */
 export const LAYER = 2147483000;
 const MARGIN = 12;
