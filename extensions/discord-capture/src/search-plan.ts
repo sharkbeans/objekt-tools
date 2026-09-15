@@ -140,6 +140,15 @@ export function loadHue(load: { pages: number; budget: number }): number {
   return Math.round(120 - 90 * used);
 }
 
+/**
+ * What a search looked for, as one comparable string: the codes, in any order,
+ * and how deep it paged. Pace and skip-recent are left out — they change how a
+ * run goes, not what it finds — so changing them does not make results stale.
+ */
+export function searchFilters(codes: Iterable<string>, pages: number): string {
+  return `${[...new Set(codes)].sort().join(",")}|${pages}`;
+}
+
 /** One line saying what was left out, or nothing when nothing was. */
 export function describePlan(plan: Plan): string {
   const parts: string[] = [];

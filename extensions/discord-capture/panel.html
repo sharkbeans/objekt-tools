@@ -59,7 +59,7 @@ button.chip:hover{background:var(--field)}
 .warn a{color:inherit}
 
 .wants{position:relative;flex:1;min-width:0}
-.wants textarea{height:62px;resize:none;padding-bottom:18px;display:block}
+.wants textarea{height:80px;resize:none;padding-bottom:18px;display:block}
 .wants .count{position:absolute;right:9px;bottom:5px;font-size:11px;color:var(--dim);pointer-events:none}
 .wants .count.none{color:var(--bad)}
 .wants .restore{position:absolute;left:9px;bottom:3px;border:0;background:none;padding:0 2px;font-size:11px;color:var(--accent-line);border-radius:4px}
@@ -111,6 +111,11 @@ button.chip:hover{background:var(--field)}
 .say.bad{color:var(--bad)}
 .actions{display:flex;gap:8px}
 .actions .primary{flex:1}
+/* Search and Open in match trade the filled button: Open while the results
+   match the cards, Search once the cards or pages change. Whichever is second
+   is outlined in the accent rather than plain field grey, so it still reads as
+   an action and not as a leftover. */
+#run-search:not(.primary),#open-match:not(.primary){min-width:128px;background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-text);font-weight:600}
 
 /* Settings: everything a first search does not need. */
 .scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-right:2px}
@@ -137,22 +142,27 @@ summary{cursor:pointer;font-size:12px;color:var(--dim)}
 .tools button{font-size:12px;padding:5px 9px}
 code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-radius:4px;font-size:11px}
 
-/* The settings a run is tuned with, mirrored from Settings onto the main view.
-   One row at the panel's usual widths; it only wraps when squeezed narrower. */
-/* Two rows regardless of width: the pace/pages knobs, then what they add up
-   to (estimate, skip-recent) — rather than an incidental wrap that reorders
-   itself as the panel is resized. */
+/* The settings a run is tuned with, mirrored from Settings onto the main
+   view. Two rows on a grid — the pace and pages knobs, then the estimate and
+   skip-recent under them, column for column — dropping to one column only
+   when the panel is too narrow for two. Every cell and the warning line keep
+   their height when empty, so nothing above the Search button moves as they
+   fill in or clear. */
 .tuning{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--dim)}
-.tuning-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.tuning-grid{display:grid;grid-template-columns:minmax(0,360px) auto;justify-content:start;align-items:center;gap:6px 20px}
+.tuning-grid > *{min-height:20px;display:flex;align-items:center}
 .tuning label{display:flex;align-items:center;gap:6px;white-space:nowrap}
-.tuning .pace{flex:1 1 auto;max-width:280px}
+.tuning .pace{min-width:0}
 .tuning input[type=range]{flex:1 1 72px;min-width:72px;width:72px}
 .tuning input[type=number]{width:52px;padding:3px 6px}
 .tuning input[type=checkbox]{width:auto;margin:0;accent-color:var(--accent-line)}
 .tuning output{min-width:4.5em;font-variant-numeric:tabular-nums}
-.tuning-eta{flex:1 1 auto;font-variant-numeric:tabular-nums}
-.tuning-eta:empty{display:none}
-.tuning-warn{margin:0;color:var(--warn-text)}
+.tuning-eta{font-variant-numeric:tabular-nums}
+.tuning-warn{min-height:20px;margin:0;color:var(--warn-text)}
+/* Two columns need about 370px: Pace's label, shortest slider and value
+   beside the Pages column. Narrower than that, one column beats a crushed
+   slider. */
+@media (max-width:380px){.tuning-grid{grid-template-columns:minmax(0,1fr)}}
 
 #consent ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
 #consent .scroll{gap:10px}
@@ -180,7 +190,7 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
   <div class="warn" id="health" hidden></div>
   <div class="top">
     <div class="wants">
-      <textarea id="wants" aria-label="Objekts you are looking for" spellcheck="false" placeholder="What are you looking for?&#10;SeoYeon CC101, Mayu AA101"></textarea>
+      <textarea id="wants" aria-label="Objekts you are looking for" spellcheck="false" placeholder="seoyeon cc101 102 bb101 102&#10;yy cc101-108&#10;kaede, nakyoung aa101"></textarea>
       <span class="count" id="wants-count"></span>
       <button type="button" class="restore" id="restore-wants" hidden></button>
     </div>
@@ -197,13 +207,6 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
     <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
     <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
     <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
   </ul>
   <div class="foot">
     <div class="meter" id="search-progress" hidden><i></i></div>
@@ -215,18 +218,16 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
       <div class="actions" style="margin-top:8px"><button type="button" class="primary" id="accept-automation">I understand — turn on search</button></div>
     </div>
     <div class="tuning" id="tuning">
-      <div class="tuning-row">
+      <div class="tuning-grid">
         <label class="pace" title="Lower delays are faster, but may trigger Discord rate limits and a forced wait.">Pace
           <input id="delay-main" class="risk" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
           <output id="delay-main-value" for="delay-main">+5s/page</output></label>
         <label>Pages per objekt
           <input id="pages-main" type="number" min="1" max="20" step="1" value="3" aria-describedby="tuning-warn"></label>
-      </div>
-      <div class="tuning-row">
         <span class="tuning-eta" id="tuning-eta" title="Estimated time for this search, from its codes, pace and pages"></span>
         <label title="Skip codes searched in the last 6 hours"><input type="checkbox" id="skip-recent-main" checked> Skip recent</label>
       </div>
-      <p class="tuning-warn" id="tuning-warn" role="status" hidden></p>
+      <p class="tuning-warn" id="tuning-warn" role="status"></p>
     </div>
     <div class="actions" id="actions">
       <button type="button" id="stop-search" hidden>Stop</button>

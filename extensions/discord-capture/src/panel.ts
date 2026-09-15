@@ -29,6 +29,7 @@ import {
   loadHue,
   planQueries,
   readSearchedAt,
+  searchFilters,
   searchLoad,
 } from "./search-plan";
 import { channelFromUrl, channelIds } from "./settings";
@@ -567,6 +568,8 @@ let runId: string | null = null;
 /** The unfinished run Continue would pick up, if there is one. */
 let pending: PendingRun | null = null;
 let searchedAt = new Map<string, number>();
+/** What the last Search was pressed with (`searchFilters`), if known. */
+let lastFilters: string | null = null;
 let captureError: string | null = null;
 let hasChannel = false;
 
@@ -647,6 +650,15 @@ function emptyQueries(p: Record<string, unknown>): string[] {
     : [];
 }
 
+function readFilters(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+/** Pages per objekt as a run would read it. */
+function pageSetting(): number {
+  return Math.min(20, Math.max(1, Number(pages.value) || 3));
+}
+
 function plural(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -717,19 +729,26 @@ function render() {
     carryOn.textContent = `Continue · ${left.left} left`;
     carryOn.title = `Carries on from ${left.next}, under the same search`;
   }
+  // Cards or page depth changed since the last Search: what match would open
+  // is from a different search, so searching takes the main button instead.
+  const changed =
+    !busy &&
+    !left &&
+    lastFilters !== null &&
+    lastFilters !== searchFilters(queries, pageSetting());
   const open = element<HTMLButtonElement>("open-match");
   open.hidden = busy || ready === 0;
   open.textContent = `Open ${ready} in match ↗`;
-  open.classList.toggle("primary", !left);
+  open.classList.toggle("primary", !left && !changed);
   const search = element<HTMLButtonElement>("run-search");
-  search.classList.toggle("primary", open.hidden && !left);
+  const searchFirst = !left && (open.hidden || changed);
+  search.classList.toggle("primary", searchFirst);
   if (!busy) {
-    search.textContent =
-      open.hidden && !left
-        ? queries.size
-          ? `Search ${plural(queries.size, "code")}`
-          : "Search"
-        : "Search again";
+    search.textContent = searchFirst
+      ? queries.size
+        ? `Search ${plural(queries.size, "code")}`
+        : "Search"
+      : "↻ Search again";
   }
   renderTiles();
   showTuning();
@@ -777,6 +796,7 @@ async function refresh(): Promise<void> {
       "searchProgress",
       "searchRunId",
       "searchedAt",
+      "lastSearchFilters",
     ]);
     captureError =
       typeof settings.captureError === "string" ? settings.captureError : null;
@@ -787,6 +807,7 @@ async function refresh(): Promise<void> {
         ? settings.searchRunId
         : null;
     searchedAt = readSearchedAt(settings.searchedAt);
+    lastFilters = readFilters(settings.lastSearchFilters);
     showHealth(settings.captureHealth);
     const tab = await discordTab().catch(() => null);
     const channel = channelFromUrl(tab?.url);
@@ -941,14 +962,13 @@ function showTuning() {
     slider.style.setProperty("--risk", risk);
     slider.style.setProperty("--fill", String(seconds / 15));
   }
-  const warning = element("tuning-warn");
-  warning.hidden = !load.over;
-  warning.textContent = load.over
+  // Both rows stay on screen even when empty (see the .tuning-row CSS): a row
+  // that only sometimes exists is what moved the buttons below it around.
+  element("tuning-warn").textContent = load.over
     ? `${load.pages}/${load.budget} pages — Discord may rate-limit.`
     : "";
-  const eta = element("tuning-eta");
-  eta.hidden = load.pages === 0;
-  eta.textContent = describeDuration(load.estimatedMs);
+  element("tuning-eta").textContent =
+    load.pages > 0 ? describeDuration(load.estimatedMs) : "";
 }
 
 /** Zero is not "no delay applied" — it is "gated on capture instead". */
@@ -970,13 +990,14 @@ delayMain.addEventListener("input", () => {
   delay.value = delayMain.value;
   showDelay();
 });
+// Page depth is part of what a search looks for, so the buttons follow it too.
 pagesMain.addEventListener("input", () => {
   pages.value = pagesMain.value;
-  showTuning();
+  render();
 });
 pages.addEventListener("input", () => {
   pagesMain.value = pages.value;
-  showTuning();
+  render();
 });
 // Registered before the save below, so the copy the run reads is already
 // updated when it is written.
@@ -1047,6 +1068,9 @@ action("run-search", async () => {
     skipRecent: skipRecent.checked,
   });
   if (!response?.ok) throw new Error(response?.error ?? "Could not start.");
+  // Recorded only once the run has started: a refused start changed nothing.
+  lastFilters = searchFilters([...keptQueries].filter(Boolean), pageCount);
+  await extensionApi.storage.local.set({ lastSearchFilters: lastFilters });
   heldUntil = 0;
   progress = {
     running: true,
@@ -1317,6 +1341,11 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   if (changes.removedWants) {
     removed = readRemoved(changes.removedWants.newValue);
     showWantsCount();
+    render();
+  }
+  // Another copy of the panel started a search.
+  if (changes.lastSearchFilters) {
+    lastFilters = readFilters(changes.lastSearchFilters.newValue);
     render();
   }
   // Keep the cards moving with the run without waiting on a full refresh.

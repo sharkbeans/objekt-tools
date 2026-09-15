@@ -10,8 +10,23 @@ import {
   RECOMMENDED_DELAY_MS,
   RECOMMENDED_PAGE_BUDGET,
   readSearchedAt,
+  searchFilters,
   searchLoad,
 } from "./search-plan";
+
+test("search filters ignore code order and duplicates", () => {
+  assert.equal(
+    searchFilters(["CC102", "CC101", "CC101"], 3),
+    searchFilters(["CC101", "CC102"], 3),
+  );
+});
+
+test("a different code or page depth is a different search", () => {
+  const base = searchFilters(["CC101", "CC102"], 3);
+  assert.notEqual(searchFilters(["CC101"], 3), base);
+  assert.notEqual(searchFilters(["CC101", "CC102", "CC103"], 3), base);
+  assert.notEqual(searchFilters(["CC101", "CC102"], 5), base);
+});
 
 test("the recommended pace gets the recommended page budget", () => {
   assert.equal(pageBudget(RECOMMENDED_DELAY_MS), RECOMMENDED_PAGE_BUDGET);
