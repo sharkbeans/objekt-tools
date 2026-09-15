@@ -28,7 +28,7 @@ export function remainingMs(
   progress: Record<string, unknown> | null,
   now: number,
 ): number | null {
-  if (!progress || progress.running !== true) return null;
+  if (progress?.running !== true) return null;
   const total = num(progress.total);
   const done = num(progress.done) ?? 0;
   const startedAt = num(progress.startedAt);

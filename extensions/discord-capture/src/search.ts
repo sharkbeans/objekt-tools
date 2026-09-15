@@ -1027,7 +1027,24 @@ export interface SearchProgress {
    * back — Discord still loading after a reload, or re-rendering after a crash.
    */
   waiting?: boolean;
+  /**
+   * Which retry the run is on while it waits for a search box that went away
+   * mid-run, and how many it will make before giving up.
+   */
+  retry?: number;
+  retries?: number;
 }
+
+/**
+ * Pauses before looking again for a search box that went away mid-run.
+ *
+ * Discord's crash screen offers its own reload, and a client that re-renders
+ * its header can take a while about it; giving up after one short look stopped
+ * runs that would have carried on a minute later.
+ */
+export const BOX_RETRY_MS: readonly number[] = [15_000, 30_000, 60_000];
+/** Longest stretch of a retry pause without a progress report. */
+const RETRY_REPORT_MS = 10_000;
 
 export interface SearchRun {
   /** Queries actually submitted before finishing or stopping. */
@@ -1149,6 +1166,11 @@ export interface SearchOptions {
    */
   boxWaitMs?: number;
   /**
+   * Pauses between further looks for a search box that went away after the run
+   * had used it, before the run is given up as interrupted. See `BOX_RETRY_MS`.
+   */
+  boxRetryMs?: readonly number[];
+  /**
    * The same wait, before the first query.
    *
    * Longer for a run picked up after a reload, which starts as the page loads
@@ -1181,6 +1203,9 @@ export interface SearchOptions {
   /** Injectable for tests. */
   wait?: (ms: number) => Promise<void>;
 }
+
+/** A query found the search box back after it went away, and the run should go back. */
+const RESTART = Symbol("restart");
 
 /**
  * Submit each query in turn, waiting for each result page to be fully recorded.
@@ -1234,6 +1259,11 @@ export async function runSearches(
   const stallLimit = Math.max(1, options.stallLimit ?? 3);
   const boxWaitMs = Math.max(0, options.boxWaitMs ?? 10_000);
   const loadWaitMs = Math.max(0, options.loadWaitMs ?? boxWaitMs);
+  const boxRetryMs = options.boxRetryMs ?? BOX_RETRY_MS;
+  /** Query indexes already counted in `done`, so a query searched again is not. */
+  const counted = new Set<number>();
+  /** Times the run has gone back for the query at each index. */
+  const restartsAt = new Map<number, number>();
   /** Wait longer for each attempt, so a rate limit is given room to clear. */
   const backoff = (attempt: number) =>
     wait(Math.min(8_000, backoffMs * 2 ** (attempt - 1)));
@@ -1366,19 +1396,55 @@ export async function runSearches(
    * rather than a real state, so it is worth simply doing again; the retry
    * clicks the bar open first and types a keystroke at a time.
    */
-  const fire = async (query: string): Promise<string | null> => {
+  const fire = async (
+    query: string,
+    index: number,
+  ): Promise<string | typeof RESTART | null> => {
     for (let attempt = 1; ; attempt++) {
       if (options.signal.cancelled) return "Cancelled.";
       let box = await searchBox(query);
       if (options.signal.cancelled) return "Cancelled.";
       if (!box) {
-        // A box this run has already typed into and submitted through does not
-        // disappear for a reason that retrying fixes: Discord crashed, or the
-        // tab was taken somewhere without one.
+        // Nothing submitted yet: this is a page without search, not Discord
+        // falling over mid-run.
         if (submittedBy.option + submittedBy.enter === 0)
           return "Could not find Discord's search box.";
-        interrupted = true;
-        return "Discord's search box went away part-way through — Discord probably crashed or reloaded.";
+        // A box this run has already used went away: Discord crashed or is
+        // re-rendering. Give it a few increasingly long pauses to come back
+        // before calling the run interrupted.
+        for (const [retry, pause] of boxRetryMs.entries()) {
+          // Reported in slices, so a long pause is not mistaken by the panel
+          // for a run whose tab has gone.
+          for (let slept = 0; slept < pause; slept += RETRY_REPORT_MS) {
+            options.onProgress?.({
+              done,
+              total: queries.length,
+              query,
+              posts: probe?.posts() ?? 0,
+              waiting: true,
+              retry: retry + 1,
+              retries: boxRetryMs.length,
+            });
+            await wait(Math.min(RETRY_REPORT_MS, pause - slept));
+            if (options.signal.cancelled) return "Cancelled.";
+          }
+          box = await searchBox(query);
+          if (options.signal.cancelled) return "Cancelled.";
+          if (box) break;
+        }
+        if (!box) {
+          interrupted = true;
+          return "Discord's search box went away part-way through — Discord probably crashed or reloaded.";
+        }
+        retried++;
+        // The query Discord took down with it is behind this one and was never
+        // finished; go back for it rather than skipping it — twice at most, so
+        // a query that itself keeps crashing Discord is stepped over.
+        const restarts = restartsAt.get(resumeFrom) ?? 0;
+        if (resumeFrom < index && restarts < 2) {
+          restartsAt.set(resumeFrom, restarts + 1);
+          return RESTART;
+        }
       }
       // Only the recovery pass touches the bar. Clicking it open re-renders
       // it, which detaches the field that was just found — typing into that
@@ -1416,7 +1482,10 @@ export async function runSearches(
         await backoff(attempt);
         continue;
       }
-      if (attempt === 1) done++;
+      if (!counted.has(index)) {
+        counted.add(index);
+        done++;
+      }
       progress(query, 1);
       // Page one renders during this wait and is captured by the observer.
       const outcome = await settle(query, 1, before);
@@ -1500,11 +1569,17 @@ export async function runSearches(
     }
   };
 
-  for (const [done, query] of queries.entries()) {
+  for (let index = 0; index < queries.length; index++) {
+    const query = queries[index];
     options.onCheckpoint?.(resumeFrom);
     matchedNothing = false;
     cutShort = false;
-    const blocked = await fire(query);
+    const blocked = await fire(query, index);
+    if (blocked === RESTART) {
+      // Back to the query that went down; the loop's increment lands on it.
+      index = resumeFrom - 1;
+      continue;
+    }
     if (blocked) return finish(blocked);
     // Three queries in a row answered with the list already on screen is not a
     // run that recovers on the fourth. Something — a rate limit, or a Discord
@@ -1577,7 +1652,7 @@ export async function runSearches(
     // A query cut short stays the place to pick up from until a later one
     // finishes cleanly, which is the evidence that Discord was still there.
     if (cutShort) continue;
-    resumeFrom = done + 1;
+    resumeFrom = index + 1;
     options.onQuerySearched?.(query);
   }
   return finish(null);

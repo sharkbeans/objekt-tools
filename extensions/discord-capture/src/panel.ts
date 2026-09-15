@@ -515,6 +515,8 @@ function describe(p: Record<string, unknown> | null): string {
   if (p.running) {
     if (stale())
       return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed — anything captured is still in the index.`;
+    if (typeof p.retry === "number")
+      return `Discord's search box went away before ${p.query || "the next code"} — retry ${p.retry} of ${p.retries} · ${done}/${total}…${planNote}`;
     if (p.waiting)
       return `Waiting for Discord's search box before ${p.query || "the next code"} · ${done}/${total}…${planNote}`;
     return `Searching ${done}/${total}${p.query ? ` · ${p.query}` : ""}${
@@ -583,9 +585,12 @@ function statusLine(): { text: string; bad: boolean } {
     const left = remainingMs(p, Date.now());
     const eta = left === null ? "" : ` · ${formatRemaining(left)}`;
     return {
-      text: p.waiting
-        ? `Waiting for Discord to load · ${done}/${total}${eta}`
-        : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}${eta}`,
+      text:
+        typeof p.retry === "number"
+          ? `Discord's search box went away — waiting to retry (${p.retry}/${p.retries}) · ${done}/${total}`
+          : p.waiting
+            ? `Waiting for Discord to load · ${done}/${total}${eta}`
+            : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}${eta}`,
       bad: false,
     };
   }

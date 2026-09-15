@@ -1752,6 +1752,62 @@ test("Discord crashing under a run marks it interrupted, at the query it took do
   );
 });
 
+test("a search box that comes back after a pause carries the run on, from the query it lost", async () => {
+  const doc = page(SEARCH_BOX + panel(["1", "2"]));
+  const recorded = new Set<string>();
+  for (let id = 1; id <= 12; id++) recorded.add(rowId(String(id)));
+  let submits = 0;
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Enter") return;
+    submits++;
+    doc.getElementById("search-results")?.remove();
+    // Discord falls over on the second query and takes the header with it.
+    if (submits === 2) {
+      doc.querySelector('[role="combobox"]')?.remove();
+      return;
+    }
+    const first = submits * 2 + 1;
+    doc.body.insertAdjacentHTML(
+      "beforeend",
+      panel([String(first), String(first + 1)]),
+    );
+  });
+  const searched: string[] = [];
+  const retries: number[] = [];
+  let slept = 0;
+  const run = await runSearches(doc, ["CC1", "CC2", "CC3"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: probeOf(recorded),
+    boxRetryMs: [15_000, 30_000, 60_000],
+    onProgress: (report) => {
+      if (report.retry) retries.push(report.retry);
+    },
+    onQuerySearched: (query) => searched.push(query),
+    wait: async (ms) => {
+      if (!retries.length || doc.querySelector('[role="combobox"]')) return;
+      slept += ms;
+      // Back partway through the second pause.
+      if (slept >= 15_000 + 20_000)
+        doc.body.insertAdjacentHTML("afterbegin", SEARCH_BOX);
+    },
+    settlePollMs: 100,
+  });
+  assert.equal(run.stopped, null);
+  assert.equal(run.interrupted, false);
+  assert.equal(Math.max(...retries), 2, "it says which retry it is on");
+  assert.ok(
+    retries.filter((retry) => retry === 2).length > 1,
+    "and keeps saying so through a long pause",
+  );
+  assert.deepEqual(
+    searched,
+    ["CC1", "CC2", "CC3"],
+    "CC2 went down with Discord and is searched again, not skipped",
+  );
+  assert.equal(run.done, 3, "a query searched again is not counted twice");
+});
+
 test("a run started before Discord has drawn its search box waits for it", async () => {
   // A resume starts as the page loads. Typing at once found no box, stopped the
   // run and discarded its place, so no resume ever survived the reload.
