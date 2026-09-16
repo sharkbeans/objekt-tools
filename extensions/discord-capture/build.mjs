@@ -5,6 +5,7 @@ import {
   readFile,
   writeFile,
 } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = new URL("./", import.meta.url);
@@ -42,9 +43,9 @@ const hostPattern = (origin) => {
 await mkdir(new URL(`${output}/`, root), { recursive: true });
 await build({
   entryPoints: ["content", "background", "panel"].map(
-    (name) => new URL(`src/${name}.ts`, root).pathname,
+    (name) => fileURLToPath(new URL(`src/${name}.ts`, root)),
   ),
-  outdir: new URL(`${output}/`, root).pathname,
+  outdir: fileURLToPath(new URL(`${output}/`, root)),
   bundle: true,
   platform: "browser",
   target: firefox ? "firefox128" : "chrome116",
@@ -115,5 +116,5 @@ for (const icon of await readdir(new URL("icons/", root)))
     );
 
 console.log(
-  `Load the built extension from ${new URL(`${output}/manifest.json`, root).pathname}\n  Open in match → ${matchOrigin}/match\n  card art and inventory → ${appOrigin}`,
+  `Load the built extension from ${fileURLToPath(new URL(`${output}/manifest.json`, root))}\n  Open in match → ${matchOrigin}/match\n  card art and inventory → ${appOrigin}`,
 );
