@@ -42,8 +42,8 @@ const hostPattern = (origin) => {
 
 await mkdir(new URL(`${output}/`, root), { recursive: true });
 await build({
-  entryPoints: ["content", "background", "panel"].map(
-    (name) => fileURLToPath(new URL(`src/${name}.ts`, root)),
+  entryPoints: ["content", "background", "panel"].map((name) =>
+    fileURLToPath(new URL(`src/${name}.ts`, root)),
   ),
   outdir: fileURLToPath(new URL(`${output}/`, root)),
   bundle: true,
