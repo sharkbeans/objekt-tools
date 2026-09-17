@@ -198,6 +198,36 @@ function toggle(set: Set<string>, key: string) {
   return next;
 }
 
+/** Traders, not posts: one person's two separate lists are still one trader. */
+function traderCount(posts: readonly DeskPost[]) {
+  return new Set(posts.map((post) => post.message.author)).size;
+}
+
+/**
+ * Most traders first, by the same count the card's badge shows — narrowed by
+ * the other grid's picks. A grid is never narrowed by its own picks, so picking
+ * a card cannot reorder the grid it was picked from. Ties fall back to the
+ * whole mode pool, then the card name, so the order stays stable.
+ */
+function byTraders(
+  cards: DeskCard[],
+  pool: ReadonlyMap<string, DeskCard>,
+): DeskCard[] {
+  return cards
+    .map((card) => ({
+      card,
+      count: traderCount(card.posts),
+      pooled: traderCount(pool.get(card.key)?.posts ?? []),
+    }))
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        b.pooled - a.pooled ||
+        deskLabel(a.card.item).localeCompare(deskLabel(b.card.item)),
+    )
+    .map(({ card }) => card);
+}
+
 function SelectionTray({
   selected,
   items,
@@ -588,9 +618,8 @@ export function MatchClient() {
       ),
     [indexed, mode, activeGive, matchesTheirSearch],
   );
-  // Card order comes from the whole mode pool, never from the current
-  // selection: picking a card would otherwise make it the most-wanted card
-  // left and pull it to the front of the grid mid-scan.
+  // The whole mode pool, ignoring every pick: the tie-break for card order and
+  // the lowest price in wtb.
   const pool = useMemo(
     () => selectDeskPosts(indexed, mode, EMPTY_KEYS, EMPTY_KEYS),
     [indexed, mode],
@@ -605,10 +634,11 @@ export function MatchClient() {
     () => collectDeskCards(mineCandidates, "wants"),
     [mineCandidates],
   );
+  // "Your side": most wants first.
   const myCards = useMemo(
     () =>
-      [...mine]
-        .flatMap(([key, item]): DeskCard[] => {
+      byTraders(
+        [...mine].flatMap(([key, item]): DeskCard[] => {
           const posts = demanded.get(key)?.posts ?? [];
           if (
             mode === "wtt" &&
@@ -618,43 +648,39 @@ export function MatchClient() {
           )
             return [];
           return [{ key, item, posts }];
-        })
-        .sort(
-          (a, b) =>
-            (poolDemand.get(b.key)?.posts.length ?? 0) -
-              (poolDemand.get(a.key)?.posts.length ?? 0) ||
-            deskLabel(a.item).localeCompare(deskLabel(b.item)),
-        ),
+        }),
+        poolDemand,
+      ),
     [mine, demanded, poolDemand, activeGive, get, mode],
   );
-  const theirCards = useMemo(
-    () =>
-      [...offered.values()].sort((a, b) => {
-        if (sort === "member")
-          return deskLabel(a.item).localeCompare(deskLabel(b.item), undefined, {
-            numeric: true,
-          });
-        if (sort === "price" && mode === "wtb") {
-          const price = (card: DeskCard) =>
-            Math.min(
-              ...(poolSupply.get(card.key)?.posts ?? card.posts).map(
-                (post) =>
-                  askingPrice(post.message.pricing, card.key)?.amount ??
-                  Number.POSITIVE_INFINITY,
-              ),
-            );
-          const pa = price(a);
-          const pb = price(b);
-          if (pa !== pb) return pa < pb ? -1 : 1;
-        }
-        return (
-          (poolSupply.get(b.key)?.posts.length ?? 0) -
-            (poolSupply.get(a.key)?.posts.length ?? 0) ||
-          deskLabel(a.item).localeCompare(deskLabel(b.item))
+  // "From your Discord paste": most haves first, unless another sort is chosen.
+  const theirCards = useMemo(() => {
+    const ranked = byTraders([...offered.values()], poolSupply);
+    if (sort === "member")
+      return ranked.sort((a, b) =>
+        deskLabel(a.item).localeCompare(deskLabel(b.item), undefined, {
+          numeric: true,
+        }),
+      );
+    if (sort === "price" && mode === "wtb") {
+      const price = (card: DeskCard) =>
+        Math.min(
+          ...(poolSupply.get(card.key)?.posts ?? card.posts).map(
+            (post) =>
+              askingPrice(post.message.pricing, card.key)?.amount ??
+              Number.POSITIVE_INFINITY,
+          ),
         );
-      }),
-    [offered, poolSupply, sort, mode],
-  );
+      const prices = new Map(ranked.map((card) => [card.key, price(card)]));
+      // Stable, so equal prices keep the most-haves order.
+      return ranked.sort((a, b) => {
+        const pa = prices.get(a.key) ?? Number.POSITIVE_INFINITY;
+        const pb = prices.get(b.key) ?? Number.POSITIVE_INFINITY;
+        return pa === pb ? 0 : pa < pb ? -1 : 1;
+      });
+    }
+    return ranked;
+  }, [offered, poolSupply, sort, mode]);
   const contactPosts = useMemo(
     () =>
       candidates
@@ -1001,9 +1027,7 @@ export function MatchClient() {
   };
   // "My objekts": how many traders want each of the viewer's own cards — a
   // "want" badge, colored to match "Your side" above the grid.
-  // Traders, not posts: one person's two separate lists are still one trader.
-  const traders = (card: DeskCard) =>
-    new Set(card.posts.map((post) => post.message.author)).size;
+  const traders = (card: DeskCard) => traderCount(card.posts);
   const mineBadge = (card: DeskCard): DeskBadge => {
     const count = traders(card);
     const who = mode === "wts" ? "buyer" : "trader";
@@ -1343,7 +1367,7 @@ export function MatchClient() {
                 onChange={(event) => setSort(event.target.value as typeof sort)}
                 className="rounded-md border bg-background px-2 py-1.5 text-sm"
               >
-                <option value="popular">Most offers</option>
+                <option value="popular">Most haves</option>
                 <option value="member">Member</option>
                 {mode === "wtb" && <option value="price">Lowest price</option>}
               </select>
