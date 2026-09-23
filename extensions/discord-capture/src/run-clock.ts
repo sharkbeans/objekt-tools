@@ -36,6 +36,8 @@ export function remainingMs(
   const startDone = num(progress.startDone) ?? 0;
   const pages = Math.max(1, num(progress.pages) ?? 1);
   const delayMs = Math.max(0, num(progress.delayMs) ?? 0);
+  const pageMs = num(progress.pageMs) ?? PAGE_GUESS_MS;
+  const share = num(progress.pageShare) ?? 1;
   const page = num(progress.page);
   // Queries fully behind the run, plus the share of the one in hand. Until this
   // call has submitted one, nothing is in hand and `done` is all behind it.
@@ -46,8 +48,80 @@ export function remainingMs(
   const perQuery =
     measured > 0
       ? Math.max(0, now - startedAt) / measured
-      : pages * (delayMs + PAGE_GUESS_MS);
+      : Math.max(1, pages * share) * (delayMs + pageMs);
   return left * perQuery;
+}
+
+/**
+ * How long the search has been going, or took: this call of the run plus any
+ * earlier calls it continued (`priorMs`), and not the gap between them.
+ */
+export function elapsedMs(
+  progress: Record<string, unknown> | null,
+  now: number,
+): number | null {
+  const startedAt = num(progress?.startedAt);
+  if (startedAt === null) return null;
+  const end = num(progress?.finishedAt) ?? now;
+  return (
+    Math.max(0, num(progress?.priorMs) ?? 0) + Math.max(0, end - startedAt)
+  );
+}
+
+/** A stopwatch reading: "0:42", "4:12", "1:02:05". */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.floor(Math.max(0, ms) / 1000);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = String(seconds % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+/** What past runs measured, for estimating the next one. */
+export interface RunStats {
+  /** Time per page on top of the configured pause: Discord plus capture. */
+  pageMs: number;
+  /** Pages walked out of pages asked for; codes often stop early. */
+  pageShare: number;
+}
+
+/** Read stored stats, or null when there are none worth using. */
+export function readRunStats(value: unknown): RunStats | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const pageMs = num(row.pageMs);
+  const pageShare = num(row.pageShare);
+  if (pageMs === null || pageShare === null) return null;
+  if (pageMs <= 0 || pageShare <= 0 || pageShare > 1) return null;
+  return { pageMs, pageShare };
+}
+
+/**
+ * Fold one finished run into the stats. Weighted half and half with what came
+ * before, so one odd run moves the estimate without taking it over. Runs too
+ * short to say anything (under three pages) are left out.
+ */
+export function updateRunStats(
+  previous: RunStats | null,
+  run: {
+    elapsedMs: number;
+    pagesWalked: number;
+    pagesAsked: number;
+    delayMs: number;
+  },
+): RunStats | null {
+  if (run.pagesWalked < 3 || run.pagesAsked <= 0) return previous;
+  const perPage = run.elapsedMs / run.pagesWalked - Math.max(0, run.delayMs);
+  const measured: RunStats = {
+    // Never below a second: a page cannot settle faster than Discord answers.
+    pageMs: Math.max(1_000, perPage),
+    pageShare: Math.min(1, Math.max(0.05, run.pagesWalked / run.pagesAsked)),
+  };
+  if (!previous) return measured;
+  return {
+    pageMs: (previous.pageMs + measured.pageMs) / 2,
+    pageShare: (previous.pageShare + measured.pageShare) / 2,
+  };
 }
 
 /** "under a minute", "~4 min", "~1 h", "~1 h 5 min" — a span, not a target. */

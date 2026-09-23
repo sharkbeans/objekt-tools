@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   describeDuration,
+  elapsedMs,
   formatAsOf,
+  formatElapsed,
   formatRemaining,
   remainingMs,
+  updateRunStats,
 } from "./run-clock";
+import { searchLoad } from "./search-plan";
 
 const now = Date.UTC(2026, 8, 15, 12);
 
@@ -101,4 +105,57 @@ test("as of names the timezone", () => {
   const text = formatAsOf(now, "en-GB");
   assert.match(text, /^as of 15 Sept?, /);
   assert.match(text, /(GMT|UTC|[A-Z]{2,5})/);
+});
+
+test("the stopwatch counts this call plus earlier ones, then stops", () => {
+  const started = 1_000_000;
+  const running = { startedAt: started, priorMs: 60_000 };
+  assert.equal(elapsedMs(running, started + 12_000), 72_000);
+  const finished = { ...running, finishedAt: started + 30_000 };
+  // A finished run reads the same however long after it is looked at.
+  assert.equal(elapsedMs(finished, started + 999_999), 90_000);
+  assert.equal(elapsedMs({}, started), null);
+});
+
+test("formats the stopwatch", () => {
+  assert.equal(formatElapsed(42_000), "0:42");
+  assert.equal(formatElapsed(252_000), "4:12");
+  assert.equal(formatElapsed(3_725_000), "1:02:05");
+});
+
+test("learns page time and depth from finished runs", () => {
+  // 10 codes × 6 pages asked, 20 walked, 5s pause, 3 minutes.
+  const first = updateRunStats(null, {
+    elapsedMs: 180_000,
+    pagesWalked: 20,
+    pagesAsked: 60,
+    delayMs: 5_000,
+  });
+  assert.deepEqual(first, { pageMs: 4_000, pageShare: 1 / 3 });
+  // Half and half with the next run.
+  const second = updateRunStats(first, {
+    elapsedMs: 120_000,
+    pagesWalked: 12,
+    pagesAsked: 12,
+    delayMs: 5_000,
+  });
+  assert.deepEqual(second, { pageMs: 4_500, pageShare: 2 / 3 });
+  // Too short to say anything.
+  assert.equal(
+    updateRunStats(second, {
+      elapsedMs: 1,
+      pagesWalked: 1,
+      pagesAsked: 1,
+      delayMs: 0,
+    }),
+    second,
+  );
+});
+
+test("the estimate before a run uses what was measured", () => {
+  const measured = { pageMs: 6_000, pageShare: 0.5 };
+  // 10 codes × 6 pages at 5s: 60 × 0.5 × 11s.
+  assert.equal(searchLoad(10, 6, 5_000, measured).estimatedMs, 330_000);
+  // With nothing measured, every page at the 4s guess.
+  assert.equal(searchLoad(10, 6, 5_000).estimatedMs, 540_000);
 });

@@ -10,6 +10,7 @@ import {
   findNextPage,
   findSearchBox,
   findSubmitOption,
+  noResultsShown,
   pagerCensus,
   resultRows,
   resultsPanel,
@@ -284,6 +285,9 @@ test("submits every query in order, pacing between them", async () => {
     caughtUp: 0,
     tooOld: 0,
     searchErrors: 0,
+    paceMs: 3000,
+    peakPaceMs: 3000,
+    holds: 0,
     pagesWalked: 3,
     pagerNote: null,
     posts: 0,
@@ -640,6 +644,7 @@ test("holds the page open until every post on it is recorded", async () => {
     outstanding: 0,
     settled: true,
     changed: true,
+    failed: false,
   });
   assert.ok(polls >= 4, `settled after only ${polls} polls`);
 });
@@ -665,6 +670,7 @@ test("gives up on a page it cannot confirm, and says how much was left", async (
     outstanding: 2,
     settled: false,
     changed: true,
+    failed: false,
   });
   assert.equal(polls, 5, "should stop at the budget, not poll forever");
 });
@@ -729,6 +735,7 @@ test("waits out the grace period when Discord returns the same list", async () =
     outstanding: 0,
     settled: true,
     changed: false,
+    failed: false,
   });
   assert.equal(polls, 5);
 });
@@ -841,6 +848,10 @@ test("a search still in flight is not an answer of no matches", async () => {
   assert.equal(run.posts, 2);
 });
 
+// Copied from Discord's client (2026-09-23).
+const NO_RESULTS =
+  '<div class="emptyResultsContent_a98f3b"><div class="noResultsImage_a98f3b"></div><div class="emptyResultsText_a98f3b noResults_a98f3b">We searched far and wide. Unfortunately, no results were found.</div></div>';
+
 test("a code nobody has posted still reads as no matches, and is named", async () => {
   // The other side of the same rule: an empty panel that stays empty for the
   // grace period is an answer, and the run says which code it was so the claim
@@ -851,7 +862,7 @@ test("a code nobody has posted still reads as no matches, and is named", async (
   const list = doc.getElementById("search-results");
   assert.ok(list);
   doc.addEventListener("keydown", () => {
-    list.innerHTML = "";
+    list.innerHTML = NO_RESULTS;
   });
   const run = await runSearches(doc, ["CC101"], {
     delayMs: 0,
@@ -1033,7 +1044,7 @@ test("a query that matched nothing leaves the last one's pager alone", async () 
   list.innerHTML = ["1", "2"].map(RESULT_ROW).join("") + NEXT;
   // Nothing matched: the rows go, and the pager is still up.
   doc.addEventListener("keydown", () => {
-    list.innerHTML = NEXT;
+    list.innerHTML = NO_RESULTS + NEXT;
   });
   doc.addEventListener("click", (event) => {
     const target = event.target;
@@ -1253,6 +1264,7 @@ test("counts unreadable rows apart from recorded ones", async () => {
     outstanding: 0,
     settled: true,
     changed: true,
+    failed: false,
   });
 });
 
@@ -1631,7 +1643,7 @@ test("does not re-fire a code that already came back empty", async () => {
       recorded.add(rowId("1"));
       return;
     }
-    list.innerHTML = "";
+    list.innerHTML = NO_RESULTS;
   });
   const run = await runSearches(doc, ["CC101", "CC201", "AA101"], {
     delayMs: 0,
@@ -2038,8 +2050,9 @@ test("pages on while results are inside the age cutoff", async () => {
   assert.equal(run.tooOld, 0);
 });
 
+// Copied from Discord's client (2026-09-23).
 const DROPPED_GLASS =
-  "<div><svg></svg><div>We dropped the magnifying glass. Can you try searching again?</div></div>";
+  '<div class="emptyResultsContent_a98f3b"><div class="errorImage_a98f3b"></div><div class="emptyResultsText_a98f3b errorMessage_a98f3b">We dropped the magnifying glass. Can you try searching again?</div></div>';
 
 /**
  * Discord whose search fails on `failOn` page(s): Next renders its error in
@@ -2153,6 +2166,19 @@ test("the error on page one is not read as no matches", () => {
   assert.equal(searchFailed(empty), false);
 });
 
+test("recognises the search error in any language, by its classes", () => {
+  // A later build hash, and a client not in English.
+  const doc = page(
+    `${SEARCH_BOX}<div id="search-results"><div class="emptyResultsContent_f00d42"><div class="errorImage_f00d42"></div><div class="emptyResultsText_f00d42 errorMessage_f00d42">검색 중 오류가 발생했어요.</div></div></div>`,
+  );
+  assert.equal(searchFailed(doc), true);
+  // The same container without the error classes is "no results".
+  const empty = page(
+    `${SEARCH_BOX}<div id="search-results"><div class="emptyResultsContent_f00d42"><div class="noResultsImage_f00d42"></div><div class="emptyResultsText_f00d42">결과가 없어요.</div></div></div>`,
+  );
+  assert.equal(searchFailed(empty), false);
+});
+
 const CRASH_SCREEN =
   '<div><h2>Well, this is awkward</h2><div>Looks like Discord has crashed unexpectedly....</div><button type="button"><div>Reload</div></button></div>';
 
@@ -2191,4 +2217,174 @@ test("a crash mid-run ends it at once as crashed, not after the retries", async 
     true,
     "did not sit out the retries",
   );
+});
+
+test("an error that will not clear reaches the pause in seconds, not minutes", async () => {
+  // Every search of every code fails on page one, however often it is typed.
+  const discord = failingResults((page) => page === 1);
+  let waited = 0;
+  const run = await runSearches(discord.doc, ["CC101", "CC102", "CC103"], {
+    delayMs: 0,
+    pages: 6,
+    signal: { cancelled: false },
+    probe: allRecorded,
+    wait: async (ms) => {
+      waited += ms;
+    },
+  });
+  assert.equal(run.rateLimited, true);
+  assert.match(run.stopped ?? "", /magnifying glass/);
+  // One 30s pause before searching the first code again, the pace doubling
+  // after each error (5s, 10s), and the settle grace periods: not three typed
+  // attempts and a stall per code.
+  assert.ok(waited < 60_000, `waited ${waited}ms`);
+  assert.ok(discord.submits() <= 3, `typed ${discord.submits()} times`);
+});
+
+test("slows down when Discord pushes back, and eases off again", async () => {
+  // Page 2 of the second code fails once; everything else loads.
+  const discord = failingResults((page, submit) => page === 2 && submit === 2);
+  const paces: number[] = [];
+  let requests = 0;
+  const run = await runSearches(discord.doc, ["CC101", "CC102", "CC103"], {
+    delayMs: 0,
+    pages: 10,
+    signal: { cancelled: false },
+    probe: allRecorded,
+    errorBackoffMs: 1,
+    onRequest: () => requests++,
+    onProgress: (p) => {
+      if (typeof p.paceMs === "number") paces.push(p.paceMs);
+    },
+    wait: async () => {},
+  });
+  assert.equal(run.searchErrors, 1);
+  assert.equal(run.peakPaceMs, 5_000, "Instant became 5s after the error");
+  assert.ok(paces.includes(5_000));
+  // Eased back while the later pages loaded cleanly.
+  assert.ok(run.paceMs < 5_000, `ended at ${run.paceMs}ms`);
+  // Every query and every Next is a request Discord counts.
+  assert.ok(requests >= run.pagesWalked, `${requests} requests`);
+});
+
+test("starts at a pace an earlier run learned", async () => {
+  const waits: number[] = [];
+  await runSearches(pagedResults("2026-09-20T00:00:00.000Z"), ["CC101"], {
+    delayMs: 0,
+    startPaceMs: 12_000,
+    pages: 2,
+    signal: { cancelled: false },
+    probe: knownProbe(false),
+    wait: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  assert.ok(waits.includes(12_000));
+});
+
+test("leaving the channel holds the run, then it redoes the code", async () => {
+  const discord = failingResults(() => false);
+  let away = false;
+  let polls = 0;
+  let typedWhileAway = 0;
+  discord.doc.addEventListener("keydown", () => {
+    if (away) typedWhileAway++;
+  });
+  let clicksWhileAway = 0;
+  discord.doc.addEventListener("click", () => {
+    if (away) clicksWhileAway++;
+  });
+  const paused: string[] = [];
+  const searched: string[] = [];
+  let nexts = 0;
+  discord.doc.addEventListener("click", (event) => {
+    const target = event.target as Element | null;
+    // Wander off after the first Next of the first code.
+    if (target?.closest?.('[rel="next"]') && ++nexts === 1) away = true;
+  });
+  const run = await runSearches(discord.doc, ["CC101", "CC102"], {
+    delayMs: 0,
+    pages: 3,
+    signal: { cancelled: false },
+    probe: allRecorded,
+    holdReason: () => (away ? "Paused — you left #objekt-trade." : null),
+    onQuerySearched: (query) => searched.push(query),
+    onProgress: (p) => {
+      if (p.paused) paused.push(p.paused);
+    },
+    wait: async (ms) => {
+      // Come back after a few seconds on hold.
+      if (away && ms === 1_000 && ++polls === 3) away = false;
+    },
+  });
+  assert.equal(run.holds, 1);
+  assert.ok(paused.length > 0, "the panel was told");
+  assert.equal(typedWhileAway, 0, "typed nothing while away");
+  assert.equal(clicksWhileAway, 0, "clicked nothing while away");
+  // Both codes finished, the first searched again after the hold.
+  assert.deepEqual(searched, ["CC101", "CC102"]);
+  assert.equal(discord.submits(), 3);
+  assert.equal(run.stopped, null);
+  assert.equal(run.searchErrors, 0);
+});
+
+test("an empty panel with no 'no results' screen is still loading, not empty", async () => {
+  // The end of a heavy run: the rows go, and Discord takes longer than the
+  // grace period to answer. That was recorded as "nothing for AA120" while
+  // hundreds of captured posts mentioned it.
+  const doc = page(
+    `${SEARCH_BOX}<div id="search-results">${RESULT_ROW("9")}</div>`,
+  );
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  let polls = 0;
+  let loading = false;
+  doc.addEventListener("keydown", () => {
+    list.innerHTML = "";
+    loading = true;
+    polls = 0;
+  });
+  const run = await runSearches(doc, ["AA120"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    probe: allRecorded,
+    wait: async () => {
+      // Answers after ~6s of polls: well past the 2.5s grace period.
+      if (loading && ++polls === 40) {
+        list.innerHTML = RESULT_ROW("1") + RESULT_ROW("2");
+        loading = false;
+      }
+    },
+  });
+  assert.deepEqual(run.emptyQueries, []);
+  assert.equal(run.empty, 0);
+});
+
+test("recognises Discord's 'no results' screen apart from its error", () => {
+  const empty = page(
+    `${SEARCH_BOX}<div id="search-results">${NO_RESULTS}</div>`,
+  );
+  assert.equal(noResultsShown(empty), true);
+  assert.equal(searchFailed(empty), false);
+  const failed = page(
+    `${SEARCH_BOX}<div id="search-results">${DROPPED_GLASS}</div>`,
+  );
+  assert.equal(noResultsShown(failed), false);
+  const loading = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  assert.equal(noResultsShown(loading), false);
+  // Another build's hash, another language.
+  const korean = page(
+    `${SEARCH_BOX}<div id="search-results"><div class="emptyResultsContent_f00d42"><div class="noResultsImage_f00d42"></div><div class="emptyResultsText_f00d42 noResults_f00d42">결과가 없어요.</div></div></div>`,
+  );
+  assert.equal(noResultsShown(korean), true);
+});
+
+test("finds the results panel by its class, in any language", () => {
+  // Discord's panel as captured (2026-09-23), with the label translated and
+  // another build's hash: no id, so neither older anchor would find it.
+  const doc = page(
+    `${SEARCH_BOX}<section class="searchResultsWrap_f00d42" aria-label="검색 결과"><header class="searchHeader_f00d42"><div class="totalResults_f00d42" role="status"><div>결과 없음</div></div></header><div class="scroller_f00d42"><div class="emptyResultsWrap_f00d42">${NO_RESULTS.replaceAll("a98f3b", "f00d42")}</div></div></section>`,
+  );
+  assert.equal(resultsPanel(doc)?.tagName, "SECTION");
+  assert.equal(noResultsShown(doc), true);
 });

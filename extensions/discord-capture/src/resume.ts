@@ -30,6 +30,8 @@ export interface PendingRun {
   delayMs: number;
   /** The age cutoff the run was started with; zero for none. */
   maxAgeMs: number;
+  /** Time spent searching so far, across earlier calls; not the gaps. */
+  elapsedMs: number;
   planNote: string;
   /** The tab it was running in, so another Discord tab does not adopt it. */
   tab: number | null;
@@ -113,6 +115,10 @@ export function readPendingRun(value: unknown): PendingRun | null {
     maxAgeMs:
       Number.isFinite(Number(row.maxAgeMs)) && Number(row.maxAgeMs) > 0
         ? Number(row.maxAgeMs)
+        : 0,
+    elapsedMs:
+      Number.isFinite(Number(row.elapsedMs)) && Number(row.elapsedMs) > 0
+        ? Number(row.elapsedMs)
         : 0,
     planNote: typeof row.planNote === "string" ? row.planNote : "",
     tab: Number.isFinite(Number(row.tab)) ? Number(row.tab) : null,

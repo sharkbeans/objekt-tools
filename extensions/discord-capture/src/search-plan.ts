@@ -11,6 +11,7 @@
  * without a browser.
  */
 
+import { EASE_AFTER_PAGES, EASE_STEP_MS } from "./adaptive-pace";
 import { PAGE_GUESS_MS } from "./run-clock";
 
 /** Queries one run will fire. Beyond this it is not searching, it is scraping. */
@@ -148,6 +149,13 @@ export function searchLoad(
   queryCount: number,
   pages: number,
   delayMs: number,
+  /** What past runs measured; the fixed guess until there are any. */
+  stats: { pageMs: number; pageShare: number } | null = null,
+  /**
+   * A slower pace the run starts at, carried from one Discord pushed back on.
+   * It eases toward `delayMs` as pages load, so it is not paid on every page.
+   */
+  startMs = delayMs,
 ): { pages: number; budget: number; over: boolean; estimatedMs: number } {
   const walked = Math.max(0, queryCount) * Math.max(1, pages);
   const budget = pageBudget(delayMs);
@@ -155,9 +163,36 @@ export function searchLoad(
     pages: walked,
     budget,
     over: walked > budget,
-    // Same guess remainingMs falls back on before a run has measured itself.
-    estimatedMs: walked * (Math.max(0, delayMs) + PAGE_GUESS_MS),
+    // Same figures remainingMs falls back on before a run has measured itself:
+    // the pages a run really walks, at the time each really takes.
+    estimatedMs: easedPausesMs(
+      Math.round(walked * (stats?.pageShare ?? 1)),
+      startMs,
+      delayMs,
+      stats?.pageMs ?? PAGE_GUESS_MS,
+    ),
   };
+}
+
+/**
+ * Time for `pages` pages when the pause starts at `startMs` and eases back to
+ * `floorMs` the way adaptive-pace.ts does while pages keep loading.
+ */
+function easedPausesMs(
+  pages: number,
+  startMs: number,
+  floorMs: number,
+  pageMs: number,
+): number {
+  const floor = Math.max(0, floorMs);
+  let pause = Math.max(floor, startMs);
+  let total = 0;
+  for (let page = 1; page <= pages; page++) {
+    total += pause + pageMs;
+    if (page % EASE_AFTER_PAGES === 0)
+      pause = Math.max(floor, pause - EASE_STEP_MS);
+  }
+  return total;
 }
 
 /**

@@ -1,6 +1,12 @@
 import { objektKey, parseOffering } from "@/lib/discord/match";
 import { formatSeasonNumberLabel } from "@/lib/objekt-label";
 import type { ParsedItem } from "@/lib/paste-parser";
+import {
+  carriedPace,
+  LEDGER_WINDOW_MS,
+  readLedger,
+  recentRequests,
+} from "./adaptive-pace";
 import { extensionApi } from "./browser";
 import {
   acceptAutomation,
@@ -24,8 +30,12 @@ import {
 } from "./resume";
 import {
   describeDuration,
+  elapsedMs,
   formatAsOf,
+  formatElapsed,
   formatRemaining,
+  type RunStats,
+  readRunStats,
   remainingMs,
 } from "./run-clock";
 import { searchQueryFor } from "./search";
@@ -591,6 +601,11 @@ let lastFilters: string | null = null;
 let captureError: string | null = null;
 /** When a run last stopped looking rate-limited; see rate-limit.ts. */
 let rateLimitedAt: number | null = null;
+/** What finished runs measured, for the time estimate. */
+let runStats: RunStats | null = null;
+/** The pace a recent run was pushed to, and recent request times. */
+let storedPace: unknown = null;
+let requestLedger: number[] = [];
 /**
  * The rate limit the user ticked "I understand the risks" for. Good for one
  * run against that one rate limit: a new stall, or starting a run, clears it.
@@ -673,6 +688,8 @@ function describe(p: Record<string, unknown> | null): string {
       return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed — anything captured is still in the index.`;
     if (typeof p.retry === "number")
       return `Discord's search box went away before ${p.query || "the next code"} — retry ${p.retry} of ${p.retries} · ${done}/${total}…${planNote}`;
+    if (typeof p.paused === "string" && p.paused)
+      return `${p.paused} · ${done}/${total}${planNote}`;
     if (p.waiting)
       return `Waiting for Discord's search box before ${p.query || "the next code"} · ${done}/${total}…${planNote}`;
     return `Searching ${done}/${total}${p.query ? ` · ${p.query}` : ""}${
@@ -694,6 +711,18 @@ function describe(p: Record<string, unknown> | null): string {
     typeof p.closed === "number" && p.closed > 0
       ? ` · ${p.closed} cut short by the results closing`
       : "";
+  const errors =
+    typeof p.searchErrors === "number" && p.searchErrors > 0
+      ? ` · ${plural(p.searchErrors, "search error")}`
+      : "";
+  const slowed =
+    typeof p.peakPaceMs === "number" &&
+    typeof p.delayMs === "number" &&
+    p.peakPaceMs > p.delayMs
+      ? ` · slowed to +${Math.round(p.peakPaceMs / 1000)}s/page at the most, ended at +${Math.round(
+          (typeof p.paceMs === "number" ? p.paceMs : p.peakPaceMs) / 1000,
+        )}s`
+      : "";
   const typed =
     p.typedBy && typeof p.typedBy === "object"
       ? Object.entries(p.typedBy as Record<string, number>)
@@ -706,9 +735,9 @@ function describe(p: Record<string, unknown> | null): string {
     .map((text) => `\n⚠ ${text}`)
     .join("");
   if (typeof p.stopped === "string" && p.stopped)
-    return `Stopped after ${done}/${total}: ${p.stopped}${planNote}${note}`;
+    return `Stopped after ${done}/${total}${pages}${errors}${slowed}: ${p.stopped}${planNote}${note}`;
   return total
-    ? `Finished ${done}/${total} searches${pages}${retries}${empty}${closed}.${
+    ? `Finished ${done}/${total} searches${pages}${retries}${errors}${slowed}${empty}${closed}.${
         typed ? `\ntyped via ${typed}` : ""
       }${planNote}${note}`
     : "";
@@ -746,16 +775,27 @@ function statusLine(): { text: string; bad: boolean } {
       text: `Stopped reporting after ${done}/${total} — the Discord tab was probably reloaded.`,
       bad: true,
     };
+  if (p && running() && typeof p.paused === "string" && p.paused)
+    return { text: `${p.paused} · ${done}/${total}`, bad: true };
   if (p && running()) {
     const left = remainingMs(p, Date.now());
-    const eta = left === null ? "" : ` · ${formatRemaining(left)}`;
+    const spent = elapsedMs(p, Date.now());
+    const eta = `${spent === null ? "" : ` · ${formatElapsed(spent)} elapsed`}${
+      left === null ? "" : ` · ${formatRemaining(left)}`
+    }`;
     return {
       text:
         typeof p.retry === "number"
           ? `Discord's search box went away — waiting to retry (${p.retry}/${p.retries}) · ${done}/${total}`
           : p.waiting
             ? `Waiting for Discord to load · ${done}/${total}${eta}`
-            : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}${eta}`,
+            : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}${
+                typeof p.paceMs === "number" &&
+                typeof p.delayMs === "number" &&
+                p.paceMs > p.delayMs
+                  ? ` · Discord pushed back, slowed to +${Math.round(p.paceMs / 1000)}s`
+                  : ""
+              }${eta}`,
       bad: false,
     };
   }
@@ -764,8 +804,13 @@ function statusLine(): { text: string; bad: boolean } {
   if (p && total) {
     const nothing = emptyQueries(p);
     const newest = runId ? summary.newestRun : summary.newest;
+    // Only a run that says when it finished: one whose tab went away never did.
+    const took =
+      typeof p.finishedAt === "number" ? elapsedMs(p, Date.now()) : null;
     return {
       text: `${p.stopped ? "Stopped · " : ""}${plural(summary.run, "post")} found${
+        took === null ? "" : ` · took ${formatElapsed(took)}`
+      }${
         newest ? ` · ${formatAsOf(newest)}` : ""
       }${nothing.length ? ` · nothing for ${nothing.join(", ")}` : ""}`,
       bad: false,
@@ -892,6 +937,9 @@ async function refresh(): Promise<void> {
       "searchedAt",
       "lastSearchFilters",
       "rateLimitedAt",
+      "runStats",
+      "searchPace",
+      "searchLedger",
     ]);
     captureError =
       typeof settings.captureError === "string" ? settings.captureError : null;
@@ -904,6 +952,9 @@ async function refresh(): Promise<void> {
     searchedAt = readSearchedAt(settings.searchedAt);
     lastFilters = readFilters(settings.lastSearchFilters);
     rateLimitedAt = readRateLimitedAt(settings.rateLimitedAt);
+    runStats = readRunStats(settings.runStats);
+    storedPace = settings.searchPace;
+    requestLedger = readLedger(settings.searchLedger);
     showHealth(settings.captureHealth);
     const tab = await discordTab().catch(() => null);
     const channel = channelFromUrl(tab?.url);
@@ -1097,7 +1148,11 @@ function showTuning() {
         ? `Recommended for ${plural(count, "code")}`
         : `Recommended: ${rec.pages} pages · +${rec.delaySeconds}s`;
   element("use-recommended").hidden = count === 0 || (tuningAuto && matches);
-  const load = searchLoad(count, pageCount, seconds * 1000);
+  // A run starts at the slower of the chosen pace and one Discord recently
+  // pushed a run to, so that is what the estimate is for.
+  const carried = carriedPace(storedPace, Date.now());
+  const startMs = Math.max(seconds * 1000, carried);
+  const load = searchLoad(count, pageCount, seconds * 1000, runStats, startMs);
   const risk = `hsl(${loadHue(load)} 80% 50%)`;
   for (const slider of [delay, delayMain]) {
     slider.style.setProperty("--risk", risk);
@@ -1105,9 +1160,21 @@ function showTuning() {
   }
   // Both rows stay on screen even when empty (see the .tuning-row CSS): a row
   // that only sometimes exists is what moved the buttons below it around.
-  element("tuning-warn").textContent = load.over
-    ? `${load.pages}/${load.budget} pages — Discord may rate-limit.`
-    : "";
+  const recent = recentRequests(requestLedger, Date.now());
+  const minutes = LEDGER_WINDOW_MS / 60_000;
+  element("tuning-warn").textContent = [
+    load.over
+      ? `${load.pages}/${load.budget} pages — Discord may rate-limit.`
+      : "",
+    carried > seconds * 1000
+      ? `Discord pushed back recently: starts at +${Math.round(carried / 1000)}s/page.`
+      : "",
+    recent > 0
+      ? `${recent} ${recent === 1 ? "search" : "searches"} sent in the last ${minutes} min.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   element("tuning-eta").textContent =
     load.pages > 0 ? describeDuration(load.estimatedMs) : "";
 }
@@ -1519,6 +1586,16 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
     lastFilters = readFilters(changes.lastSearchFilters.newValue);
     render();
   }
+  if (changes.runStats) {
+    runStats = readRunStats(changes.runStats.newValue);
+    showTuning();
+  }
+  if (changes.searchPace || changes.searchLedger) {
+    if (changes.searchPace) storedPace = changes.searchPace.newValue;
+    if (changes.searchLedger)
+      requestLedger = readLedger(changes.searchLedger.newValue);
+    showTuning();
+  }
   if (changes.rateLimitedAt) {
     rateLimitedAt = readRateLimitedAt(changes.rateLimitedAt.newValue);
     // A new stall needs its own acknowledgement.
@@ -1582,8 +1659,13 @@ element<HTMLInputElement>("cooldown-ack").addEventListener(
 );
 
 // Tick the cool-down's countdown, and hand the buttons back when it ends.
+// And the search's stopwatch, while one is going.
 setInterval(() => {
-  if (document.visibilityState !== "visible" || rateLimitedAt === null) return;
+  if (document.visibilityState !== "visible") return;
+  if (rateLimitedAt === null) {
+    if (running()) render();
+    return;
+  }
   render();
   if (lockoutRemaining(rateLimitedAt, Date.now()) === 0) rateLimitedAt = null;
 }, 1_000);

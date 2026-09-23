@@ -13,6 +13,7 @@
 
 import { parseOffering } from "@/lib/discord/match";
 import { formatSeasonNumberLabel } from "@/lib/objekt-label";
+import { type Pace, pageLoaded, pushedBack, startPace } from "./adaptive-pace";
 import { resultBodies, rowOf } from "./dom";
 
 /**
@@ -661,7 +662,11 @@ export function findNextPage(doc: Document): HTMLElement | null {
  * label first, then the pager — which only ever renders inside the panel — so
  * no generated class names are relied on here either.
  */
+// Captured from the client (2026-09-23): the panel is
+// `<section class="searchResultsWrap_a98f3b" aria-label="Search Results">`,
+// with no id. The class is the same in every language; the label is English.
 const RESULTS_SELECTORS = [
+  '[class*="searchResultsWrap_"]',
   "#search-results",
   '[aria-label="Search Results" i]',
 ];
@@ -919,6 +924,8 @@ export interface PageSettle {
    * same list it was already showing — the shape a rate-limited search takes.
    */
   changed: boolean;
+  /** Discord answered with its search error; see `searchFailed`. */
+  failed: boolean;
 }
 
 export interface SettleOptions {
@@ -1002,8 +1009,34 @@ export async function settlePage(
     // made the first codes in a run come back empty and their pages go unread,
     // and it is a race, which is why the same code was empty in one run and
     // not the next.
+    // Rows that turned over settle at once. A panel that *changed* to empty
+    // settles after the grace period only when Discord says "no results";
+    // otherwise it is still loading, and gets its whole budget to answer. One
+    // that never changed is left to the grace period: that is a query that was
+    // never submitted, which the caller types again rather than waits out.
+    const loading = changed && rows.length === 0 && !noResultsShown(doc);
     const need =
-      changed && rows.length > 0 ? 2 : Math.max(2, Math.ceil(graceMs / pollMs));
+      changed && rows.length > 0
+        ? 2
+        : loading
+          ? Number.POSITIVE_INFINITY
+          : Math.max(2, Math.ceil(graceMs / pollMs));
+    // Discord's search error is an answer, and nothing more will render under
+    // it: waiting out the budget for rows is what left it on screen for
+    // minutes. Until the grace period is up it may still be the last query's
+    // error, so only a changed panel is believed sooner.
+    if ((changed || waited >= graceMs) && searchFailed(doc))
+      return {
+        panel,
+        rendered: 0,
+        recorded: 0,
+        known: 0,
+        unreadable: 0,
+        outstanding: 0,
+        settled: true,
+        changed,
+        failed: true,
+      };
     const done = quiet >= need;
     // Stop means stop: waiting out a fifteen-second budget first is how a
     // cancel button earns a reputation for not working.
@@ -1017,6 +1050,7 @@ export async function settlePage(
         outstanding,
         settled: done,
         changed,
+        failed: false,
       };
     await options.wait(pollMs);
     waited += pollMs;
@@ -1042,6 +1076,10 @@ export interface SearchProgress {
    */
   retry?: number;
   retries?: number;
+  /** The pause after each page right now, which Discord pushing back raises. */
+  paceMs?: number;
+  /** Why the run is on hold, while it is; see `SearchOptions.holdReason`. */
+  paused?: string;
 }
 
 /**
@@ -1100,6 +1138,12 @@ export interface SearchRun {
   tooOld: number;
   /** Times Discord's search failed on a page ("We dropped the magnifying glass"). */
   searchErrors: number;
+  /** The pause after each page when the run ended; see adaptive-pace.ts. */
+  paceMs: number;
+  /** The slowest the run had to go. */
+  peakPaceMs: number;
+  /** Times the run was put on hold; see `SearchOptions.holdReason`. */
+  holds: number;
   /**
    * Whether the run stopped because Discord stopped answering — the shape a
    * rate limit takes from the UI. Starts the cool-down in rate-limit.ts.
@@ -1243,6 +1287,21 @@ export interface SearchOptions {
    */
   maxAgeMs?: number;
   /**
+   * The pace to start at when an earlier run learned a slower one than
+   * `delayMs`. The run adapts from there; see adaptive-pace.ts.
+   */
+  startPaceMs?: number;
+  /** Called for every search request sent: each query, and each Next. */
+  onRequest?: () => void;
+  /**
+   * Why the run must not type right now, or null to go on. Asked before every
+   * query and page, and after each settles; while it answers, the run waits,
+   * then searches the code in hand again from its first page. This is how
+   * leaving the run's channel pauses it rather than sending its searches, or
+   * reading its results, somewhere else.
+   */
+  holdReason?: () => string | null;
+  /**
    * Pause before searching a code again after Discord's search failed on it.
    * See `SEARCH_ERROR_BACKOFF_MS`.
    */
@@ -1260,6 +1319,8 @@ export interface SearchOptions {
  * searching again at once is the opposite of backing off.
  */
 export const SEARCH_ERROR_BACKOFF_MS = 30_000;
+/** How often a run on hold looks whether it may carry on. */
+const HOLD_POLL_MS = 1_000;
 
 /**
  * Discord's crash screen, in the English client: "Well, this is awkward. Looks
@@ -1284,16 +1345,59 @@ export function crashScreen(doc: Document): HTMLElement | null {
 }
 
 /**
- * Discord's search error, in the English client: an illustration and "We
- * dropped the magnifying glass. Can you try searching again?" in place of the
- * results. Only needed on page one, where an empty panel is also how "nobody
- * posted this" looks; on later pages an empty panel is the error whatever the
- * language, since Discord only offers Next when there is more.
+ * Discord's search error: "We dropped the magnifying glass. Can you try
+ * searching again?" in place of the results. Captured from the client:
+ *
+ *   <div class="emptyResultsContent_a98f3b">
+ *     <div class="errorImage_a98f3b"></div>
+ *     <div class="emptyResultsText_a98f3b errorMessage_a98f3b">We dropped…</div>
+ *   </div>
+ *
+ * The container is the empty-results one, shared with "no results"; the error
+ * classes are what set it apart, in every language. Matched on the readable
+ * part before the build hash, which changes between Discord releases.
  */
+const SEARCH_ERROR_SELECTOR = [
+  '[class*="emptyResultsContent_"] [class*="errorImage_"]',
+  '[class*="emptyResultsContent_"] [class*="errorMessage_"]',
+].join(", ");
+/** The English wording, in case Discord renames those classes. */
 const SEARCH_ERROR_TEXT = /dropped the magnifying glass|try searching again/i;
 
-/** Whether the results panel is showing Discord's search error. */
+/**
+ * Discord's "no results" screen, captured from the client (2026-09-23):
+ *
+ *   <div class="emptyResultsContent_a98f3b">
+ *     <div class="noResultsImage_a98f3b"></div>
+ *     <div class="emptyResultsText_a98f3b noResults_a98f3b">We searched far
+ *       and wide. Unfortunately, no results were found.</div>
+ *   </div>
+ *
+ * The same container as the error, with its own classes in place of the
+ * error's. Matched on the part before the build hash, so any language works.
+ */
+const NO_RESULTS_SELECTOR = [
+  '[class*="emptyResultsContent_"] [class*="noResultsImage_"]',
+  '[class*="emptyResultsContent_"] [class*="noResults_"]',
+].join(", ");
+
+/**
+ * Whether Discord is showing its "no results" screen. An empty panel without
+ * it is a search still loading. Accepting that as "nobody posted this" after a
+ * short quiet is what reported AA120 as empty at the end of a heavy run, while
+ * 229 of the posts that run captured mentioned it.
+ */
+export function noResultsShown(doc: Document): boolean {
+  return (
+    resultRows(doc).length === 0 &&
+    doc.querySelector(NO_RESULTS_SELECTOR) !== null &&
+    !searchFailed(doc)
+  );
+}
+
+/** Whether Discord is showing its search error in place of results. */
 export function searchFailed(doc: Document): boolean {
+  if (doc.querySelector(SEARCH_ERROR_SELECTOR)) return true;
   const panel = resultsPanel(doc);
   return (
     panel !== null &&
@@ -1376,6 +1480,34 @@ export async function runSearches(
   let caughtUp = 0;
   let tooOld = 0;
   let searchErrors = 0;
+  /** `delayMs` is where the pace starts; Discord pushing back raises it. */
+  let pace: Pace = startPace(options.delayMs, options.startPaceMs);
+  let peakPaceMs = pace.delayMs;
+  const slowDown = () => {
+    pace = pushedBack(pace);
+    peakPaceMs = Math.max(peakPaceMs, pace.delayMs);
+  };
+  let holds = 0;
+  const held = () => options.holdReason?.() ?? null;
+  /** Wait out a hold, if there is one. True when there was. */
+  const holdOn = async (query: string): Promise<boolean> => {
+    let reason = held();
+    if (!reason) return false;
+    holds++;
+    while (reason && !options.signal.cancelled) {
+      options.onProgress?.({
+        done,
+        total: queries.length,
+        query,
+        posts: probe?.posts() ?? 0,
+        paceMs: pace.delayMs,
+        paused: reason,
+      });
+      await wait(HOLD_POLL_MS);
+      reason = held();
+    }
+    return true;
+  };
   let crashed = false;
   /**
    * Search errors since a later page last loaded or a code finished; three is
@@ -1387,6 +1519,8 @@ export async function runSearches(
   const errorRetries = new Set<number>();
   /** The query in flight hit an error and is to be searched again. */
   let retryQuery = false;
+  /** Discord answered the query in flight with its search error on page one. */
+  let firstPageFailed = false;
   /**
    * Discord's search failed on this page. Decides what the query does next:
    * search it again once after a pause, or leave it unfinished for Continue so
@@ -1400,6 +1534,7 @@ export async function runSearches(
   ): Promise<string | null> => {
     searchErrors++;
     errorsInRow++;
+    slowDown();
     if (errorsInRow >= stallLimit)
       return `Discord's search failed ${errorsInRow} times in a row ("We dropped the magnifying glass"). That usually means search is rate-limited, so searching is paused for 10 minutes.`;
     if (!errorRetries.has(index)) {
@@ -1469,6 +1604,9 @@ export async function runSearches(
     caughtUp,
     tooOld,
     searchErrors,
+    paceMs: pace.delayMs,
+    peakPaceMs,
+    holds,
     pagesWalked,
     pagerNote,
     posts: probe?.posts() ?? 0,
@@ -1492,6 +1630,7 @@ export async function runSearches(
       query,
       page,
       posts: probe?.posts() ?? 0,
+      paceMs: pace.delayMs,
     });
 
   /**
@@ -1579,7 +1718,12 @@ export async function runSearches(
         settleNote ??= `${query} page ${page}: gave up with ${result.outstanding} of ${result.rendered} posts unrecorded`;
       }
     }
-    if (!probe || options.delayMs > 0) await wait(options.delayMs);
+    // Clean pages earn the pace back, a second at a time.
+    // The same list as before is not a page loading: it is what a refusal
+    // looks like, and must not count toward easing off.
+    if (result?.changed && result.rendered > 0 && !result.failed)
+      pace = pageLoaded(pace, options.delayMs);
+    if (!probe || pace.delayMs > 0) await wait(pace.delayMs);
     return { blocked: null, retryable: false, result };
   };
 
@@ -1598,6 +1742,9 @@ export async function runSearches(
   ): Promise<string | typeof RESTART | null> => {
     for (let attempt = 1; ; attempt++) {
       if (options.signal.cancelled) return "Cancelled.";
+      // Never type into a channel the run did not start in; the loop waits
+      // out the hold and searches this code again.
+      if (held()) return null;
       let box = await searchBox(query);
       if (options.signal.cancelled) return "Cancelled.";
       if (!box) {
@@ -1679,6 +1826,7 @@ export async function runSearches(
       const usedInsertion = typed.index;
       const path = await commitSearch(box, query, wait);
       submittedBy[path]++;
+      if (path !== "blocked") options.onRequest?.();
       // Nothing was handed to Discord at all, so there is nothing to wait for.
       if (path === "blocked") {
         if (attempt >= attempts)
@@ -1702,6 +1850,12 @@ export async function runSearches(
       }
       if (!outcome.result) return null;
       if (options.signal.cancelled) return "Cancelled.";
+      // Not a misfire to type again at once: the main loop backs off and
+      // counts it towards a rate limit.
+      if (outcome.result.failed) {
+        firstPageFailed = true;
+        return null;
+      }
       if (!outcome.result.panel) {
         // The panel is gone, not empty — an empty one is still a panel now.
         // After a query has produced one, that means it was closed: the user
@@ -1721,6 +1875,19 @@ export async function runSearches(
         continue;
       }
       sawPanel = true;
+      // Empty, with no "no results" screen, after the whole budget: Discord
+      // never answered. Not "nobody posted this" — searched again after a
+      // pause, and not marked searched if that fails too.
+      if (
+        outcome.result.changed &&
+        outcome.result.rendered === 0 &&
+        !outcome.result.settled &&
+        !noResultsShown(doc)
+      ) {
+        settleNote ??= `${query}: the results never loaded`;
+        firstPageFailed = true;
+        return null;
+      }
       if (outcome.result.changed) {
         // The results moved, so this insertion really did reach the editor.
         preferred = usedInsertion;
@@ -1750,6 +1917,7 @@ export async function runSearches(
         unchanged++;
         stalled++;
         stalledQuery = true;
+        slowDown();
         settleNote ??= `${query}: the results never changed after ${attempt} attempts (typed via ${typed.via ?? "nothing"}). Either the editor is dropping every insertion this build knows, or Discord is rate-limiting — try adding a pause.`;
         return null;
       }
@@ -1782,8 +1950,25 @@ export async function runSearches(
     cutShort = false;
     stalledQuery = false;
     retryQuery = false;
+    firstPageFailed = false;
     lastSettle = null;
+    await holdOn(query);
+    if (options.signal.cancelled) return finish("Cancelled.");
+    // Whatever the query did while its channel was not on screen — an error,
+    // a stall, results that closed — was not Discord's answer to it, so none
+    // of it is counted once the run searches it again.
+    const counts = { stalled, errorsInRow, searchErrors, pace };
+    const redo = async () => {
+      await holdOn(query);
+      ({ stalled, errorsInRow, searchErrors, pace } = counts);
+    };
     const blocked = await fire(query, index);
+    if (blocked !== "Cancelled." && held()) {
+      await redo();
+      if (options.signal.cancelled) return finish("Cancelled.");
+      index--;
+      continue;
+    }
     if (blocked === RESTART) {
       // Back to the query that went down; the loop's increment lands on it.
       index = resumeFrom - 1;
@@ -1801,10 +1986,12 @@ export async function runSearches(
         true,
       );
     // The error on page one looks like "no matches" to everything above.
-    if (matchedNothing && searchFailed(doc)) {
-      matchedNothing = false;
-      empty--;
-      emptyQueries.pop();
+    if (firstPageFailed || (matchedNothing && searchFailed(doc))) {
+      if (matchedNothing) {
+        matchedNothing = false;
+        empty--;
+        emptyQueries.pop();
+      }
       const stop = await searchError(query, index, 1);
       if (stop) return finish(stop, true);
       // Again from the top, or left unfinished: either way not searched.
@@ -1819,8 +2006,13 @@ export async function runSearches(
     // them here — and it filled the run's one note with "no Next control" from
     // the query least likely to have one, hiding what the rest hit. A query
     // whose results closed under it has no pager left to walk at all.
+    let heldQuery = false;
     for (let page = 2; page <= pages && !matchedNothing && !cutShort; page++) {
       if (options.signal.cancelled) return finish("Cancelled.");
+      if (held()) {
+        heldQuery = true;
+        break;
+      }
       // Every request not sent is one less toward a rate limit. The query
       // still counts as searched: what it stopped short of was already read,
       // or is past the age anyone asked for.
@@ -1843,8 +2035,13 @@ export async function runSearches(
       const beforePage = currentPage(doc);
       const beforeRows = probe ? rowSignature(doc) : "";
       next.click();
+      options.onRequest?.();
       progress(query, page);
       const stopped = await settle(query, page, beforeRows);
+      if (held()) {
+        heldQuery = true;
+        break;
+      }
       if (stopped.blocked) return finish(stopped.blocked);
       // The results ran out. That is the end of this query, not of the run —
       // killing it here is what stopped a four-query run halfway through its
@@ -1852,7 +2049,10 @@ export async function runSearches(
       // The panel is up but empty, with no pager: Discord's search failed.
       // Treating it as the end of the results is what marked a code done at
       // page 4 of 10 and moved on.
-      if (stopped.result?.panel && stopped.result.rendered === 0) {
+      if (
+        (stopped.result?.panel && stopped.result.rendered === 0) ||
+        searchFailed(doc)
+      ) {
         const stop = await searchError(query, index, page);
         if (stop) return finish(stop, true);
         break;
@@ -1893,6 +2093,12 @@ export async function runSearches(
     }
     // A query cut short stays the place to pick up from until a later one
     // finishes cleanly, which is the evidence that Discord was still there.
+    if (heldQuery) {
+      await redo();
+      if (options.signal.cancelled) return finish("Cancelled.");
+      index--;
+      continue;
+    }
     // Searched again from the top: its earlier pages are re-read, and deduped.
     if (retryQuery) {
       index--;

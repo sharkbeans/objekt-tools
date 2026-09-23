@@ -21,6 +21,7 @@ function pending(over: Partial<PendingRun> = {}): PendingRun {
     pages: 5,
     delayMs: 0,
     maxAgeMs: 0,
+    elapsedMs: 0,
     planNote: "3 codes",
     tab: 7,
     tries: 0,

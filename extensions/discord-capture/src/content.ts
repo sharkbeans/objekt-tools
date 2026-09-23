@@ -4,6 +4,7 @@ import {
   objektKey,
   parseOffering,
 } from "@/lib/discord/match";
+import { carriedPace, readLedger, trimLedger } from "./adaptive-pace";
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
 import {
@@ -40,6 +41,7 @@ import {
   readPendingRun,
   STALE_MS,
 } from "./resume";
+import { readRunStats, updateRunStats } from "./run-clock";
 import {
   type CaptureProbe,
   crashScreen,
@@ -59,7 +61,13 @@ import {
   readSearchedAt,
   SEARCHED_MEMORY_MS,
 } from "./search-plan";
-import { capturing, channelFromUrl, channelIds } from "./settings";
+import {
+  capturing,
+  channelFromUrl,
+  channelIds,
+  channelLabelFromTitle,
+  formatChannelLabel,
+} from "./settings";
 import type { Entry } from "./store";
 import { waitFor } from "./wait";
 
@@ -322,6 +330,8 @@ function watch(on: boolean) {
 let consent: unknown;
 /** When a run last stopped looking rate-limited; see rate-limit.ts. */
 let rateLimitedAt: number | null = null;
+/** When each recent search request was sent; see adaptive-pace.ts. */
+let requestLedger: number[] = [];
 function update(settings: Record<string, unknown>) {
   if ("consent" in settings) consent = settings.consent;
   if ("pausedChannels" in settings)
@@ -469,6 +479,11 @@ let runTiming: {
   startDone: number;
   pages: number;
   delayMs: number;
+  /** Searching time from earlier calls this one continues. */
+  priorMs: number;
+  /** Measured by earlier runs; see `RunStats`. */
+  pageMs?: number;
+  pageShare?: number;
 } | null = null;
 async function report(progress: Record<string, unknown>) {
   // Stamped so the panel can tell a run that is working from one that died with
@@ -824,6 +839,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     planNote,
     run: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     resumedNote: null,
+    priorMs: 0,
   });
   return true;
 });
@@ -849,6 +865,8 @@ interface RunPlan {
   run: string;
   /** What to tell the user about the interruption this is recovering from. */
   resumedNote: string | null;
+  /** Searching time already spent on this run by earlier calls. */
+  priorMs: number;
   /** How long to wait for Discord's search box before the first query. */
   loadWaitMs?: number;
 }
@@ -881,11 +899,23 @@ async function driveRun(plan: RunPlan): Promise<void> {
   postsReportedAt = 0;
   searchRun = plan.run;
   runQueries = plan.all;
+  const stored = await extensionApi.storage.local.get([
+    "runStats",
+    "searchPace",
+    "searchLedger",
+  ]);
+  const stats = readRunStats(stored.runStats);
+  // A run straight after one Discord pushed back on starts where that one
+  // ended, less what Discord's budget has refilled since.
+  const startPaceMs = carriedPace(stored.searchPace, Date.now());
+  requestLedger = trimLedger(readLedger(stored.searchLedger), Date.now());
   runTiming = {
     startedAt: Date.now(),
     startDone: plan.offset,
     pages: plan.pages,
     delayMs: plan.delayMs,
+    priorMs: plan.priorMs,
+    ...(stats ?? {}),
   };
   // Resolve the tab now rather than reading whatever `tabId()` happens to have
   // cached. It is what stops a second Discord tab adopting this run, and a
@@ -910,8 +940,24 @@ async function driveRun(plan: RunPlan): Promise<void> {
     });
     // Taken as the run starts, before this run's own codes join it.
     const searchedBefore = new Set(searched.keys());
+    // The channel the run was started in. Leaving it holds the run: Discord
+    // closes the results under it, and the search box on screen may belong to
+    // another server entirely.
+    const home = channelFromUrl(location.href);
+    const homeLabel = channelLabelFromTitle(document.title);
+    const away = `Paused — you left ${
+      homeLabel
+        ? formatChannelLabel(homeLabel)
+        : "the channel this search started in"
+    }. Go back to it and the search carries on.`;
     const run = await runSearches(document, plan.queries, {
       delayMs: plan.delayMs,
+      startPaceMs,
+      holdReason: () =>
+        home && channelFromUrl(location.href) !== home ? away : null,
+      onRequest: () => {
+        requestLedger.push(Date.now());
+      },
       pages: plan.pages,
       maxAgeMs: plan.maxAgeMs,
       searchedBefore: (query) => searchedBefore.has(query),
@@ -952,8 +998,35 @@ async function driveRun(plan: RunPlan): Promise<void> {
     // way again, and restarting it unasked is not backing off.
     else await savePending(plan, resumeAt, run.resumeFrom, run.interrupted);
     const next = plan.all[resumeAt];
+    const finishedAt = Date.now();
+    // Only what Discord added on top of the chosen pace is carried over: a
+    // pace the user picked is theirs to change, not something learned.
+    await extensionApi.storage.local.set({
+      searchPace:
+        run.paceMs > plan.delayMs
+          ? { delayMs: run.paceMs, at: finishedAt }
+          : null,
+      searchLedger: trimLedger(requestLedger, finishedAt),
+    });
+    // What this call measured, for the next estimate. A run that stopped early
+    // still walked real pages at a real speed.
+    if (runTiming) {
+      const stats = updateRunStats(
+        readRunStats(
+          (await extensionApi.storage.local.get("runStats")).runStats,
+        ),
+        {
+          elapsedMs: finishedAt - runTiming.startedAt,
+          pagesWalked: run.pagesWalked,
+          pagesAsked: Math.max(1, run.done) * plan.pages,
+          delayMs: plan.delayMs,
+        },
+      );
+      if (stats) await extensionApi.storage.local.set({ runStats: stats });
+    }
     await report({
       ...run,
+      finishedAt,
       done: run.done + plan.offset,
       total: plan.all.length,
       running: false,
@@ -961,12 +1034,14 @@ async function driveRun(plan: RunPlan): Promise<void> {
       ...(run.interrupted && next
         ? {
             stopped: run.crashed
-              ? `Discord crashed. Reloading it — the search carries on from ${next}.`
+              ? AUTO_RELOAD_AFTER_CRASH
+                ? `Discord crashed. Reloading it — the search carries on from ${next}.`
+                : `Discord crashed. Reload Discord and the search carries on from ${next}.`
               : `${run.stopped} Reload Discord and it carries on from ${next}.`,
           }
         : {}),
     });
-    reloadAfter = run.crashed && Boolean(next);
+    reloadAfter = AUTO_RELOAD_AFTER_CRASH && run.crashed && Boolean(next);
   } catch (error) {
     // A thrown run will not come good by being retried on a reload, so it is
     // not left for one — but it is left for Continue, from the last query it
@@ -978,6 +1053,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
       total: plan.all.length,
       posts: runPosts.size,
       running: false,
+      finishedAt: Date.now(),
       stopped: error instanceof Error ? error.message : "Search failed.",
     });
   } finally {
@@ -988,6 +1064,12 @@ async function driveRun(plan: RunPlan): Promise<void> {
   }
   if (reloadAfter) await reloadCrashed();
 }
+
+/**
+ * TEMPORARY: off so the crash screen stays up long enough to copy its markup
+ * for `crashScreen`. Turn back on once that is matched structurally.
+ */
+const AUTO_RELOAD_AFTER_CRASH = false;
 
 /**
  * Press Discord's own Reload on its crash screen, once the run's place is
@@ -1025,6 +1107,9 @@ async function savePending(
 ) {
   const pending: PendingRun = {
     run: plan.run,
+    elapsedMs:
+      plan.priorMs +
+      (runTiming ? Math.max(0, Date.now() - runTiming.startedAt) : 0),
     // The whole plan, so a resume knows the total as well as the remainder.
     queries: plan.all,
     done,
@@ -1039,7 +1124,12 @@ async function savePending(
   };
   const searchedAt = searchedUpdate();
   await extensionApi.storage.local
-    .set({ pendingRun: pending, ...searchedAt })
+    .set({
+      pendingRun: pending,
+      ...searchedAt,
+      // With each checkpoint, so a run that crashes still counts its requests.
+      searchLedger: trimLedger(requestLedger, Date.now()),
+    })
     .catch(() => {
       if (searchedAt.searchedAt) searchedDirty = true;
     });
@@ -1083,6 +1173,7 @@ async function resume(
     maxAgeMs: plan.state.maxAgeMs,
     planNote: plan.state.planNote,
     run: plan.state.run,
+    priorMs: plan.state.elapsedMs,
     resumedNote: plan.skipped
       ? `Picked the interrupted run back up, skipping ${plan.skipped} — the tab went down on it ${MAX_TRIES} times.`
       : reopened

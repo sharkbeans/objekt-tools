@@ -159,3 +159,10 @@ test("recommends deep and gentle for a few codes, shallow and slower for many", 
     );
   }
 });
+
+test("a carried-over pace is paid while it eases off, not on every page", () => {
+  // 16 pages at Instant with a 4s page: flat is 64s.
+  assert.equal(searchLoad(16, 1, 0, null).estimatedMs, 64_000);
+  // Starting at +2s: 8 pages at 2s, then 8 at 1s — not 16 at 2s.
+  assert.equal(searchLoad(16, 1, 0, null, 2_000).estimatedMs, 64_000 + 24_000);
+});
