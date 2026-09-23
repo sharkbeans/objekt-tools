@@ -28,6 +28,8 @@ export interface PendingRun {
   done: number;
   pages: number;
   delayMs: number;
+  /** The age cutoff the run was started with; zero for none. */
+  maxAgeMs: number;
   planNote: string;
   /** The tab it was running in, so another Discord tab does not adopt it. */
   tab: number | null;
@@ -108,6 +110,10 @@ export function readPendingRun(value: unknown): PendingRun | null {
     done,
     pages: Number.isFinite(Number(row.pages)) ? Number(row.pages) : 1,
     delayMs: Number.isFinite(Number(row.delayMs)) ? Number(row.delayMs) : 0,
+    maxAgeMs:
+      Number.isFinite(Number(row.maxAgeMs)) && Number(row.maxAgeMs) > 0
+        ? Number(row.maxAgeMs)
+        : 0,
     planNote: typeof row.planNote === "string" ? row.planNote : "",
     tab: Number.isFinite(Number(row.tab)) ? Number(row.tab) : null,
     tries: Number.isFinite(tries) && tries > 0 ? tries : 0,

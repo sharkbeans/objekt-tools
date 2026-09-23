@@ -200,3 +200,22 @@ test("scopes posts to the search run that found them", async () => {
   const stored = await entries();
   assert.equal(stored[0].run, "run-b");
 });
+
+test("says whether a post was in the index before this search run", async () => {
+  await clear();
+  const block = {
+    author: "Trader",
+    body: "HAVE\nYooYeon CC101",
+    time: "2026-09-08T23:59:00.000Z",
+  };
+  assert.equal((await capture(block, "1-1", "run-a")).known, false);
+  // The same run meeting it again (another code, same post) is still new to it.
+  assert.equal((await capture(block, "1-1", "run-a")).known, false);
+  assert.equal((await capture(block, "1-1", "run-b")).known, true);
+  // Captured by browsing the channel, then found by a search.
+  await capture(block, "1-2");
+  assert.equal((await capture(block, "1-2", "run-c")).known, true);
+  // Not written to the index: it only describes that one capture.
+  assert.ok((await entries()).every((entry) => !("known" in entry)));
+  await clear();
+});

@@ -123,6 +123,64 @@ function parseCollectionToken(token: string): ParsedCollection | null {
   return { season, digits, prefix, onOffline };
 }
 
+const seasonWordLetters: Record<string, string> = {
+  atom: "A",
+  binary: "B",
+  cream: "C",
+  divine: "D",
+  ever: "E",
+};
+
+const idnttSeasonWords: Record<string, string> = {
+  spring: "Spring",
+  summer: "Summer",
+  autumn: "Autumn",
+  fall: "Autumn",
+  winter: "Winter",
+  "☀": "Summer",
+  "🌸": "Spring",
+  "🍁": "Autumn",
+  "❄": "Winter",
+};
+
+/**
+ * A season named on its own, ahead of bare numbers: "BB 301", "divine 201",
+ * "Atom02 105", "Summer26 212", "☀️26 221Z". Only counts when the next token
+ * is a bare collection number, so prose ("a 1:1", "ever since") is ignored.
+ * A single lowercase letter is not a prefix here: "a 301" is an article.
+ */
+function parseSeasonToken(
+  token: string,
+  next: string | undefined,
+): string | null {
+  if (!next || !/^\d{3}[azAZ]?$/.test(next)) return null;
+
+  const prefixMatch = token.match(/^[A-Za-z]{1,9}$/);
+  if (prefixMatch && (token.length > 1 || token === token.toUpperCase())) {
+    const season = seasonPrefixMap[token.toUpperCase()];
+    if (season) return season;
+  }
+
+  const word = token.match(/^([A-Za-z]+)(\d{2})?$/);
+  if (word) {
+    const lower = word[1].toLowerCase();
+    const letter = seasonWordLetters[lower];
+    if (letter) {
+      const generation = word[2] ? Number.parseInt(word[2], 10) : 1;
+      if (generation >= 1 && generation <= 9)
+        return seasonPrefixMap[letter.repeat(generation)] ?? null;
+      return null;
+    }
+    const idntt = idnttSeasonWords[lower];
+    if (idntt && word[2]) return `${idntt}${word[2]}`;
+    return null;
+  }
+
+  const emoji = token.match(/^([☀🌸🍁❄])️?(\d{2})$/u);
+  if (emoji) return `${idnttSeasonWords[emoji[1]]}${emoji[2]}`;
+  return null;
+}
+
 /**
  * Strip Discord formatting from a line before checking if it's a header or item.
  * Handles common Discord markdown wrappers: headings, bold/italic/underline,
@@ -131,7 +189,9 @@ function parseCollectionToken(token: string): ParsedCollection | null {
 function stripDiscordFormatting(line: string): string {
   return line
     .trim()
+    .replace(/\\([*_~|`#>-])/g, "$1") // backslash-escaped markdown: "BB402\\*"
     .replace(/^>\s*/, "") // > blockquote
+    .replace(/^-#\s+/, "") // -# subtext
     .replace(/^#{1,3}\s+/, "") // # heading, ## heading, ### heading
     .replace(/^[-*]\s+/, "") // list bullets
     .replace(/`([^`]+)`/g, "$1")
@@ -228,6 +288,34 @@ function normalizeItemLine(line: string): string {
     line
       // Multiplication sign → ASCII x, so x3 / (x3) parse identically.
       .replace(/×/g, "x")
+      // Full-width parentheses from CJK keyboards: "CC201（for CC202）".
+      .replace(/（/g, "(")
+      .replace(/）/g, ")")
+      // Season emoji written apart from its year: "☀️ 26 226" → "☀️26 226".
+      .replace(/([☀🌸🍁❄]️?)\s+(\d{2})(?!\d)/gu, "$1$2")
+      // One number shared by several prefixes: "e/bb/cc402" → "e402 bb402 cc402".
+      .replace(
+        /\b((?:[A-Za-z]{1,3}\/)+[A-Za-z]{1,3})(\d{3}[azAZ]?)\b/g,
+        (_, prefixes: string, digits: string) =>
+          prefixes
+            .split("/")
+            .map((p) => `${p}${digits}`)
+            .join(" "),
+      )
+      // Name glued to a code: "Yooyeon-CC341", "Shion/Sullin-AA343".
+      .replace(/\b([A-Za-z]+)-(?=[A-Za-z]{0,3}\d{3})/g, "$1 ")
+      // Slash- or dot-separated lists: "D303/D313", "AA104/117", "cc313.345",
+      // "Kotone/Hayeon AA365". A slash between two words is kept, so prose
+      // such as "and/or" is left alone.
+      .replace(
+        /(\d{3}[azAZ]?(?:x\d+)?)[/.](?=[A-Za-z]{0,3}\d{3}(?:[azAZ]|x\d+)?\b)/g,
+        "$1 ",
+      )
+      .replace(/\b([A-Za-z]+)\/(?=[A-Za-z]+\b)/g, (whole, name: string) =>
+        resolveMember(name) ? `${name} ` : whole,
+      )
+      // Annotation glued to a code: "CC108(2)", "aa402($100)", "CC601(unscanned)".
+      .replace(/(\d{3}[azAZ]?)\(/g, "$1 (")
       // Collapse spaces around a range separator between two collection codes.
       .replace(
         /([A-Za-z]{0,3}\d{3}[azAZ]?)\s*[-~]\s*([A-Za-z]{0,3}\d{3}[azAZ]?)/g,
@@ -327,7 +415,8 @@ function parseLine(
     const tokens = part.split(/\s+/);
 
     for (let j = 0; j < tokens.length; j++) {
-      const token = tokens[j];
+      // A code or range wrapped whole in parentheses: "(CC601)", "(D324-D326)".
+      const token = tokens[j].replace(/^\(([A-Za-z]{1,3}\d{3}[^()]*)\)$/, "$1");
       if (!token) continue;
 
       const memberCandidate = resolveMember(token, i === 0 && j === 0);
@@ -399,13 +488,24 @@ function parseLine(
         continue;
       }
 
-      // ── Collection token with optional attached serial: BB101#1, BB101#20x ─
+      // ── Season written apart from the numbers: "BB 301 302", "Summer26 212",
+      // "☀️26 221Z", "divine 201". Applies to the bare numbers that follow.
+      const spacedSeason = parseSeasonToken(token, tokens[j + 1]);
+      if (spacedSeason) {
+        currentSeason = spacedSeason;
+        continue;
+      }
+
+      // ── Collection token with optional attached serial: BB101#1, BB101#20x.
+      // Descriptive tags ("#4n" for a four-digit serial, "#any", "#similar")
+      // are dropped rather than costing the whole item.
       let collToken = token;
       let attachedSerial: string | undefined;
-      const attachedSerialMatch = token.match(/^(.+?)#(\d+x?)$/i);
+      const attachedSerialMatch = collToken.match(/^(.+?)#(\S*)$/);
       if (attachedSerialMatch && parseCollectionToken(attachedSerialMatch[1])) {
         collToken = attachedSerialMatch[1];
-        attachedSerial = attachedSerialMatch[2];
+        if (/^\d+x?$/i.test(attachedSerialMatch[2]))
+          attachedSerial = attachedSerialMatch[2];
       }
 
       const parsed = parseCollectionToken(collToken);
@@ -425,12 +525,18 @@ function parseLine(
 
       // ── Bare 3-digit number inheriting current season ────────────────────
       // e.g. "Hayeon bb101 102 104" → 102/104 inherit Binary02
-      const bareDigitsMatch = token.match(/^(\d{3})[azAZ]?$/);
+      const bareDigitsMatch = token.match(/^(\d{3})([azAZ]?)$/);
       if (bareDigitsMatch && currentSeason) {
+        const suffix = bareDigitsMatch[2].toLowerCase();
         emit(
           {
             season: currentSeason,
             collectionNo: bareDigitsMatch[1],
+            ...(suffix === "a"
+              ? { onOffline: "online" as const }
+              : suffix === "z"
+                ? { onOffline: "offline" as const }
+                : {}),
           },
           token,
         );

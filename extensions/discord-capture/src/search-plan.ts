@@ -19,6 +19,13 @@ export const QUERY_CAP = 40;
 /** How long a searched code stays "done" by default. */
 export const DEFAULT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * How long a searched code is remembered at all. Longer than the cooldown:
+ * past it the code is searched again, but having been searched before is what
+ * lets that search stop paging once it reaches posts it already captured.
+ */
+export const SEARCHED_MEMORY_MS = 30 * 24 * 60 * 60 * 1000;
+
 export interface Plan {
   /** Queries to fire, in order. */
   queries: string[];
@@ -110,6 +117,30 @@ export function pageBudget(delayMs: number): number {
     (RECOMMENDED_PAGE_BUDGET * perPage) /
       (RECOMMENDED_DELAY_MS + PAGE_GUESS_MS),
   );
+}
+
+/** The slowest pace the panel offers, in seconds per page. */
+export const MAX_DELAY_S = 60;
+
+/**
+ * Pages and pace to suggest for a search of this many codes.
+ *
+ * Few codes go deep, many go shallow, and the pace is the fastest whole second
+ * that keeps codes × pages inside `pageBudget` — never faster than the
+ * recommended 5s. Pages are cheap once a code has been searched before, since
+ * paging stops as soon as it reaches posts already captured.
+ */
+export function recommendedTuning(codes: number): {
+  pages: number;
+  delaySeconds: number;
+} {
+  const count = Math.max(0, codes);
+  const pages = count <= 5 ? 10 : count <= 10 ? 6 : count <= 20 ? 4 : 3;
+  const first = RECOMMENDED_DELAY_MS / 1000;
+  for (let seconds = first; seconds <= MAX_DELAY_S; seconds++)
+    if (pageBudget(seconds * 1000) >= count * pages)
+      return { pages, delaySeconds: seconds };
+  return { pages, delaySeconds: MAX_DELAY_S };
 }
 
 /** The most result pages a run will walk, against what its pace allows. */

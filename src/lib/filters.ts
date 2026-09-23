@@ -259,6 +259,11 @@ export const membersByArtist: Record<ValidArtist, string[]> = {
     "EunSoo",
     "MinGyeol",
     "MinJun",
+    "EunChan",
+    "EunSung",
+    "GiWoong",
+    "GyungHo",
+    "JooHeon",
   ],
 };
 

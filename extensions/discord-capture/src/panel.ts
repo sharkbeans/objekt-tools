@@ -12,6 +12,11 @@ import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, resolveTab, type TabLike } from "./host-tab";
 import { MATCH_LABEL } from "./match-tab";
 import {
+  formatLockout,
+  lockoutRemaining,
+  readRateLimitedAt,
+} from "./rate-limit";
+import {
   continuable,
   type PendingRun,
   readPendingRun,
@@ -27,8 +32,10 @@ import { searchQueryFor } from "./search";
 import {
   DEFAULT_COOLDOWN_MS,
   loadHue,
+  MAX_DELAY_S,
   planQueries,
   readSearchedAt,
+  recommendedTuning,
   searchFilters,
   searchLoad,
 } from "./search-plan";
@@ -582,6 +589,60 @@ let searchedAt = new Map<string, number>();
 /** What the last Search was pressed with (`searchFilters`), if known. */
 let lastFilters: string | null = null;
 let captureError: string | null = null;
+/** When a run last stopped looking rate-limited; see rate-limit.ts. */
+let rateLimitedAt: number | null = null;
+/**
+ * The rate limit the user ticked "I understand the risks" for. Good for one
+ * run against that one rate limit: a new stall, or starting a run, clears it.
+ */
+let overrideFor: number | null = null;
+/** When the warning was opened; the box cannot be ticked until it is read. */
+let warningOpenedAt: number | null = null;
+/** How long the warning must be on screen before it can be acknowledged. */
+const WARNING_READ_MS = 8_000;
+
+function coolingDown(): boolean {
+  return !running() && lockoutRemaining(rateLimitedAt, Date.now()) > 0;
+}
+
+function overridden(): boolean {
+  return rateLimitedAt !== null && overrideFor === rateLimitedAt;
+}
+
+/** Close the warning and forget the acknowledgement. */
+function resetOverride() {
+  overrideFor = null;
+  warningOpenedAt = null;
+  element<HTMLInputElement>("cooldown-ack").checked = false;
+}
+
+/** The countdown, the warning and its tick box, in step with the clock. */
+function showCooldown() {
+  const cooling = coolingDown();
+  element("cooldown").hidden = !cooling || element("actions").hidden;
+  if (!cooling) {
+    if (overrideFor !== null || warningOpenedAt !== null) resetOverride();
+  } else {
+    element("cooldown-left").textContent = formatLockout(
+      lockoutRemaining(rateLimitedAt, Date.now()),
+    );
+  }
+  const open = warningOpenedAt !== null;
+  element("cooldown-warning").hidden = !open;
+  element("cooldown-ack-row").hidden = !open;
+  const opener = element<HTMLButtonElement>("cooldown-open");
+  opener.setAttribute("aria-expanded", String(open));
+  opener.textContent = open ? "Wait instead" : "Continue anyway…";
+  const readFor =
+    warningOpenedAt === null
+      ? 0
+      : warningOpenedAt + WARNING_READ_MS - Date.now();
+  element<HTMLInputElement>("cooldown-ack").disabled = readFor > 0;
+  element("cooldown-ack-text").textContent =
+    readFor > 0
+      ? `Read the warning above — you can tick this in ${Math.ceil(readFor / 1000)}s.`
+      : "I understand the risks to my Discord account and want to search anyway.";
+}
 let hasChannel = false;
 
 function stale(): boolean {
@@ -761,6 +822,23 @@ function render() {
         : "Search"
       : "↻ Search again";
   }
+  // The content script refuses too; this just stops offering the click.
+  // `hold` keeps the click handler from re-enabling it when a refused
+  // request returns.
+  showCooldown();
+  if (!busy) {
+    const blocked = coolingDown() && !overridden();
+    for (const button of [search, carryOn]) {
+      button.disabled = blocked;
+      button.dataset.hold = blocked ? "1" : "";
+    }
+    if (coolingDown())
+      search.textContent = blocked
+        ? `Paused · ${formatLockout(lockoutRemaining(rateLimitedAt, Date.now()))}`
+        : "Search anyway";
+    if (coolingDown() && left)
+      carryOn.textContent = `${overridden() ? "Continue anyway" : "Continue"} · ${left.left} left`;
+  }
   renderTiles();
   showTuning();
 }
@@ -813,6 +891,7 @@ async function refresh(): Promise<void> {
       "searchRunId",
       "searchedAt",
       "lastSearchFilters",
+      "rateLimitedAt",
     ]);
     captureError =
       typeof settings.captureError === "string" ? settings.captureError : null;
@@ -824,6 +903,7 @@ async function refresh(): Promise<void> {
         : null;
     searchedAt = readSearchedAt(settings.searchedAt);
     lastFilters = readFilters(settings.lastSearchFilters);
+    rateLimitedAt = readRateLimitedAt(settings.rateLimitedAt);
     showHealth(settings.captureHealth);
     const tab = await discordTab().catch(() => null);
     const channel = channelFromUrl(tab?.url);
@@ -965,6 +1045,14 @@ const skipRecent = element<HTMLInputElement>("skip-recent");
 const delayMain = element<HTMLInputElement>("delay-main");
 const pagesMain = element<HTMLInputElement>("pages-main");
 const skipRecentMain = element<HTMLInputElement>("skip-recent-main");
+const maxAge = element<HTMLSelectElement>("max-age");
+/**
+ * Whether pace and pages follow the recommendation for the codes entered.
+ * Moving either control by hand turns it off, until "Use recommended".
+ */
+let tuningAuto = true;
+/** The code count the controls were last set for, so typing does not reset them. */
+let tunedFor: number | null = null;
 
 /**
  * Keep the pace slider's colour, the page-budget warning and the time
@@ -973,7 +1061,7 @@ const skipRecentMain = element<HTMLInputElement>("skip-recent-main");
  * what is shown here is what clicking it would actually do right now.
  */
 function showTuning() {
-  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+  const seconds = Math.min(MAX_DELAY_S, Math.max(0, Number(delay.value) || 0));
   const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
   const codes = [
     ...new Set(
@@ -986,11 +1074,34 @@ function showTuning() {
     searched: searchedAt,
     cooldownMs: skipRecent.checked ? DEFAULT_COOLDOWN_MS : 0,
   });
-  const load = searchLoad(plan.queries.length, pageCount, seconds * 1000);
+  const count = plan.queries.length;
+  const rec = recommendedTuning(count);
+  // Only when the codes change, and only with some entered: an empty list has
+  // nothing to recommend for, and re-applying on every render would fight the
+  // user the moment they touched a control.
+  if (tuningAuto && count > 0 && count !== tunedFor) {
+    tunedFor = count;
+    if (seconds !== rec.delaySeconds || pageCount !== rec.pages) {
+      delay.value = String(rec.delaySeconds);
+      pages.value = String(rec.pages);
+      saveSearchSettings();
+      showDelay();
+      return;
+    }
+  }
+  const matches = seconds === rec.delaySeconds && pageCount === rec.pages;
+  element("tuning-rec-text").textContent =
+    count === 0
+      ? ""
+      : tuningAuto && matches
+        ? `Recommended for ${plural(count, "code")}`
+        : `Recommended: ${rec.pages} pages · +${rec.delaySeconds}s`;
+  element("use-recommended").hidden = count === 0 || (tuningAuto && matches);
+  const load = searchLoad(count, pageCount, seconds * 1000);
   const risk = `hsl(${loadHue(load)} 80% 50%)`;
   for (const slider of [delay, delayMain]) {
     slider.style.setProperty("--risk", risk);
-    slider.style.setProperty("--fill", String(seconds / 15));
+    slider.style.setProperty("--fill", String(seconds / MAX_DELAY_S));
   }
   // Both rows stay on screen even when empty (see the .tuning-row CSS): a row
   // that only sometimes exists is what moved the buttons below it around.
@@ -1003,7 +1114,7 @@ function showTuning() {
 
 /** Zero is not "no delay applied" — it is "gated on capture instead". */
 function showDelay() {
-  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+  const seconds = Math.min(MAX_DELAY_S, Math.max(0, Number(delay.value) || 0));
   delayMain.value = String(seconds);
   pagesMain.value = pages.value;
   skipRecentMain.checked = skipRecent.checked;
@@ -1043,11 +1154,28 @@ skipRecent.addEventListener("change", () => {
 /** Settings take effect as they are changed, not on the next run's click. */
 function saveSearchSettings() {
   void extensionApi.storage.local.set({
-    searchDelay: Math.min(15, Math.max(0, Number(delay.value) || 0)),
+    searchDelay: Math.min(MAX_DELAY_S, Math.max(0, Number(delay.value) || 0)),
     searchPages: Math.min(20, Math.max(1, Number(pages.value) || 3)),
     skipRecent: skipRecent.checked,
+    searchMaxAgeDays: Number(maxAge.value) || 0,
+    tuningAuto,
   });
 }
+/** A hand on pace or pages hands them over to the user. */
+function tunedByHand() {
+  tuningAuto = false;
+  saveSearchSettings();
+  showTuning();
+}
+for (const input of [delay, pages, delayMain, pagesMain])
+  input.addEventListener("input", tunedByHand);
+element("use-recommended").addEventListener("click", () => {
+  tuningAuto = true;
+  tunedFor = null;
+  showTuning();
+  saveSearchSettings();
+});
+maxAge.addEventListener("change", saveSearchSettings);
 for (const input of [
   delay,
   pages,
@@ -1080,7 +1208,7 @@ action("run-search", async () => {
   ];
   const tab = await discordTab();
   await ensureCapturing(tab.url);
-  const seconds = Math.min(15, Math.max(0, Number(delay.value) || 0));
+  const seconds = Math.min(MAX_DELAY_S, Math.max(0, Number(delay.value) || 0));
   const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
   clearTimeout(saveTimer);
   await extensionApi.storage.local.set({
@@ -1096,8 +1224,11 @@ action("run-search", async () => {
     delayMs: seconds * 1000,
     pages: pageCount,
     skipRecent: skipRecent.checked,
+    maxAgeDays: Number(maxAge.value) || 0,
+    riskAccepted: overridden(),
   });
   if (!response?.ok) throw new Error(response?.error ?? "Could not start.");
+  resetOverride();
   // Recorded only once the run has started: a refused start changed nothing.
   lastFilters = searchFilters([...keptQueries].filter(Boolean), pageCount);
   await extensionApi.storage.local.set({ lastSearchFilters: lastFilters });
@@ -1114,8 +1245,12 @@ action("run-search", async () => {
 action("continue-search", async () => {
   const tab = await discordTab();
   await ensureCapturing(tab.url);
-  const response = await toContentScript(tab.id, { type: "continue-search" });
+  const response = await toContentScript(tab.id, {
+    type: "continue-search",
+    riskAccepted: overridden(),
+  });
   if (!response?.ok) throw new Error(response?.error ?? "Could not continue.");
+  resetOverride();
   heldUntil = 0;
   progress = {
     running: true,
@@ -1329,6 +1464,8 @@ void extensionApi.storage.local
     "searchDelay",
     "searchPages",
     "skipRecent",
+    "searchMaxAgeDays",
+    "tuningAuto",
     "owned",
     "nickname",
     "removedWants",
@@ -1346,6 +1483,10 @@ void extensionApi.storage.local
       pages.value = String(settings.searchPages);
     if (typeof settings.skipRecent === "boolean")
       skipRecent.checked = settings.skipRecent;
+    if (typeof settings.searchMaxAgeDays === "number")
+      maxAge.value = String(settings.searchMaxAgeDays);
+    if (typeof settings.tuningAuto === "boolean")
+      tuningAuto = settings.tuningAuto;
     showDelay();
     nickname.value =
       typeof settings.nickname === "string" ? settings.nickname : "";
@@ -1376,6 +1517,12 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   // Another copy of the panel started a search.
   if (changes.lastSearchFilters) {
     lastFilters = readFilters(changes.lastSearchFilters.newValue);
+    render();
+  }
+  if (changes.rateLimitedAt) {
+    rateLimitedAt = readRateLimitedAt(changes.rateLimitedAt.newValue);
+    // A new stall needs its own acknowledgement.
+    resetOverride();
     render();
   }
   // Keep the cards moving with the run without waiting on a full refresh.
@@ -1418,6 +1565,28 @@ setInterval(() => {
         void refresh().catch(() => {});
     });
 }, 2_000);
+
+element("cooldown-open").addEventListener("click", () => {
+  if (warningOpenedAt === null) warningOpenedAt = Date.now();
+  else resetOverride();
+  render();
+});
+element<HTMLInputElement>("cooldown-ack").addEventListener(
+  "change",
+  (event) => {
+    overrideFor = (event.currentTarget as HTMLInputElement).checked
+      ? rateLimitedAt
+      : null;
+    render();
+  },
+);
+
+// Tick the cool-down's countdown, and hand the buttons back when it ends.
+setInterval(() => {
+  if (document.visibilityState !== "visible" || rateLimitedAt === null) return;
+  render();
+  if (lockoutRemaining(rateLimitedAt, Date.now()) === 0) rateLimitedAt = null;
+}, 1_000);
 
 // A stale run is only noticed when something looks at it; nothing writes to
 // storage once its tab has gone, so look now and then.

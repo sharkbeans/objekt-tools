@@ -299,6 +299,24 @@ Lynn D301 D302`;
     assert.equal(a.time?.dated, true);
     assert.equal(a.time?.minutes, 10 * 60 + 55);
   });
+
+  it("splits on an edited message's header and keeps the post time", () => {
+    const messages = parseTranscript(`@Kira0211 (09/08/2026 10:55 AM)
+Have
+Seoyeon CC302
+
+@Pobby (09/09/2026 12:29 PM, edited 09/09/2026 12:30 PM)
+Have
+Lynn D301`);
+    assert.deepEqual(
+      messages.map((m) => [m.author, m.haves.map((i) => i.collectionNo)]),
+      [
+        ["Kira0211", ["302"]],
+        ["Pobby", ["301"]],
+      ],
+    );
+    assert.equal(messages[1].time?.minutes, 12 * 60 + 29);
+  });
 });
 
 describe("analyzeTranscript", () => {

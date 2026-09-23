@@ -18,7 +18,14 @@ import {
   openMatchTab,
 } from "./match-tab";
 import { capturing, channelIds, isDiscordUrl } from "./settings";
-import { capture, clear, count, type Entry, entries } from "./store";
+import {
+  type Captured,
+  capture,
+  clear,
+  count,
+  type Entry,
+  entries,
+} from "./store";
 
 /**
  * The panel UI, wherever it is being shown from.
@@ -566,7 +573,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       if (!fromSearch && (!guild || !capturing(channel, current.paused)))
         throw new Error("Capture is paused");
       if (guild && channel) void rememberGuild(channel, guild).catch(() => {});
-      let entry: Entry;
+      let entry: Captured;
       try {
         entry = await capture(
           request.block,

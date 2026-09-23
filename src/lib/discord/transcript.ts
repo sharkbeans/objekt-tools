@@ -60,8 +60,11 @@ const AUTHOR_LINE = new RegExp(
 // owned by nobody, which is worse than not importing it. The name is captured
 // lazily because 55 of 420 authors in a real export have spaces in it
 // ("@밤이의 불씨", "@alexander uwu"); only the trailing timestamp is a reliable anchor.
+// Edited messages append the edit time — "@Pobby (09/09/2026 12:29 PM, edited
+// 09/09/2026 12:30 PM)" — and 131 of 3,200 headers in that export had it, each
+// otherwise folded into the poster above. The post time is kept.
 const DISCRUB_AUTHOR_LINE = new RegExp(
-  String.raw`^@(.*?)\s+\((${WHEN})\)\s*$`,
+  String.raw`^@(.*?)\s+\((${WHEN})(?:,\s*edited\s+${WHEN})?\)\s*$`,
   "i",
 );
 

@@ -27,6 +27,11 @@ import {
 } from "./panel-frame";
 import { readPanelState } from "./panel-geometry";
 import {
+  lockoutMessage,
+  lockoutRemaining,
+  readRateLimitedAt,
+} from "./rate-limit";
+import {
   MAX_TRIES,
   nextPending,
   type PendingRun,
@@ -37,6 +42,7 @@ import {
 } from "./resume";
 import {
   type CaptureProbe,
+  crashScreen,
   currentPage,
   findNextPage,
   findSearchBox,
@@ -51,6 +57,7 @@ import {
   planQueries,
   pruneSearchedAt,
   readSearchedAt,
+  SEARCHED_MEMORY_MS,
 } from "./search-plan";
 import { capturing, channelFromUrl, channelIds } from "./settings";
 import type { Entry } from "./store";
@@ -176,6 +183,12 @@ const pausedRows = new Set<string>();
  */
 const unreadableSince = new Map<string, number>();
 const UNREADABLE_GRACE_MS = 1500;
+/**
+ * Rows this run added to the index, as opposed to ones already there. What is
+ * recorded and not in here was known before the run started, which is what
+ * lets a code that has caught up stop paging. Cleared with `recorded`.
+ */
+const fresh = new Set<string>();
 
 async function scan(element: Element) {
   if (!watching || orphaned || pending.has(element)) return;
@@ -222,6 +235,7 @@ async function scan(element: Element) {
     });
     if (response?.ok) {
       recorded.add(rowKey(element));
+      if (response.value?.known !== true) fresh.add(rowKey(element));
       // Only results count towards the run. The open channel keeps taking posts
       // the whole time a search is running, and those are not what was searched
       // for.
@@ -306,6 +320,8 @@ function watch(on: boolean) {
   });
 }
 let consent: unknown;
+/** When a run last stopped looking rate-limited; see rate-limit.ts. */
+let rateLimitedAt: number | null = null;
 function update(settings: Record<string, unknown>) {
   if ("consent" in settings) consent = settings.consent;
   if ("pausedChannels" in settings)
@@ -417,7 +433,7 @@ function searchedUpdate(): { searchedAt?: Record<string, number> } {
   if (!searchedDirty) return {};
   searchedDirty = false;
   return {
-    searchedAt: pruneSearchedAt(searched, DEFAULT_COOLDOWN_MS, Date.now()),
+    searchedAt: pruneSearchedAt(searched, SEARCHED_MEMORY_MS, Date.now()),
   };
 }
 async function flushSearched() {
@@ -528,11 +544,12 @@ function countPost(id: string) {
 const captureProbe: CaptureProbe = {
   account: (rows) => {
     const now = Date.now();
-    const tally = { recorded: 0, pending: 0, unreadable: 0 };
+    const tally = { recorded: 0, known: 0, pending: 0, unreadable: 0 };
     for (const row of rows) {
       const key = rowKey(row);
       if (recorded.has(key)) {
         tally.recorded++;
+        if (!fresh.has(key)) tally.known++;
         countPost(key);
         continue;
       }
@@ -720,6 +737,16 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     reply({ ok: false, error: "A search run is already in progress." });
     return true;
   }
+  // Enforced here, not only by a disabled button: another panel, or one that
+  // has not caught up with storage yet, can still send the request. The one
+  // way through is the panel's "I understand the risks" box, which is only
+  // tickable after its warning has been on screen for a while, and covers a
+  // single run.
+  const cooling = lockoutRemaining(rateLimitedAt, Date.now());
+  if (cooling > 0 && request.riskAccepted !== true) {
+    reply({ ok: false, error: lockoutMessage(cooling) });
+    return true;
+  }
   if (request.type === "continue-search") {
     // Claimed before the first await, so a second click cannot start a second
     // run while this one is still reading storage. The run takes the claim
@@ -759,6 +786,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   }
   const delayMs = Number(request.delayMs);
   const pages = Number(request.pages);
+  const maxAgeDays = Number(request.maxAgeDays);
   // Skipping is opt-out rather than automatic: a run that quietly searched
   // nothing because everything was searched an hour ago would look broken.
   const cooldownMs = request.skipRecent === false ? 0 : DEFAULT_COOLDOWN_MS;
@@ -788,6 +816,11 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     delayMs: Number.isFinite(delayMs)
       ? Math.min(60_000, Math.max(0, delayMs))
       : 5_000,
+    // At most a year: anything larger is a typo, not a cutoff.
+    maxAgeMs:
+      Number.isFinite(maxAgeDays) && maxAgeDays > 0
+        ? Math.min(365, maxAgeDays) * 24 * 60 * 60_000
+        : 0,
     planNote,
     run: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     resumedNote: null,
@@ -805,6 +838,8 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
 interface RunPlan {
   /** The queries this call will search: the whole plan, or its tail. */
   queries: string[];
+  /** Stop paging a code past this age; zero for no cutoff. */
+  maxAgeMs: number;
   /** The whole plan, in order, which is what a resume needs to read back. */
   all: string[];
   offset: number;
@@ -841,6 +876,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
   // session would otherwise accumulate a string per message seen, for ever.
   // Rows still on screen re-assert themselves the next time they are scanned.
   recorded.clear();
+  fresh.clear();
   unreadableSince.clear();
   postsReportedAt = 0;
   searchRun = plan.run;
@@ -861,6 +897,8 @@ async function driveRun(plan: RunPlan): Promise<void> {
   await extensionApi.storage.local.set({ searchRunId: searchRun });
   await savePending(plan, plan.offset, 0);
   let checkpoint = plan.offset;
+  /** Discord crashed under the run, and its place is saved: reload it. */
+  let reloadAfter = false;
   try {
     await report({
       done: plan.offset,
@@ -870,9 +908,13 @@ async function driveRun(plan: RunPlan): Promise<void> {
       running: true,
       planNote: note,
     });
+    // Taken as the run starts, before this run's own codes join it.
+    const searchedBefore = new Set(searched.keys());
     const run = await runSearches(document, plan.queries, {
       delayMs: plan.delayMs,
       pages: plan.pages,
+      maxAgeMs: plan.maxAgeMs,
+      searchedBefore: (query) => searchedBefore.has(query),
       signal: searchSignal,
       probe: captureProbe,
       loadWaitMs: plan.loadWaitMs,
@@ -899,6 +941,10 @@ async function driveRun(plan: RunPlan): Promise<void> {
     // how an update used to lose a run it could have kept.
     if (orphaned) return;
     const resumeAt = plan.offset + run.resumeFrom;
+    if (run.rateLimited) {
+      rateLimitedAt = Date.now();
+      await extensionApi.storage.local.set({ rateLimitedAt });
+    }
     if (run.stopped === null) await clearPending();
     // Anything short of finished can be continued. Only Discord going away
     // under the run is picked up by a reload on its own: a run stopped by
@@ -914,10 +960,13 @@ async function driveRun(plan: RunPlan): Promise<void> {
       planNote: note,
       ...(run.interrupted && next
         ? {
-            stopped: `${run.stopped} Reload Discord and it carries on from ${next}.`,
+            stopped: run.crashed
+              ? `Discord crashed. Reloading it — the search carries on from ${next}.`
+              : `${run.stopped} Reload Discord and it carries on from ${next}.`,
           }
         : {}),
     });
+    reloadAfter = run.crashed && Boolean(next);
   } catch (error) {
     // A thrown run will not come good by being retried on a reload, so it is
     // not left for one — but it is left for Continue, from the last query it
@@ -937,6 +986,25 @@ async function driveRun(plan: RunPlan): Promise<void> {
     holdWorkerOpen(false);
     void flushSearched();
   }
+  if (reloadAfter) await reloadCrashed();
+}
+
+/**
+ * Press Discord's own Reload on its crash screen, once the run's place is
+ * saved. The crash screen never clears by itself, so the run used to sit out
+ * two minutes of retries and then ask the user to reload. The resume on page
+ * load picks the run up — and steps over a code that keeps crashing Discord,
+ * so this cannot loop.
+ */
+async function reloadCrashed() {
+  // Long enough to read the panel's "Discord crashed" before the page goes.
+  await sleep(3_000);
+  await flushSearched();
+  if (orphaned || searchSignal.cancelled || searching) return;
+  const target = crashScreen(document);
+  if (!target) return;
+  if (target === document.body) location.reload();
+  else target.click();
 }
 
 /**
@@ -962,6 +1030,7 @@ async function savePending(
     done,
     pages: plan.pages,
     delayMs: plan.delayMs,
+    maxAgeMs: plan.maxAgeMs,
     planNote: plan.planNote,
     tab: ownTabId,
     tries: reached > 0 ? 0 : pendingTries,
@@ -1011,6 +1080,7 @@ async function resume(
     offset: plan.done,
     pages: plan.state.pages,
     delayMs: plan.state.delayMs,
+    maxAgeMs: plan.state.maxAgeMs,
     planNote: plan.state.planNote,
     run: plan.state.run,
     resumedNote: plan.skipped
@@ -1048,11 +1118,14 @@ async function resumeInterruptedRun() {
   // Consent is read fresh rather than trusted from the interrupted run: it may
   // have been withdrawn between the crash and this page loading, and a resume
   // is still automation of the user's account.
-  const { consent: stored } = await extensionApi.storage.local.get("consent");
+  const { consent: stored, rateLimitedAt: limitedAt } =
+    await extensionApi.storage.local.get(["consent", "rateLimitedAt"]);
   if (!automationAllowed(stored)) {
     await clearPending();
     return;
   }
+  // Kept for Continue once the cool-down is over, not dropped.
+  if (lockoutRemaining(readRateLimitedAt(limitedAt), Date.now()) > 0) return;
   if (searching || orphaned) return;
   await resume(plan, mine, true);
 }
@@ -1098,14 +1171,25 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   const settings: Record<string, unknown> = {};
   if (changes.searchedAt && !searchedDirty)
     searched = readSearchedAt(changes.searchedAt.newValue);
+  if (changes.rateLimitedAt)
+    rateLimitedAt = readRateLimitedAt(changes.rateLimitedAt.newValue);
   for (const key of ["consent", "pausedChannels", "owned", "wants"])
     if (changes[key]) settings[key] = changes[key].newValue;
   if (Object.keys(settings).length) update(settings);
 });
 void extensionApi.storage.local
-  .get(["consent", "pausedChannels", "owned", "wants", "panel", "searchedAt"])
+  .get([
+    "consent",
+    "pausedChannels",
+    "owned",
+    "wants",
+    "panel",
+    "searchedAt",
+    "rateLimitedAt",
+  ])
   .then((settings) => {
     searched = readSearchedAt(settings.searchedAt);
+    rateLimitedAt = readRateLimitedAt(settings.rateLimitedAt);
     update(settings);
     // The panel is a window, so it stays where it was: open across reloads and
     // across channel switches, until it is closed on purpose.

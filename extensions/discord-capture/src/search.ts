@@ -866,6 +866,12 @@ function scrollResults(doc: Document): boolean {
 export interface RowAccounting {
   /** Recorded in the index. */
   recorded: number;
+  /**
+   * Of the recorded, how many were already in the index before this run —
+   * the evidence a code's search has caught up with what was captured last
+   * time. Optional so a probe that cannot tell simply never stops paging early.
+   */
+  known?: number;
   /** Not recorded yet, and still worth waiting for. */
   pending: number;
   /**
@@ -900,6 +906,8 @@ export interface PageSettle {
   rendered: number;
   /** Of those, how many reached the index. */
   recorded: number;
+  /** Of those, how many were in the index before this run. */
+  known: number;
   /** Of those, how many the parser could not read at all. */
   unreadable: number;
   /** Rows still unconfirmed when the wait ended. Zero on a clean settle. */
@@ -1004,6 +1012,7 @@ export async function settlePage(
         panel,
         rendered: rows.length,
         recorded: account.recorded,
+        known: account.known ?? 0,
         unreadable: account.unreadable,
         outstanding,
         settled: done,
@@ -1082,6 +1091,20 @@ export interface SearchRun {
   submittedBy: Record<SubmitPath, number>;
   /** Queries fired again because the first attempt drew no response at all. */
   retried: number;
+  /**
+   * Codes whose paging stopped early because a page held only posts already
+   * in the index from an earlier search: everything older was captured then.
+   */
+  caughtUp: number;
+  /** Codes whose paging stopped early at the age cutoff. */
+  tooOld: number;
+  /** Times Discord's search failed on a page ("We dropped the magnifying glass"). */
+  searchErrors: number;
+  /**
+   * Whether the run stopped because Discord stopped answering — the shape a
+   * rate limit takes from the UI. Starts the cool-down in rate-limit.ts.
+   */
+  rateLimited: boolean;
   /** Queries that ran and matched nothing. A normal outcome, not a failure. */
   empty: number;
   /** Times the results panel disappeared mid-query, which ends that query. */
@@ -1099,6 +1122,12 @@ export interface SearchRun {
    * up again rather than starting over.
    */
   interrupted: boolean;
+  /**
+   * Whether that was Discord's crash screen, which only a reload clears. The
+   * caller saves the run's place and presses Reload; the resume on load does
+   * the rest.
+   */
+  crashed: boolean;
   /**
    * Index of the first query whose pages were not all walked — where a run
    * that is picked up again should start.
@@ -1200,8 +1229,92 @@ export interface SearchOptions {
    * vanished under it is not counted as behind the run.
    */
   onCheckpoint?: (done: number) => void;
+  /**
+   * Whether a code was searched in an earlier run. Only such a code stops
+   * paging once a page holds nothing new: for a code searched for the first
+   * time, posts already captured by browsing the channel say nothing about the
+   * older pages, which is exactly what a first deep search is for.
+   */
+  searchedBefore?: (query: string) => boolean;
+  /**
+   * Stop paging a code once its results are older than this. Results come
+   * newest first, so a page that reaches past the cutoff means every later
+   * page is older still. Zero or absent: no cutoff.
+   */
+  maxAgeMs?: number;
+  /**
+   * Pause before searching a code again after Discord's search failed on it.
+   * See `SEARCH_ERROR_BACKOFF_MS`.
+   */
+  errorBackoffMs?: number;
+  /** Injectable for tests. */
+  now?: () => number;
   /** Injectable for tests. */
   wait?: (ms: number) => Promise<void>;
+}
+
+/**
+ * How long to wait before searching a code again when Discord's search failed
+ * part-way through it. Discord asks for exactly that ("Can you try searching
+ * again?"), but a failure mid-run is usually load or a rate limit, and
+ * searching again at once is the opposite of backing off.
+ */
+export const SEARCH_ERROR_BACKOFF_MS = 30_000;
+
+/**
+ * Discord's crash screen, in the English client: "Well, this is awkward. Looks
+ * like Discord has crashed unexpectedly…" and a Reload button, in place of the
+ * whole app. It never recovers on its own, so waiting for the search box to
+ * come back — right for a re-render — only delayed the reload it needs.
+ */
+const CRASH_TEXT = /well, this is awkward|discord has crashed/i;
+
+/**
+ * Discord's crash screen, if that is what the tab is showing: its Reload
+ * button, or the page body when the button cannot be found. Null otherwise.
+ */
+export function crashScreen(doc: Document): HTMLElement | null {
+  if (findSearchBox(doc) || !CRASH_TEXT.test(doc.body?.textContent ?? ""))
+    return null;
+  for (const button of doc.querySelectorAll<HTMLElement>(
+    'button, [role="button"]',
+  ))
+    if (/^\s*reload\s*$/i.test(button.textContent ?? "")) return button;
+  return doc.body;
+}
+
+/**
+ * Discord's search error, in the English client: an illustration and "We
+ * dropped the magnifying glass. Can you try searching again?" in place of the
+ * results. Only needed on page one, where an empty panel is also how "nobody
+ * posted this" looks; on later pages an empty panel is the error whatever the
+ * language, since Discord only offers Next when there is more.
+ */
+const SEARCH_ERROR_TEXT = /dropped the magnifying glass|try searching again/i;
+
+/** Whether the results panel is showing Discord's search error. */
+export function searchFailed(doc: Document): boolean {
+  const panel = resultsPanel(doc);
+  return (
+    panel !== null &&
+    resultRows(doc).length === 0 &&
+    SEARCH_ERROR_TEXT.test(panel.textContent ?? "")
+  );
+}
+
+/**
+ * When the oldest post on the results page was sent, or null when no row
+ * carries a readable time.
+ */
+export function oldestResultTime(doc: Document): number | null {
+  let oldest: number | null = null;
+  for (const row of resultRows(doc)) {
+    const at = Date.parse(
+      row.querySelector("time[datetime]")?.getAttribute("datetime") ?? "",
+    );
+    if (Number.isFinite(at) && (oldest === null || at < oldest)) oldest = at;
+  }
+  return oldest;
 }
 
 /** A query found the search box back after it went away, and the run should go back. */
@@ -1247,6 +1360,81 @@ export async function runSearches(
   let closed = 0;
   /** Whether the query in flight lost its results panel before it finished. */
   let cutShort = false;
+  /**
+   * Discord answered the current query with the list it was already showing.
+   * Its pager is still walked — the same code already on screen answers that
+   * way too — but it is not marked searched and not passed by `resumeFrom`.
+   * Otherwise Continue after a rate limit skipped every query in the stall
+   * streak but the last, and "skip recent" hid them for hours.
+   */
+  let stalledQuery = false;
+  /** The last page settled for the query in flight. */
+  let lastSettle: PageSettle | null = null;
+  // Read through a function: it is written inside `settle`, which the
+  // compiler cannot see from the loop, so it would narrow it to null there.
+  const settled = (): PageSettle | null => lastSettle;
+  let caughtUp = 0;
+  let tooOld = 0;
+  let searchErrors = 0;
+  let crashed = false;
+  /**
+   * Search errors since a later page last loaded or a code finished; three is
+   * a rate limit. Page one loading does not count: it is what every retry
+   * starts with, so it would clear the count on each one.
+   */
+  let errorsInRow = 0;
+  /** Codes already searched again after an error, by index. One retry each. */
+  const errorRetries = new Set<number>();
+  /** The query in flight hit an error and is to be searched again. */
+  let retryQuery = false;
+  /**
+   * Discord's search failed on this page. Decides what the query does next:
+   * search it again once after a pause, or leave it unfinished for Continue so
+   * it is neither skipped nor marked searched. Returns a reason to end the run
+   * when the errors have become a rate limit.
+   */
+  const searchError = async (
+    query: string,
+    index: number,
+    page: number,
+  ): Promise<string | null> => {
+    searchErrors++;
+    errorsInRow++;
+    if (errorsInRow >= stallLimit)
+      return `Discord's search failed ${errorsInRow} times in a row ("We dropped the magnifying glass"). That usually means search is rate-limited, so searching is paused for 10 minutes.`;
+    if (!errorRetries.has(index)) {
+      errorRetries.add(index);
+      pagerNote ??= `${query}: Discord's search failed on page ${page} — searched it again after a pause`;
+      await wait(options.errorBackoffMs ?? SEARCH_ERROR_BACKOFF_MS);
+      retryQuery = true;
+      return null;
+    }
+    pagerNote ??= `${query}: Discord's search failed on page ${page} twice — not marked searched, so the next search runs it again`;
+    cutShort = true;
+    return null;
+  };
+  const now = options.now ?? Date.now;
+  const maxAgeMs = Math.max(0, options.maxAgeMs ?? 0);
+  /**
+   * Why the query in flight should not page any further, or null to go on.
+   * Counted where it is decided, once per query.
+   */
+  const enough = (query: string): "caught-up" | "too-old" | null => {
+    if (maxAgeMs > 0) {
+      const oldest = oldestResultTime(doc);
+      if (oldest !== null && oldest < now() - maxAgeMs) return "too-old";
+    }
+    const page = settled();
+    if (
+      page &&
+      options.searchedBefore?.(query) &&
+      page.rendered > 0 &&
+      page.known > 0 &&
+      page.known >= page.rendered - page.unreadable
+    )
+      return "caught-up";
+    return null;
+  };
   /** See `SearchRun.resumeFrom`. */
   let resumeFrom = 0;
   /** Set when the search box vanished after this run had already used it. */
@@ -1274,9 +1462,13 @@ export async function runSearches(
     enter: 0,
     blocked: 0,
   };
-  const finish = (stopped: string | null): SearchRun => ({
+  const finish = (stopped: string | null, rateLimited = false): SearchRun => ({
     done,
     stopped,
+    rateLimited,
+    caughtUp,
+    tooOld,
+    searchErrors,
     pagesWalked,
     pagerNote,
     posts: probe?.posts() ?? 0,
@@ -1290,6 +1482,7 @@ export async function runSearches(
     closed,
     typedBy,
     interrupted,
+    crashed,
     resumeFrom,
   });
   const progress = (query: string, page: number) =>
@@ -1317,6 +1510,8 @@ export async function runSearches(
     for (let waited = 0; ; waited += pollMs) {
       const box = findSearchBox(doc);
       if (box || waited >= budgetMs || options.signal.cancelled) return box;
+      // No amount of waiting brings the box back from the crash screen.
+      if (crashScreen(doc)) return null;
       if (waited === 0)
         options.onProgress?.({
           done,
@@ -1361,6 +1556,7 @@ export async function runSearches(
         pollMs: options.settlePollMs,
         budgetMs: options.settleBudgetMs,
       });
+      lastSettle = result;
       // A settle that ended because Stop was pressed has no verdict to give:
       // every count in it is a snapshot of a page that was still working.
       if (options.signal.cancelled)
@@ -1411,7 +1607,13 @@ export async function runSearches(
           return "Could not find Discord's search box.";
         // A box this run has already used went away: Discord crashed or is
         // re-rendering. Give it a few increasingly long pauses to come back
-        // before calling the run interrupted.
+        // before calling the run interrupted — unless it is the crash screen,
+        // which only a reload clears.
+        if (crashScreen(doc)) {
+          interrupted = true;
+          crashed = true;
+          return "Discord crashed.";
+        }
         for (const [retry, pause] of boxRetryMs.entries()) {
           // Reported in slices, so a long pause is not mistaken by the panel
           // for a run whose tab has gone.
@@ -1434,6 +1636,9 @@ export async function runSearches(
         }
         if (!box) {
           interrupted = true;
+          // It may have crashed while the run was waiting for it.
+          crashed = crashScreen(doc) !== null;
+          if (crashed) return "Discord crashed.";
           return "Discord's search box went away part-way through — Discord probably crashed or reloaded.";
         }
         retried++;
@@ -1544,6 +1749,7 @@ export async function runSearches(
       if (attempt >= attempts) {
         unchanged++;
         stalled++;
+        stalledQuery = true;
         settleNote ??= `${query}: the results never changed after ${attempt} attempts (typed via ${typed.via ?? "nothing"}). Either the editor is dropping every insertion this build knows, or Discord is rate-limiting — try adding a pause.`;
         return null;
       }
@@ -1574,6 +1780,9 @@ export async function runSearches(
     options.onCheckpoint?.(resumeFrom);
     matchedNothing = false;
     cutShort = false;
+    stalledQuery = false;
+    retryQuery = false;
+    lastSettle = null;
     const blocked = await fire(query, index);
     if (blocked === RESTART) {
       // Back to the query that went down; the loop's increment lands on it.
@@ -1588,8 +1797,20 @@ export async function runSearches(
     // gets an account noticed.
     if (stalled >= stallLimit)
       return finish(
-        `Discord stopped answering: ${stalled} searches in a row returned the results already on screen. That usually means search is rate-limited — wait a few minutes, then run again with a pace of a second or two.`,
+        `Discord stopped answering: ${stalled} searches in a row returned the results already on screen. That usually means search is rate-limited, so searching is paused for 10 minutes — then run again with a pace of a second or two.`,
+        true,
       );
+    // The error on page one looks like "no matches" to everything above.
+    if (matchedNothing && searchFailed(doc)) {
+      matchedNothing = false;
+      empty--;
+      emptyQueries.pop();
+      const stop = await searchError(query, index, 1);
+      if (stop) return finish(stop, true);
+      // Again from the top, or left unfinished: either way not searched.
+      if (retryQuery) index--;
+      continue;
+    }
     pagesWalked++;
 
     const pages = Math.max(1, options.pages ?? 1);
@@ -1600,6 +1821,18 @@ export async function runSearches(
     // whose results closed under it has no pager left to walk at all.
     for (let page = 2; page <= pages && !matchedNothing && !cutShort; page++) {
       if (options.signal.cancelled) return finish("Cancelled.");
+      // Every request not sent is one less toward a rate limit. The query
+      // still counts as searched: what it stopped short of was already read,
+      // or is past the age anyone asked for.
+      const reason = stalledQuery ? null : enough(query);
+      if (reason === "caught-up") {
+        caughtUp++;
+        break;
+      }
+      if (reason === "too-old") {
+        tooOld++;
+        break;
+      }
       const next = await nextPage();
       // Fail soft: fewer results than requested pages is normal, and a missing
       // pager must not abandon the remaining queries.
@@ -1616,6 +1849,15 @@ export async function runSearches(
       // The results ran out. That is the end of this query, not of the run —
       // killing it here is what stopped a four-query run halfway through its
       // second.
+      // The panel is up but empty, with no pager: Discord's search failed.
+      // Treating it as the end of the results is what marked a code done at
+      // page 4 of 10 and moved on.
+      if (stopped.result?.panel && stopped.result.rendered === 0) {
+        const stop = await searchError(query, index, page);
+        if (stop) return finish(stop, true);
+        break;
+      }
+      if (stopped.result?.rendered) errorsInRow = 0;
       if (stopped.result && !stopped.result.panel) {
         pagerNote ??= "the results ran out before the requested page count";
         // Or Discord went down mid-page. Which one only shows at the next
@@ -1651,7 +1893,13 @@ export async function runSearches(
     }
     // A query cut short stays the place to pick up from until a later one
     // finishes cleanly, which is the evidence that Discord was still there.
-    if (cutShort) continue;
+    // Searched again from the top: its earlier pages are re-read, and deduped.
+    if (retryQuery) {
+      index--;
+      continue;
+    }
+    if (cutShort || stalledQuery) continue;
+    errorsInRow = 0;
     resumeFrom = index + 1;
     options.onQuerySearched?.(query);
   }

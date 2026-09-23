@@ -22,7 +22,7 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;font:13px/1.4 system-ui,sans-serif;color:var(--text);background:var(--bg)}
-button,input,textarea{font:inherit;color:inherit}
+button,input,textarea,select{font:inherit;color:inherit}
 a{color:var(--accent-line)}
 /* Anything given a display of its own has to opt back out of it when hidden,
    or the [hidden] attribute silently stops working on it. */
@@ -45,7 +45,7 @@ button.icon:hover{background:var(--field);color:var(--text)}
 /* The gear is the only way into Settings; at the shared icon size the glyph
    rendered smaller than the text beside it and was easy to miss. */
 #open-settings{width:36px;height:36px;font-size:24px;line-height:1}
-input,textarea{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%}
+input,textarea,select{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%}
 
 /* The want box shares its row with the gear and the capture switch for the open
    channel, a dot and a word beside it rather than a row of their own. */
@@ -168,10 +168,25 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
 .tuning output{min-width:4.5em;font-variant-numeric:tabular-nums}
 .tuning-eta{font-variant-numeric:tabular-nums}
 .tuning-warn{min-height:20px;margin:0;color:var(--warn-text)}
+/* Keeps its height when empty, like the warning under it. */
+.tuning-rec{min-height:24px;margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tuning-rec button{font-size:12px;padding:2px 8px}
 /* Two columns need about 370px: Pace's label, shortest slider and value
    beside the Pages column. Narrower than that, one column beats a crushed
    slider. */
 @media (max-width:380px){.tuning-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* The pause after a rate limit. The countdown is its own line so it can be
+   read at a glance; the override sits behind a warning that has to be opened,
+   read for a few seconds, and ticked. */
+.cooldown{display:flex;flex-direction:column;gap:8px}
+.cooldown[hidden],.cooldown [hidden]{display:none}
+.cooldown-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cooldown-timer{margin:0;font-size:13px;color:var(--warn-text)}
+.cooldown-timer strong{font-size:16px;font-variant-numeric:tabular-nums}
+.cooldown ul{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.cooldown .check{font-size:12px}
+.cooldown .check:has(input:disabled){opacity:.6}
 
 #consent ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
 #consent .scroll{gap:10px}
@@ -229,14 +244,30 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
     <div class="tuning" id="tuning">
       <div class="tuning-grid">
         <label class="pace" title="Lower delays are faster, but may trigger Discord rate limits and a forced wait.">Pace
-          <input id="delay-main" class="risk" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
+          <input id="delay-main" class="risk" type="range" min="0" max="60" step="1" value="5" aria-describedby="delay-note">
           <output id="delay-main-value" for="delay-main">+5s/page</output></label>
         <label>Pages per objekt
           <input id="pages-main" type="number" min="1" max="20" step="1" value="3" aria-describedby="tuning-warn"></label>
         <span class="tuning-eta" id="tuning-eta" title="Estimated time for this search, from its codes, pace and pages"></span>
         <label title="Skip codes searched in the last 6 hours"><input type="checkbox" id="skip-recent-main" checked> Skip recent</label>
       </div>
+      <p class="tuning-rec"><span id="tuning-rec-text"></span><button type="button" id="use-recommended" hidden>Use recommended</button></p>
       <p class="tuning-warn" id="tuning-warn" role="status"></p>
+    </div>
+    <div class="cooldown" id="cooldown" hidden>
+      <div class="cooldown-head">
+        <p class="cooldown-timer" role="timer">Searching paused for <strong id="cooldown-left">10:00</strong></p>
+        <button type="button" id="cooldown-open" aria-expanded="false" aria-controls="cooldown-warning">Continue anyway…</button>
+      </div>
+      <div class="warn" id="cooldown-warning" hidden>
+        <strong>Discord stopped answering your searches.</strong> That is what a rate limit looks like, and it means Discord has noticed this account searching quickly.
+        <ul>
+          <li>Searching again now makes it more likely Discord <strong>locks, flags or bans your account</strong>. This extension cannot undo that.</li>
+          <li>Waiting out the timer is the safe choice. Searches that start too early usually just stall again.</li>
+          <li>If you go on, use a slow pace (5s or more) and fewer pages.</li>
+        </ul>
+      </div>
+      <label class="check" id="cooldown-ack-row" hidden><input type="checkbox" id="cooldown-ack" disabled> <span id="cooldown-ack-text">I understand the risks to my Discord account and want to search anyway.</span></label>
     </div>
     <div class="actions" id="actions">
       <button type="button" id="stop-search" hidden>Stop</button>
@@ -267,10 +298,21 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
     </div>
     <div class="setting">
       <label for="delay">Pace · <span id="delay-value">+5s per page</span></label>
-      <input id="delay" class="risk" type="range" min="0" max="15" step="1" value="5" aria-describedby="delay-note">
+      <input id="delay" class="risk" type="range" min="0" max="60" step="1" value="5" aria-describedby="delay-note">
       <p class="note" id="delay-note">Lower delays are faster, but may trigger Discord rate limits and a forced wait.</p>
     </div>
     <label class="check"><input type="checkbox" id="skip-recent" checked> Skip codes searched in the last 6 hours</label>
+    <div class="setting">
+      <label for="max-age">Stop paging at posts older than</label>
+      <select id="max-age" aria-describedby="max-age-note">
+        <option value="0">Any age</option>
+        <option value="3">3 days</option>
+        <option value="7">7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">30 days</option>
+      </select>
+      <p class="note" id="max-age-note">Results come newest first, and old trade posts are mostly gone. Stopping early sends Discord fewer requests. A code searched before also stops as soon as a page holds nothing new.</p>
+    </div>
     <details id="step-trouble">
       <summary>Troubleshooting</summary>
       <p class="say" id="run-detail"></p>

@@ -21,6 +21,12 @@ export interface Entry {
   link?: string;
 }
 /**
+ * A post as `capture` left it, and whether it was in the index before this
+ * search run reached it. Not stored: it is only true of this one write.
+ */
+export type Captured = Entry & { known: boolean };
+
+/**
  * The open database, kept for as long as the worker lives.
  *
  * Opening and closing per operation was fine while a capture was something
@@ -101,13 +107,16 @@ export function capture(
   id: string,
   run?: string,
   link?: string,
-): Promise<Entry> {
+): Promise<Captured> {
   return transaction("readwrite", (store, done) => {
     const key = id;
     const request = store.get(key);
     request.onsuccess = () => {
       const existing: Entry | undefined = request.result;
       if (existing) {
+        // Read before the run is reassigned below: stored by browsing, or by
+        // an earlier search, not by this one.
+        const known = !run || existing.run !== run;
         let changed = false;
         // A post this search surfaced again belongs to this search, whenever it
         // was first seen.
@@ -138,7 +147,7 @@ export function capture(
           changed = true;
         }
         if (changed) store.put(existing);
-        done(existing);
+        done({ ...existing, known });
         return;
       }
       const parsed = collect([
@@ -152,7 +161,7 @@ export function capture(
         ...(link ? { link } : {}),
       };
       store.add(entry);
-      done(entry);
+      done({ ...entry, known: false });
     };
   });
 }

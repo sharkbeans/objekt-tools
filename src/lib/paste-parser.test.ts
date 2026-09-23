@@ -291,3 +291,109 @@ SeoYeon CC101-CC108 CC109-CC116
     );
   });
 });
+
+// Shapes found by running the parser over a real 1,358-message trade-channel
+// export and listing lines that named objekts but produced none.
+describe("parsePastedTrade — real trade-channel shapes", () => {
+  const haves = (line: string) =>
+    parsePastedTrade(`HAVE\n${line}`).haves.map(
+      (i) =>
+        `${i.member ?? "*"}:${i.season}:${i.collectionNo}` +
+        (i.quantity ? `x${i.quantity}` : "") +
+        (i.serial ? `#${i.serial}` : ""),
+    );
+
+  it("reads a name hyphenated onto its codes", () => {
+    assert.deepEqual(haves("Yooyeon-CC341"), ["YooYeon:Cream02:341"]);
+    assert.deepEqual(haves("Seoah-D301/D309x2/D313"), [
+      "SeoAh:Divine01:301",
+      "SeoAh:Divine01:309x2",
+      "SeoAh:Divine01:313",
+    ]);
+  });
+
+  it("keeps a suffixed range intact", () => {
+    assert.deepEqual(haves("Naky A117A-A120A set"), [
+      "NaKyoung:Atom01:117",
+      "NaKyoung:Atom01:118",
+      "NaKyoung:Atom01:119",
+      "NaKyoung:Atom01:120",
+    ]);
+  });
+
+  it("gives slash-joined names joint ownership of the code", () => {
+    assert.deepEqual(haves("Seoyeon/Sohyun-CC312"), [
+      "SeoYeon:Cream02:312",
+      "SoHyun:Cream02:312",
+    ]);
+  });
+
+  it("splits slash- and dot-separated codes", () => {
+    assert.deepEqual(haves("Shion AA103/114"), [
+      "ShiOn:Atom02:103",
+      "ShiOn:Atom02:114",
+    ]);
+    assert.deepEqual(haves("[Mayu] cc313.345"), [
+      "Mayu:Cream02:313",
+      "Mayu:Cream02:345",
+    ]);
+  });
+
+  it("expands one number shared by several prefixes", () => {
+    assert.deepEqual(haves("Yeonji e/bb/cc402"), [
+      "YeonJi:Ever01:402",
+      "YeonJi:Binary02:402",
+      "YeonJi:Cream02:402",
+    ]);
+  });
+
+  it("reads a code with an annotation glued on", () => {
+    assert.deepEqual(haves("Lynn cc101(x2) CC108(2) aa402($100)"), [
+      "Lynn:Cream02:101x2",
+      "Lynn:Cream02:108x2",
+      "Lynn:Atom02:402",
+    ]);
+    assert.deepEqual(haves("Nakyoung aa402（1:1）"), ["NaKyoung:Atom02:402"]);
+  });
+
+  it("reads a code or range wrapped in parentheses", () => {
+    assert.deepEqual(haves("Sullin (D324-D326)"), [
+      "Sullin:Divine01:324",
+      "Sullin:Divine01:325",
+      "Sullin:Divine01:326",
+    ]);
+  });
+
+  it("drops descriptive serial tags but keeps numeric ones", () => {
+    assert.deepEqual(haves("Xinyu AA324#4n Lynn AA402#any BB101#7"), [
+      "Xinyu:Atom02:324",
+      "Lynn:Atom02:402",
+      "Lynn:Binary02:101#7",
+    ]);
+  });
+
+  it("reads a season written apart from its numbers", () => {
+    assert.deepEqual(haves("naky BB 301 302"), [
+      "NaKyoung:Binary02:301",
+      "NaKyoung:Binary02:302",
+    ]);
+    assert.deepEqual(haves("naky divine 201"), ["NaKyoung:Divine01:201"]);
+    assert.deepEqual(haves("HeeJu Summer26 212"), ["HeeJu:Summer26:212"]);
+  });
+
+  it("reads idntt season emoji", () => {
+    assert.deepEqual(haves("TaeIn ☀️25 218Z ❄️ 26 224Z 🌸26 302"), [
+      "TaeIn:Summer25:218",
+      "TaeIn:Winter26:224",
+      "TaeIn:Spring26:302",
+    ]);
+  });
+
+  it("does not read an article as a season prefix", () => {
+    assert.deepEqual(haves("i have a 301 for you"), []);
+  });
+
+  it("reads subtext and backslash-escaped markdown", () => {
+    assert.deepEqual(haves("-# Mayu BB402\\*"), ["Mayu:Binary02:402"]);
+  });
+});

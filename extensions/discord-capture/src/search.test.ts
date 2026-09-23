@@ -5,6 +5,7 @@ import { rowKey } from "./dom";
 import {
   type CaptureProbe,
   commitSearch,
+  crashScreen,
   currentPage,
   findNextPage,
   findSearchBox,
@@ -17,6 +18,7 @@ import {
   rowsTurnedOver,
   runSearches,
   type SearchProgress,
+  searchFailed,
   searchQueries,
   searchSafe,
   settlePage,
@@ -278,6 +280,10 @@ test("submits every query in order, pacing between them", async () => {
   assert.deepEqual(run, {
     done: 3,
     stopped: null,
+    rateLimited: false,
+    caughtUp: 0,
+    tooOld: 0,
+    searchErrors: 0,
     pagesWalked: 3,
     pagerNote: null,
     posts: 0,
@@ -291,6 +297,7 @@ test("submits every query in order, pacing between them", async () => {
     closed: 0,
     typedBy: { insertText: 3 },
     interrupted: false,
+    crashed: false,
     resumeFrom: 3,
   });
   // One pacing wait per page per query, including after the last: that pause is
@@ -628,6 +635,7 @@ test("holds the page open until every post on it is recorded", async () => {
     panel: true,
     rendered: 2,
     recorded: 2,
+    known: 0,
     unreadable: 0,
     outstanding: 0,
     settled: true,
@@ -652,6 +660,7 @@ test("gives up on a page it cannot confirm, and says how much was left", async (
     panel: true,
     rendered: 2,
     recorded: 0,
+    known: 0,
     unreadable: 0,
     outstanding: 2,
     settled: false,
@@ -715,6 +724,7 @@ test("waits out the grace period when Discord returns the same list", async () =
     panel: true,
     rendered: 2,
     recorded: 2,
+    known: 0,
     unreadable: 0,
     outstanding: 0,
     settled: true,
@@ -1238,6 +1248,7 @@ test("counts unreadable rows apart from recorded ones", async () => {
     panel: true,
     rendered: 3,
     recorded: 2,
+    known: 0,
     unreadable: 1,
     outstanding: 0,
     settled: true,
@@ -1428,6 +1439,7 @@ test("a query that matches nothing does not end the run", async () => {
     settlePollMs: 100,
   });
   assert.equal(run.stopped, null, "an empty result set is an answer");
+  assert.equal(run.rateLimited, false);
   assert.equal(run.done, 3, "every query still ran");
   assert.equal(run.empty, 2);
   assert.equal(run.posts, 2);
@@ -1646,6 +1658,7 @@ test("gives up rather than typing into a client that stopped answering", async (
     if ((event as KeyboardEvent).key === "Enter") submits++;
   });
   const waits: number[] = [];
+  const searched: string[] = [];
   const run = await runSearches(doc, ["CC1", "CC2", "CC3", "CC4", "CC5"], {
     delayMs: 0,
     signal: { cancelled: false },
@@ -1653,11 +1666,17 @@ test("gives up rather than typing into a client that stopped answering", async (
     wait: async (ms) => {
       waits.push(ms);
     },
+    onQuerySearched: (query) => searched.push(query),
     settlePollMs: 100,
     attempts: 2,
     backoffMs: 500,
   });
   assert.match(run.stopped ?? "", /rate-limited/);
+  assert.equal(run.rateLimited, true, "starts the cool-down");
+  // None of the three stalled queries was read, so Continue starts at the
+  // first of them and "skip recent" does not hide any of them.
+  assert.equal(run.resumeFrom, 0);
+  assert.deepEqual(searched, []);
   assert.equal(run.done, 3, "stops after the third stalled query, not the 5th");
   assert.equal(submits, 6, "two attempts each, then it stops");
   // And it backed off between attempts rather than firing straight back.
@@ -1880,4 +1899,296 @@ test("a pager it cannot read is reported as no pager, not as page one", () => {
   );
   assert.equal(currentPage(doc), null);
   assert.equal(findNextPage(doc), null);
+});
+
+/**
+ * Discord for the early-stop tests: submitting shows page one, each Next the
+ * page after it, three rows a page, every row posted at `postedAt`.
+ */
+function pagedResults(postedAt: string) {
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  let current = 1;
+  const render = () => {
+    list.innerHTML =
+      [1, 2, 3]
+        .map(
+          (n) =>
+            `<li><time datetime="${postedAt}"></time><div id="message-content-${current}${n}"></div></li>`,
+        )
+        .join("") + pager(current, 3);
+  };
+  doc.addEventListener("keydown", () => {
+    current = 1;
+    render();
+  });
+  doc.addEventListener("click", (event) => {
+    const target = event.target as Element | null;
+    if (!target?.closest?.('[rel="next"]')) return;
+    current++;
+    render();
+  });
+  return doc;
+}
+
+/** Records every row at once; `known` says whether it was there before the run. */
+const knownProbe = (known: boolean): CaptureProbe => ({
+  account: (rows) => ({
+    recorded: rows.length,
+    known: known ? rows.length : 0,
+    pending: 0,
+    unreadable: 0,
+  }),
+  posts: () => 0,
+});
+
+test("a code searched before stops paging once a page holds nothing new", async () => {
+  const searched: string[] = [];
+  const run = await runSearches(
+    pagedResults("2026-09-20T00:00:00.000Z"),
+    ["CC101"],
+    {
+      delayMs: 0,
+      pages: 3,
+      signal: { cancelled: false },
+      probe: knownProbe(true),
+      searchedBefore: () => true,
+      onQuerySearched: (query) => searched.push(query),
+      wait: async () => {},
+    },
+  );
+  assert.equal(run.pagesWalked, 1, "pages two and three were not requested");
+  assert.equal(run.caughtUp, 1);
+  // Caught up is finished, not cut short.
+  assert.deepEqual(searched, ["CC101"]);
+  assert.equal(run.resumeFrom, 1);
+});
+
+test("a first search pages on past posts captured by browsing", async () => {
+  // Browsing the channel captures its newest posts, which says nothing about
+  // the older pages a first deep search is for.
+  const run = await runSearches(
+    pagedResults("2026-09-20T00:00:00.000Z"),
+    ["CC101"],
+    {
+      delayMs: 0,
+      pages: 3,
+      signal: { cancelled: false },
+      probe: knownProbe(true),
+      searchedBefore: () => false,
+      wait: async () => {},
+    },
+  );
+  assert.equal(run.pagesWalked, 3);
+  assert.equal(run.caughtUp, 0);
+});
+
+test("a code searched before still pages while its pages hold new posts", async () => {
+  const run = await runSearches(
+    pagedResults("2026-09-20T00:00:00.000Z"),
+    ["CC101"],
+    {
+      delayMs: 0,
+      pages: 3,
+      signal: { cancelled: false },
+      probe: knownProbe(false),
+      searchedBefore: () => true,
+      wait: async () => {},
+    },
+  );
+  assert.equal(run.pagesWalked, 3);
+});
+
+test("stops paging once results pass the age cutoff", async () => {
+  const now = Date.parse("2026-09-23T00:00:00.000Z");
+  const run = await runSearches(
+    pagedResults("2026-09-01T00:00:00.000Z"),
+    ["CC101"],
+    {
+      delayMs: 0,
+      pages: 3,
+      signal: { cancelled: false },
+      probe: knownProbe(false),
+      maxAgeMs: 7 * 24 * 60 * 60_000,
+      now: () => now,
+      wait: async () => {},
+    },
+  );
+  assert.equal(run.pagesWalked, 1);
+  assert.equal(run.tooOld, 1);
+});
+
+test("pages on while results are inside the age cutoff", async () => {
+  const now = Date.parse("2026-09-23T00:00:00.000Z");
+  const run = await runSearches(
+    pagedResults("2026-09-20T00:00:00.000Z"),
+    ["CC101"],
+    {
+      delayMs: 0,
+      pages: 3,
+      signal: { cancelled: false },
+      probe: knownProbe(false),
+      maxAgeMs: 7 * 24 * 60 * 60_000,
+      now: () => now,
+      wait: async () => {},
+    },
+  );
+  assert.equal(run.pagesWalked, 3);
+  assert.equal(run.tooOld, 0);
+});
+
+const DROPPED_GLASS =
+  "<div><svg></svg><div>We dropped the magnifying glass. Can you try searching again?</div></div>";
+
+/**
+ * Discord whose search fails on `failOn` page(s): Next renders its error in
+ * place of the results. Each submit starts the code over from page one.
+ */
+function failingResults(failOn: (page: number, submit: number) => boolean) {
+  const doc = page(`${SEARCH_BOX}<div id="search-results"></div>`);
+  const list = doc.getElementById("search-results");
+  assert.ok(list);
+  let current = 1;
+  let submits = 0;
+  const render = () => {
+    list.innerHTML = failOn(current, submits)
+      ? DROPPED_GLASS
+      : [1, 2, 3]
+          .map(
+            (n) =>
+              `<li><div id="message-content-${submits}${current}${n}"></div></li>`,
+          )
+          .join("") + pager(current, 10);
+  };
+  doc.addEventListener("keydown", () => {
+    submits++;
+    current = 1;
+    render();
+  });
+  doc.addEventListener("click", (event) => {
+    const target = event.target as Element | null;
+    if (!target?.closest?.('[rel="next"]')) return;
+    current++;
+    render();
+  });
+  return { doc, submits: () => submits };
+}
+
+const allRecorded: CaptureProbe = {
+  account: (rows) => ({
+    recorded: rows.length,
+    pending: 0,
+    unreadable: 0,
+  }),
+  posts: () => 0,
+};
+
+test("searches a code again when Discord's search fails part-way", async () => {
+  // Fails on page 4 the first time only.
+  const discord = failingResults((page, submit) => page === 4 && submit === 1);
+  const searched: string[] = [];
+  const backoffs: number[] = [];
+  const run = await runSearches(discord.doc, ["CC101", "CC102"], {
+    delayMs: 0,
+    pages: 6,
+    signal: { cancelled: false },
+    probe: allRecorded,
+    onQuerySearched: (query) => searched.push(query),
+    errorBackoffMs: 30_000,
+    settleBudgetMs: 300,
+    wait: async (ms) => {
+      if (ms === 30_000) backoffs.push(ms);
+    },
+  });
+  assert.equal(run.searchErrors, 1);
+  assert.deepEqual(backoffs, [30_000], "paused before searching again");
+  assert.deepEqual(searched, ["CC101", "CC102"]);
+  assert.equal(run.stopped, null);
+});
+
+test("a code Discord keeps failing on is not marked searched", async () => {
+  // CC101 fails on page 4 every time; CC102 is fine.
+  const discord = failingResults((page, submit) => page === 4 && submit <= 2);
+  const searched: string[] = [];
+  const run = await runSearches(discord.doc, ["CC101", "CC102"], {
+    delayMs: 0,
+    pages: 6,
+    signal: { cancelled: false },
+    probe: allRecorded,
+    onQuerySearched: (query) => searched.push(query),
+    errorBackoffMs: 1,
+    settleBudgetMs: 300,
+    wait: async () => {},
+  });
+  assert.equal(run.searchErrors, 2);
+  // So "skip recent" does not hide it, and the next search runs it again.
+  assert.deepEqual(searched, ["CC102"]);
+  assert.match(run.pagerNote ?? "", /failed on page 4/);
+});
+
+test("repeated search errors are a rate limit", async () => {
+  const discord = failingResults((page) => page === 2);
+  const run = await runSearches(discord.doc, ["CC101", "CC102", "CC103"], {
+    delayMs: 0,
+    pages: 3,
+    signal: { cancelled: false },
+    probe: allRecorded,
+    errorBackoffMs: 1,
+    settleBudgetMs: 300,
+    wait: async () => {},
+  });
+  assert.equal(run.rateLimited, true);
+  assert.match(run.stopped ?? "", /magnifying glass/);
+});
+
+test("the error on page one is not read as no matches", () => {
+  const doc = page(
+    `${SEARCH_BOX}<div id="search-results">${DROPPED_GLASS}</div>`,
+  );
+  assert.equal(searchFailed(doc), true);
+  const empty = page(
+    `${SEARCH_BOX}<div id="search-results"><div>We searched far and wide. Unfortunately, no results were found.</div></div>`,
+  );
+  assert.equal(searchFailed(empty), false);
+});
+
+const CRASH_SCREEN =
+  '<div><h2>Well, this is awkward</h2><div>Looks like Discord has crashed unexpectedly....</div><button type="button"><div>Reload</div></button></div>';
+
+test("recognises Discord's crash screen and finds its Reload", () => {
+  const doc = page(CRASH_SCREEN);
+  assert.equal(crashScreen(doc)?.textContent?.trim(), "Reload");
+  // The app on screen, or a post quoting the words, is not a crash.
+  assert.equal(
+    crashScreen(page(`${SEARCH_BOX}<p>well, this is awkward</p>`)),
+    null,
+  );
+});
+
+test("a crash mid-run ends it at once as crashed, not after the retries", async () => {
+  const doc = page(SEARCH_BOX);
+  let submits = 0;
+  doc.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Enter") return;
+    // Discord falls over after the first query.
+    if (++submits === 1) doc.body.innerHTML = CRASH_SCREEN;
+  });
+  const waited: number[] = [];
+  const run = await runSearches(doc, ["CC101", "CC102"], {
+    delayMs: 0,
+    signal: { cancelled: false },
+    boxWaitMs: 60_000,
+    boxRetryMs: [15_000, 30_000, 60_000],
+    wait: async (ms) => {
+      waited.push(ms);
+    },
+  });
+  assert.equal(run.crashed, true);
+  assert.equal(run.interrupted, true);
+  assert.equal(
+    waited.reduce((a, b) => a + b, 0) < 15_000,
+    true,
+    "did not sit out the retries",
+  );
 });

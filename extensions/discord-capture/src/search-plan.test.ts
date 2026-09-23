@@ -10,6 +10,7 @@ import {
   RECOMMENDED_DELAY_MS,
   RECOMMENDED_PAGE_BUDGET,
   readSearchedAt,
+  recommendedTuning,
   searchFilters,
   searchLoad,
 } from "./search-plan";
@@ -140,4 +141,21 @@ test("prunes entries that have outlived the cooldown", () => {
   assert.deepEqual(pruneSearchedAt(searched, 6 * hour, now), {
     CC101: now - hour,
   });
+});
+
+test("recommends deep and gentle for a few codes, shallow and slower for many", () => {
+  assert.deepEqual(recommendedTuning(3), { pages: 10, delaySeconds: 5 });
+  assert.deepEqual(recommendedTuning(10), { pages: 6, delaySeconds: 5 });
+  const many = recommendedTuning(40);
+  assert.equal(many.pages, 3);
+  assert.ok(many.delaySeconds > 5, "40 codes needs a slower pace");
+  // Whatever it picks stays inside the budget it warns about.
+  for (const codes of [1, 5, 6, 10, 11, 20, 21, 40]) {
+    const rec = recommendedTuning(codes);
+    assert.equal(
+      searchLoad(codes, rec.pages, rec.delaySeconds * 1000).over,
+      false,
+      `${codes} codes`,
+    );
+  }
 });
