@@ -1066,10 +1066,11 @@ async function driveRun(plan: RunPlan): Promise<void> {
 }
 
 /**
- * TEMPORARY: off so the crash screen stays up long enough to copy its markup
- * for `crashScreen`. Turn back on once that is matched structurally.
+ * Whether a run presses Discord's Reload after a crash. Pressing Stop within
+ * the three seconds before it does leaves the crash screen up — which is how
+ * to capture its markup for `crashScreen`, still matched by English text.
  */
-const AUTO_RELOAD_AFTER_CRASH = false;
+const AUTO_RELOAD_AFTER_CRASH = true;
 
 /**
  * Press Discord's own Reload on its crash screen, once the run's place is

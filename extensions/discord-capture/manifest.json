@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Objekt Match",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Collect the trade posts you can already see in Discord into a local index, then export them to objekt.my/match.",
   "author": "objekt.my",
   "homepage_url": "https://objekt.my",

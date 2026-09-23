@@ -89,6 +89,14 @@ export default function ExtensionPrivacyPage() {
           It also stores what you type into the panel: your want list, your
           Cosmo nickname if you enter one, and your pace and page settings.
         </p>
+        <p>
+          To pace searches so Discord does not refuse them, it also keeps, on
+          your device only: when each search request was sent over the last 10
+          minutes, how long result pages took to load, the slower pace Discord
+          last pushed a search to, which codes were searched in the last 30
+          days, and when searching was last paused for a rate limit. These are
+          never sent anywhere.
+        </p>
       </Section>
 
       <Section title="What it does not collect">
