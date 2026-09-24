@@ -172,6 +172,13 @@ describe("sections (enabled)", () => {
     // one stable URL. Before this was root-only it fell through to the
     // [address] profile route and rendered an empty profile with a 200.
     assert.equal(isRootOnlyPath("/extension-privacy"), true);
+    // The extension landing page, linked from store listings and CTAs.
+    assert.equal(isRootOnlyPath("/extension"), true);
+    assert.equal(isRootOnlyPath("/extension/"), true);
+    // Segment-bounded: "/extension" does not swallow its siblings, so
+    // "/extension-privacy" is root-only on its own entry, not by prefix.
+    assert.equal(isRootOnlyPath("/extensions"), false);
+    assert.equal(isRootOnlyPath("/extension-privacy-old"), false);
     assert.equal(isRootOnlyPath("/"), false);
     assert.equal(isRootOnlyPath("/linkage"), false);
     assert.equal(isRootOnlyPath("/trades"), false);

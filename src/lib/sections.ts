@@ -48,6 +48,9 @@ const ROOT_ONLY_PREFIXES = [
   // The browser extension's privacy policy. One stable URL, because it is
   // entered into both extension stores and linked from the extension itself.
   "/extension-privacy",
+  // The extension's landing page — linked from store listings and in-app
+  // CTAs, so it needs the same single stable URL.
+  "/extension",
 ];
 
 export function rootDomain(): string | null {

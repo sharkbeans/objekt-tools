@@ -72,6 +72,7 @@ export async function sitemapEntriesForSection(
   if (section === "root") {
     return [
       { path: "/", changeFrequency: "weekly", priority: 1 },
+      { path: "/extension", changeFrequency: "monthly", priority: 0.7 },
       { path: "/proofshot", changeFrequency: "monthly", priority: 0.6 },
       { path: "/spin", changeFrequency: "monthly", priority: 0.6 },
     ];
