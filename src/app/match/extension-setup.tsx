@@ -1,60 +1,20 @@
 "use client";
 
 import {
+  ArrowRightIcon,
   CheckIcon,
   ExternalLinkIcon,
   PuzzleIcon,
-  ShieldCheckIcon,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import { extensionStoreForBrowser } from "@/lib/extension-links";
 
-type StepState = "done" | "current" | "todo";
-
-function SetupStep({
-  n,
-  state,
-  title,
-  children,
-}: {
-  n: number;
-  state: StepState;
-  title: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <li className="flex gap-3">
-      <span
-        className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-          state === "done"
-            ? "bg-emerald-500 text-white"
-            : state === "current"
-              ? "bg-[#5865F2] text-white"
-              : "border text-muted-foreground"
-        }`}
-      >
-        {state === "done" ? <CheckIcon className="size-3.5" /> : n}
-      </span>
-      <div className="min-w-0 flex-1 space-y-2">
-        <p
-          className={`text-sm ${state === "todo" ? "text-muted-foreground" : "font-medium"} ${state === "done" ? "text-muted-foreground line-through decoration-muted-foreground/50" : ""}`}
-        >
-          {title}
-        </p>
-        {children}
-      </div>
-    </li>
-  );
-}
-
 /**
- * The extension offered as a setup task, not an ad: a checklist whose first
- * step ticks itself when the extension's bridge answers (see
- * `useExtensionPresence`, which keeps listening after its timeout, so
- * installing in another tab flips it here without a reload). Desktop Chromium
- * only; renders nothing where the extension can't be installed.
+ * An optional shortcut alongside importing posts. Presence keeps updating
+ * after installation in another tab; unsupported browsers get no prompt.
  */
 export function ExtensionSetup({
   installed,
@@ -65,146 +25,165 @@ export function ExtensionSetup({
   installed: boolean | null;
   /** Analytics: which screen the install click came from. */
   source: "empty" | "paste";
-  /** The paste dialog: the checklist alone, without the privacy column. */
+  /** A smaller offer above the paste box. */
   compact?: boolean;
 }) {
   const store = extensionStoreForBrowser();
-  if (!store && !installed) return null;
+  if (!store) return null;
   const ready = installed === true;
 
-  const status = (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-        ready
-          ? "bg-emerald-500/15 text-emerald-400"
-          : "bg-amber-500/15 text-amber-400"
-      }`}
-      aria-live="polite"
+  const action = ready ? (
+    <Button asChild variant="secondary" className="border border-foreground/15">
+      <a href="https://discord.com/app" target="_blank" rel="noreferrer">
+        Open Discord
+        <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
+      </a>
+    </Button>
+  ) : (
+    <Button
+      asChild
+      className="border border-[#a58cff]/30 bg-[#6d22ff]/15 font-semibold text-[#6d22ff] hover:bg-[#6d22ff]/25 focus-visible:border-[#a58cff] focus-visible:ring-[#a58cff]/30 dark:text-[#a58cff]"
+      size={compact ? "sm" : "default"}
     >
-      <span
-        className={`size-1.5 rounded-full ${ready ? "bg-emerald-400" : "animate-pulse bg-amber-400"}`}
-      />
-      {ready
-        ? "Extension installed"
-        : installed === null
-          ? "Checking…"
-          : "Not installed"}
-    </span>
+      <a
+        href={store.url}
+        target="_blank"
+        rel="noreferrer"
+        onClick={() => track("match_install_cta_click", { source })}
+      >
+        Add to Chrome
+        <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
+      </a>
+    </Button>
   );
 
-  const steps = (
-    <ol className="space-y-4">
-      <SetupStep
-        n={1}
-        state={ready ? "done" : "current"}
-        title="Add Objekt Match to Chrome"
-      >
-        {!ready && store && (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              asChild
-              className="bg-[#5865F2] font-semibold text-white hover:bg-[#4752C4]"
-            >
-              <a
-                href={store.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => track("match_install_cta_click", { source })}
-              >
-                <PuzzleIcon className="size-4" />
-                Add to Chrome, it’s free
-              </a>
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              This page ticks this step when it’s installed.
-            </span>
-          </div>
-        )}
-      </SetupStep>
-      <SetupStep
-        n={2}
-        state={ready ? "current" : "todo"}
-        title="Open a Discord trade channel in this browser and scroll as usual"
-      >
-        {ready && (
-          <Button asChild size="sm" variant="outline">
-            <a href="https://discord.com/app" target="_blank" rel="noreferrer">
-              Open Discord
-              <ExternalLinkIcon className="size-3.5" />
-            </a>
-          </Button>
-        )}
-      </SetupStep>
-      <SetupStep
-        n={3}
-        state="todo"
-        title="Press “Open in match” in the Objekt Match panel. The posts land here."
-      />
-    </ol>
+  const details = (
+    <Link
+      href="/extension"
+      target="_blank"
+      rel="noreferrer"
+      className="rounded-sm text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+    >
+      How it works
+    </Link>
   );
-
-  if (compact)
-    return (
-      <div className="space-y-4 rounded-xl border border-[#5865F2]/40 bg-[#5865F2]/[0.06] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold">
-            {ready
-              ? "Bring posts in with Objekt Match"
-              : "Skip the copy-pasting"}
-          </p>
-          {status}
-        </div>
-        {steps}
-      </div>
-    );
 
   return (
     <section
-      aria-label="Set up the Objekt Match extension"
-      className="overflow-hidden rounded-2xl border border-[#5865F2]/40 bg-card"
+      aria-label="Objekt Match extension"
+      className={
+        compact
+          ? "rounded-xl border bg-muted/30 p-4"
+          : "overflow-hidden rounded-xl border bg-card"
+      }
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-[#5865F2]/[0.06] px-5 py-4">
-        <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#5865F2] text-white">
-            <PuzzleIcon className="size-5" />
+      <div
+        className={
+          compact
+            ? "min-w-0"
+            : "min-w-0 p-5 sm:p-6 md:flex md:items-center md:gap-6"
+        }
+      >
+        <div className={`flex min-w-0 flex-1 ${compact ? "gap-3" : "gap-4"}`}>
+          <span
+            className={`flex shrink-0 items-center justify-center border border-[#a58cff]/20 bg-[#6d22ff]/10 text-[#6d22ff] dark:text-[#a58cff] ${compact ? "size-9 rounded-lg" : "size-12 rounded-xl"}`}
+          >
+            <PuzzleIcon
+              className={compact ? "size-4" : "size-6"}
+              aria-hidden="true"
+            />
           </span>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-semibold">Set up Objekt Match</h2>
-              <span className="rounded-full bg-[#5865F2]/20 px-2 py-0.5 text-xs font-medium text-[#aeb6ff]">
-                Recommended
-              </span>
-            </div>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Copy-pasting a busy channel is slow. The extension saves every
-              trade post you scroll past, so you match against the whole
-              channel.
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">
+              Objekt Match ·{" "}
+              {compact ? "Free Chrome extension" : "Chrome extension"}
+            </p>
+            <h2
+              className={
+                compact
+                  ? "mt-1 text-sm font-semibold"
+                  : "mt-1 text-lg font-semibold"
+              }
+              aria-live="polite"
+            >
+              {ready
+                ? "You’re ready to bring posts over"
+                : "Search 1,000+ trade posts at once"}
+            </h2>
+            <p
+              className={`mt-1 text-sm leading-relaxed text-muted-foreground ${compact ? "" : "max-w-lg"}`}
+            >
+              {ready ? (
+                <>
+                  Scroll a trade channel on Discord, then press{" "}
+                  <strong className="font-medium text-foreground">
+                    Open in match
+                  </strong>{" "}
+                  in the Objekt Match panel.
+                </>
+              ) : (
+                "Capture posts as you scroll Discord, then search, filter and sort the objekts here to find your next trade."
+              )}
             </p>
           </div>
         </div>
-        {status}
-      </div>
-      <div className="grid gap-6 p-5 md:grid-cols-[1fr_16rem]">
-        {steps}
-        <div className="space-y-2 text-sm text-muted-foreground md:border-l md:pl-6">
-          <p className="flex items-center gap-2 font-medium text-foreground">
-            <ShieldCheckIcon className="size-4 text-emerald-400" />
-            What it never does
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-xs">
-            <li>Read your Discord token or password</li>
-            <li>Capture DMs or group DMs</li>
-            <li>Upload posts before you press Open in match</li>
-          </ul>
-          <Link
-            href="/extension"
-            target="_blank"
-            className="inline-block pt-1 text-xs underline underline-offset-4 hover:text-foreground"
-          >
-            How it works
-          </Link>
+        <div
+          className={
+            compact
+              ? "mt-3 flex flex-wrap items-center gap-4 pl-12"
+              : "mt-5 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 pl-16 md:mt-0 md:flex-col md:gap-2.5 md:pl-0"
+          }
+        >
+          {action}
+          {!compact && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {ready ? (
+                <>
+                  <CheckIcon className="size-3.5" aria-hidden="true" />
+                  Extension installed
+                </>
+              ) : (
+                "Free · Optional"
+              )}
+            </p>
+          )}
+          {details}
         </div>
       </div>
+      {!compact && !ready && (
+        <div className="grid items-center gap-3 px-5 pb-5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6 sm:pb-6">
+          {/* Replace these labelled placeholders with recordings of the same
+              query in Discord and the extension when those assets are ready. */}
+          <figure className="min-w-0 space-y-3">
+            <Image
+              src="/extension/discord-search-placeholder.svg"
+              alt="Placeholder for a screenshot or GIF of searching trade posts in Discord."
+              width={640}
+              height={320}
+              className="h-auto w-full rounded-lg border"
+            />
+            <figcaption className="text-center text-sm font-medium">
+              Search Discord
+            </figcaption>
+          </figure>
+          <ArrowRightIcon
+            className="mx-auto size-5 rotate-90 text-muted-foreground sm:-mt-8 sm:rotate-0"
+            aria-hidden="true"
+          />
+          <figure className="min-w-0 space-y-3">
+            <Image
+              src="/extension/results-placeholder.svg"
+              alt="Placeholder for a screenshot or GIF of the extension’s matching cards and collected posts."
+              width={640}
+              height={320}
+              className="h-auto w-full rounded-lg border"
+            />
+            <figcaption className="text-center text-sm font-medium">
+              Browse the results
+            </figcaption>
+          </figure>
+        </div>
+      )}
     </section>
   );
 }
