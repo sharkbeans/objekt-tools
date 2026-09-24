@@ -13,7 +13,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "objekt.my",
-  description: "Cosmo objekt tools for collectors",
+  description: "Track your grids. Find who has what you're missing.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://objekt.my"),
 };
 

@@ -14,8 +14,9 @@ import { cosmoAccount } from "@/lib/db/schema";
 import { sectionHref } from "@/lib/sections";
 
 export const metadata: Metadata = {
-  title: "Collection Progress | objekt.my",
-  description: "Open your Cosmo collection progress.",
+  title: "Collection & Grids | objekt.my",
+  description:
+    "See every FCO you're missing for your next grid, then find who on Discord has it.",
 };
 
 export default async function ProgressPage({

@@ -35,12 +35,12 @@ export function DiscordBanner({
       <div className="container mx-auto flex items-center justify-between gap-4">
         <p className="text-sm text-center flex-1">
           <span className="font-medium text-[#7289da]">
-            Get trade notifications on Discord
+            Get notified on Discord when someone matches your list
           </span>
           <span className="hidden sm:inline text-muted-foreground">
             {" "}
-            — join our server so we can DM you when someone sends a trade offer
-            or accepts yours.
+            — join our server so we can DM you about list matches and trade
+            offers.
           </span>{" "}
           <a
             href={DISCORD_INVITE}

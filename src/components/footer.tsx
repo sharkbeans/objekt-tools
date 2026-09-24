@@ -12,7 +12,11 @@ function getDisclaimerText(
   }
 
   if (pathname === "/" && !currentSection) {
-    return "Fan-made community tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO · all content is user-generated";
+    return "Fan-made grid and trade-matching tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO · all content is user-generated";
+  }
+
+  if (pathname.startsWith("/match") || pathname.startsWith("/extension")) {
+    return "Fan-made Discord trade-matching tool · not affiliated with or endorsed by MODHAUS, COSMO or Discord · no real objekts are distributed";
   }
 
   if (

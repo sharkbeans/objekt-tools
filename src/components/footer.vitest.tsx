@@ -21,7 +21,21 @@ describe("SiteDisclaimerFooter", () => {
     render(<SiteDisclaimerFooter currentSection={null} />);
 
     expect(
-      screen.getByText(/Fan-made community tools for Cosmo collectors/i),
+      screen.getByText(/Fan-made grid and trade-matching tools/i),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    "/match",
+    "/extension",
+    "/extension-privacy",
+  ])("shows the matching disclaimer on %s", (path) => {
+    pathnameState.value = path;
+
+    render(<SiteDisclaimerFooter currentSection={null} />);
+
+    expect(
+      screen.getByText(/Fan-made Discord trade-matching tool/i),
     ).toBeInTheDocument();
   });
 

@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { track } from "@/lib/analytics";
 import { INTENT_LABEL } from "@/lib/discord/intent";
 import { type MatchedPoster, objektKey } from "@/lib/discord/match";
 import { askingPrice, bidPrice, formatPrice } from "@/lib/discord/price";
@@ -105,7 +106,10 @@ export function JumpToMessage({ href }: { href: string | undefined }) {
         target="_blank"
         rel="noreferrer"
         title="Open this post in Discord"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          track("match_post_jump");
+        }}
       >
         <DiscordIcon className="size-3.5 shrink-0" />
         Jump to message

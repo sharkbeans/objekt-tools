@@ -422,7 +422,7 @@ export async function GET(
             fontFamily: "Regular",
           }}
         >
-          objekt.my
+          find your missing FCOs · objekt.my
         </div>
       </div>
 
