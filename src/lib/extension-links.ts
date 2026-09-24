@@ -26,7 +26,7 @@ export function extensionStoreForBrowser(): {
 } | null {
   if (typeof navigator === "undefined") return null;
   const ua = navigator.userAgent;
-  if (/Android|iPhone|iPad|Mobile/i.test(ua)) return null;
+  if (isPhoneBrowser()) return null;
   if (/Firefox\//.test(ua))
     return EXTENSION_STORE_URLS.firefox
       ? { store: "firefox", url: EXTENSION_STORE_URLS.firefox }
@@ -34,4 +34,13 @@ export function extensionStoreForBrowser(): {
   if (/Chrome\//.test(ua) && EXTENSION_STORE_URLS.chrome)
     return { store: "chrome", url: EXTENSION_STORE_URLS.chrome };
   return null;
+}
+
+/**
+ * A phone or tablet browser: no extensions, and no practical way to copy a
+ * whole Discord channel. Client-only — reads `navigator`.
+ */
+export function isPhoneBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 }

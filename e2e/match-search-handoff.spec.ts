@@ -170,7 +170,7 @@ test("linked Objekt.top and Apollo lists load together", async ({ page }) => {
       },
     });
   });
-  await page.getByRole("button", { name: "Paste Discord posts" }).click();
+  await page.getByRole("button", { name: "Import Discord posts" }).click();
   const dialog = page.getByRole("dialog");
   await dialog
     .getByRole("textbox", { name: "Discord posts" })
@@ -239,7 +239,7 @@ test("a rate-limited list import pauses and offers to load the rest", async ({
       },
     });
   });
-  await page.getByRole("button", { name: "Paste Discord posts" }).click();
+  await page.getByRole("button", { name: "Import Discord posts" }).click();
   const dialog = page.getByRole("dialog");
   await dialog
     .getByRole("textbox", { name: "Discord posts" })
