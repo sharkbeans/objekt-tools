@@ -2,21 +2,16 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import type * as React from "react";
 import { use, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DiscordNudge } from "@/components/auth/discord-nudge";
-import { SignInDialog } from "@/components/auth/sign-in-dialog";
 import {
-  type ObjektImageItem,
   ObjektImages,
   useObjektImages,
 } from "@/components/objekt/objekt-images";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
-import { InitiateDirectDialog } from "@/components/trades/initiate-direct-dialog";
-import { InitiateTradeDialog } from "@/components/trades/initiate-trade-dialog";
 import { MatchCard } from "@/components/trades/match-card";
 import { TradeTextCard } from "@/components/trades/trade-text-card";
+import { TradesRetiringBanner } from "@/components/trades/trades-retiring-banner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,20 +32,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useCosmoLink } from "@/hooks/use-cosmo-link";
 import { usePerRow } from "@/hooks/use-per-row";
 import { useSession } from "@/lib/auth-client";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { formatTradeText } from "@/lib/trade/trade-text";
 import type { TradePostDTO } from "@/lib/trade/trade-types";
 
-type TradeItem = ObjektImageItem;
 type TradeDetailDTO = TradePostDTO & {
   discordId?: string | null;
   discordUsername?: string | null;
@@ -63,16 +50,8 @@ export default function TradeDetailClient({
 }) {
   const { id } = use(params);
   const { data: session } = useSession();
-  const { isLinked } = useCosmoLink();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [initiateTarget, setInitiateTarget] = useState<{
-    matchedTradePostId: string;
-    theirHaves: TradeItem[];
-  } | null>(null);
-  // For non-owners: direct initiation (no own trade post required)
-  const [directInitiateOpen, setDirectInitiateOpen] = useState(false);
-  const [signInOpen, setSignInOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<"close" | "delete" | null>(
     null,
   );
@@ -100,64 +79,6 @@ export default function TradeDetailClient({
   const { perRow, setPerRow, gridStyle } = usePerRow();
 
   const isOwnerEarly = session?.user?.id === trade?.user?.id;
-  const tradeLinkHref = sectionHref("/link", { currentSection: "trade" });
-
-  function handleBlockedTradeOffer() {
-    toast.error("Link your Cosmo account to send trades", {
-      action: {
-        label: "Link now",
-        onClick: () => router.push(tradeLinkHref),
-      },
-    });
-  }
-
-  function renderTradeOfferButton({
-    onSend,
-    variant,
-    className,
-  }: {
-    onSend: () => void;
-    variant?: React.ComponentProps<typeof Button>["variant"];
-    className?: string;
-  }) {
-    const requiresLink = !!session && !isLinked;
-    const button = (
-      <Button
-        size="sm"
-        variant={variant}
-        aria-disabled={requiresLink}
-        className={
-          requiresLink
-            ? `${className ?? ""} cursor-not-allowed opacity-50`.trim()
-            : className
-        }
-        onClick={() => {
-          if (!session) {
-            setSignInOpen(true);
-            return;
-          }
-          if (requiresLink) {
-            handleBlockedTradeOffer();
-            return;
-          }
-          onSend();
-        }}
-      >
-        Send a Trade Offer
-      </Button>
-    );
-
-    if (!requiresLink) return button;
-
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">{button}</span>
-        </TooltipTrigger>
-        <TooltipContent>Link your Cosmo account to send trades.</TooltipContent>
-      </Tooltip>
-    );
-  }
 
   async function handleClose() {
     try {
@@ -256,6 +177,8 @@ export default function TradeDetailClient({
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <TradesRetiringBanner />
+
       {/* Trade details */}
       <Card>
         <CardHeader>
@@ -355,32 +278,6 @@ export default function TradeDetailClient({
         </CardContent>
       </Card>
 
-      {/* Non-owner: Send a Trade Offer directly against this post (no own trade post required) */}
-      {!isOwner && trade.status === "open" && (
-        <TooltipProvider>
-          <Card>
-            <CardContent className="py-4 space-y-3">
-              {trade.wantsOnly && session && (
-                <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-sm text-yellow-200">
-                  This trader only accepts offers that include at least one
-                  objekt from their want list. Your offer will be rejected if
-                  none of your objekts match.
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-sm text-muted-foreground">
-                  Interested? Initiate a trade with this poster.
-                </p>
-                {renderTradeOfferButton({
-                  onSend: () => setDirectInitiateOpen(true),
-                })}
-              </div>
-              {session && <DiscordNudge />}
-            </CardContent>
-          </Card>
-        </TooltipProvider>
-      )}
-
       {/* Matches */}
       {isOwner && trade.status === "open" && (
         <div>
@@ -396,23 +293,11 @@ export default function TradeDetailClient({
           {matchesLoading ? (
             <p className="text-muted-foreground">Finding matches...</p>
           ) : matchData?.matches?.length > 0 ? (
-            <TooltipProvider>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {matchData.matches.map((match: TradePostDTO) => (
-                  <MatchCard key={match.id} match={match}>
-                    {renderTradeOfferButton({
-                      variant: "outline",
-                      className: "w-full mt-1",
-                      onSend: () =>
-                        setInitiateTarget({
-                          matchedTradePostId: match.id,
-                          theirHaves: match.haves,
-                        }),
-                    })}
-                  </MatchCard>
-                ))}
-              </div>
-            </TooltipProvider>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {matchData.matches.map((match: TradePostDTO) => (
+                <MatchCard key={match.id} match={match} />
+              ))}
+            </div>
           ) : (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
@@ -482,34 +367,6 @@ export default function TradeDetailClient({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Owner-side: initiate dialog (owner picking from their matches) */}
-      {initiateTarget && (
-        <InitiateTradeDialog
-          open={!!initiateTarget}
-          onOpenChange={(open) => {
-            if (!open) setInitiateTarget(null);
-          }}
-          myTradePostId={id}
-          myHaves={trade?.haves ?? []}
-          matchedTradePostId={initiateTarget.matchedTradePostId}
-          theirHaves={initiateTarget.theirHaves}
-        />
-      )}
-
-      {/* Non-owner: direct initiate dialog (no own trade post needed) */}
-      {directInitiateOpen && (
-        <InitiateDirectDialog
-          open={directInitiateOpen}
-          onOpenChange={setDirectInitiateOpen}
-          tradePostId={id}
-          theirHaves={trade?.haves ?? []}
-          theirWants={trade?.wants ?? []}
-        />
-      )}
-
-      {/* Unauthenticated: prompt sign-in */}
-      <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
     </div>
   );
 }

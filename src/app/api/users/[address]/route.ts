@@ -1,14 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-server";
-import {
-  loadProfileStats,
-  resolveProfileIdentity,
-} from "@/lib/profile/profile-summary";
+import { resolveProfileIdentity } from "@/lib/profile/profile-summary";
 import { decodeRouteParam } from "@/lib/route-params";
 
-// GET /api/users/[address] — public user profile stats
+// GET /api/users/[address] — public user profile
 // Accepts: wallet address (0x...) or cosmo nickname (falls back to Cosmo API lookup).
-// The lookup and stats live in @/lib/profile/profile-summary so the profile
+// The lookup lives in @/lib/profile/profile-summary so the profile
 // page's generateMetadata and OG image share one implementation with this route.
 export async function GET(
   _request: NextRequest,
@@ -50,20 +47,12 @@ export async function GET(
         isOwner: false,
         userId: null,
       },
-      stats: {
-        completed: 0,
-        cancelled: 0,
-        defaulted: 0,
-        openPosts: 0,
-      },
-      banned: null,
     });
   }
 
   const { cosmo } = result;
   const userId = cosmo.userId;
   const isOwner = session?.user.id === userId;
-  const { stats, banned } = await loadProfileStats(userId);
 
   return NextResponse.json({
     linked: true,
@@ -72,14 +61,12 @@ export async function GET(
     image: cosmo.user.image,
     linkedAt: cosmo.linkedAt,
     email: isOwner ? cosmo.user.email : null,
-    // Discord username is shown publicly on profiles and to trade partners
+    // Discord username is shown publicly on profiles and to list matches
     discordId: cosmo.user.discordId ?? null,
     discordUsername: cosmo.user.discordUsername ?? null,
     viewer: {
       isOwner,
       userId: isOwner ? userId : null,
     },
-    stats,
-    banned,
   });
 }

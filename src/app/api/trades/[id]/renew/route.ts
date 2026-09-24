@@ -3,12 +3,18 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
 import { activeTrade, tradePost } from "@/lib/db/schema";
+import { TRADES_FROZEN, TRADES_RETIRED_ERROR } from "@/lib/trade/retirement";
 
 // POST /api/trades/[id]/renew — reopen a closed trade post
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Frozen ahead of retirement (plan 039): no new trade activity.
+  if (TRADES_FROZEN) {
+    return NextResponse.json({ error: TRADES_RETIRED_ERROR }, { status: 410 });
+  }
+
   let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();

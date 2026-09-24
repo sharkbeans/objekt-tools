@@ -12,6 +12,7 @@ import {
 } from "@/components/objekt/objekt-filter-bar";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TradePagination } from "@/components/trades/trade-pagination";
+import { TradesRetiringBanner } from "@/components/trades/trades-retiring-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -242,6 +243,7 @@ export default function MyTradesPage() {
 
   return (
     <div className="space-y-6">
+      <TradesRetiringBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">My Trades</h1>

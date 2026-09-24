@@ -28,17 +28,11 @@ export async function generateMetadata({
   const displayName = card?.nickname ?? identifier;
 
   const title = `@${displayName} | objekt.my`;
-  const plural = (n: number, one: string, many: string) =>
-    `${n} ${n === 1 ? one : many}`;
-  const description = card?.stats
-    ? `${plural(card.stats.completed, "completed trade", "completed trades")} · ${plural(card.stats.openPosts, "open trade post", "open trade posts")}. View @${displayName}'s trade reputation and collection on objekt.my.`
-    : `View @${displayName}'s Cosmo collection and trades on objekt.my.`;
+  const description = `View @${displayName}'s Cosmo collection and grid progress on objekt.my.`;
 
-  // Cache-bust the embed when the reputation changes. Stats are cached for
-  // 60s upstream, so this only moves when the underlying numbers do.
-  const version = card?.stats
-    ? `${card.stats.completed}-${card.stats.cancelled}-${card.stats.defaulted}-${card.stats.openPosts}`
-    : "0";
+  // Cache-bust the embed when the card changes (linking the account, or the
+  // trade-stats layout it used to carry, dropped in plan 039).
+  const version = card?.linked ? "linked-2" : "0";
   const ogImage = {
     url: `${rootUrl()}/@${encodeURIComponent(identifier)}/og?v=${version}`,
     width: 1200,

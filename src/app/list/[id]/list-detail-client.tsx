@@ -217,7 +217,11 @@ export default function ListDetailClient({
   const [matches, setMatches] = useState<TradePostDTO[] | null>(null);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [checkingMatchId, setCheckingMatchId] = useState<string | null>(null);
-  const [removedTradeOpen, setRemovedTradeOpen] = useState(false);
+  // Why a clicked match can't be opened: its objekts are gone, or it's a
+  // manual trade post (trades are retiring — only Lists have a page now).
+  const [unavailableMatch, setUnavailableMatch] = useState<
+    "removed" | "trade-post" | null
+  >(null);
 
   const haveItems = useMemo(
     () =>
@@ -371,38 +375,45 @@ export default function ListDetailClient({
   const handleOpenMatch = useCallback(
     async (match: TradePostDTO) => {
       if (checkingMatchId) return;
+      // A match opens the matched List. Manual trade posts have no List (and
+      // the trade pages are retiring), so there is nothing to open.
+      if (!match.linkedPosterId) {
+        setUnavailableMatch("trade-post");
+        return;
+      }
+      const listHref = sectionHref(`/list/${match.linkedPosterId}`, {
+        currentSection: "list",
+      });
+      const dropMatch = () =>
+        setMatches((prev) =>
+          prev ? prev.filter((item) => item.id !== match.id) : prev,
+        );
+
       setCheckingMatchId(match.id);
       try {
-        const res = await fetch(`/api/trades/${match.id}/check-availability`, {
-          method: "POST",
-        });
+        const res = await fetch(
+          `/api/list-matches/${match.id}/check-availability`,
+          { method: "POST" },
+        );
 
         if (res.status === 404) {
-          setMatches((prev) =>
-            prev ? prev.filter((item) => item.id !== match.id) : prev,
-          );
-          setRemovedTradeOpen(true);
+          dropMatch();
+          setUnavailableMatch("removed");
           return;
         }
 
         if (res.ok) {
           const result = await res.json();
           if (result.deleted) {
-            setMatches((prev) =>
-              prev ? prev.filter((item) => item.id !== match.id) : prev,
-            );
-            setRemovedTradeOpen(true);
+            dropMatch();
+            setUnavailableMatch("removed");
             return;
           }
         }
 
-        router.push(
-          sectionHref(`/trades/${match.id}`, { currentSection: "trade" }),
-        );
+        router.push(listHref);
       } catch {
-        router.push(
-          sectionHref(`/trades/${match.id}`, { currentSection: "trade" }),
-        );
+        router.push(listHref);
       } finally {
         setCheckingMatchId(null);
       }
@@ -649,13 +660,19 @@ export default function ListDetailClient({
         </p>
       )}
 
-      <AlertDialog open={removedTradeOpen} onOpenChange={setRemovedTradeOpen}>
+      <AlertDialog
+        open={unavailableMatch !== null}
+        onOpenChange={(open) => {
+          if (!open) setUnavailableMatch(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Trade unavailable</AlertDialogTitle>
+            <AlertDialogTitle>Match unavailable</AlertDialogTitle>
             <AlertDialogDescription>
-              This trade was removed because the offered objekts are no longer
-              in the trader&apos;s inventory.
+              {unavailableMatch === "trade-post"
+                ? "This match is an old trade post, not a List, and trade posts are retiring. Reach out to the trader on Discord instead."
+                : "This match was removed because the offered objekts are no longer in the trader's inventory."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

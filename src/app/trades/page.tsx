@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { TradesRetiringBanner } from "@/components/trades/trades-retiring-banner";
 import { Button } from "@/components/ui/button";
 import { sectionAbsoluteUrl, sectionHref } from "@/lib/sections";
 import { TradesContent } from "./trades-content";
@@ -52,6 +53,7 @@ export async function generateMetadata({
 export default function TradesPage() {
   return (
     <div className="space-y-6">
+      <TradesRetiringBanner />
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold">Browse Trades</h1>

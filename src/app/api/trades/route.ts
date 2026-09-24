@@ -13,6 +13,7 @@ import { parsePaginationParams } from "@/lib/pagination";
 import { redis } from "@/lib/redis";
 import { sanitizeNoteText } from "@/lib/sanitize-text";
 import { getCached } from "@/lib/server-cache";
+import { TRADES_FROZEN, TRADES_RETIRED_ERROR } from "@/lib/trade/retirement";
 import { getActiveBan, getBlockingTradeId } from "@/lib/trade/trade-guards";
 import { listTradesPage } from "@/lib/trade/trade-listing";
 import { notifyNewMatches } from "@/lib/trade/trade-match-notify";
@@ -120,6 +121,11 @@ export async function GET(request: NextRequest) {
 
 // POST /api/trades — create a new trade post
 export async function POST(request: NextRequest) {
+  // Frozen ahead of retirement (plan 039): no new trade activity.
+  if (TRADES_FROZEN) {
+    return NextResponse.json({ error: TRADES_RETIRED_ERROR }, { status: 410 });
+  }
+
   let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();

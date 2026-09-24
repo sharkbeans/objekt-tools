@@ -11,6 +11,7 @@ import {
 import { notify } from "@/lib/notify";
 import { isRateLimited } from "@/lib/rate-limit";
 import { publishUserEvent } from "@/lib/realtime";
+import { TRADES_FROZEN, TRADES_RETIRED_ERROR } from "@/lib/trade/retirement";
 import {
   checkTradeOfferQuota,
   getActiveBan,
@@ -40,6 +41,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Frozen ahead of retirement (plan 039): no new trade activity.
+  if (TRADES_FROZEN) {
+    return NextResponse.json({ error: TRADES_RETIRED_ERROR }, { status: 410 });
+  }
+
   let session: Awaited<ReturnType<typeof requireSession>>;
   try {
     session = await requireSession();

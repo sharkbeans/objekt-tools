@@ -16,7 +16,7 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { Fragment, use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DiscordNudge } from "@/components/auth/discord-nudge";
-import { CounterOfferDialog } from "@/components/trades/counter-offer-dialog";
+import { TradesRetiringBanner } from "@/components/trades/trades-retiring-banner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -908,7 +908,6 @@ export default function ActiveTradePage({
   const lastCheckRef = useRef<number>(0);
   const [checkCooldown, setCheckCooldown] = useState(0);
   const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [counterOfferOpen, setCounterOfferOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<
     "accept" | "decline" | "cancel" | null
   >(null);
@@ -1216,6 +1215,7 @@ export default function ActiveTradePage({
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <TradesRetiringBanner />
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1253,23 +1253,13 @@ export default function ActiveTradePage({
             {isParticipant && (
               <div className="flex flex-wrap gap-2 items-center">
                 {isRecipient && trade.status === "pending" && (
-                  <>
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white border-0"
-                      onClick={() => setConfirmDialog("accept")}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-blue-700/60 text-blue-400 hover:bg-blue-900/30 hover:text-blue-300"
-                      onClick={() => setCounterOfferOpen(true)}
-                    >
-                      Counter-Offer
-                    </Button>
-                  </>
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white border-0"
+                    onClick={() => setConfirmDialog("accept")}
+                  >
+                    Accept
+                  </Button>
                 )}
                 {iWaitingForPartner && (
                   <p className="text-xs text-muted-foreground">
@@ -1833,21 +1823,6 @@ export default function ActiveTradePage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Counter-Offer Dialog */}
-      {isRecipient && trade.status === "pending" && (
-        <CounterOfferDialog
-          open={counterOfferOpen}
-          onOpenChange={setCounterOfferOpen}
-          tradeId={trade.id}
-          mySides={recipientSides}
-          theirSides={initiatorSides}
-          theirAddress={initiatorSides[0]?.address ?? ""}
-          theirCosmoUsername={
-            trade.initiator.cosmoNickname ?? trade.initiator.name
-          }
-        />
-      )}
     </div>
   );
 }

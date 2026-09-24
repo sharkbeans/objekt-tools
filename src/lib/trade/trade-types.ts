@@ -82,6 +82,9 @@ export interface TradePostDTO {
   status: string;
   wantsOnly: boolean;
   source?: "manual" | "list";
+  // The poster (List) a source="list" post mirrors — see poster-trade-sync.
+  // Null for manual trade posts.
+  linkedPosterId?: string | null;
   createdAt: string;
   updatedAt: string;
   user: {
