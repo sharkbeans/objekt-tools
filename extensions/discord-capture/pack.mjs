@@ -126,9 +126,12 @@ async function build(label, args) {
   // `EXTENSION_MATCH_URL` still in the shell hands everyone's searches and
   // lookups to their own localhost, which is broken for every one of them.
   // See `src/app-origin.ts`.
-  const local = manifest.host_permissions.filter((pattern) =>
-    /^https?:\/\/(localhost|127\.0\.0\.1)\//.test(pattern),
-  );
+  // Content-script matches too: the objekt.my bridge follows the same
+  // rewrite, and a store build injecting into localhost would be as broken.
+  const local = [
+    ...manifest.host_permissions,
+    ...manifest.content_scripts.flatMap((script) => script.matches),
+  ].filter((pattern) => /^https?:\/\/(localhost|127\.0\.0\.1)\//.test(pattern));
   if (local.length)
     throw new Error(
       `Refusing to package a build that reaches ${local.join(", ")}. Unset NEXT_PUBLIC_APP_URL and EXTENSION_MATCH_URL (or point them at https://objekt.my) and run this again.`,

@@ -146,6 +146,21 @@ extensionApi.runtime.onInstalled.addListener((details) => {
         .executeScript({ target: { tabId: tab.id }, files: ["content.js"] })
         .catch(() => {});
     }
+    // Likewise the objekt.my bridge, so a page that was open while the
+    // extension was installed — the /extension page, typically — can tell it
+    // is there without a reload. The bridge stands aside if one is running.
+    const objektTabs = await extensionApi.tabs
+      .query({ url: [...new Set([OBJEKT_ORIGIN, MATCH_PERMISSION])] })
+      .catch(() => []);
+    for (const tab of objektTabs) {
+      if (typeof tab.id !== "number") continue;
+      await extensionApi.scripting
+        .executeScript({
+          target: { tabId: tab.id },
+          files: ["objekt-bridge.js"],
+        })
+        .catch(() => {});
+    }
     if (details.reason !== "install") return;
     const first = pickTab(tabs);
     if (typeof first?.id === "number")

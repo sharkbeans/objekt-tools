@@ -16,6 +16,7 @@ import {
 } from "./consent";
 import { exportTranscript } from "./export";
 import { DISCORD_MATCHES, resolveTab, type TabLike } from "./host-tab";
+import { huntIsFresh, huntNotice } from "./hunt";
 import { MATCH_LABEL } from "./match-tab";
 import {
   formatLockout,
@@ -551,6 +552,7 @@ function wantsChanged(save: boolean) {
   tiles = tilesFrom(wants.value);
   pruneRemoved();
   showWantsCount();
+  showHunt();
   renderTiles();
   render();
   fetchArt();
@@ -564,6 +566,53 @@ function wantsChanged(save: boolean) {
   }, 600);
 }
 wants.addEventListener("input", () => wantsChanged(true));
+
+// ---------------------------------------------------------------------------
+// A hunt sent from objekt.my
+//
+// The bridge on objekt.my writes the want list straight into storage, so the
+// list itself arrives through `storage.onChanged` like any other panel's edit.
+// This is the part that says where it came from, and undoes it.
+
+let huntAt: unknown = null;
+let wantsBeforeHunt = "";
+
+function showHunt() {
+  const note = element("hunt-note");
+  const fresh = huntIsFresh(huntAt, Date.now());
+  note.hidden = !fresh;
+  if (!fresh) return;
+  element("hunt-text").textContent = huntNotice(tiles.length);
+  element("undo-hunt").hidden = !wantsBeforeHunt.trim();
+}
+
+function readHuntState(settings: Record<string, unknown>) {
+  if ("huntAt" in settings) huntAt = settings.huntAt;
+  if ("wantsBeforeHunt" in settings)
+    wantsBeforeHunt =
+      typeof settings.wantsBeforeHunt === "string"
+        ? settings.wantsBeforeHunt
+        : "";
+}
+
+element("undo-hunt").addEventListener("click", () => {
+  const before = wantsBeforeHunt;
+  if (!before.trim()) return;
+  wants.value = before;
+  wantsChanged(false);
+  huntAt = null;
+  wantsBeforeHunt = "";
+  showHunt();
+  void extensionApi.storage.local.set({ wants: before });
+  void extensionApi.storage.local.remove(["huntAt", "wantsBeforeHunt"]);
+  tell("Restored your previous list.");
+});
+
+element("dismiss-hunt").addEventListener("click", () => {
+  huntAt = null;
+  showHunt();
+  void extensionApi.storage.local.remove(["huntAt"]);
+});
 wants.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
@@ -1536,9 +1585,12 @@ void extensionApi.storage.local
     "owned",
     "nickname",
     "removedWants",
+    "huntAt",
+    "wantsBeforeHunt",
   ])
   .then((settings) => {
     removed = readRemoved(settings.removedWants);
+    readHuntState(settings);
     consent = settings.consent;
     applyTheme(settings.discordTheme);
     showViews();
@@ -1610,15 +1662,33 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
       pending = readPendingRun(changes.pendingRun.newValue);
     render();
   }
+  // A hunt from objekt.my replaces the list even mid-edit: it was sent on
+  // purpose, and Undo puts back whatever it replaced.
+  if (changes.huntAt || changes.wantsBeforeHunt) {
+    readHuntState({
+      ...(changes.huntAt ? { huntAt: changes.huntAt.newValue } : {}),
+      ...(changes.wantsBeforeHunt
+        ? { wantsBeforeHunt: changes.wantsBeforeHunt.newValue }
+        : {}),
+    });
+    showHunt();
+  }
   if (
     changes.wants &&
-    document.activeElement !== wants &&
+    (document.activeElement !== wants || changes.huntId) &&
     typeof changes.wants.newValue === "string" &&
     changes.wants.newValue !== wants.value
   ) {
     wants.value = changes.wants.newValue;
     wantsChanged(false);
   }
+  // The bridge fills in a nickname only when there was none.
+  if (
+    changes.nickname &&
+    document.activeElement !== nickname &&
+    typeof changes.nickname.newValue === "string"
+  )
+    nickname.value = changes.nickname.newValue;
   if (changes.owned && Array.isArray(changes.owned.newValue))
     say(inventoryStatus, `${changes.owned.newValue.length} objekts saved`);
   void refresh().catch(() => {});

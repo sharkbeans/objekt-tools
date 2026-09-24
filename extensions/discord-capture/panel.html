@@ -72,6 +72,11 @@ button.chip:hover{background:var(--field)}
 .wants .count{position:absolute;right:9px;bottom:5px;font-size:11px;color:var(--dim);pointer-events:none}
 .wants .count.none{color:var(--bad)}
 .wants .restore{position:absolute;left:9px;bottom:3px;border:0;background:none;padding:0 2px;font-size:11px;color:var(--accent-line);border-radius:4px}
+/* A hunt sent from objekt.my: one line, with Undo in the restore link's style. */
+.hunt-note{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin:6px 0 0;font-size:12px;color:var(--dim)}
+.hunt-note[hidden]{display:none}
+.hunt-note span{flex:1 1 auto;min-width:0}
+.hunt-note .restore{border:0;background:none;padding:0 2px;font-size:11px;color:var(--accent-line);border-radius:4px}
 
 /* The want list as cards. The art is the thing people recognise; the name
    under it is there for the cards the catalogue has no picture for. */
@@ -224,6 +229,7 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
       <span class="chip" id="no-channel" title="Open a trade channel in Discord" hidden><span class="pip"></span>No channel</span>
     </div>
   </div>
+  <p class="hunt-note" id="hunt-note" role="status" hidden><span id="hunt-text"></span><button type="button" class="restore" id="undo-hunt" hidden>Undo — restore previous list</button><button type="button" class="restore" id="dismiss-hunt" aria-label="Dismiss" title="Dismiss">✕</button></p>
   <ul class="tiles" id="tiles" aria-label="Your wants"></ul>
   <ul class="tiles skeletons" aria-hidden="true">
     <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>

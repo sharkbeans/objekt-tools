@@ -42,7 +42,7 @@ const hostPattern = (origin) => {
 
 await mkdir(new URL(`${output}/`, root), { recursive: true });
 await build({
-  entryPoints: ["content", "background", "panel"].map((name) =>
+  entryPoints: ["content", "background", "panel", "objekt-bridge"].map((name) =>
     fileURLToPath(new URL(`src/${name}.ts`, root)),
   ),
   outdir: fileURLToPath(new URL(`${output}/`, root)),
@@ -74,15 +74,21 @@ const manifest = JSON.parse(
 // `matchOrigin`, in place of the checked-in objekt.my one, so the env vars
 // above are enough on their own — nobody has to remember a second place to
 // grant access.
-manifest.host_permissions = [
+const retarget = (patterns) => [
   ...new Set(
-    manifest.host_permissions.flatMap((pattern) =>
+    patterns.flatMap((pattern) =>
       pattern === "https://objekt.my/*"
         ? [hostPattern(appOrigin), hostPattern(matchOrigin)]
         : [pattern],
     ),
   ),
 ];
+manifest.host_permissions = retarget(manifest.host_permissions);
+// The objekt.my bridge (`src/objekt-bridge.ts`) has to run on whichever
+// server the build points at, or a dev build could never be told about a
+// hunt — so its `matches` follow the same rewrite, portless for Firefox.
+for (const script of manifest.content_scripts)
+  script.matches = retarget(script.matches);
 // Reloading the extension leaves the old content script running in any Discord
 // tab that is already open, so "did my change take effect" is not answerable by
 // looking at the UI. Stamping the build makes it answerable.

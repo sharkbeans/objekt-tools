@@ -381,6 +381,66 @@ try {
   await matchPages()[0].waitForFunction(() => window.received.length === 2);
   assert.equal(matchPages().length, 1, "the open /match tab is reused");
 
+  // The objekt.my bridge (declared content script): the page can tell the
+  // extension is installed, and a hunt it sends becomes the panel's want list
+  // live, with Undo putting the previous list back.
+  const site = matchPages()[0];
+  const ask = (message, reply) =>
+    site.evaluate(
+      ([message, reply]) =>
+        new Promise((resolve) => {
+          addEventListener("message", (event) => {
+            if (
+              event.data?.source === "objekt-capture" &&
+              event.data.type === reply
+            )
+              resolve(event.data);
+          });
+          postMessage(message, location.origin);
+        }),
+      [message, reply],
+    );
+  const present = await ask(
+    { source: "objekt-match", type: "ping" },
+    "present",
+  );
+  assert.equal(
+    present.version,
+    JSON.parse(readFileSync(new URL("./manifest.json", import.meta.url)))
+      .version,
+  );
+  const saved = await ask(
+    {
+      source: "objekt-match",
+      type: "hunt",
+      id: "smoke-hunt",
+      wants: "SeoYeon CC102\nSeoYeon CC103",
+      nickname: "",
+    },
+    "hunt-saved",
+  );
+  assert.deepEqual(saved, {
+    source: "objekt-capture",
+    type: "hunt-saved",
+    id: "smoke-hunt",
+    count: 2,
+  });
+  await popup.waitForFunction(
+    () =>
+      document.getElementById("wants").value === "SeoYeon CC102\nSeoYeon CC103",
+  );
+  await popup.locator("#hunt-note").waitFor();
+  assert.match(await popup.locator("#hunt-text").textContent(), /2 objekts/);
+  await popup.locator("#undo-hunt").click();
+  await popup.waitForFunction(
+    () => document.getElementById("wants").value === "SeoYeon CC101",
+  );
+  assert.equal(await popup.locator("#hunt-note").isVisible(), false);
+  assert.equal(
+    (await worker.evaluate(() => chrome.storage.local.get("wants"))).wants,
+    "SeoYeon CC101",
+  );
+
   // A run in progress, stated directly rather than raced against: Stop exists
   // only while there is something to stop, and Search refuses a second run.
   await worker.evaluate(() =>
@@ -553,7 +613,7 @@ try {
   await indexHolds("4 posts in the index");
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, want cards with art, a whole search run end to end, delivery into /match and tab reuse, run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, want cards with art, a whole search run end to end, delivery into /match and tab reuse, objekt.my bridge (presence, hunt → want list, undo), run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();

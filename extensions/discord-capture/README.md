@@ -232,6 +232,27 @@ dump remains available for inspection. `/match` retains its 40,000-post cap, so 
 a text export above that limit stops with an explanation; the extension itself keeps the
 complete local index.
 
+## Hunts from objekt.my
+
+The other direction. `src/objekt-bridge.ts` is a content script on `objekt.my/*` (rewritten by
+`build.mjs` to the app and match origins, exactly like the host permission) that runs
+`startBridge` from `src/bridge.ts`. It does two things and nothing else: it answers the page's
+`ping` with `present` (so /match and the grid dialog know the extension is installed), and it
+stores a `hunt` — a want list the user sent by pressing **Send to Objekt Match** — in
+`storage.local.wants`, answering `hunt-saved`. It reads nothing from the page DOM, sends no
+requests, and never touches objekt.my cookies: the page, which already has the data, posts it
+in, so the extension never has to call objekt.my with the user's session. Messages are
+validated by `readPageMessage` in `src/lib/match/extension-handoff.ts` (≤ 40 lines of ≤ 64
+chars, a Cosmo-charset nickname) and accepted only from the page's own window and origin.
+
+What gets written is `huntWrite` in `src/hunt.ts`: the list it replaced is kept as
+`wantsBeforeHunt`, the nickname is filled in only when the extension has none, and cards
+removed from the previous search are forgotten. The panel picks the new list up through
+`storage.onChanged`, shows "Hunt from objekt.my — N objekts…" and offers **Undo — restore
+previous list** for a day. The worker also injects the bridge into objekt.my tabs that were
+already open at install or update, so the page that sent you to the store can tell the
+extension arrived without a reload; a second copy in the same tab stands aside.
+
 ## Card art
 
 As the want list is typed, each recognised objekt becomes a card and asks objekt.my's public
