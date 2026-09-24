@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeOfferableDupes } from "@/lib/grid-progress";
+import {
+  computeHuntRows,
+  computeOfferableDupes,
+  computeSavedHunt,
+  editionBoard,
+} from "@/lib/grid-progress";
 
 type Counts = { owned: number; transferable?: number; gridMints?: number };
 
@@ -250,5 +255,110 @@ describe("computeOfferableDupes", () => {
     ]);
 
     assert.deepEqual(offerableBySlot(rows), { "121": 2 });
+  });
+});
+
+const slotsOf = (rows: { collectionNo: string }[]) =>
+  rows.map((c) => c.collectionNo);
+
+describe("computeHuntRows", () => {
+  it("targets the next grid past what is already griddable", () => {
+    // Every slot owned once, 101 twice: one grid is craftable, so the next
+    // one needs a second copy of everything except 101.
+    const firsts = firstEdition(
+      Object.fromEntries(
+        Array.from({ length: 8 }, (_, i) => [
+          String(101 + i),
+          { owned: i === 0 ? 2 : 1 },
+        ]),
+      ),
+    );
+    const rows = computeHuntRows(firsts, 0);
+    assert.deepEqual(
+      rows.map((r) => r.needed),
+      [0, 1, 1, 1, 1, 1, 1, 1],
+    );
+  });
+
+  it("subtracts copies spent on past grids", () => {
+    const firsts = firstEdition({ "101": { owned: 1 }, "102": { owned: 2 } });
+    // One grid redeemed: 101's only copy is spent, 102 has one usable.
+    const rows = computeHuntRows(firsts, 1);
+    assert.equal(rows[0].usable, 0);
+    assert.equal(rows[0].needed, 1);
+    assert.equal(rows[1].needed, 0);
+  });
+});
+
+describe("editionBoard", () => {
+  it("picks one edition's slots in order and counts its grids", () => {
+    const season = [
+      collection("108", "First", { owned: 1 }),
+      collection("101", "First", { owned: 1 }),
+      collection("109", "First", { owned: 1 }),
+      collection("202", "Special", { owned: 1, gridMints: 1 }),
+      collection("201", "Special", { owned: 1, gridMints: 2 }),
+      collection("203", "Special", { owned: 1, gridMints: 5 }),
+    ];
+    const board = editionBoard(season, 1);
+    assert.deepEqual(slotsOf(board.firsts), ["101", "108"]);
+    assert.deepEqual(slotsOf(board.specials), ["201", "202"]);
+    assert.equal(board.gridded, 3);
+  });
+});
+
+describe("computeSavedHunt", () => {
+  // 101 x3 and 102 x2 spare-ish; 103/104/105/107 missing.
+  const season = firstEdition({
+    "101": { owned: 3 },
+    "102": { owned: 2 },
+    "106": { owned: 1 },
+    "108": { owned: 1 },
+  });
+
+  it("wants every missing slot minus the ones deselected", () => {
+    const hunt = computeSavedHunt(season, 1, {
+      mode: "wtb",
+      skipped: ["cream02-seoyeon-105"],
+      offers: ["cream02-seoyeon-101"],
+    });
+    assert.deepEqual(slotsOf(hunt.wants), ["103", "104", "107"]);
+    assert.deepEqual(hunt.offers, [], "Buy never offers");
+  });
+
+  it("offers only ticked dupes that are still spare", () => {
+    const hunt = computeSavedHunt(season, 1, {
+      mode: "wtt",
+      skipped: [],
+      offers: ["cream02-seoyeon-101", "cream02-seoyeon-106"],
+    });
+    // 106 has a single copy, which the active edition keeps: not spare.
+    assert.deepEqual(slotsOf(hunt.offers), ["101"]);
+  });
+
+  it("shrinks as the user collects", () => {
+    const collected = season.map((c) =>
+      c.collectionNo === "103" ? { ...c, ownedCount: 1 } : c,
+    );
+    const hunt = computeSavedHunt(collected, 1, {
+      mode: "wtb",
+      skipped: [],
+      offers: [],
+    });
+    assert.deepEqual(slotsOf(hunt.wants), ["104", "105", "107"]);
+  });
+
+  it("drops a ticked dupe the user no longer holds", () => {
+    const traded = season.map((c) =>
+      c.collectionNo === "101"
+        ? { ...c, ownedCount: 1, transferableCount: 1 }
+        : c,
+    );
+    const hunt = computeSavedHunt(traded, 1, {
+      mode: "wtt",
+      skipped: [],
+      offers: ["cream02-seoyeon-101"],
+    });
+    assert.deepEqual(hunt.offers, []);
   });
 });

@@ -38,7 +38,7 @@ import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { EDITION_LABELS, type Edition } from "@/lib/edition";
 import {
-  computeGriddable,
+  computeHuntRows,
   computeOfferableDupes,
   formatSlotSerial,
   getGridSlots,
@@ -133,21 +133,12 @@ export function GridTradeDialog({
     };
   }, [session, nickname]);
 
-  // Target the *next* grid past however many are already griddable now, so
-  // this works whether nothing has been gridded yet (feature 2) or the user
-  // wants to stack up for another grid on top of ones they can already do
-  // (feature 3).
-  const target = computeGriddable(firsts, gridded) + 1;
+  // Target the *next* grid past however many are already griddable now —
+  // the same rows a saved hunt recomputes server-side (grid-progress.ts).
   const slots = getGridSlots(edition);
-
   const rows = useMemo(
-    () =>
-      firsts.map((c) => {
-        const usable = c.ownedCount - gridded;
-        const needed = Math.max(0, target - usable);
-        return { collection: c, usable, needed };
-      }),
-    [firsts, gridded, target],
+    () => computeHuntRows(firsts, gridded),
+    [firsts, gridded],
   );
 
   const defaultSelection = useMemo(

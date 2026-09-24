@@ -11,6 +11,31 @@ export function computeGriddable(
   return Math.max(0, Math.min(...firsts.map((c) => c.ownedCount - gridded)));
 }
 
+export type HuntRow<T> = {
+  collection: T;
+  /** Copies not already spent on past grids. */
+  usable: number;
+  /** Copies still missing for the next grid. */
+  needed: number;
+};
+
+/**
+ * What each FCO slot still needs for the *next* grid past however many are
+ * already griddable — so this works whether nothing has been gridded yet or
+ * the user is stacking up for another grid on top of ones they can already
+ * craft. The grid dialog's rows, and the wants of a saved hunt.
+ */
+export function computeHuntRows<T extends { ownedCount: number }>(
+  firsts: T[],
+  gridded: number,
+): HuntRow<T>[] {
+  const target = computeGriddable(firsts, gridded) + 1;
+  return firsts.map((collection) => {
+    const usable = collection.ownedCount - gridded;
+    return { collection, usable, needed: Math.max(0, target - usable) };
+  });
+}
+
 // 3x3 grid slots (row/col, 1-indexed), skipping the center cell reserved for
 // the reward SCO. Editions 1-2 use all 8 outer cells; edition 3 uses only
 // the 4 orthogonal (diamond) cells and leaves the corners empty.
@@ -139,4 +164,80 @@ export function computeOfferableDupes<T extends OfferableInput>(
   }
 
   return offerable.filter((row) => row.offerable > 0);
+}
+
+function byCollectionNo(
+  a: { collectionNo: string },
+  b: { collectionNo: string },
+) {
+  return a.collectionNo.localeCompare(b.collectionNo, undefined, {
+    numeric: true,
+  });
+}
+
+/**
+ * One edition's board out of a season: its FCOs and reward SCOs in slot
+ * order, and how many times it has been gridded (the reward mints). The same
+ * grouping the grid section does before handing a board to the dialog.
+ */
+export function editionBoard<T extends OfferableInput>(
+  seasonCollections: T[],
+  edition: Edition,
+): { firsts: T[]; specials: T[]; gridded: number } {
+  const firsts: T[] = [];
+  const specials: T[] = [];
+  for (const c of seasonCollections) {
+    const cEdition = getCollectionEdition({
+      artist: c.artist,
+      class: c.class,
+      onOffline: c.onOffline,
+      collectionNo: c.collectionNo,
+      season: c.season,
+    });
+    if (cEdition !== edition) continue;
+    if (c.class === "First") firsts.push(c);
+    else if (c.class === "Special") specials.push(c);
+  }
+  firsts.sort(byCollectionNo);
+  specials.sort(byCollectionNo);
+  const gridded = specials.reduce((sum, c) => sum + c.gridMintCount, 0);
+  return { firsts, specials, gridded };
+}
+
+export interface SavedHuntChoice {
+  mode: "wtb" | "wtt";
+  /** collectionIds deselected from the missing slots. */
+  skipped: readonly string[];
+  /** collectionIds of dupes opted into offering. */
+  offers: readonly string[];
+}
+
+/**
+ * A saved hunt's current wants and offers, from live ownership.
+ *
+ * Wants are recomputed rather than stored: every slot still missing for the
+ * next grid, minus the ones the user deselected — so a hunt shrinks as the
+ * user collects. Offers are the ticked dupes that are *still* spare (a dupe
+ * traded away or spent on a grid drops out), never in Buy mode, and never one
+ * the same hunt is asking for, exactly as the grid dialog builds them.
+ */
+export function computeSavedHunt<T extends OfferableInput>(
+  seasonCollections: T[],
+  edition: Edition,
+  choice: SavedHuntChoice,
+): { wants: T[]; offers: T[] } {
+  const { firsts, gridded } = editionBoard(seasonCollections, edition);
+  const skipped = new Set(choice.skipped);
+  const wants = computeHuntRows(firsts, gridded)
+    .filter(
+      (row) => row.needed > 0 && !skipped.has(row.collection.collectionId),
+    )
+    .map((row) => row.collection);
+  if (choice.mode !== "wtt") return { wants, offers: [] };
+  const wanted = new Set(wants.map((c) => c.collectionId));
+  const ticked = new Set(choice.offers);
+  const offers = computeOfferableDupes(seasonCollections, edition)
+    .map((dupe) => dupe.collection)
+    .filter((c) => ticked.has(c.collectionId) && !wanted.has(c.collectionId));
+  return { wants, offers };
 }
