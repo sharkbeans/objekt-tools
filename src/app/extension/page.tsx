@@ -11,7 +11,7 @@ import { StoreButtons } from "./store-buttons";
 export const metadata: Metadata = {
   title: "Objekt Match extension | objekt.my",
   description:
-    "Scroll your Discord trade channels as usual — Objekt Match remembers every post and shows who has what you're missing.",
+    "Scroll your Discord trade channels as usual. Objekt Match remembers every post and shows who has what you're missing.",
 };
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -29,8 +29,8 @@ export default function ExtensionPage() {
       <header className="space-y-4">
         <h1 className="text-3xl font-bold">Objekt Match</h1>
         <p className="text-lg">
-          Scroll your trade channels as usual — Objekt Match remembers every
-          post and shows who has what you&rsquo;re missing.
+          Scroll your trade channels as usual. Objekt Match remembers every post
+          and shows who has what you&rsquo;re missing.
         </p>
         <p className="text-muted-foreground">
           A browser extension for Discord. It keeps the trade posts you already
@@ -38,8 +38,8 @@ export default function ExtensionPage() {
           <Link href="/match" className="underline underline-offset-4">
             objekt.my/match
           </Link>{" "}
-          against your grids and your collection — no more copy-pasting
-          channels.
+          against your grids and your collection, so you never copy-paste a
+          channel again.
         </p>
         <StoreButtons />
       </header>

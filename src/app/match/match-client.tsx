@@ -142,7 +142,6 @@ const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
 const PICKED_KEY = "match:picked:v1";
 const COLS_KEY = "match:columns:v1";
-const INSTALL_CTA_KEY = "match:install-cta-dismissed:v1";
 const COLUMN_CHOICES = [4, 5, 6, 7, 8, 10, 12] as const;
 const DEFAULT_COLUMNS = 8;
 const EMPTY_KEYS = new Set<string>();
@@ -284,56 +283,42 @@ function SelectionTray({
  * is not installed (or not enabled on this site). Paste stays the fallback
  * either way.
  */
-function InstallCta({ onDismiss }: { onDismiss: () => void }) {
+function EmptyStateExtension() {
   // Only where it can actually be installed: desktop Chromium today. Phones
   // and Firefox keep pasting, without an offer they can't take up.
   const store = extensionStoreForBrowser();
   if (!store) return null;
   return (
-    <div className="flex items-start gap-3 rounded-xl border bg-card px-4 py-3">
-      <PuzzleIcon className="mt-0.5 size-5 shrink-0 text-primary" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <p className="text-sm">
-          <span className="font-semibold">Skip the copy-pasting.</span> Objekt
-          Match is a free Chrome extension that collects trade posts as you
-          scroll Discord and brings them here. Everything stays in your browser.
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button asChild size="sm">
-            <a
-              href={store.url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => track("match_install_cta_click")}
-            >
-              Add to Chrome — it&rsquo;s free
-            </a>
-          </Button>
-          <Link
-            href="/extension"
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            How it works
-          </Link>
-          {/* Store versions before 1.2.0 can't tell this page they're
-              installed, so let their users say so. */}
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            I already have it
-          </button>
-        </div>
+    <div className="mx-auto max-w-sm space-y-3 border-t pt-5">
+      <div className="flex items-center justify-center gap-2 text-sm font-semibold">
+        <PuzzleIcon className="size-4 text-primary" />
+        Skip the copy-pasting
       </div>
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={onDismiss}
-        className="rounded-md p-1 text-muted-foreground hover:text-foreground"
-      >
-        <XIcon className="size-4" />
-      </button>
+      <p className="text-sm text-muted-foreground">
+        Objekt Match is a free Chrome extension. It saves trade posts while you
+        scroll Discord and brings them here in one click.
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Button asChild size="sm" variant="outline">
+          <a
+            href={store.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() =>
+              track("match_install_cta_click", { source: "empty" })
+            }
+          >
+            Add to Chrome
+          </a>
+        </Button>
+        <Link
+          href="/extension"
+          target="_blank"
+          className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          How it works
+        </Link>
+      </div>
     </div>
   );
 }
@@ -349,7 +334,7 @@ function PasteExtensionHint({ installed }: { installed: boolean | null }) {
       <p className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
         <PuzzleIcon className="mt-0.5 size-4 shrink-0 text-primary" />
         <span>
-          You have Objekt Match — press <strong>Open in match</strong> in its
+          You have Objekt Match. Press <strong>Open in match</strong> in its
           panel on Discord to bring posts here without pasting.
         </span>
       </p>
@@ -361,9 +346,9 @@ function PasteExtensionHint({ installed }: { installed: boolean | null }) {
       <PuzzleIcon className="mt-0.5 size-4 shrink-0 text-primary" />
       <div className="min-w-0 flex-1 space-y-2 text-sm">
         <p>
-          <span className="font-semibold">Skip the pasting.</span> The free
-          Objekt Match extension collects posts as you scroll Discord and sends
-          them here in one click.
+          <span className="font-semibold">Skip the copy-pasting.</span> Objekt
+          Match is a free Chrome extension. It saves trade posts while you
+          scroll Discord and brings them here in one click.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button asChild size="sm">
@@ -375,7 +360,7 @@ function PasteExtensionHint({ installed }: { installed: boolean | null }) {
                 track("match_install_cta_click", { source: "paste" })
               }
             >
-              Add to Chrome — it&rsquo;s free
+              Add to Chrome
             </a>
           </Button>
           <Link
@@ -474,7 +459,6 @@ export function MatchClient() {
   const [seen, setSeen] = useState<ReadonlySet<SeenId>>(EMPTY_SEEN);
   const [hideSeen, setHideSeen] = useState(true);
   // Hidden until the stored choice is read, so a dismissed card never flashes.
-  const [installCtaDismissed, setInstallCtaDismissed] = useState(true);
   // messageKey -> the SHA-256 ids that identify this post and its author.
   const [seenIds, setSeenIds] =
     useState<ReadonlyMap<string, PostSeenIds>>(EMPTY_SEEN_IDS);
@@ -508,7 +492,6 @@ export function MatchClient() {
         );
       setSeen(loadLocalSeen());
       setHideSeen(loadHideSeen());
-      setInstallCtaDismissed(localStorage.getItem(INSTALL_CTA_KEY) === "1");
       localStorage.removeItem("match:transcript:v1");
     } catch {
       /* A disabled or full store still allows a session. */
@@ -1308,7 +1291,7 @@ export function MatchClient() {
             Find your next trade
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Paste or capture your Discord trade channels — see who has what
+            Paste or capture your Discord trade channels to see who has what
             you’re missing.
           </p>
         </div>
@@ -1325,18 +1308,6 @@ export function MatchClient() {
       </header>
       {ready && extensionInstalled && activeHunt && (
         <HuntSendBar hunt={activeHunt} onDismiss={() => setActiveHunt(null)} />
-      )}
-      {ready && extensionInstalled === false && !installCtaDismissed && (
-        <InstallCta
-          onDismiss={() => {
-            setInstallCtaDismissed(true);
-            try {
-              localStorage.setItem(INSTALL_CTA_KEY, "1");
-            } catch {
-              /* Dismissed for this session only. */
-            }
-          }}
-        />
       )}
       <section className="space-y-3" aria-label="Trading mode">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1685,6 +1656,11 @@ export function MatchClient() {
                   <Button onClick={() => setEditor("paste")}>
                     Import Discord posts
                   </Button>
+                  {ready && extensionInstalled === false && (
+                    <div className="pt-4">
+                      <EmptyStateExtension />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <DeskGrid

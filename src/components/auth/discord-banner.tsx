@@ -38,9 +38,7 @@ export function DiscordBanner({
             Get notified on Discord when someone matches your list
           </span>
           <span className="hidden sm:inline text-muted-foreground">
-            {" "}
-            — join our server so we can DM you about list matches and trade
-            offers.
+            . Join our server so our bot can message you when a list matches.
           </span>{" "}
           <a
             href={DISCORD_INVITE}

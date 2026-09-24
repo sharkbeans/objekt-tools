@@ -356,7 +356,7 @@ export function GridTradeDialog({
         throw new Error(err.error ?? "Couldn’t save this grid.");
       }
       track("hunt_saved", { mode, wants: selected.size });
-      toast.success("Saved — find it under Saved grids on Match");
+      toast.success("Saved. Find it under Saved grids on Match.");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Couldn’t save this grid.",

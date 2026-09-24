@@ -38,7 +38,7 @@ function rememberDismissed() {
 const POINTS = [
   {
     icon: EyeIcon,
-    text: "Reads the trade posts you scroll past in Discord — nothing else.",
+    text: "Only reads the trade posts you scroll past in Discord.",
   },
   {
     icon: LockIcon,
@@ -94,7 +94,7 @@ export function CopyAndOpenDiscord({
       </p>
       {copied && (
         <p className="text-muted-foreground">
-          Copied {wants.length} objekt{wants.length === 1 ? "" : "s"} — paste
+          Copied {wants.length} objekt{wants.length === 1 ? "" : "s"}. Paste
           {wants.length === 1 ? " it" : " them"} into the want box in Objekt
           Match&rsquo;s panel.
         </p>
@@ -188,7 +188,7 @@ export function ExtensionIntro({
           <p className="font-semibold">Let Objekt Match look for you</p>
           <p className="text-sm text-muted-foreground">
             A free Chrome extension. Scroll your Discord trade channel as usual
-            and it spots who has what you&rsquo;re missing — no copy-pasting.
+            and it spots who has what you&rsquo;re missing. No copy-pasting.
           </p>
         </div>
       </div>
@@ -206,8 +206,8 @@ export function ExtensionIntro({
         <div className="space-y-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
           <p className="text-muted-foreground">
             Added it already? It may need a page reload, or an update to show up
-            here. You can carry on either way — its <em>Open in match</em>{" "}
-            button brings Discord posts to Match.
+            here. You can carry on either way: its <em>Open in match</em> button
+            brings Discord posts to Match.
           </p>
           <Button
             size="sm"
@@ -239,7 +239,7 @@ export function ExtensionIntro({
               track("extension_intro_install");
             }}
           >
-            Add to Chrome — it&rsquo;s free
+            Add to Chrome, it&rsquo;s free
           </a>
         </Button>
         <Button
@@ -251,7 +251,7 @@ export function ExtensionIntro({
             onSkip();
           }}
         >
-          Not now — I&rsquo;ll paste posts
+          Not now, I&rsquo;ll paste posts
         </Button>
       </div>
 
