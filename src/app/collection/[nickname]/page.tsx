@@ -2,11 +2,13 @@ import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { ClaimBanner } from "@/components/progress/claim-banner";
+import { HuntingChip } from "@/components/progress/hunting-chip";
 import { ProgressOverviewContent } from "@/components/progress/progress-overview-content";
 import { getSession } from "@/lib/auth-server";
 import { resolveNickname } from "@/lib/cosmo/resolve-nickname";
 import { db } from "@/lib/db";
 import { cosmoAccount } from "@/lib/db/schema";
+import { countSavedHunts } from "@/lib/hunts/saved-hunts";
 import { decodeRouteParam } from "@/lib/route-params";
 import { sectionAbsoluteUrl } from "@/lib/sections";
 
@@ -80,12 +82,16 @@ export default async function ProgressNicknamePage({
   const session = await getSession();
 
   let isViewerLinked = false;
+  let huntCount = 0;
   if (session) {
     const linked = await db.query.cosmoAccount.findFirst({
       where: eq(cosmoAccount.userId, session.user.id),
       columns: { nickname: true },
     });
     isViewerLinked = !!linked?.nickname;
+    // The owner, on their own page: point back at the hunts they saved.
+    if (linked?.nickname?.toLowerCase() === resolved.nickname.toLowerCase())
+      huntCount = await countSavedHunts(session.user.id);
   }
 
   const showClaimBanner = !session || !isViewerLinked;
@@ -93,6 +99,11 @@ export default async function ProgressNicknamePage({
   return (
     <div className="mx-auto w-full max-w-[96rem] px-4 py-6 space-y-6">
       {showClaimBanner && <ClaimBanner isSignedIn={!!session} />}
+      {huntCount > 0 && (
+        <div className="flex justify-end">
+          <HuntingChip count={huntCount} />
+        </div>
+      )}
       <ProgressOverviewContent
         key={resolved.address}
         nickname={resolved.nickname}

@@ -2,6 +2,7 @@
 
 import {
   ArrowLeftRightIcon,
+  BookmarkIcon,
   Check,
   Loader2Icon,
   PuzzleIcon,
@@ -99,13 +100,14 @@ export function GridTradeDialog({
   seasonCollections,
 }: Props) {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, isPending: sessionPending } = useSession();
   // Buy by default: grid rank chasers never give up dupes (dupes are future
   // grids), so haves are strictly opt-in — Trade mode, one tick at a time.
   const [huntMode, setHuntMode] = useState<HuntMode>("wtb");
   const [offerIds, setOfferIds] = useState<Set<string>>(() => new Set());
   const [creating, setCreating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { installed: extensionInstalled } = useExtensionPresence();
   // Only the profile's own owner can offer its dupes or auto-create a
@@ -298,6 +300,55 @@ export function GridTradeDialog({
     }
   };
 
+  // Save the hunt to the account. Only the user's own choices are kept —
+  // Buy/Trade, the missing slots they deselected, the dupes they ticked — and
+  // the server recomputes the wants from live ownership on every read.
+  const member = firsts[0]?.member ?? "";
+  const season = firsts[0]?.season ?? "";
+  const handleSaveHunt = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/hunts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nickname,
+          member,
+          season,
+          edition,
+          mode,
+          skipped: rows
+            .filter(
+              (r) => r.needed > 0 && !selected.has(r.collection.collectionId),
+            )
+            .map((r) => r.collection.collectionId),
+          offers: offered.map((d) => d.collection.collectionId),
+        }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Couldn’t save this hunt.");
+      }
+      track("hunt_saved", { mode, wants: selected.size });
+      toast.success("Hunt saved — find it under My hunts on /match");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Couldn’t save this hunt.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Sign-in lives on the root host; the internal grid path it returns to is
+  // redirected onto the collect host when subdomains are on.
+  const signInHref = sectionHref(
+    `/sign-in?returnTo=${encodeURIComponent(
+      `/collection/${encodeURIComponent(nickname)}/${encodeURIComponent(member)}?view=grid&season=${encodeURIComponent(season)}`,
+    )}`,
+    { currentSection: "collect" },
+  );
+
   // Stash the draft and open the full poster editor so the user can
   // customize before saving.
   const handleCustomize = () => {
@@ -471,6 +522,41 @@ export function GridTradeDialog({
               </ul>
             )}
           </div>
+        )}
+
+        {isOwnProfile ? (
+          <div className="flex items-center gap-3 rounded border border-border px-3 py-2">
+            <p className="flex-1 text-xs text-muted-foreground">
+              Keep this hunt on your account and pick it up from /match on any
+              device.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSaveHunt}
+              disabled={saving || !member || !season}
+              className="gap-1.5"
+            >
+              {saving ? (
+                <Loader2Icon className="h-4 w-4 animate-spin" />
+              ) : (
+                <BookmarkIcon className="h-4 w-4" />
+              )}
+              Save hunt
+            </Button>
+          </div>
+        ) : (
+          !session &&
+          !sessionPending && (
+            <p className="text-center text-xs text-muted-foreground">
+              <Link
+                href={signInHref}
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                Sign in to save this hunt and pick it up on desktop
+              </Link>
+            </p>
+          )
         )}
 
         <DialogFooter className="flex-col-reverse sm:flex-row sm:items-center">

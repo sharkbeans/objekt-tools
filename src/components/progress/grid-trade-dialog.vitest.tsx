@@ -217,6 +217,60 @@ describe("GridTradeDialog hunt", () => {
   });
 });
 
+describe("GridTradeDialog saved hunts", () => {
+  afterEach(() => {
+    mocks.push.mockReset();
+    mocks.session = null;
+    vi.unstubAllGlobals();
+  });
+
+  it("asks a signed-out visitor to sign in to save, returning to this grid", () => {
+    renderDialog(firstEdition({ "101": 1 }));
+    const link = screen.getByRole("link", {
+      name: /Sign in to save this hunt and pick it up on desktop/,
+    });
+    const href = new URL(link.getAttribute("href") ?? "", "https://objekt.my");
+    expect(href.pathname).toBe("/sign-in");
+    expect(href.searchParams.get("returnTo")).toBe(
+      "/collection/sjarkbean/SeoYeon?view=grid&season=Cream02",
+    );
+    expect(screen.queryByRole("button", { name: /Save hunt/ })).toBeNull();
+  });
+
+  it("saves the owner's choices, not the wants", async () => {
+    signInAsOwner();
+    renderDialog(firstEdition({ "101": 3, "102": 2, "106": 1, "108": 1 }));
+    expect(screen.queryByRole("link", { name: /Sign in to save/ })).toBeNull();
+
+    // Deselect 105, then save in Trade mode offering 101.
+    const slot105 = screen.getByAltText("105").closest("button");
+    if (!slot105) throw new Error("slot 105 button not found");
+    fireEvent.click(slot105);
+    fireEvent.click(await screen.findByRole("button", { name: /Trade/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /SeoYeon CC101/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Save hunt/ }));
+
+    const fetchMock = vi.mocked(fetch);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => url === "/api/hunts")).toBe(
+        true,
+      ),
+    );
+    const [, init] =
+      fetchMock.mock.calls.find(([url]) => url === "/api/hunts") ?? [];
+    expect(init?.method).toBe("PUT");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      nickname: "sjarkbean",
+      member: "SeoYeon",
+      season: "Cream02",
+      edition: 1,
+      mode: "wtt",
+      skipped: ["cream02-seoyeon-105"],
+      offers: ["cream02-seoyeon-101"],
+    });
+  });
+});
+
 describe("GridTradeDialog with the extension", () => {
   afterEach(() => {
     mocks.push.mockReset();

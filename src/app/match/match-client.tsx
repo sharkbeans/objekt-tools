@@ -85,6 +85,7 @@ import {
   encodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
+import type { SavedHuntView } from "@/lib/hunts/saved-hunts";
 import {
   PAGE_SOURCE,
   type PageMessage,
@@ -131,6 +132,7 @@ import { sectionHref } from "@/lib/sections";
 import { ContactResults } from "./desk-contacts";
 import { type DeskBadge, DeskGrid } from "./desk-grid";
 import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
+import { MyHuntsMenu } from "./my-hunts-menu";
 import { PostDialog } from "./post-dialog";
 
 const NICK_KEY = "match:nickname:v1";
@@ -651,6 +653,20 @@ export function MatchClient() {
       });
     },
     [loadInventory],
+  );
+
+  /** A hunt saved on the account, opened exactly like a hunt URL. */
+  const applySavedHunt = useCallback(
+    (saved: SavedHuntView) => {
+      applyHunt({
+        mode: saved.mode,
+        wants: saved.wants,
+        offers: saved.offers,
+        nickname: saved.nickname,
+      });
+      track("hunt_applied", { source: "saved" });
+    },
+    [applyHunt],
   );
 
   // Applied only once `ready` is true so it lands after the localStorage
@@ -1219,6 +1235,7 @@ export function MatchClient() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {userId && <MyHuntsMenu onApply={applySavedHunt} />}
           <Button variant="outline" onClick={() => setEditor("mine")}>
             My lists
           </Button>

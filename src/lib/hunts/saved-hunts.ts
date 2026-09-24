@@ -239,11 +239,7 @@ export async function saveHunt(
       ),
     );
   if (!existing) {
-    const [{ total }] = await db
-      .select({ total: count() })
-      .from(hunt)
-      .where(eq(hunt.userId, userId));
-    if (total >= MAX_HUNTS_PER_USER)
+    if ((await countSavedHunts(userId)) >= MAX_HUNTS_PER_USER)
       return {
         ok: false,
         status: 409,
@@ -279,6 +275,15 @@ export async function saveHunt(
     .returning({ id: hunt.id });
   if (!saved) return { ok: false, status: 500, error: "Could not save" };
   return { ok: true, id: saved.id };
+}
+
+/** How many hunts the user has saved. */
+export async function countSavedHunts(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(hunt)
+    .where(eq(hunt.userId, userId));
+  return row?.total ?? 0;
 }
 
 /** Delete one of the user's hunts. False when there was no such hunt. */
