@@ -110,14 +110,36 @@ export function capture(
 ): Promise<Captured> {
   return transaction("readwrite", (store, done) => {
     const key = id;
+    // Search results used to be stored under the bare message id, having no
+    // channel to put in front of it. One seen again with its channel moves to
+    // the channel key rather than being stored twice.
+    const legacy = key.match(/^\d+-(\d+)$/)?.[1];
     const request = store.get(key);
     request.onsuccess = () => {
-      const existing: Entry | undefined = request.result;
+      const current: Entry | undefined = request.result;
+      if (current || !legacy) {
+        merge(current);
+        return;
+      }
+      const old = store.get(legacy);
+      old.onsuccess = () => {
+        const moved: Entry | undefined = old.result;
+        if (!moved) {
+          merge(undefined);
+          return;
+        }
+        store.delete(legacy);
+        moved.key = key;
+        // Forced through `put` below even if nothing else changes.
+        merge(moved, true);
+      };
+    };
+    const merge = (existing: Entry | undefined, rekeyed = false) => {
       if (existing) {
         // Read before the run is reassigned below: stored by browsing, or by
         // an earlier search, not by this one.
         const known = !run || existing.run !== run;
-        let changed = false;
+        let changed = rekeyed;
         // A post this search surfaced again belongs to this search, whenever it
         // was first seen.
         if (run && existing.run !== run) {

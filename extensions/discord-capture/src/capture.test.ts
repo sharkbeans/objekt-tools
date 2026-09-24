@@ -153,6 +153,73 @@ test("a result still reads when Discord links no channel", () => {
   assert.equal(message?.author, "Trader");
 });
 
+// Trimmed from a real results panel (2026-09-24): no link back to the channel
+// anywhere — "Jump" is a div — only the group the result is listed under,
+// labelled "<channel>, <category>".
+function realSearchResult(group = "objekt-trade, COSMO") {
+  const id = "1552518179870347347";
+  return new JSDOM(
+    `<section class="searchResultsWrap_a98f3b" aria-label="Search Results"><div role="list" id="search-results"><ul role="group" class="searchResultGroup_a7e67f" aria-label="${group}"><li class="container__80bf8" role="listitem" id="search-results-0" aria-labelledby="search-result-${id}"><div class="searchResult__80bf8" role="button"><div class="message__80bf8"><div class="wrapper_c19a55" aria-labelledby="message-username-${id} uid_3 message-content-${id} uid_4 message-timestamp-${id}" role="article" id="search-result-${id}"><div class="contents_c19a55"><h2 class="header_c19a55"><span id="message-username-${id}" class="headerText_c19a55"><div class="username_c19a55" role="button">Ddeeee</div></span><span class="timestamp_c19a55"><span><time id="message-timestamp-${id}" datetime="2026-09-24T03:12:58.474Z"><i class="separator_c19a55" aria-hidden="true"> — </i>11:12 AM</time></span></span></h2><div id="message-content-${id}" class="markup__75297 messageContent_c19a55"><strong><span>HAVE</span></strong><span>\nSeoyeon cc502</span></div></div></div></div></div><div class="buttonsContainer__80bf8" aria-hidden="true"><div class="button__80bf8" role="button">Jump</div></div></li></ul></div></section>`,
+    {
+      url: "https://discord.com/channels/968385909730971668/1014037515931504660",
+    },
+  ).window.document;
+}
+
+test("a real search result in the open channel links back to its message", () => {
+  const doc = realSearchResult();
+  doc.title = "Discord | #objekt-trade | COSMO";
+  const message = readMessage(doc.querySelector("li") as Element);
+  assert.equal(message?.source, "search");
+  assert.equal(message?.channel, "1014037515931504660");
+  assert.equal(message?.guild, "968385909730971668");
+  assert.equal(
+    messageLink(message?.guild, message?.channel, message?.id ?? ""),
+    "https://discord.com/channels/968385909730971668/1014037515931504660/1552518179870347347",
+  );
+});
+
+test("a search result from another channel is not placed in the open one", () => {
+  const doc = realSearchResult("wts-only, COSMO");
+  doc.title = "Discord | #objekt-trade | COSMO";
+  const message = readMessage(doc.querySelector("li") as Element);
+  assert.equal(message?.source, "search");
+  assert.equal(message?.channel, null);
+  assert.equal(message?.guild, null);
+  // A channel whose name merely starts the same way is another channel.
+  const lookalike = realSearchResult("objekt-trade-2, COSMO");
+  lookalike.title = "Discord | #objekt-trade | COSMO";
+  assert.equal(
+    readMessage(lookalike.querySelector("li") as Element)?.channel,
+    null,
+  );
+});
+
+test("a result stored without its channel moves to the channel key when seen again", async () => {
+  await clear();
+  const block = {
+    author: "Ddeeee",
+    body: "HAVE\nSeoyeon cc502",
+    time: "2026-09-24T03:12:58.474Z",
+  };
+  await capture(block, "1552518179870347347", "run-1");
+  const link =
+    "https://discord.com/channels/968385909730971668/1014037515931504660/1552518179870347347";
+  const again = await capture(
+    block,
+    "1014037515931504660-1552518179870347347",
+    "run-2",
+    link,
+  );
+  const stored = await entries();
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].key, "1014037515931504660-1552518179870347347");
+  assert.equal(stored[0].link, link);
+  assert.equal(stored[0].run, "run-2");
+  assert.equal(again.known, true);
+  await clear();
+});
+
 test("channel rows keep naming their own channel", () => {
   const message = readMessage(fixture().querySelector("li") as Element);
   assert.equal(message?.source, "channel");

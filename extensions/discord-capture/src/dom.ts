@@ -1,4 +1,5 @@
 import { parseMessageTime } from "@/lib/discord/transcript";
+import { channelLabelFromTitle } from "./settings";
 export const MESSAGE_SELECTOR = '[id^="chat-messages-"]';
 
 /**
@@ -61,7 +62,9 @@ export function readMessage(element: Element) {
   // The channel list names its channel in the row id. A result does not, so it
   // comes from the link Discord puts on each result back to where it was posted
   // — and is null when that link is not there.
-  const origin = own ? null : whereFromRow(element);
+  const origin = own
+    ? null
+    : (whereFromRow(element) ?? openChannelOfGroup(element));
   const channel = own ? own[1] : (origin?.channel ?? null);
   // The guild is only needed to link back to the message. A channel row is in
   // the channel the page has open; a result says where it was posted.
@@ -128,6 +131,31 @@ function whereFromRow(
       };
   }
   return null;
+}
+
+/**
+ * The open channel, for a search result filed under that channel's name.
+ *
+ * Discord's results carry no channel id anywhere — no link back, and "Jump" is
+ * a button. What they do carry is the group they are listed under,
+ * `<ul role="group" aria-label="objekt-trade, COSMO">` (channel, then
+ * category). The open channel's id is in the URL and its name in the tab title,
+ * so a result grouped under that name was posted there. Results from any other
+ * channel stay unplaced rather than guessed.
+ */
+function openChannelOfGroup(
+  element: Element,
+): { guild: string; channel: string } | null {
+  const doc = element.ownerDocument;
+  const open = doc.location?.pathname.match(/^\/channels\/(\d+)\/(\d+)/);
+  const name = channelLabelFromTitle(doc.title)?.channel.replace(/^#/, "");
+  const group = element
+    .closest('[role="group"][aria-label]')
+    ?.getAttribute("aria-label");
+  if (!open || !name || !group) return null;
+  return group === name || group.startsWith(`${name}, `)
+    ? { guild: open[1], channel: open[2] }
+    : null;
 }
 
 /** The guild of the channel the page has open, if that is `channel`. */

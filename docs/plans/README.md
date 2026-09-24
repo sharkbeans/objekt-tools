@@ -134,3 +134,21 @@ Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED (reason)` | `REJECTED 
   024. Revisit if onboarding friction is reported.
 - **Pre-commit hooks / test watch mode** — watch script rides along in plan
   016; hooks left to maintainer preference.
+
+## Refocus: grids + Discord match (2026-09-24, `9ea53d2`)
+
+Product direction: retire `/trades`; lead with Collection/grid and the Objekt
+Match extension ("see what your grids are missing → find who on Discord has it
+→ jump to their post"). Target user is the grid hunter — rank chasers buy
+(WTB, no haves), traders offer opt-in dupes (WTT).
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| [037](037-refresh-grid-hunt.md) | Refresh: home/nav/copy, `/extension`, grid "Hunt these" → /match | P0 | M | — | TODO |
+| [038](038-extension-bridge-saved-hunts.md) | Extension bridge (page → extension hunts) + saved hunts | P1 | L | 037 | TODO |
+| [039](039-retire-trades.md) | Retire /trades: freeze → drain → remove → drop tables | P1 | L | 037 | TODO |
+
+- **038 Part A must land before the extension's first store submission** — it
+  adds an `objekt.my` content script and changes the privacy disclosure.
+- **039 is staged over weeks**, one PR per stage, each behind an owner gate.
+  Lists keep using the `tradePost*` tables as their matching index.
