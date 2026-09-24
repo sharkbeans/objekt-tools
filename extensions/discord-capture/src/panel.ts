@@ -265,7 +265,7 @@ action(
   async () => {
     if (
       !confirm(
-        "Stop reading Discord and forget your agreement? Posts already captured are kept — clear them separately if you want them gone.",
+        "Stop reading Discord and forget your agreement? Posts already captured are kept. Clear them separately if you want them gone.",
       )
     )
       return;
@@ -517,7 +517,7 @@ function showWantsCount() {
   restore.textContent = `${removed.size} removed · restore`;
   count.classList.toggle("none", tiles.length === 0);
   count.textContent = !tiles.length
-    ? "Nothing recognised — try “SeoYeon CC101”"
+    ? "Nothing recognised. Try “SeoYeon CC101”"
     : found < lines
       ? `${shown} · some lines not recognised`
       : String(shown);
@@ -704,7 +704,7 @@ function showCooldown() {
   element<HTMLInputElement>("cooldown-ack").disabled = readFor > 0;
   element("cooldown-ack-text").textContent =
     readFor > 0
-      ? `Read the warning above — you can tick this in ${Math.ceil(readFor / 1000)}s.`
+      ? `Read the warning above. You can tick this in ${Math.ceil(readFor / 1000)}s.`
       : "I understand the risks to my Discord account and want to search anyway.";
 }
 let hasChannel = false;
@@ -734,9 +734,9 @@ function describe(p: Record<string, unknown> | null): string {
     typeof p.planNote === "string" && p.planNote ? `\n${p.planNote}` : "";
   if (p.running) {
     if (stale())
-      return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed — anything captured is still in the index.`;
+      return `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded or closed. Anything captured is still in the index.`;
     if (typeof p.retry === "number")
-      return `Discord's search box went away before ${p.query || "the next code"} — retry ${p.retry} of ${p.retries} · ${done}/${total}…${planNote}`;
+      return `Discord's search box went away before ${p.query || "the next code"}. Retry ${p.retry} of ${p.retries} · ${done}/${total}…${planNote}`;
     if (typeof p.paused === "string" && p.paused)
       return `${p.paused} · ${done}/${total}${planNote}`;
     if (p.waiting)
@@ -821,7 +821,7 @@ function statusLine(): { text: string; bad: boolean } {
   const total = typeof p?.total === "number" ? p.total : 0;
   if (p && stale())
     return {
-      text: `Stopped reporting after ${done}/${total} — the Discord tab was probably reloaded.`,
+      text: `Stopped reporting after ${done}/${total}. The Discord tab was probably reloaded.`,
       bad: true,
     };
   if (p && running() && typeof p.paused === "string" && p.paused)
@@ -835,7 +835,7 @@ function statusLine(): { text: string; bad: boolean } {
     return {
       text:
         typeof p.retry === "number"
-          ? `Discord's search box went away — waiting to retry (${p.retry}/${p.retries}) · ${done}/${total}`
+          ? `Discord's search box went away. Waiting to retry (${p.retry}/${p.retries}) · ${done}/${total}`
           : p.waiting
             ? `Waiting for Discord to load · ${done}/${total}${eta}`
             : `Searching ${p.query ? `${p.query} · ` : ""}${done}/${total}${
@@ -1047,7 +1047,7 @@ function showHealth(health: unknown) {
   banner.hidden = !broken;
   if (!broken) return;
   const count = typeof broken.elements === "number" ? broken.elements : 0;
-  banner.textContent = `Capture has stopped working: ${count} messages are on screen and none can be read, so Discord has changed its markup. The extension needs an update — Settings → Troubleshooting → Check this tab has the detail to report.`;
+  banner.textContent = `Capture has stopped working: ${count} messages are on screen and none can be read, so Discord has changed its markup. The extension needs an update. Settings → Troubleshooting → Check this tab has the detail to report.`;
 }
 
 /** Whether this channel is being collected, as one pill that switches it. */
@@ -1213,7 +1213,7 @@ function showTuning() {
   const minutes = LEDGER_WINDOW_MS / 60_000;
   element("tuning-warn").textContent = [
     load.over
-      ? `${load.pages}/${load.budget} pages — Discord may rate-limit.`
+      ? `${load.pages}/${load.budget} pages. Discord may rate-limit.`
       : "",
     carried > seconds * 1000
       ? `Discord pushed back recently: starts at +${Math.round(carried / 1000)}s/page.`
@@ -1402,7 +1402,7 @@ action(
     });
     say(
       inventoryStatus,
-      `${count} objekts saved — posts wanting them are marked in Discord`,
+      `${count} objekts saved. Posts wanting them are marked in Discord`,
     );
   },
   (message) => say(inventoryStatus, message, true),
@@ -1515,12 +1515,12 @@ action(
     const storage = await request("storage").catch(() => null);
     const lines = [
       storage
-        ? `storage: ${megabytes(storage.usage)} used of ${megabytes(storage.quota)}, ${storage.persisted ? "protected from eviction" : "evictable — export regularly"}`
+        ? `storage: ${megabytes(storage.usage)} used of ${megabytes(storage.quota)}, ${storage.persisted ? "protected from eviction" : "evictable, so export regularly"}`
         : "storage: unavailable",
       // The panel and the content script are reloaded by different actions, so
       // they can disagree — and a stale content script explains almost every
       // "my fix did nothing".
-      `content script build: ${d.build ?? "older than this panel — refresh the Discord tab"}`,
+      `content script build: ${d.build ?? "older than this panel, so refresh the Discord tab"}`,
       `channel: ${d.channel ?? "not on a channel"}`,
       `enabled: ${d.enabled.length ? d.enabled.join(", ") : "none"}`,
       `message elements found: ${d.elements}`,

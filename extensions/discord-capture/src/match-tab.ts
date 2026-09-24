@@ -100,7 +100,7 @@ export function deliverToMatch(
           ok: false,
           error: sent
             ? "The /match page took the posts but never confirmed them. Check the tab."
-            : "The /match page never answered. Reload that tab and try again — if it keeps happening, the site may be on an older version.",
+            : "The /match page never answered. Reload that tab and try again. If it keeps happening, the site may be on an older version.",
         }),
       timeoutMs,
     );

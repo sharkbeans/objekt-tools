@@ -299,7 +299,7 @@ export async function openPanel(tabId: number | null): Promise<void> {
   bar.setAttribute("role", "toolbar");
   bar.setAttribute(
     "aria-label",
-    "objekt.my capture panel — drag, or use the arrow keys, to move",
+    "objekt.my capture panel. Drag, or use the arrow keys, to move",
   );
   const dot = document.createElement("span");
   dot.className = "dot";

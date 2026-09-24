@@ -1539,12 +1539,12 @@ export async function runSearches(
       return `Discord's search failed ${errorsInRow} times in a row ("We dropped the magnifying glass"). That usually means search is rate-limited, so searching is paused for 10 minutes.`;
     if (!errorRetries.has(index)) {
       errorRetries.add(index);
-      pagerNote ??= `${query}: Discord's search failed on page ${page} — searched it again after a pause`;
+      pagerNote ??= `${query}: Discord's search failed on page ${page}, so it was searched again after a pause`;
       await wait(options.errorBackoffMs ?? SEARCH_ERROR_BACKOFF_MS);
       retryQuery = true;
       return null;
     }
-    pagerNote ??= `${query}: Discord's search failed on page ${page} twice — not marked searched, so the next search runs it again`;
+    pagerNote ??= `${query}: Discord's search failed on page ${page} twice. It isn't marked searched, so the next search runs it again`;
     cutShort = true;
     return null;
   };
@@ -1707,7 +1707,7 @@ export async function runSearches(
       // same query again would render the same unreadable rows.
       if (result.rendered > 0 && result.recorded === 0)
         return {
-          blocked: `Discord's search results rendered ${result.rendered} posts but none could be read — the results markup has changed. Open Troubleshooting and press “Check this tab”.`,
+          blocked: `Discord's search results rendered ${result.rendered} posts but none could be read, so the results markup has changed. Open Troubleshooting and press “Check this tab”.`,
           retryable: false,
           result,
         };
@@ -1786,7 +1786,7 @@ export async function runSearches(
           // It may have crashed while the run was waiting for it.
           crashed = crashScreen(doc) !== null;
           if (crashed) return "Discord crashed.";
-          return "Discord's search box went away part-way through — Discord probably crashed or reloaded.";
+          return "Discord's search box went away part-way through. Discord probably crashed or reloaded.";
         }
         retried++;
         // The query Discord took down with it is behind this one and was never
@@ -1865,11 +1865,11 @@ export async function runSearches(
           closed++;
           cutShort = true;
           pagerNote ??=
-            "the search results closed part-way through — leave the results panel open while a run is going";
+            "the search results closed part-way through. Leave the results panel open while a run is going";
           return null;
         }
         if (attempt >= attempts)
-          return "Could not find Discord's search results. Nothing on the results pages was read — open Troubleshooting and press “Check this tab”.";
+          return "Could not find Discord's search results. Nothing on the results pages was read. Open Troubleshooting and press “Check this tab”.";
         retried++;
         await backoff(attempt);
         continue;
@@ -1918,7 +1918,7 @@ export async function runSearches(
         stalled++;
         stalledQuery = true;
         slowDown();
-        settleNote ??= `${query}: the results never changed after ${attempt} attempts (typed via ${typed.via ?? "nothing"}). Either the editor is dropping every insertion this build knows, or Discord is rate-limiting — try adding a pause.`;
+        settleNote ??= `${query}: the results never changed after ${attempt} attempts (typed via ${typed.via ?? "nothing"}). Either the editor is dropping every insertion this build knows, or Discord is rate-limiting. Try adding a pause.`;
         return null;
       }
       retried++;
@@ -1982,7 +1982,7 @@ export async function runSearches(
     // gets an account noticed.
     if (stalled >= stallLimit)
       return finish(
-        `Discord stopped answering: ${stalled} searches in a row returned the results already on screen. That usually means search is rate-limited, so searching is paused for 10 minutes — then run again with a pace of a second or two.`,
+        `Discord stopped answering: ${stalled} searches in a row returned the results already on screen. That usually means search is rate-limited, so searching is paused for 10 minutes. Then run again with a pace of a second or two.`,
         true,
       );
     // The error on page one looks like "no matches" to everything above.
@@ -2029,7 +2029,7 @@ export async function runSearches(
       // Fail soft: fewer results than requested pages is normal, and a missing
       // pager must not abandon the remaining queries.
       if (!next) {
-        pagerNote ??= `${query}: no Next control after page ${page - 1} of ${pages} requested — ${pagerCensus(doc)}`;
+        pagerNote ??= `${query}: no Next control after page ${page - 1} of ${pages} requested: ${pagerCensus(doc)}`;
         break;
       }
       const beforePage = currentPage(doc);
@@ -2079,7 +2079,7 @@ export async function runSearches(
       if (beforePage === null || nowPage === null) {
         const afterRows = rowSignature(doc);
         if (!rowsTurnedOver(beforeRows, afterRows)) {
-          pagerNote ??= `${query}: page ${page} could not be confirmed — the pager has no page numbers, and the results went from ${rowCount(beforeRows)} to ${rowCount(afterRows)} rows without losing any`;
+          pagerNote ??= `${query}: page ${page} could not be confirmed. The pager has no page numbers, and the results went from ${rowCount(beforeRows)} to ${rowCount(afterRows)} rows without losing any`;
           break;
         }
         pagesWalked++;

@@ -259,7 +259,7 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
       : null;
   const posts = (await entries()).filter((post) => !run || post.run === run);
   if (!posts.length)
-    throw new Error("Nothing to open yet — run a search first.");
+    throw new Error("Nothing to open yet. Run a search first.");
   const transcript = exportTranscript(posts.map((post) => post.block));
   // Keyed the way /match keys a post, so each can link back to its message.
   const links: Record<string, string> = {};
@@ -273,7 +273,7 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
   // page, which refuses the script with something like "Frame with ID 0 is
   // showing error page". Say what that means instead.
   const unreachable = MATCH_ORIGIN_IS_LOCAL
-    ? `Could not reach ${MATCH_LABEL} — is the dev server running (npm run dev)?`
+    ? `Could not reach ${MATCH_LABEL}. Is the dev server running (npm run dev)?`
     : `${MATCH_LABEL} could not be reached.`;
   const [injection] = await extensionApi.scripting
     .executeScript({

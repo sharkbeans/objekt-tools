@@ -220,11 +220,11 @@ export function describePlan(plan: Plan): string {
   const parts: string[] = [];
   if (plan.skipped.length)
     parts.push(
-      `${plan.skipped.length} searched recently — skipped (uncheck to search them anyway)`,
+      `${plan.skipped.length} searched recently and skipped (uncheck to search them anyway)`,
     );
   if (plan.overflow.length)
     parts.push(
-      `${plan.overflow.length} over the ${QUERY_CAP}-code limit for one run — run again to continue`,
+      `${plan.overflow.length} over the ${QUERY_CAP}-code limit for one run. Run again to continue`,
     );
   return parts.join(" · ");
 }

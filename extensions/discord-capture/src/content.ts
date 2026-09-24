@@ -101,7 +101,7 @@ function orphan(superseded = false) {
   if (superseded) discardPanel();
   else
     showPanelNotice(
-      "The extension was reloaded or updated, so this tab is running an old copy of it. Reload Discord to carry on capturing — anything already captured is safe.",
+      "The extension was reloaded or updated, so this tab is running an old copy of it. Reload Discord to carry on capturing. Anything already captured is safe.",
     );
 }
 
@@ -137,7 +137,7 @@ function annotate(element: Element, entry: Entry) {
   const shadow = host.attachShadow({ mode: "closed" });
   const badge = document.createElement("span");
   badge.textContent = match?.isMutual
-    ? `objekt.my · mutual — wants ${wantCount}, has ${giveCount} you want`
+    ? `objekt.my · mutual: wants ${wantCount}, has ${giveCount} you want`
     : wantCount
       ? `objekt.my · wants ${wantCount} of yours`
       : `objekt.my · has ${giveCount} you want`;
@@ -514,7 +514,7 @@ window.addEventListener("pagehide", () => {
       ...lastProgress,
       running: false,
       stopped:
-        "The Discord tab was closed or reloaded mid-run. Reopening Discord in the next half hour picks the run up where it stopped — or press Continue.",
+        "The Discord tab was closed or reloaded mid-run. Reopening Discord in the next half hour picks the run up where it stopped, or press Continue.",
       at: Date.now(),
     },
   });
@@ -638,7 +638,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       reply({
         ok: false,
         error:
-          "Agree to capture first — nothing on the page is read before that.",
+          "Agree to capture first. Nothing on the page is read before that.",
       });
       return true;
     }
@@ -744,7 +744,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     reply({
       ok: false,
       error:
-        "Agree to run searches in the extension panel first — it types into Discord's own search box on your behalf.",
+        "Agree to run searches in the extension panel first. It types into Discord's own search box on your behalf.",
     });
     return true;
   }
@@ -945,7 +945,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
     // another server entirely.
     const home = channelFromUrl(location.href);
     const homeLabel = channelLabelFromTitle(document.title);
-    const away = `Paused — you left ${
+    const away = `Paused: you left ${
       homeLabel
         ? formatChannelLabel(homeLabel)
         : "the channel this search started in"
@@ -1035,7 +1035,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
         ? {
             stopped: run.crashed
               ? AUTO_RELOAD_AFTER_CRASH
-                ? `Discord crashed. Reloading it — the search carries on from ${next}.`
+                ? `Discord crashed. Reloading it, and the search carries on from ${next}.`
                 : `Discord crashed. Reload Discord and the search carries on from ${next}.`
               : `${run.stopped} Reload Discord and it carries on from ${next}.`,
           }
@@ -1176,7 +1176,7 @@ async function resume(
     run: plan.state.run,
     priorMs: plan.state.elapsedMs,
     resumedNote: plan.skipped
-      ? `Picked the interrupted run back up, skipping ${plan.skipped} — the tab went down on it ${MAX_TRIES} times.`
+      ? `Picked the interrupted run back up, skipping ${plan.skipped} because the tab went down on it ${MAX_TRIES} times.`
       : reopened
         ? "Picked the interrupted run back up where it stopped."
         : "Carried on from where the last run stopped.",
@@ -1241,7 +1241,7 @@ async function continueRun(): Promise<{ total: number; done: number }> {
   const at = typeof progress?.at === "number" ? progress.at : 0;
   if (progress?.running === true && Date.now() - at < STALE_MS)
     throw new Error(
-      "That search is still going in another Discord tab — stop it there first.",
+      "That search is still going in another Discord tab. Stop it there first.",
     );
   const mine = await tabId();
   const plan = planResume(
