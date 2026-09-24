@@ -315,6 +315,15 @@ function InstallCta({ onDismiss }: { onDismiss: () => void }) {
           >
             How it works
           </Link>
+          {/* Store versions before 1.2.0 can't tell this page they're
+              installed, so let their users say so. */}
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            I already have it
+          </button>
         </div>
       </div>
       <button

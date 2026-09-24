@@ -2,6 +2,7 @@
 
 import {
   CheckCircle2Icon,
+  ClipboardCopyIcon,
   EyeIcon,
   Loader2Icon,
   LockIcon,
@@ -50,6 +51,59 @@ const POINTS = [
 ];
 
 /**
+ * The way in for an extension this page can't talk to: copy the missing
+ * objekts, one per line — the format the panel's want box reads — and open
+ * Discord. Store versions before 1.2.0 have no objekt.my bridge, so the page
+ * can neither see them nor hand them a list; this works with every version.
+ *
+ * Copy first, then open: once the new tab takes focus the clipboard write is
+ * refused, while opening a tab still counts as part of the click for a few
+ * seconds after it.
+ */
+export function CopyAndOpenDiscord({
+  wants,
+  className = "",
+}: {
+  wants: string[];
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const run = async () => {
+    try {
+      await navigator.clipboard.writeText(wants.join("\n"));
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+    track("extension_copy_open_discord", { wants: wants.length });
+    window.open("https://discord.com/app", "_blank", "noopener");
+  };
+  return (
+    <div className={`space-y-1 text-center text-xs ${className}`}>
+      <p className="text-muted-foreground">
+        Already have Objekt Match?{" "}
+        <button
+          type="button"
+          onClick={() => void run()}
+          disabled={wants.length === 0}
+          className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4 disabled:opacity-50"
+        >
+          <ClipboardCopyIcon className="size-3.5" />
+          Copy list &amp; open Discord
+        </button>
+      </p>
+      {copied && (
+        <p className="text-muted-foreground">
+          Copied {wants.length} objekt{wants.length === 1 ? "" : "s"} — paste
+          {wants.length === 1 ? " it" : " them"} into the want box in Objekt
+          Match&rsquo;s panel.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * A short, skippable introduction to the Objekt Match extension, shown the
  * first time someone asks to find objekts on Discord without it.
  *
@@ -63,6 +117,7 @@ export function ExtensionIntro({
   storeUrl,
   installed,
   count,
+  wants,
   currentSection,
   onSkip,
   onSend,
@@ -72,6 +127,8 @@ export function ExtensionIntro({
   installed: boolean;
   /** How many objekts are about to be looked for. */
   count: number;
+  /** Their labels, for copying when the extension can't be reached. */
+  wants: string[];
   currentSection?: SectionId;
   onSkip: () => void;
   onSend: () => void;
@@ -197,6 +254,8 @@ export function ExtensionIntro({
           Not now — I&rsquo;ll paste posts
         </Button>
       </div>
+
+      <CopyAndOpenDiscord wants={wants} />
 
       <p className="text-center text-xs text-muted-foreground">
         <Link

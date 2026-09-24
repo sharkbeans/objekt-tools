@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  CopyAndOpenDiscord,
   ExtensionIntro,
   introDismissed,
 } from "@/components/extension/extension-intro";
@@ -444,6 +445,7 @@ export function GridTradeDialog({
               storeUrl={intro.storeUrl}
               installed={extensionInstalled === true}
               count={selected.size}
+              wants={currentHunt().wants}
               currentSection="collect"
               onSkip={handleFindOnDiscord}
               onSend={() => void handleSendToExtension()}
@@ -644,6 +646,9 @@ export function GridTradeDialog({
                 Find on Discord
               </Button>
             </DialogFooter>
+            {extensionInstalled === false && (
+              <CopyAndOpenDiscord wants={currentHunt().wants} />
+            )}
             {extensionInstalled && (
               <p className="text-center text-xs text-muted-foreground">
                 Adds these to Objekt Match and takes you to Discord, where it

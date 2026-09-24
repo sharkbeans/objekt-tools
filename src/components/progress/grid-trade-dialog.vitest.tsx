@@ -301,6 +301,28 @@ describe("GridTradeDialog with the extension", () => {
     }
   });
 
+  it("lets someone with an older extension copy the list and open Discord", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    renderDialog(firstEdition({ "101": 1, "102": 1, "106": 1, "108": 1 }));
+    // No extension answers, as with any store version before 1.2.0.
+    fireEvent.click(
+      await screen.findByRole(
+        "button",
+        { name: /Copy list & open Discord/ },
+        { timeout: 3000 },
+      ),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalled());
+    expect(writeText).toHaveBeenCalledWith(MISSING.join("\n"));
+    expect(open.mock.calls[0][0]).toBe("https://discord.com/app");
+    expect(
+      await screen.findByText(/paste them into the want box/),
+    ).toBeTruthy();
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
   it("offers a skippable intro once on desktop Chrome without the extension", async () => {
     vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
