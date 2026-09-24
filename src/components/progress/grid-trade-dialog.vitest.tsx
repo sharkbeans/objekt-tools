@@ -227,14 +227,14 @@ describe("GridTradeDialog saved hunts", () => {
   it("asks a signed-out visitor to sign in to save, returning to this grid", () => {
     renderDialog(firstEdition({ "101": 1 }));
     const link = screen.getByRole("link", {
-      name: /Sign in to save this hunt and pick it up on desktop/,
+      name: /Sign in to save this grid and pick it up on desktop/,
     });
     const href = new URL(link.getAttribute("href") ?? "", "https://objekt.my");
     expect(href.pathname).toBe("/sign-in");
     expect(href.searchParams.get("returnTo")).toBe(
       "/collection/sjarkbean/SeoYeon?view=grid&season=Cream02",
     );
-    expect(screen.queryByRole("button", { name: /Save hunt/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Save grid/ })).toBeNull();
   });
 
   it("saves the owner's choices, not the wants", async () => {
@@ -248,7 +248,7 @@ describe("GridTradeDialog saved hunts", () => {
     fireEvent.click(slot105);
     fireEvent.click(await screen.findByRole("button", { name: /Trade/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /SeoYeon CC101/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Save hunt/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Save grid/ }));
 
     const fetchMock = vi.mocked(fetch);
     await waitFor(() =>
@@ -276,20 +276,19 @@ describe("GridTradeDialog with the extension", () => {
     mocks.push.mockReset();
     mocks.session = null;
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    localStorage.clear();
   });
 
-  it("sends the hunt to the extension instead of navigating", async () => {
+  it("sends the missing list to the extension instead of navigating", async () => {
     const extension = installFakeExtension();
     try {
       renderDialog(firstEdition({ "101": 1, "102": 1, "106": 1, "108": 1 }));
-      const send = await screen.findByRole("button", {
-        name: /Send to Objekt Match/,
-      });
+      // "Open in Match" only appears once the extension has answered.
       expect(
-        screen.getByRole("button", { name: /Open in \/match/ }),
+        await screen.findByRole("button", { name: /Open in Match/ }),
       ).toBeInTheDocument();
-      expect(screen.queryByText(/Get the extension/)).toBeNull();
-      fireEvent.click(send);
+      fireEvent.click(screen.getByRole("button", { name: /Find on Discord/ }));
       await waitFor(() => expect(extension.hunts).toHaveLength(1));
       expect(extension.hunts[0]).toMatchObject({
         type: "hunt",
@@ -302,20 +301,33 @@ describe("GridTradeDialog with the extension", () => {
     }
   });
 
-  it("keeps Find on Discord and links the extension when it is absent", async () => {
+  it("offers a skippable intro once on desktop Chrome without the extension", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    );
+    const { unmount } = renderDialog(firstEdition({}));
+    // Let the presence check time out: no extension answered.
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    fireEvent.click(screen.getByRole("button", { name: /Find on Discord/ }));
+
+    const install = screen.getByRole("link", { name: /Add to Chrome/ });
+    expect(install.getAttribute("href")).toContain(
+      "chromewebstore.google.com/detail/objekt-match/",
+    );
+    expect(install.getAttribute("target")).toBe("_blank");
+    expect(mocks.push).not.toHaveBeenCalled();
+
+    // "Not now" carries on to /match — not a dead end.
+    fireEvent.click(screen.getByRole("button", { name: /Not now/ }));
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    unmount();
+
+    // ...and the intro isn't offered again.
+    mocks.push.mockReset();
     renderDialog(firstEdition({}));
-    expect(
-      await screen.findByRole(
-        "link",
-        { name: /Get the extension/ },
-        { timeout: 3000 },
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Find on Discord/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Send to Objekt Match/ }),
-    ).toBeNull();
-  });
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    fireEvent.click(screen.getByRole("button", { name: /Find on Discord/ }));
+    expect(screen.queryByRole("link", { name: /Add to Chrome/ })).toBeNull();
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+  }, 10_000);
 });

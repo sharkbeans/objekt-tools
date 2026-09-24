@@ -78,5 +78,5 @@ export function huntIsFresh(huntAt: unknown, now: number): boolean {
 
 /** The panel's one-line notice for a hunt of `count` objekts. */
 export function huntNotice(count: number): string {
-  return `Hunt from objekt.my — ${count} objekt${count === 1 ? "" : "s"}. Scroll your trade channel or press Search.`;
+  return `${count} missing objekt${count === 1 ? "" : "s"} from objekt.my. Scroll your trade channel or press Search.`;
 }

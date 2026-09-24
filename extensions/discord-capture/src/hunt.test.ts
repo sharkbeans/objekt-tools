@@ -75,9 +75,9 @@ describe("hunt notice", () => {
     assert.equal(huntCount("a\n\n b \n"), 2);
     assert.equal(
       huntNotice(4),
-      "Hunt from objekt.my — 4 objekts. Scroll your trade channel or press Search.",
+      "4 missing objekts from objekt.my. Scroll your trade channel or press Search.",
     );
-    assert.match(huntNotice(1), /— 1 objekt\./);
+    assert.match(huntNotice(1), /^1 missing objekt from/);
   });
 
   it("stays up for a day", () => {

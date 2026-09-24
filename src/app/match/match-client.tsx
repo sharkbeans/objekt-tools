@@ -44,6 +44,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useExtensionPresence } from "@/hooks/use-extension-presence";
 import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
+import { extensionStoreForBrowser } from "@/lib/extension-links";
 import {
   fetchInventoryByNickname,
   type OwnedEntry,
@@ -284,22 +285,38 @@ function SelectionTray({
  * either way.
  */
 function InstallCta({ onDismiss }: { onDismiss: () => void }) {
+  // Only where it can actually be installed: desktop Chromium today. Phones
+  // and Firefox keep pasting, without an offer they can't take up.
+  const store = extensionStoreForBrowser();
+  if (!store) return null;
   return (
     <div className="flex items-start gap-3 rounded-xl border bg-card px-4 py-3">
       <PuzzleIcon className="mt-0.5 size-5 shrink-0 text-primary" />
       <div className="min-w-0 flex-1 space-y-2">
         <p className="text-sm">
-          <span className="font-semibold">Get Objekt Match</span> — it collects
-          trade posts as you scroll Discord, so you never paste again.
+          <span className="font-semibold">Skip the copy-pasting.</span> Objekt
+          Match is a free Chrome extension that collects trade posts as you
+          scroll Discord and brings them here. Everything stays in your
+          browser.
         </p>
-        <Button asChild size="sm" variant="outline">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild size="sm">
+            <a
+              href={store.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => track("match_install_cta_click")}
+            >
+              Add to Chrome — it&rsquo;s free
+            </a>
+          </Button>
           <Link
             href="/extension"
-            onClick={() => track("match_install_cta_click")}
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
-            Get the extension
+            How it works
           </Link>
-        </Button>
+        </div>
       </div>
       <button
         type="button"
@@ -333,7 +350,9 @@ function HuntSendBar({
     const ok = await sendHuntToExtension(hunt, { source: "match" });
     setSending(false);
     if (ok) {
-      toast.success("Sent — open your Discord trade channel");
+      toast.success(
+        "Added to Objekt Match — open your Discord trade channel and scroll.",
+      );
       onDismiss();
     } else {
       toast.error("Objekt Match didn’t answer. Reload this page and retry.");
@@ -344,13 +363,13 @@ function HuntSendBar({
     <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
       <PuzzleIcon className="size-5 shrink-0 text-primary" />
       <p className="min-w-0 flex-1 text-sm">
-        Hunting {count} objekt{count === 1 ? "" : "s"}. Make{" "}
-        {count === 1 ? "it" : "them"} Objekt Match’s want list so your next
-        Discord scroll looks for {count === 1 ? "it" : "them"} too.
+        Looking for {count} objekt{count === 1 ? "" : "s"}. Add{" "}
+        {count === 1 ? "it" : "them"} to Objekt Match so your next Discord
+        scroll flags who has {count === 1 ? "it" : "them"}.
       </p>
       <Button size="sm" onClick={send} disabled={sending}>
         {sending && <Loader2Icon className="size-4 animate-spin" />}
-        Send to Objekt Match
+        Add to Objekt Match
       </Button>
       <button
         type="button"

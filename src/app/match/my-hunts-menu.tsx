@@ -58,7 +58,7 @@ export function MyHuntsMenu({
       method: "DELETE",
     }).catch(() => null);
     if (!res?.ok) {
-      toast.error("Couldn’t delete that hunt.");
+      toast.error("Couldn’t delete that saved grid.");
       return;
     }
     setHunts((current) => current.filter((h) => h.id !== hunt.id));
@@ -76,11 +76,11 @@ export function MyHuntsMenu({
       <DropdownMenuTrigger asChild>
         <Button variant="outline">
           <BookmarkIcon className="size-4" />
-          My hunts
+          Saved grids
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel>Saved hunts</DropdownMenuLabel>
+        <DropdownMenuLabel>Saved grids</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {hunts.map((hunt) => {
           const missing = hunt.wants.length;
@@ -106,7 +106,7 @@ export function MyHuntsMenu({
               </span>
               <button
                 type="button"
-                aria-label={`Delete the ${hunt.member} ${hunt.season} hunt`}
+                aria-label={`Delete the ${hunt.member} ${hunt.season} saved grid`}
                 className="pointer-events-auto rounded p-1 text-muted-foreground hover:text-destructive"
                 onPointerDown={stop}
                 onPointerUp={stop}

@@ -65,7 +65,7 @@ export default function ExtensionPrivacyPage() {
           browser. It has no account of its own and no analytics. The only
           server it talks to is objekt.my, the developer&rsquo;s own site, for
           the three things listed under &ldquo;What leaves your device&rdquo;
-          below. On objekt.my pages it only listens for a hunt you send it by
+          below. On objekt.my pages it only listens for a list of missing objekts you send it by
           pressing a button.
         </p>
       </Section>
@@ -109,7 +109,7 @@ export default function ExtensionPrivacyPage() {
           <li>Attachments, images, voice, or embeds — text bodies only.</li>
           <li>
             Browsing history, or any activity on sites other than Discord. On
-            objekt.my it reads nothing but the hunt you send it (see &ldquo;On
+            objekt.my it reads nothing but the list you send it (see &ldquo;On
             objekt.my pages&rdquo; below).
           </li>
           <li>
@@ -189,7 +189,7 @@ export default function ExtensionPrivacyPage() {
 
       <Section title="On objekt.my pages">
         <p>
-          On objekt.my pages the extension listens only for a hunt you send by
+          On objekt.my pages the extension listens only for a list of missing objekts you send by
           pressing a button, and stores that want list locally. It reads nothing
           else from objekt.my pages and sends nothing back except that it is
           installed.
@@ -198,12 +198,13 @@ export default function ExtensionPrivacyPage() {
           <li>
             <strong>What it listens for.</strong> Two kinds of message the page
             posts to itself: &ldquo;is the extension installed?&rdquo;, and a
-            hunt — up to 40 objekt names such as &ldquo;SeoYeon CC101&rdquo;,
-            plus your Cosmo nickname if the page knows it. A hunt is only sent
-            when you press <em>Send to Objekt Match</em>.
+            list of missing objekts — up to 40 names such as &ldquo;SeoYeon
+            CC101&rdquo;, plus your Cosmo nickname if the page knows it. It is
+            only sent when you press <em>Find on Discord</em> or{" "}
+            <em>Add to Objekt Match</em>.
           </li>
           <li>
-            <strong>What it does with a hunt.</strong> Makes it the want list in
+            <strong>What it does with that list.</strong> Makes it the want list in
             the extension&rsquo;s panel, keeping the list it replaced so{" "}
             <em>Undo</em> can put it back. Your nickname is filled in only if
             the extension has none; one you typed is never overwritten.

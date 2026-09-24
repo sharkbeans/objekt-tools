@@ -5,7 +5,6 @@ import {
   BookmarkIcon,
   Check,
   Loader2Icon,
-  PuzzleIcon,
   SearchIcon,
   ShoppingBagIcon,
 } from "lucide-react";
@@ -13,6 +12,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  ExtensionIntro,
+  introDismissed,
+} from "@/components/extension/extension-intro";
 import type { PosterData } from "@/components/poster/poster-canvas";
 import {
   AlertDialog,
@@ -38,6 +41,7 @@ import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { EDITION_LABELS, type Edition } from "@/lib/edition";
+import { extensionStoreForBrowser } from "@/lib/extension-links";
 import {
   computeHuntRows,
   computeOfferableDupes,
@@ -109,6 +113,8 @@ export function GridTradeDialog({
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // The one-time extension intro, shown in place of the picker.
+  const [intro, setIntro] = useState<{ storeUrl: string } | null>(null);
   const { installed: extensionInstalled } = useExtensionPresence();
   // Only the profile's own owner can offer its dupes or auto-create a
   // matchable trade list from it — a visitor viewing someone else's grid
@@ -178,6 +184,7 @@ export function GridTradeDialog({
     setTouched(false);
     setHuntMode("wtb");
     setOfferIds(new Set());
+    setIntro(null);
   }, [open]);
 
   // Spare copies across the *whole season*, not just this board's edition —
@@ -291,13 +298,32 @@ export function GridTradeDialog({
     const ok = await sendHuntToExtension(currentHunt(), { source: "grid" });
     setSending(false);
     if (ok) {
-      toast.success("Sent — open your Discord trade channel");
+      toast.success(
+        "Added to Objekt Match — open your Discord trade channel and scroll.",
+      );
       onOpenChange(false);
     } else {
       toast.error(
-        "Objekt Match didn’t answer. Reload this page and try again, or open the hunt in /match.",
+        "Objekt Match didn’t answer. Reload this page and try again, or open the list in Match.",
       );
     }
+  };
+
+  // The one primary action. With the extension, the list goes straight to it.
+  // Without it, a Chrome desktop user who hasn't said "Not now" before gets a
+  // one-time intro first; everyone else goes to /match, where pasting works.
+  const handleFind = () => {
+    if (extensionInstalled) {
+      void handleSendToExtension();
+      return;
+    }
+    const store = extensionStoreForBrowser();
+    if (store && !introDismissed()) {
+      setIntro({ storeUrl: store.url });
+      track("extension_intro_shown", { source: "grid" });
+      return;
+    }
+    handleFindOnDiscord();
   };
 
   // Save the hunt to the account. Only the user's own choices are kept —
@@ -327,13 +353,13 @@ export function GridTradeDialog({
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? "Couldn’t save this hunt.");
+        throw new Error(err.error ?? "Couldn’t save this grid.");
       }
       track("hunt_saved", { mode, wants: selected.size });
-      toast.success("Hunt saved — find it under My hunts on /match");
+      toast.success("Saved — find it under Saved grids on Match");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Couldn’t save this hunt.",
+        error instanceof Error ? error.message : "Couldn’t save this grid.",
       );
     } finally {
       setSaving(false);
@@ -403,224 +429,229 @@ export function GridTradeDialog({
       <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Hunt for {firsts[0]?.member} {firsts[0]?.season}{" "}
+            Find missing {firsts[0]?.member} {firsts[0]?.season}{" "}
             {EDITION_LABELS[edition]}
           </DialogTitle>
           <DialogDescription>
-            Pick the FCOs you still need, then see who on Discord has them.
+            {intro
+              ? "Find who has these on Discord."
+              : "Pick the ones you still need, then see who on Discord has them."}
           </DialogDescription>
         </DialogHeader>
 
-        {isOwnProfile && (
-          <fieldset
-            className="mx-auto inline-flex rounded-xl border bg-muted/50 p-1"
-            aria-label="Buy or trade"
-          >
-            {HUNT_MODES.map(({ id, label, icon: Icon }) => (
-              <Button
-                key={id}
-                size="sm"
-                variant={mode === id ? "default" : "ghost"}
-                aria-pressed={mode === id}
-                onClick={() => setHuntMode(id)}
-                className="min-w-24 rounded-lg"
-              >
-                <Icon className="size-4" />
-                {label}
-              </Button>
-            ))}
-          </fieldset>
-        )}
-
-        <div className="mx-auto grid w-[85%] grid-cols-3 grid-rows-3 gap-2.5">
-          {rows.slice(0, slots.length).map(({ collection: c, usable }, i) => {
-            const isSelected = selected.has(c.collectionId);
-            const [row, col] = slots[i];
-            return (
-              <div
-                key={c.collectionId}
-                style={{ gridRow: row, gridColumn: col }}
-              >
-                <button
-                  type="button"
-                  onClick={() => toggle(c.collectionId)}
-                  className={cn(
-                    "relative w-full rounded-sm overflow-hidden focus:outline-none ring-2 ring-inset ring-transparent transition-colors",
-                    isSelected && "ring-green-500",
-                  )}
-                >
-                  {/* biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets. */}
-                  <img
-                    src={c.thumbnailImage}
-                    alt={c.collectionNo}
-                    loading="lazy"
-                    className="w-full aspect-photocard object-cover"
-                  />
-                  {usable <= 0 && (
-                    <div className="absolute inset-0 bg-black/71.5" />
-                  )}
-                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
-                    <p className="text-[10px] text-white font-medium leading-tight">
-                      {formatSlotSerial(c.collectionNo)}
-                    </p>
-                  </div>
-                  {isSelected && (
-                    <>
-                      <div className="absolute inset-0 bg-black/25" />
-                      <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow">
-                        <Check
-                          className="w-3.5 h-3.5 text-white"
-                          strokeWidth={3}
-                        />
-                      </div>
-                    </>
-                  )}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-
-        {mode === "wtt" && (
-          <div className="space-y-2 rounded border border-border px-3 py-2">
-            <div>
-              <p className="text-sm font-medium">Offer duplicates</p>
-              <p className="text-xs text-muted-foreground">
-                Pick dupes you’re willing to trade away. Grid rank chasers:
-                leave these empty.
-              </p>
-            </div>
-            {dupes.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No duplicate FCOs available to offer this season.
-              </p>
-            ) : (
-              <ul className="max-h-48 space-y-1 overflow-y-auto">
-                {dupes.map(({ collection: c, offerable }) => (
-                  <li key={c.collectionId}>
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-primary"
-                        checked={offerIds.has(c.collectionId)}
-                        onChange={() => toggleOffer(c.collectionId)}
-                      />
-                      {/* biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets. */}
-                      <img
-                        src={c.thumbnailImage}
-                        alt=""
-                        loading="lazy"
-                        className="h-8 aspect-photocard rounded-sm object-cover"
-                      />
-                      <span className="flex-1">{huntLabel(c)}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {offerable} spare
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {isOwnProfile ? (
-          <div className="flex items-center gap-3 rounded border border-border px-3 py-2">
-            <p className="flex-1 text-xs text-muted-foreground">
-              Keep this hunt on your account and pick it up from /match on any
-              device.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSaveHunt}
-              disabled={saving || !member || !season}
-              className="gap-1.5"
+        {intro ? (
+          <>
+            <ExtensionIntro
+              storeUrl={intro.storeUrl}
+              installed={extensionInstalled === true}
+              count={selected.size}
+              currentSection="collect"
+              onSkip={handleFindOnDiscord}
+              onSend={() => void handleSendToExtension()}
+              sending={sending}
+            />
+            <button
+              type="button"
+              onClick={() => setIntro(null)}
+              className="mx-auto text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             >
-              {saving ? (
-                <Loader2Icon className="h-4 w-4 animate-spin" />
-              ) : (
-                <BookmarkIcon className="h-4 w-4" />
-              )}
-              Save hunt
-            </Button>
-          </div>
+              Back to picking
+            </button>
+          </>
         ) : (
-          !session &&
-          !sessionPending && (
-            <p className="text-center text-xs text-muted-foreground">
-              <Link
-                href={signInHref}
-                className="underline underline-offset-4 hover:text-foreground"
+          <>
+            {isOwnProfile && (
+              <fieldset
+                className="mx-auto inline-flex rounded-xl border bg-muted/50 p-1"
+                aria-label="Buy or trade"
               >
-                Sign in to save this hunt and pick it up on desktop
-              </Link>
-            </p>
-          )
-        )}
+                {HUNT_MODES.map(({ id, label, icon: Icon }) => (
+                  <Button
+                    key={id}
+                    size="sm"
+                    variant={mode === id ? "default" : "ghost"}
+                    aria-pressed={mode === id}
+                    onClick={() => setHuntMode(id)}
+                    className="min-w-24 rounded-lg"
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </Button>
+                ))}
+              </fieldset>
+            )}
 
-        <DialogFooter className="flex-col-reverse sm:flex-row sm:items-center">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          {isOwnProfile && (
-            <Button
-              variant="ghost"
-              onClick={() => setConfirmOpen(true)}
-              disabled={selected.size === 0 || creating}
-              className="gap-1.5"
-            >
-              {creating && <Loader2Icon className="h-4 w-4 animate-spin" />}
-              Create list
-            </Button>
-          )}
-          {extensionInstalled ? (
-            <>
+            <div className="mx-auto grid w-[85%] grid-cols-3 grid-rows-3 gap-2.5">
+              {rows
+                .slice(0, slots.length)
+                .map(({ collection: c, usable }, i) => {
+                  const isSelected = selected.has(c.collectionId);
+                  const [row, col] = slots[i];
+                  return (
+                    <div
+                      key={c.collectionId}
+                      style={{ gridRow: row, gridColumn: col }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggle(c.collectionId)}
+                        className={cn(
+                          "relative w-full rounded-sm overflow-hidden focus:outline-none ring-2 ring-inset ring-transparent transition-colors",
+                          isSelected && "ring-green-500",
+                        )}
+                      >
+                        {/* biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets. */}
+                        <img
+                          src={c.thumbnailImage}
+                          alt={c.collectionNo}
+                          loading="lazy"
+                          className="w-full aspect-photocard object-cover"
+                        />
+                        {usable <= 0 && (
+                          <div className="absolute inset-0 bg-black/71.5" />
+                        )}
+                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
+                          <p className="text-[10px] text-white font-medium leading-tight">
+                            {formatSlotSerial(c.collectionNo)}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <>
+                            <div className="absolute inset-0 bg-black/25" />
+                            <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shadow">
+                              <Check
+                                className="w-3.5 h-3.5 text-white"
+                                strokeWidth={3}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {mode === "wtt" && (
+              <div className="space-y-2 rounded border border-border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">Offer duplicates</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pick dupes you’re willing to trade away. Grid rank chasers:
+                    leave these empty.
+                  </p>
+                </div>
+                {dupes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No duplicate FCOs available to offer this season.
+                  </p>
+                ) : (
+                  <ul className="max-h-48 space-y-1 overflow-y-auto">
+                    {dupes.map(({ collection: c, offerable }) => (
+                      <li key={c.collectionId}>
+                        <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            checked={offerIds.has(c.collectionId)}
+                            onChange={() => toggleOffer(c.collectionId)}
+                          />
+                          {/* biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets. */}
+                          <img
+                            src={c.thumbnailImage}
+                            alt=""
+                            loading="lazy"
+                            className="h-8 aspect-photocard rounded-sm object-cover"
+                          />
+                          <span className="flex-1">{huntLabel(c)}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {offerable} spare
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {isOwnProfile ? (
+              <div className="flex items-center gap-3 rounded border border-border px-3 py-2">
+                <p className="flex-1 text-xs text-muted-foreground">
+                  Save this grid to your account and pick it up from Match on
+                  any device.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveHunt}
+                  disabled={saving || !member || !season}
+                  className="gap-1.5"
+                >
+                  {saving ? (
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <BookmarkIcon className="h-4 w-4" />
+                  )}
+                  Save grid
+                </Button>
+              </div>
+            ) : (
+              !session &&
+              !sessionPending && (
+                <p className="text-center text-xs text-muted-foreground">
+                  <Link
+                    href={signInHref}
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
+                    Sign in to save this grid and pick it up on desktop
+                  </Link>
+                </p>
+              )
+            )}
+
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              {isOwnProfile && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={selected.size === 0 || creating}
+                  className="gap-1.5 sm:mr-auto"
+                >
+                  {creating && <Loader2Icon className="h-4 w-4 animate-spin" />}
+                  Make a trade list
+                </Button>
+              )}
+              {extensionInstalled && (
+                <Button
+                  variant="outline"
+                  onClick={handleFindOnDiscord}
+                  disabled={selected.size === 0}
+                >
+                  Open in Match
+                </Button>
+              )}
               <Button
-                variant="outline"
-                onClick={handleFindOnDiscord}
-                disabled={selected.size === 0}
-                className="gap-1.5"
-              >
-                <SearchIcon className="h-4 w-4" />
-                Open in /match
-              </Button>
-              <Button
-                onClick={handleSendToExtension}
+                onClick={handleFind}
                 disabled={selected.size === 0 || sending}
                 className="gap-1.5"
               >
                 {sending ? (
                   <Loader2Icon className="h-4 w-4 animate-spin" />
                 ) : (
-                  <PuzzleIcon className="h-4 w-4" />
+                  <SearchIcon className="h-4 w-4" />
                 )}
-                Send to Objekt Match
+                Find on Discord
               </Button>
-            </>
-          ) : (
-            <Button
-              onClick={handleFindOnDiscord}
-              disabled={selected.size === 0}
-              className="gap-1.5"
-            >
-              <SearchIcon className="h-4 w-4" />
-              Find on Discord
-            </Button>
-          )}
-        </DialogFooter>
-        {extensionInstalled === false && (
-          <p className="text-center text-xs text-muted-foreground">
-            Objekt Match can take this hunt straight to your Discord trade
-            channel.{" "}
-            <Link
-              href={sectionHref("/extension", { currentSection: "collect" })}
-              onClick={() => track("grid_hunt_get_extension")}
-              className="underline underline-offset-4 hover:text-foreground"
-            >
-              Get the extension
-            </Link>
-          </p>
+            </DialogFooter>
+            {extensionInstalled && (
+              <p className="text-center text-xs text-muted-foreground">
+                Adds these to your Objekt Match extension. Open your Discord
+                trade channel to see who has them.
+              </p>
+            )}
+          </>
         )}
       </DialogContent>
 

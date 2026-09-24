@@ -8,6 +8,7 @@ import type { Edition } from "@/lib/edition";
 import { EDITION_LABELS } from "@/lib/edition";
 import {
   computeGriddable,
+  computeHuntRows,
   formatSlotSerial,
   getGridSlots,
 } from "@/lib/grid-progress";
@@ -160,6 +161,10 @@ export function GridBoard({
   // the same way an unowned card does.
   const gridded = specials.reduce((sum, c) => sum + c.gridMintCount, 0);
   const griddable = computeGriddable(firsts, gridded);
+  // Slots short of the next grid — the same ones the dialog pre-selects.
+  const missing = computeHuntRows(firsts, gridded).filter(
+    (r) => r.needed > 0,
+  ).length;
 
   return (
     <div className="w-full max-w-[min(90vw,30rem)] space-y-2 lg:w-[24rem] lg:max-w-[24rem] 2xl:w-[26rem] 2xl:max-w-[26rem]">
@@ -172,18 +177,20 @@ export function GridBoard({
             {ownershipLoaded && griddable > 0 && ` · ${griddable} griddable`}
           </span>
         </div>
+        {/* Filled, and naming the count: the way from "what am I missing" to
+            "who has it" is the page's main action, and an outline button
+            beside the counts read as a label. */}
         <Button
           size="sm"
-          variant="outline"
-          className="h-7 gap-1.5 px-2.5 text-xs"
+          className="h-7 gap-1.5 px-2.5 text-xs font-semibold shadow-sm"
           onClick={() => {
             setTradeOpen(true);
-            track("grid_hunt_open");
+            track("grid_hunt_open", { missing });
           }}
           disabled={!ownershipLoaded}
         >
           <SearchIcon className="h-3.5 w-3.5" />
-          Hunt
+          {ownershipLoaded ? `Find ${missing} missing` : "Find missing"}
         </Button>
       </div>
       <div className="grid w-full grid-cols-3 grid-rows-3 gap-2.5 lg:gap-3">
