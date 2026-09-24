@@ -106,7 +106,7 @@ describe("formatTradeText", () => {
       ].join("\n"),
     );
     assert.equal(
-      formatTradeText(source, "https://objekt.my/trades/abc", "Trade"),
+      formatTradeText(source, "https://objekt.my/list/abc", "Trade"),
       [
         "Have",
         "SeoYeon CC101",
@@ -116,7 +116,7 @@ describe("formatTradeText", () => {
         "",
         "dm me on discord",
         "",
-        "Trade: https://objekt.my/trades/abc",
+        "Trade: https://objekt.my/list/abc",
       ].join("\n"),
     );
   });

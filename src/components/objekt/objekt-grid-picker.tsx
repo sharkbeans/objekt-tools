@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { rareSerialShimmerClass } from "@/components/objekt/objekt-images";
 import { PerRowDropdown } from "@/components/objekt/per-row-dropdown";
-import { TradePagination } from "@/components/trades/trade-pagination";
+import { TradePagination } from "@/components/objekt/trade-pagination";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import {
   getObjektInstanceKey,

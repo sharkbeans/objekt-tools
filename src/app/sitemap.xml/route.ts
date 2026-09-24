@@ -56,7 +56,7 @@ export async function GET() {
   }
 
   // Section host: strip the section's internal prefix so the sitemap lists the
-  // clean URLs the middleware actually serves (/trades/x → trade.../x).
+  // clean URLs the middleware actually serves (/list/x → list.../x).
   const internal = await sitemapEntriesForSection(who);
   const entries = internal.flatMap((entry) => {
     const external = toExternalPath(entry.path);

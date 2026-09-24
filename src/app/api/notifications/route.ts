@@ -1,8 +1,8 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-server";
 import { db } from "@/lib/db";
-import { tradeNotification } from "@/lib/db/schema";
+import { tradeNotification, tradePost } from "@/lib/db/schema";
 
 // GET /api/notifications — list all notifications (dismissed + undismissed) with pagination
 export async function GET(request: NextRequest) {
@@ -31,7 +31,39 @@ export async function GET(request: NextRequest) {
       .where(eq(tradeNotification.userId, session.user.id)),
   ]);
 
-  return NextResponse.json({ notifications, page, limit, total });
+  // Trade pages are gone (plan 039): a notification can only link to the List
+  // its trade post mirrors (source = "list"). Manual-post and active-trade
+  // notifications get listId = null and render without a link.
+  const tradePostIds = [
+    ...new Set(
+      notifications.flatMap((n) => (n.tradePostId ? [n.tradePostId] : [])),
+    ),
+  ];
+  const listIdByTradePost = new Map<string, string>();
+  if (tradePostIds.length > 0) {
+    const posts = await db
+      .select({ id: tradePost.id, linkedPosterId: tradePost.linkedPosterId })
+      .from(tradePost)
+      .where(
+        and(inArray(tradePost.id, tradePostIds), eq(tradePost.source, "list")),
+      );
+    for (const post of posts) {
+      if (post.linkedPosterId)
+        listIdByTradePost.set(post.id, post.linkedPosterId);
+    }
+  }
+
+  return NextResponse.json({
+    notifications: notifications.map((n) => ({
+      ...n,
+      listId: n.tradePostId
+        ? (listIdByTradePost.get(n.tradePostId) ?? null)
+        : null,
+    })),
+    page,
+    limit,
+    total,
+  });
 }
 
 // POST /api/notifications/mark-all-read — dismiss all undismissed notifications

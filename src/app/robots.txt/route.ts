@@ -13,18 +13,6 @@ import { sitemapUrlForHost } from "@/lib/sitemap-entries";
 // route handler.
 export const dynamic = "force-dynamic";
 
-const TRADE_QUERY_PARAMS = [
-  "page",
-  "search",
-  "artist",
-  "member",
-  "season",
-  "class",
-  "on_offline",
-  "filter_mode",
-  "sort",
-];
-
 function robotsBody(
   rules: { allow: string[]; disallow: string[] },
   host: string,
@@ -67,17 +55,6 @@ function robotsBody(
 
 function rulesForSection(section: SectionId) {
   switch (section) {
-    case "trade":
-      return {
-        allow: ["/"],
-        disallow: [
-          "/api/",
-          "/mine",
-          "/history",
-          "/active",
-          ...TRADE_QUERY_PARAMS.map((param) => `/?*${param}=*`),
-        ],
-      };
     case "list":
       return { allow: ["/"], disallow: ["/api/", "/mine"] };
     default:
@@ -85,16 +62,10 @@ function rulesForSection(section: SectionId) {
   }
 }
 
-// Pre-subdomain rules, kept verbatim for the disabled/single-host mode.
+// Rules for the disabled/single-host mode.
 const LEGACY_RULES = {
-  allow: ["/", "/trades", "/trades/*"],
-  disallow: [
-    "/api/",
-    "/notifications",
-    "/active-trades",
-    "/trades/history",
-    ...TRADE_QUERY_PARAMS.map((param) => `/trades?*${param}=*`),
-  ],
+  allow: ["/"],
+  disallow: ["/api/", "/notifications"],
 };
 
 export async function GET() {
@@ -107,12 +78,12 @@ export async function GET() {
   } else {
     const who = sectionForHostname(hostname);
     if (who === null || who === "root") {
-      // Root domain: trade pages no longer live here (they 301 to the
+      // Root domain: section pages no longer live here (they 301 to their
       // subdomain), so only the root-owned private paths need disallowing.
       body = robotsBody(
         {
           allow: ["/"],
-          disallow: ["/api/", "/notifications", "/active-trades"],
+          disallow: ["/api/", "/notifications"],
         },
         rootUrl(),
         sitemapUrlForHost("root"),

@@ -1,8 +1,8 @@
 // Section → subdomain registry for host-based routing.
 //
-// Each tool section can be served from its own subdomain (trade.objekt.my,
-// collect.objekt.my, ...) with clean paths: the section's internal path
-// prefix (/trades, /collection, ...) is stripped from the public URL and
+// Each tool section can be served from its own subdomain (collect.objekt.my,
+// list.objekt.my, ...) with clean paths: the section's internal path
+// prefix (/collection, /list, ...) is stripped from the public URL and
 // re-added by the middleware rewrite. The feature is enabled by setting
 // NEXT_PUBLIC_ROOT_DOMAIN (build-time); when unset, every helper degrades
 // to today's single-host, path-based behavior.
@@ -10,7 +10,9 @@
 // This module must stay edge-safe (no Node APIs): it is imported by the
 // middleware, client components, and server code alike.
 
-export type SectionId = "trade" | "collect" | "list" | "create";
+// The old trade.<domain> section was retired with trades (plan 039);
+// src/proxy.ts bounces that host to /match on the root domain.
+export type SectionId = "collect" | "list" | "create";
 
 type SectionDef = {
   sub: string;
@@ -20,11 +22,6 @@ type SectionDef = {
 };
 
 const SECTIONS: Record<SectionId, SectionDef> = {
-  // On the trade host, /active/... maps to /active-trades/... — which makes
-  // "active" (plus the static /trades subroutes "new", "mine", "history")
-  // reserved first segments that must never collide with a trade post ID.
-  // Post IDs are DB-generated, so this holds.
-  trade: { sub: "trade", bases: ["/active-trades", "/trades"] },
   collect: { sub: "collect", bases: ["/collection"] },
   list: { sub: "list", bases: ["/list"] },
   create: { sub: "create", bases: ["/objekt-maker"] },
@@ -112,8 +109,8 @@ export function isRootOnlyPath(path: string): boolean {
 }
 
 // Internal path → owning section + clean external path.
-// "/trades/new" → { trade, "/new" }; "/active-trades/9" → { trade, "/active/9" };
-// "/trades" → { trade, "/" }. Returns null for root-owned paths.
+// "/list/abc" → { list, "/abc" }; "/collection" → { collect, "/" }.
+// Returns null for root-owned paths.
 export function toExternalPath(
   internalPath: string,
 ): { section: SectionId; path: string } | null {
@@ -121,7 +118,6 @@ export function toExternalPath(
     for (const base of SECTIONS[section].bases) {
       const rest = matchBase(internalPath, base);
       if (rest === null) continue;
-      if (base === "/active-trades") return { section, path: `/active${rest}` };
       return { section, path: rest === "" ? "/" : rest };
     }
   }
@@ -133,11 +129,6 @@ export function toInternalPath(
   section: SectionId,
   externalPath: string,
 ): string {
-  if (section === "trade") {
-    const activeRest = matchBase(externalPath, "/active");
-    if (activeRest !== null) return `/active-trades${activeRest}`;
-    return externalPath === "/" ? "/trades" : `/trades${externalPath}`;
-  }
   const base = SECTIONS[section].bases[0];
   return externalPath === "/" ? base : `${base}${externalPath}`;
 }
@@ -149,7 +140,7 @@ function splitHref(href: string): { path: string; suffix: string } {
 }
 
 // The one link helper components use. Call sites always write the INTERNAL
-// path form ("/trades/new", "/active-trades/9"); this emits the right shape:
+// path form ("/list/abc", "/collection/nick"); this emits the right shape:
 //  - subdomains disabled → the internal path, unchanged (today's behavior)
 //  - path owned by `currentSection` → clean relative path ("/new") so
 //    intra-section navigation stays a soft client-side nav

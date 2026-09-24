@@ -77,10 +77,10 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// Batched per-poster match count: same overlap logic as
-// /api/trades/mine/matches-count, but scoped to this page's posters' mirrored
-// trade posts and grouped back by poster id (one query round-trip regardless
-// of poster count, instead of N calls to the single-trade matches endpoint).
+// Batched per-poster match count: the findTradePostMatches overlap logic,
+// scoped to this page's posters' mirrored trade posts and grouped back by
+// poster id (one query round-trip regardless of poster count, instead of N
+// calls to /api/posters/[id]/matches).
 async function getMatchCounts(
   posterIds: string[],
   userId: string,

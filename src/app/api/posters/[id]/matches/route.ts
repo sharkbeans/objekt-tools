@@ -7,8 +7,7 @@ import { findTradePostMatches } from "@/lib/trade/trade-post-matches";
 
 // GET /api/posters/[id]/matches — find trade partners for a poster's
 // haves/wants, via its mirrored "list" trade post (see poster-trade-sync.ts).
-// Owner-only: unlike /api/trades/[id]/matches (which surfaces public trade
-// posts anyone can browse), this is the poster owner's private discovery view.
+// Owner-only: this is the poster owner's private discovery view.
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

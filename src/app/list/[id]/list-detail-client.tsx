@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ListLinkField } from "@/components/list-link-field";
+import { MatchCard } from "@/components/lists/match-card";
+import { TradeTextCard } from "@/components/lists/trade-text-card";
 import {
   type ObjektImageItem,
   ObjektImages,
@@ -15,8 +17,6 @@ import type {
   PosterData,
   PosterTheme,
 } from "@/components/poster/poster-canvas";
-import { MatchCard } from "@/components/trades/match-card";
-import { TradeTextCard } from "@/components/trades/trade-text-card";
 import {
   AlertDialog,
   AlertDialogAction,

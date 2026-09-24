@@ -152,10 +152,10 @@ services:
       - "127.0.0.1:3000:3000"
 
   # Cron triggers:
-  #   "0 2 * * *"   → /api/cron/expire-trades        (daily)
   #   "*/15 * * * *" → /api/cron/prune-stale-haves   (every 15 min)
   #   "*/10 * * * *" → /api/cron/check-trade-availability (every 10 min,
-  #                   verifies open trades in small stale-first batches)
+  #                   re-verifies open List-matching posts' haves against the
+  #                   indexer in small stale-first batches)
   #   "*/2 * * * *" → /api/cron/refresh-cosmo-token   (every 2 min, keeps the
   #                   Cosmo token chain alive so it never expires)
   #   "*/2 * * * *" → /api/cron/sync-indexer          (every 2 min, syncs the
@@ -205,7 +205,6 @@ services:
       - -c
       - |
         cat <<'EOF' | crontab -
-        0 2 * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/expire-trades
         */15 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/prune-stale-haves
         */10 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/check-trade-availability
         */2 * * * * wget -qO- --header="Authorization: Bearer $$CRON_SECRET" $$APP_URL/api/cron/refresh-cosmo-token

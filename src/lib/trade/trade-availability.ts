@@ -4,6 +4,12 @@ import { tradePost, tradePostHave } from "@/lib/db/schema";
 import { loadOwnedObjektsForPublicCollectionIds } from "@/lib/indexer-owned-objekts";
 import { notify } from "@/lib/notify";
 
+// Re-verifies open tradePost haves against the indexer and prunes objekts the
+// owner no longer holds. There is no source filter, so this covers List
+// mirrors (source = "list") too — which is why it survived the trades
+// retirement (plan 039). Callers: the check-trade-availability cron and
+// /api/list-matches/[id]/check-availability.
+
 const TRADE_AVAILABILITY_STALE_MINUTES = Number(
   process.env.TRADE_AVAILABILITY_STALE_MINUTES ?? 30,
 );
@@ -308,21 +314,6 @@ export async function verifyTradePostAvailability(tradeId: string) {
       deleted: false,
     }
   );
-}
-
-export async function verifyOpenTradesForUser(userId: string) {
-  const trades = await loadTradesForVerificationBatch(
-    TRADE_AVAILABILITY_BATCH_LIMIT,
-    userId,
-  );
-  const results = await verifyLoadedTrades(trades);
-  return {
-    checked: trades.length,
-    removed: results.filter((result) => result.deleted).length,
-    updated: results.filter((result) => result.removed > 0 && !result.deleted)
-      .length,
-    skipped: 0,
-  };
 }
 
 export async function verifyOpenTradesCron(

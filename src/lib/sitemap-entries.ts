@@ -77,10 +77,6 @@ export async function sitemapEntriesForSection(
     ];
   }
 
-  if (section === "trade") {
-    return [{ path: "/trades", changeFrequency: "daily", priority: 0.9 }];
-  }
-
   if (section === "create") {
     return [
       { path: "/objekt-maker", changeFrequency: "monthly", priority: 0.6 },

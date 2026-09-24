@@ -40,27 +40,23 @@ describe("sections (disabled mode)", () => {
   });
 
   it("sectionHref returns internal paths unchanged", () => {
-    assert.equal(sectionHref("/trades/new"), "/trades/new");
-    assert.equal(sectionHref("/active-trades/9"), "/active-trades/9");
+    assert.equal(sectionHref("/list/abc"), "/list/abc");
     assert.equal(sectionHref("/collection/abc"), "/collection/abc");
     assert.equal(sectionHref("/notifications"), "/notifications");
     assert.equal(
-      sectionHref("/trades?user=x", { currentSection: "trade" }),
-      "/trades?user=x",
+      sectionHref("/list/mine?x=1", { currentSection: "list" }),
+      "/list/mine?x=1",
     );
   });
 
   it("sectionAbsoluteUrl uses the root app URL", () => {
-    assert.equal(
-      sectionAbsoluteUrl("/active-trades/9"),
-      "https://objekt.my/active-trades/9",
-    );
-    assert.equal(sectionAbsoluteUrl("/trades/1"), "https://objekt.my/trades/1");
+    assert.equal(sectionAbsoluteUrl("/list/abc"), "https://objekt.my/list/abc");
+    assert.equal(sectionAbsoluteUrl("/match"), "https://objekt.my/match");
   });
 
   it("sectionForHostname matches nothing", () => {
     assert.equal(sectionForHostname("objekt.my"), null);
-    assert.equal(sectionForHostname("trade.objekt.my"), null);
+    assert.equal(sectionForHostname("list.objekt.my"), null);
   });
 
   it("allOrigins is just the root origin", () => {
@@ -78,37 +74,23 @@ describe("sections (enabled)", () => {
   it("sectionForHostname classifies hosts", () => {
     assert.equal(sectionForHostname("objekt.my"), "root");
     assert.equal(sectionForHostname("www.objekt.my"), "root");
-    assert.equal(sectionForHostname("trade.objekt.my"), "trade");
     assert.equal(sectionForHostname("collect.objekt.my"), "collect");
     assert.equal(sectionForHostname("list.objekt.my"), "list");
     assert.equal(sectionForHostname("create.objekt.my"), "create");
-    assert.equal(sectionForHostname("TRADE.OBJEKT.MY"), "trade");
-    assert.equal(sectionForHostname("trade.objekt.my:3000"), "trade");
+    assert.equal(sectionForHostname("LIST.OBJEKT.MY"), "list");
+    assert.equal(sectionForHostname("list.objekt.my:3000"), "list");
+    // Retired trade section: no longer a section host (src/proxy.ts bounces
+    // it to /match before section routing).
+    assert.equal(sectionForHostname("trade.objekt.my"), null);
     // Internal/unknown hosts pass through
     assert.equal(sectionForHostname("app"), null);
     assert.equal(sectionForHostname("127.0.0.1"), null);
     assert.equal(sectionForHostname("localhost"), null);
     assert.equal(sectionForHostname("evil-objekt.my"), null);
-    assert.equal(sectionForHostname("x.trade.objekt.my"), null);
+    assert.equal(sectionForHostname("x.list.objekt.my"), null);
   });
 
   it("toExternalPath maps internal paths to clean section paths", () => {
-    assert.deepEqual(toExternalPath("/trades"), {
-      section: "trade",
-      path: "/",
-    });
-    assert.deepEqual(toExternalPath("/trades/new"), {
-      section: "trade",
-      path: "/new",
-    });
-    assert.deepEqual(toExternalPath("/active-trades/9"), {
-      section: "trade",
-      path: "/active/9",
-    });
-    assert.deepEqual(toExternalPath("/active-trades"), {
-      section: "trade",
-      path: "/active",
-    });
     assert.deepEqual(toExternalPath("/collection"), {
       section: "collect",
       path: "/",
@@ -128,16 +110,14 @@ describe("sections (enabled)", () => {
     // Root-owned and non-matching paths
     assert.equal(toExternalPath("/"), null);
     assert.equal(toExternalPath("/notifications"), null);
-    assert.equal(toExternalPath("/tradesfoo"), null);
     assert.equal(toExternalPath("/listing"), null);
+    // Retired trade paths belong to no section (next.config.ts redirects
+    // them to /match).
+    assert.equal(toExternalPath("/trades"), null);
+    assert.equal(toExternalPath("/active-trades/9"), null);
   });
 
   it("toInternalPath is the inverse mapping", () => {
-    assert.equal(toInternalPath("trade", "/"), "/trades");
-    assert.equal(toInternalPath("trade", "/new"), "/trades/new");
-    assert.equal(toInternalPath("trade", "/abc123"), "/trades/abc123");
-    assert.equal(toInternalPath("trade", "/active/9"), "/active-trades/9");
-    assert.equal(toInternalPath("trade", "/active"), "/active-trades");
     assert.equal(toInternalPath("collect", "/"), "/collection");
     assert.equal(toInternalPath("collect", "/nick"), "/collection/nick");
     assert.equal(toInternalPath("list", "/abc/og"), "/list/abc/og");
@@ -146,11 +126,9 @@ describe("sections (enabled)", () => {
 
   it("round-trips every mapping", () => {
     for (const internal of [
-      "/trades",
-      "/trades/new",
-      "/trades/abc?x=1".split("?")[0],
-      "/active-trades/9",
+      "/collection",
       "/collection/nick/member",
+      "/list",
       "/list/abc",
       "/objekt-maker",
     ]) {
@@ -174,18 +152,17 @@ describe("sections (enabled)", () => {
     assert.equal(isRootOnlyPath("/extension-privacy"), true);
     assert.equal(isRootOnlyPath("/"), false);
     assert.equal(isRootOnlyPath("/linkage"), false);
-    assert.equal(isRootOnlyPath("/trades"), false);
+    assert.equal(isRootOnlyPath("/list"), false);
   });
 
   it("sectionOrigin builds subdomain origins", () => {
-    assert.equal(sectionOrigin("trade"), "https://trade.objekt.my");
     assert.equal(sectionOrigin("collect"), "https://collect.objekt.my");
+    assert.equal(sectionOrigin("list"), "https://list.objekt.my");
   });
 
   it("allOrigins lists root + all section origins", () => {
     assert.deepEqual(allOrigins(), [
       "https://objekt.my",
-      "https://trade.objekt.my",
       "https://collect.objekt.my",
       "https://list.objekt.my",
       "https://create.objekt.my",
@@ -194,34 +171,26 @@ describe("sections (enabled)", () => {
 
   it("sectionHref: same section → clean relative path", () => {
     assert.equal(
-      sectionHref("/trades/new", { currentSection: "trade" }),
-      "/new",
+      sectionHref("/list/abc/edit", { currentSection: "list" }),
+      "/abc/edit",
     );
+    assert.equal(sectionHref("/list", { currentSection: "list" }), "/");
     assert.equal(
-      sectionHref("/active-trades/9", { currentSection: "trade" }),
-      "/active/9",
-    );
-    assert.equal(sectionHref("/trades", { currentSection: "trade" }), "/");
-    assert.equal(
-      sectionHref("/trades?user=x", { currentSection: "trade" }),
-      "/?user=x",
+      sectionHref("/list/mine?x=1", { currentSection: "list" }),
+      "/mine?x=1",
     );
   });
 
   it("sectionHref: other section → absolute URL", () => {
-    assert.equal(sectionHref("/trades/new"), "https://trade.objekt.my/new");
-    assert.equal(sectionHref("/trades"), "https://trade.objekt.my/");
+    assert.equal(sectionHref("/list/abc"), "https://list.objekt.my/abc");
+    assert.equal(sectionHref("/list"), "https://list.objekt.my/");
     assert.equal(
-      sectionHref("/active-trades/9"),
-      "https://trade.objekt.my/active/9",
-    );
-    assert.equal(
-      sectionHref("/collection/nick", { currentSection: "trade" }),
+      sectionHref("/collection/nick", { currentSection: "list" }),
       "https://collect.objekt.my/nick",
     );
     assert.equal(
-      sectionHref("/trades?user=x"),
-      "https://trade.objekt.my/?user=x",
+      sectionHref("/list/mine?x=1"),
+      "https://list.objekt.my/mine?x=1",
     );
   });
 
@@ -233,21 +202,24 @@ describe("sections (enabled)", () => {
       "https://objekt.my/link",
     );
     assert.equal(
-      sectionHref("/", { currentSection: "trade" }),
+      sectionHref("/", { currentSection: "list" }),
       "https://objekt.my/",
     );
     assert.equal(
-      sectionHref("/@nick", { currentSection: "trade" }),
+      sectionHref("/@nick", { currentSection: "list" }),
       "https://objekt.my/@nick",
+    );
+    assert.equal(
+      sectionHref("/match", { currentSection: "list" }),
+      "https://objekt.my/match",
     );
   });
 
   it("sectionAbsoluteUrl points at the owning host", () => {
     assert.equal(
-      sectionAbsoluteUrl("/active-trades/9"),
-      "https://trade.objekt.my/active/9",
+      sectionAbsoluteUrl("/collection/nick"),
+      "https://collect.objekt.my/nick",
     );
-    assert.equal(sectionAbsoluteUrl("/trades/1"), "https://trade.objekt.my/1");
     assert.equal(
       sectionAbsoluteUrl("/list/abc/og?v=2"),
       "https://list.objekt.my/abc/og?v=2",
@@ -267,9 +239,9 @@ describe("sections (enabled, local dev via lvh.me)", () => {
   afterEach(restoreEnv);
 
   it("keeps protocol and port from the app URL", () => {
-    assert.equal(sectionOrigin("trade"), "http://trade.lvh.me:3000");
-    assert.equal(sectionForHostname("trade.lvh.me"), "trade");
+    assert.equal(sectionOrigin("list"), "http://list.lvh.me:3000");
+    assert.equal(sectionForHostname("list.lvh.me"), "list");
     assert.equal(sectionForHostname("lvh.me"), "root");
-    assert.equal(sectionHref("/trades/new"), "http://trade.lvh.me:3000/new");
+    assert.equal(sectionHref("/list/abc"), "http://list.lvh.me:3000/abc");
   });
 });

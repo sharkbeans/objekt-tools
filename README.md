@@ -6,7 +6,7 @@ Fan-made tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the Gate](htt
 
 ## Tools
 
-**[Trades](https://objekt.my/trades)** — Browse, post, and match Cosmo objekt trades.
+**[Match](https://objekt.my/match)** — Paste a Discord trade post and find who has what you want.
 
 **[Lists](https://objekt.my/list)** — Build and share clean have/want trade lists.
 
@@ -20,7 +20,7 @@ Fan-made tools for [MODHAUS](https://www.mod-haus.com/)' **[Cosmo: the Gate](htt
 
 ## Acknowledgements
 
-- [objekt-explorer](https://github.com/izrin96/objekt-explorer) for the Subsquid-based Objekt indexer, which powers collection progress lookups and transfer verification.
+- [objekt-explorer](https://github.com/izrin96/objekt-explorer) for the Subsquid-based Objekt indexer, which powers collection progress lookups.
 - [cosmo-web](https://apollo.cafe) for the approach used to proxy objekt images around Cosmo's CloudFront CORS cache poisoning.
 
 ## Contact

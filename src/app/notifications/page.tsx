@@ -15,8 +15,9 @@ interface Notification {
   id: number;
   message: string;
   dismissed: boolean;
-  tradePostId?: string | null;
-  activeTradeId?: string | null;
+  // The List behind the notification's trade post, if any (resolved by
+  // /api/notifications). Old trade / active-trade notifications have none.
+  listId?: string | null;
   createdAt: string;
 }
 
@@ -64,10 +65,10 @@ export default function NotificationsPage() {
     queryClient.invalidateQueries({ queryKey: ["trade-notifications"] });
   }
 
+  // Trade pages were retired (plan 039): only List-backed notifications
+  // still have somewhere to go.
   function getNotificationLink(n: Notification): string | null {
-    if (n.activeTradeId)
-      return sectionHref(`/active-trades/${n.activeTradeId}`);
-    if (n.tradePostId) return sectionHref(`/trades/${n.tradePostId}`);
+    if (n.listId) return sectionHref(`/list/${n.listId}`);
     return null;
   }
 
