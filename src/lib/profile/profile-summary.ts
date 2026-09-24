@@ -1,18 +1,13 @@
-import { and, count, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { fetchUserByNickname } from "@/lib/cosmo/client";
 import { refreshCosmoAccountIfStale } from "@/lib/cosmo/refresh-account";
 import { db } from "@/lib/db";
-import {
-  activeTrade,
-  cosmoAccount,
-  tradeBan,
-  tradePost,
-} from "@/lib/db/schema";
-import { getCached } from "@/lib/server-cache";
+import { cosmoAccount } from "@/lib/db/schema";
 
 // Shared by the public profile API route, the profile page's generateMetadata,
-// and the profile OG image — all three need the same "who is this and how do
-// they trade" answer, and previously only the API route knew how to compute it.
+// and the profile OG image — all three need the same "who is this" answer,
+// and previously only the API route knew how to compute it. (Trade reputation
+// stats were dropped with the trades retirement — plan 039.)
 
 export const PROFILE_USER_COLUMNS = {
   id: true,
@@ -30,15 +25,6 @@ export type ProfileCosmoRow = Awaited<
     }>
   >
 >;
-
-export type ProfileStats = {
-  completed: number;
-  cancelled: number;
-  defaulted: number;
-  openPosts: number;
-};
-
-export type ProfileBan = { reason: string; since: Date } | null;
 
 export function isWalletAddress(value: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(value);
@@ -120,100 +106,17 @@ export async function resolveProfileIdentity(
   return { kind: "linked", cosmo };
 }
 
-/**
- * Trade reputation for a linked account. Cached for 60s under the same key
- * the profile API has always used, so the page, the OG image, and the API
- * share one computation.
- */
-export async function loadProfileStats(
-  userId: string,
-): Promise<{ stats: ProfileStats; banned: ProfileBan }> {
-  const userTradeFilter = or(
-    eq(activeTrade.initiatorUserId, userId),
-    eq(activeTrade.recipientUserId, userId),
-  );
-
-  const {
-    completedCount,
-    cancelledCount,
-    openPostCount,
-    activeBan,
-    defaultedTrades,
-  } = await getCached(`user-profile-stats:${userId}`, 60_000, async () => {
-    const [
-      [{ value: completedCount }],
-      [{ value: cancelledCount }],
-      [{ value: openPostCount }],
-      activeBan,
-      defaultedTrades,
-    ] = await Promise.all([
-      db
-        .select({ value: count() })
-        .from(activeTrade)
-        .where(and(userTradeFilter, eq(activeTrade.status, "completed"))),
-      db
-        .select({ value: count() })
-        .from(activeTrade)
-        .where(and(userTradeFilter, eq(activeTrade.status, "cancelled"))),
-      db
-        .select({ value: count() })
-        .from(tradePost)
-        .where(and(eq(tradePost.userId, userId), eq(tradePost.status, "open"))),
-      db.query.tradeBan.findFirst({
-        where: and(eq(tradeBan.userId, userId), isNull(tradeBan.liftedAt)),
-        columns: { id: true, reason: true, createdAt: true },
-      }),
-      // Defaulted: cancelled after acceptance, user had unsent sides
-      db.query.activeTrade.findMany({
-        where: and(
-          userTradeFilter,
-          eq(activeTrade.status, "cancelled"),
-          isNotNull(activeTrade.acceptedAt),
-        ),
-        with: { sides: true },
-        columns: { id: true },
-        limit: 500,
-      }),
-    ]);
-    return {
-      completedCount,
-      cancelledCount,
-      openPostCount,
-      activeBan,
-      defaultedTrades,
-    };
-  });
-
-  const defaultedCount = defaultedTrades.filter((t) =>
-    t.sides.some((s) => s.userId === userId && s.status === "pending"),
-  ).length;
-
-  return {
-    stats: {
-      completed: completedCount,
-      cancelled: cancelledCount,
-      defaulted: defaultedCount,
-      openPosts: openPostCount,
-    },
-    banned: activeBan
-      ? { reason: activeBan.reason, since: activeBan.createdAt }
-      : null,
-  };
-}
-
 export type ProfileCard = {
   linked: boolean;
   nickname: string | null;
   address: string | null;
   linkedAt: Date | null;
-  stats: ProfileStats | null;
-  banned: ProfileBan;
 };
 
 /**
  * Display-ready profile summary for generateMetadata and the OG image.
  *
- * DB-only by design: an unlinked Cosmo user has no stats to show, so paying
+ * DB-only by design: an unlinked Cosmo user has nothing extra to show, so paying
  * for a Cosmo API round-trip on every page render (and every Discord embed
  * fetch) would buy nothing but latency. Callers fall back to a generic card
  * when this returns null.
@@ -225,14 +128,11 @@ export async function loadProfileCard(
   if (result.kind !== "linked") return null;
 
   const { cosmo } = result;
-  const { stats, banned } = await loadProfileStats(cosmo.userId);
 
   return {
     linked: true,
     nickname: cosmo.nickname ?? null,
     address: cosmo.address,
     linkedAt: cosmo.linkedAt,
-    stats,
-    banned,
   };
 }

@@ -1,64 +1,5 @@
-import type { activeTrade, activeTradeSide } from "@/lib/db/schema";
-
-// Derive status unions from the schema so changes propagate automatically.
-type ActiveTradeRow = typeof activeTrade.$inferSelect;
-type ActiveTradeSideRow = typeof activeTradeSide.$inferSelect;
-export type TradeStatus = ActiveTradeRow["status"];
-export type SideStatus = ActiveTradeSideRow["status"];
-
-/** User as flattened by the active-trades API routes (cosmoAccount inlined). */
-export interface TradeUserDTO {
-  id: string;
-  name: string;
-  image?: string | null;
-  cosmoNickname?: string | null;
-  cosmoAddress?: string | null;
-  discordId?: string | null;
-  discordUsername?: string | null;
-}
-
-/** Active-trade side as serialized over JSON (dates become strings). */
-export interface TradeSideDTO {
-  id: number;
-  userId: string;
-  address: string;
-  recipientAddress: string;
-  objektId: string;
-  collectionId: string;
-  collectionNo?: string | null;
-  member?: string | null;
-  serial?: number | null;
-  thumbnailUrl?: string | null;
-  status: SideStatus;
-  detectedAt?: string | null;
-  // The objekt that actually satisfied this side, once matched — may differ
-  // from `objektId`/`serial` above since verification matches by collection.
-  actualObjektId?: string | null;
-  actualSerial?: number | null;
-  user: TradeUserDTO;
-}
-
-/**
- * Active trade as returned by the active-trades list/history endpoints.
- * Date fields are serialized to ISO strings over JSON.
- */
-export interface ActiveTradeDTO {
-  id: string;
-  status: TradeStatus;
-  createdAt: string;
-  updatedAt: string;
-  acceptedAt?: string | null;
-  expiresAt?: string | null;
-  tradePostId?: string | null;
-  matchedTradePostId?: string | null;
-  initiatorUserId: string;
-  recipientUserId: string;
-  counterOfferToId?: string | null;
-  counterOfferId?: string | null;
-  initiator: TradeUserDTO;
-  recipient: TradeUserDTO;
-  sides: TradeSideDTO[];
-}
+// DTOs for the List matching index (tradePost / tradePostHave / tradePostWant,
+// kept after the trades retirement — plan 039). See trade-post-matches.ts.
 
 /** Item in a trade post's haves or wants list. */
 export interface TradePostItem {
@@ -74,7 +15,10 @@ export interface TradePostItem {
   thumbnailUrl?: string | null;
 }
 
-/** Trade post as returned by /api/trades* list endpoints. Note: id is a nanoid string. */
+/**
+ * A matched trade post as returned by /api/posters/[id]/matches
+ * (findTradePostMatches). Note: id is a nanoid string.
+ */
 export interface TradePostDTO {
   id: string;
   userId: string;
@@ -82,6 +26,9 @@ export interface TradePostDTO {
   status: string;
   wantsOnly: boolean;
   source?: "manual" | "list";
+  // The poster (List) a source="list" post mirrors — see poster-trade-sync.
+  // Null for manual trade posts.
+  linkedPosterId?: string | null;
   createdAt: string;
   updatedAt: string;
   user: {
@@ -99,11 +46,4 @@ export interface TradePostDTO {
   // items — their haves I want, and their wants I can fill from my haves).
   theyHaveIWant?: TradePostItem[];
   iHaveTheyWant?: TradePostItem[];
-}
-
-/** Minimal shape returned by /api/objekts/search results array. */
-export interface ObjektSearchResult {
-  collectionId: string;
-  thumbnailImage?: string | null;
-  frontImage?: string | null;
 }

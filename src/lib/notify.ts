@@ -2,7 +2,6 @@ import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tradeNotification, user } from "@/lib/db/schema";
 import { redis } from "@/lib/redis";
-import { sectionAbsoluteUrl } from "@/lib/sections";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -10,7 +9,6 @@ const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 interface NotificationRow {
   userId: string;
   message: string;
-  activeTradeId?: string | null;
   tradePostId?: string | null;
 }
 
@@ -65,19 +63,12 @@ async function sendDiscordDMs(items: NotificationRow[]): Promise<void> {
       const discordId = discordIdByUserId.get(item.userId);
       if (!discordId) return;
 
-      const tradeUrl = item.activeTradeId
-        ? sectionAbsoluteUrl(`/active-trades/${item.activeTradeId}`)
-        : null;
-
-      const content = tradeUrl ? `${item.message}\n${tradeUrl}` : item.message;
-
       try {
-        await dmUser(discordId, content);
+        await dmUser(discordId, item.message);
       } catch (err) {
         // Non-fatal — site notifications already saved to DB
-        const tradeRef = item.activeTradeId ?? "no-trade";
         console.error(
-          `[notify] Discord DM failed userId=${item.userId} tradeId=${tradeRef}`,
+          `[notify] Discord DM failed userId=${item.userId}`,
           err instanceof Error ? err.message : String(err),
         );
         const failKey = `discord-dm-fail:${item.userId}`;

@@ -19,14 +19,17 @@ test("home page exposes the main public tools", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("trades page loads its main heading", async ({ page }) => {
-  await page.goto("/trades");
+test("match page loads its main heading", async ({ page }) => {
+  await page.goto("/match");
 
-  await expect(
-    page.getByRole("heading", {
-      name: "Browse Trades",
-    }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+});
+
+test("retired trade URLs redirect to match", async ({ page }) => {
+  for (const path of ["/trades", "/trades/abc", "/active-trades/x"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/match$/);
+  }
 });
 
 test("health endpoint reports ok", async ({ request }) => {

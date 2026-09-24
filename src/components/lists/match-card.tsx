@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { formatSeasonNumberLabel, formatShortLabel } from "@/lib/objekt-label";
 import type { TradePostDTO, TradePostItem } from "@/lib/trade/trade-types";
@@ -100,33 +99,25 @@ function DiscordIcon() {
 
 interface MatchCardProps {
   match: TradePostDTO;
-  /** Optional extra content rendered below the card body (e.g. a "Send a Trade Offer" button). */
+  /** Optional extra content rendered below the card body. */
   children?: React.ReactNode;
-  /** Override navigation, e.g. to validate availability before opening. */
-  onOpenTrade?: (match: TradePostDTO) => void;
+  /** Opens the match (list-detail validates availability, then opens the
+   * matched List — there is no trade page any more). */
+  onOpenTrade: (match: TradePostDTO) => void;
 }
 
 /**
  * Discovery-focused match card: leads with what actually overlaps between
- * the two lists/posts, plus a way to reach out. Unlike TradeCard (which
- * shows a partner's whole post), this only shows the items relevant to the
- * match — see findTradePostMatches' theyHaveIWant/iHaveTheyWant.
+ * the two lists, plus a way to reach out. It only shows the items relevant
+ * to the match — see findTradePostMatches' theyHaveIWant/iHaveTheyWant.
  */
 export function MatchCard({ match, children, onOpenTrade }: MatchCardProps) {
-  const router = useRouter();
   const displayName = match.cosmoNickname
     ? `@${match.cosmoNickname}`
     : match.user.name;
   const theyHaveIWant = match.theyHaveIWant ?? [];
   const iHaveTheyWant = match.iHaveTheyWant ?? [];
-  const tradeHref = `/trades/${match.id}`;
-  const openTrade = () => {
-    if (onOpenTrade) {
-      onOpenTrade(match);
-      return;
-    }
-    router.push(tradeHref);
-  };
+  const openTrade = () => onOpenTrade(match);
 
   return (
     <div className="relative rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/20">

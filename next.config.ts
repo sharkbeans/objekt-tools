@@ -56,6 +56,19 @@ const nextConfig: NextConfig = {
         destination: "/list/:id/edit",
         permanent: false,
       },
+      // Trades were retired (plan 039); old trade and active-trade links
+      // (Discord DMs, bookmarks, search results) land on Match instead.
+      // `:path*` also matches the bare /trades and /active-trades.
+      {
+        source: "/trades/:path*",
+        destination: "/match",
+        permanent: true,
+      },
+      {
+        source: "/active-trades/:path*",
+        destination: "/match",
+        permanent: true,
+      },
     ];
   },
   images: {

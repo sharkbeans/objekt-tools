@@ -123,11 +123,18 @@ export function proxy(request: NextRequest) {
 
   // grid.<domain> isn't a real section — just bounce it to collect.
   const domain = rootDomain();
-  if (domain && hostname.toLowerCase().split(":")[0] === `grid.${domain}`) {
+  const bareHost = hostname.toLowerCase().split(":")[0];
+  if (domain && bareHost === `grid.${domain}`) {
     return NextResponse.redirect(
       `${sectionOrigin("collect")}${request.nextUrl.pathname}${request.nextUrl.search}`,
       301,
     );
+  }
+
+  // trade.<domain> was retired with trades (plan 039) — any path lands on
+  // Match. Old trade links live on in Discord messages and bookmarks.
+  if (domain && bareHost === `trade.${domain}`) {
+    return NextResponse.redirect(`${rootUrl()}/match`, 301);
   }
 
   const who = sectionForHostname(hostname);
@@ -172,8 +179,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(`${rootUrl()}${path}${search}`, 301);
   }
 
-  // Internal-form paths (trade.../trades/new) and wrong-section paths
-  // (trade.../collection/x) both 301 to their canonical external URL.
+  // Internal-form paths (list.../list/abc) and wrong-section paths
+  // (list.../collection/x) both 301 to their canonical external URL.
   const ext = toExternalPath(path);
   if (ext) {
     return NextResponse.redirect(

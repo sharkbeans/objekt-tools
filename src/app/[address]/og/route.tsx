@@ -24,46 +24,6 @@ function readFont(filename: string): Buffer {
   return fs.readFileSync(path.join(process.cwd(), "public", filename));
 }
 
-function StatTile({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        flex: 1,
-        gap: 6,
-        padding: "22px 24px",
-        borderRadius: 12,
-        border: `1px solid ${PAL.border}`,
-        background: PAL.sectionBg,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          fontSize: 52,
-          fontFamily: "Bold",
-          color: tone ?? PAL.accent,
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </div>
-      <div style={{ display: "flex", fontSize: 18, color: PAL.muted }}>
-        {label}
-      </div>
-    </div>
-  );
-}
-
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ address: string }> },
@@ -77,9 +37,8 @@ export async function GET(
     readFont("og-member.otf"),
   ];
 
-  // DB-only lookup: an unlinked Cosmo user has no reputation to render, so
-  // this falls through to the collection-oriented card instead of paying for
-  // a Cosmo API call on every embed fetch.
+  // DB-only lookup: an unlinked Cosmo user just gets the generic card, rather
+  // than paying for a Cosmo API call on every embed fetch.
   const card = await loadProfileCard(identifier);
   const displayName = card?.nickname ?? identifier;
   const since = card?.linkedAt
@@ -137,61 +96,27 @@ export async function GET(
         <div style={{ display: "flex", fontSize: 24, color: PAL.muted }}>
           {card?.linked
             ? since
-              ? `Trading on objekt.my since ${since}`
-              : "Trader on objekt.my"
+              ? `On objekt.my since ${since}`
+              : "On objekt.my"
             : "Cosmo collection & grid progress"}
         </div>
       </div>
 
-      {card?.banned ? (
-        <div
-          style={{
-            display: "flex",
-            marginTop: 26,
-            padding: "14px 20px",
-            borderRadius: 10,
-            background: PAL.dangerBg,
-            border: `1px solid ${PAL.danger}`,
-            color: PAL.danger,
-            fontSize: 22,
-            fontFamily: "Bold",
-          }}
-        >
-          Trade banned
-        </div>
-      ) : null}
-
-      {/* Reputation, or the collection pitch for accounts that never linked */}
-      {card?.stats ? (
-        <div
-          style={{
-            display: "flex",
-            gap: 16,
-            marginTop: "auto",
-            width: "100%",
-          }}
-        >
-          <StatTile label="Completed" value={card.stats.completed} />
-          <StatTile label="Cancelled" value={card.stats.cancelled} />
-          <StatTile label="No-shows" value={card.stats.defaulted} />
-          <StatTile label="Open posts" value={card.stats.openPosts} />
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "flex",
-            marginTop: "auto",
-            padding: "26px 28px",
-            borderRadius: 12,
-            border: `1px solid ${PAL.border}`,
-            background: PAL.sectionBg,
-            fontSize: 24,
-            color: PAL.muted,
-          }}
-        >
-          View this collection, grid progress, and trade list on objekt.my
-        </div>
-      )}
+      {/* Collection pitch */}
+      <div
+        style={{
+          display: "flex",
+          marginTop: "auto",
+          padding: "26px 28px",
+          borderRadius: 12,
+          border: `1px solid ${PAL.border}`,
+          background: PAL.sectionBg,
+          fontSize: 24,
+          color: PAL.muted,
+        }}
+      >
+        View this collection, grid progress, and lists on objekt.my
+      </div>
     </div>
   );
 

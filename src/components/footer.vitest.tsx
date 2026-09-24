@@ -39,13 +39,13 @@ describe("SiteDisclaimerFooter", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the trade disclaimer on trade routes", () => {
-    pathnameState.value = "/trades";
+  it("shows the list disclaimer on list routes", () => {
+    pathnameState.value = "/list/abc";
 
     render(<SiteDisclaimerFooter currentSection={null} />);
 
     expect(
-      screen.getByText(/Fan-made trade posting and checking tool/i),
+      screen.getByText(/Fan-made HAVE\/WANT poster tool/i),
     ).toBeInTheDocument();
   });
 

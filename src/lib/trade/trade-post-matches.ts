@@ -5,9 +5,9 @@ import { tradePost, tradePostHave, tradePostWant } from "@/lib/db/schema";
 // Finds open trade posts that mutually match a source trade post:
 //   - Their "have" items overlap with our "want" items
 //   - Their "want" items overlap with our "have" items
-// Shared by /api/trades/[id]/matches and /api/posters/[id]/matches (via the
-// poster's mirrored "list" trade post — see src/lib/poster-trade-sync.ts) and
-// notifyNewMatches (see trade-match-notify.ts).
+// The List matching engine: used by /api/posters/[id]/matches (via the
+// poster's mirrored "list" trade post — see src/lib/poster/poster-trade-sync.ts)
+// and notifyNewMatches (see trade-match-notify.ts).
 export async function findTradePostMatches(tradePostId: string) {
   const sourceTrade = await db.query.tradePost.findFirst({
     where: eq(tradePost.id, tradePostId),

@@ -21,34 +21,9 @@ export function getPusherServer(): Pusher | null {
   return getPusher();
 }
 
-// Channel: `trade-{tradeId}`
-// Events:
-//   trade:accepted       — { activeTradeId }
-//   trade:cancelled      — { activeTradeId, cancellerName }
-//   trade:completed      — { activeTradeId }
-//   trade:transfer-detected — { activeTradeId, count }
-//   trade:counter-offer  — { activeTradeId, originalTradeId }
-//   trade:offer-received — { activeTradeId, initiatorName }  (sent on trade post channel)
-
 // Channel: `user-{userId}`
 // Events:
 //   notification:new     — { notificationId, message }
-
-export async function publishTradeEvent(
-  tradeId: string,
-  event: string,
-  data: Record<string, unknown>,
-): Promise<void> {
-  try {
-    const pusher = getPusher();
-    if (!pusher) return;
-    await pusher.trigger(`private-trade-${tradeId}`, event, data);
-  } catch {
-    // Non-fatal — realtime is best-effort. Constructing the client is inside
-    // the try as well: every caller fires this with `void`, so anything that
-    // escapes is an unhandled rejection rather than a missed event.
-  }
-}
 
 export async function publishUserEvent(
   userId: string,

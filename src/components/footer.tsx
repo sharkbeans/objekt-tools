@@ -20,15 +20,6 @@ function getDisclaimerText(
   }
 
   if (
-    currentSection === "trade" ||
-    pathname.startsWith("/trades") ||
-    pathname.startsWith("/active-trades") ||
-    pathname.startsWith("/notifications")
-  ) {
-    return "Fan-made trade posting and checking tool · not affiliated with or endorsed by MODHAUS or COSMO · no real objekts are distributed";
-  }
-
-  if (
     currentSection === "create" ||
     pathname.startsWith("/objekt-maker") ||
     pathname.startsWith("/proofshot")

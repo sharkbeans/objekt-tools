@@ -5,6 +5,11 @@ import { requireSession } from "@/lib/auth-server";
 import { redis } from "@/lib/redis";
 import { verifyTradePostAvailability } from "@/lib/trade/trade-availability";
 
+// POST /api/list-matches/[id]/check-availability — re-verify a matched post's
+// haves against the indexer before a List owner opens the match (see
+// list-detail-client's handleOpenMatch). [id] is the matched tradePost id —
+// the List matching index. (Formerly /api/trades/[id]/check-availability;
+// moved with the trades retirement — plan 039.)
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
