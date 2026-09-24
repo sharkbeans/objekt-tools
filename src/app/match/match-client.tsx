@@ -538,6 +538,9 @@ export function MatchClient() {
         post({ source: PAGE_SOURCE, type: "ready" });
         return;
       }
+      // Presence and hunt replies are the bridge's, handled where they are
+      // asked for (`use-extension-presence`, `send-hunt`).
+      if (message.type !== "import") return;
       let posts = handled.get(message.id);
       if (posts === undefined) {
         posts = addPaste(message.transcript, message.links);

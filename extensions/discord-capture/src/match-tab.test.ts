@@ -57,6 +57,7 @@ function servePage(options: { readyAfterMs: number; posts?: number }) {
         win.postMessage({ source: PAGE_SOURCE, type: "ready" }, "*");
         return;
       }
+      if (message.type !== "import") return;
       let posts = handled.get(message.id);
       if (posts === undefined) {
         posts = options.posts ?? 1;
