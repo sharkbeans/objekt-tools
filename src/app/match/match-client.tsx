@@ -44,7 +44,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useExtensionPresence } from "@/hooks/use-extension-presence";
 import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
-import { extensionStoreForBrowser } from "@/lib/extension-links";
 import {
   fetchInventoryByNickname,
   type OwnedEntry,
@@ -77,6 +76,7 @@ import {
   fetchInventoryForVerification,
   type VerificationState,
 } from "@/lib/discord/verify";
+import { extensionStoreForBrowser } from "@/lib/extension-links";
 import {
   type ExternalListImport,
   type ExternalListLink,
@@ -296,8 +296,7 @@ function InstallCta({ onDismiss }: { onDismiss: () => void }) {
         <p className="text-sm">
           <span className="font-semibold">Skip the copy-pasting.</span> Objekt
           Match is a free Chrome extension that collects trade posts as you
-          scroll Discord and brings them here. Everything stays in your
-          browser.
+          scroll Discord and brings them here. Everything stays in your browser.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button asChild size="sm">
@@ -349,10 +348,8 @@ function HuntSendBar({
     setSending(true);
     const ok = await sendHuntToExtension(hunt, { source: "match" });
     setSending(false);
+    // The extension brings the user's Discord tab forward itself.
     if (ok) {
-      toast.success(
-        "Added to Objekt Match — open your Discord trade channel and scroll.",
-      );
       onDismiss();
     } else {
       toast.error("Objekt Match didn’t answer. Reload this page and retry.");

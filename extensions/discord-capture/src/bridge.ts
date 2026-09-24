@@ -11,6 +11,9 @@
  *   this window on its own origin.
  * - It answers `ping` with `present`, and stores a `hunt` locally and answers
  *   `hunt-saved`. Nothing else is listened for, and it makes no requests.
+ *   Once a hunt is stored it asks the extension's own worker to bring the
+ *   user's Discord tab forward — the one message it sends inside the
+ *   extension.
  */
 
 import {
@@ -51,6 +54,11 @@ export interface BridgeOptions {
    * failing to store a hunt is worse than saying nothing.
    */
   alive: () => boolean;
+  /**
+   * Called once a hunt is stored, before the page hears about it. The entry
+   * point uses it to bring Discord forward.
+   */
+  onSaved?: () => void;
   now?: () => number;
 }
 
@@ -60,6 +68,7 @@ export function startBridge({
   storage,
   version,
   alive,
+  onSaved,
   now = Date.now,
 }: BridgeOptions): () => void {
   const post = (message: ExtensionMessage) =>
@@ -90,13 +99,15 @@ export function startBridge({
     if (message.type !== "hunt") return;
     const { id, wants } = message;
     save(message).then(
-      () =>
+      () => {
+        onSaved?.();
         post({
           source: EXTENSION_SOURCE,
           type: "hunt-saved",
           id,
           count: huntCount(wants),
-        }),
+        });
+      },
       // No reply is the failure signal: the page times out and falls back to
       // opening /match, which works without the extension.
       () => {},

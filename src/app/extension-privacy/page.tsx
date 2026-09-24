@@ -65,8 +65,8 @@ export default function ExtensionPrivacyPage() {
           browser. It has no account of its own and no analytics. The only
           server it talks to is objekt.my, the developer&rsquo;s own site, for
           the three things listed under &ldquo;What leaves your device&rdquo;
-          below. On objekt.my pages it only listens for a list of missing objekts you send it by
-          pressing a button.
+          below. On objekt.my pages it only listens for a list of missing
+          objekts you send it by pressing a button.
         </p>
       </Section>
 
@@ -189,10 +189,10 @@ export default function ExtensionPrivacyPage() {
 
       <Section title="On objekt.my pages">
         <p>
-          On objekt.my pages the extension listens only for a list of missing objekts you send by
-          pressing a button, and stores that want list locally. It reads nothing
-          else from objekt.my pages and sends nothing back except that it is
-          installed.
+          On objekt.my pages the extension listens only for a list of missing
+          objekts you send by pressing a button, and stores that want list
+          locally. It reads nothing else from objekt.my pages and sends nothing
+          back except that it is installed.
         </p>
         <List>
           <li>
@@ -204,10 +204,12 @@ export default function ExtensionPrivacyPage() {
             <em>Add to Objekt Match</em>.
           </li>
           <li>
-            <strong>What it does with that list.</strong> Makes it the want list in
-            the extension&rsquo;s panel, keeping the list it replaced so{" "}
+            <strong>What it does with that list.</strong> Makes it the want list
+            in the extension&rsquo;s panel, keeping the list it replaced so{" "}
             <em>Undo</em> can put it back. Your nickname is filled in only if
-            the extension has none; one you typed is never overwritten.
+            the extension has none; one you typed is never overwritten. Then it
+            switches to the Discord tab you used last, with its panel open, or
+            opens Discord if you have no tab there.
           </li>
           <li>
             <strong>What it answers.</strong> That it is installed, and its

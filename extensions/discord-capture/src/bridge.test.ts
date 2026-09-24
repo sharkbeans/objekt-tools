@@ -65,6 +65,43 @@ const hunt = {
 };
 
 describe("startBridge", () => {
+  it("takes the user to Discord only once a hunt is stored", async () => {
+    const win = fakeWindow();
+    let shown = 0;
+    startBridge({
+      win,
+      storage: fakeStorage(),
+      version: "1.2.0",
+      alive: () => true,
+      onSaved: () => shown++,
+    });
+    win.deliver({ source: PAGE_SOURCE, type: "ping" });
+    await settle();
+    assert.equal(shown, 0, "a ping is not a reason to switch tabs");
+    win.deliver(hunt);
+    await settle();
+    assert.equal(shown, 1);
+
+    // Storage failing means nothing was stored: stay put.
+    const failing = fakeWindow();
+    let failedShown = 0;
+    startBridge({
+      win: failing,
+      storage: {
+        ...fakeStorage(),
+        set: async () => {
+          throw new Error("quota");
+        },
+      },
+      version: "1.2.0",
+      alive: () => true,
+      onSaved: () => failedShown++,
+    });
+    failing.deliver(hunt);
+    await settle();
+    assert.equal(failedShown, 0);
+  });
+
   it("announces itself on load and on every ping", () => {
     const win = fakeWindow();
     startBridge({

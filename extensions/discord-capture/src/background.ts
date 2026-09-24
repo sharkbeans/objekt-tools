@@ -1,6 +1,7 @@
 import { type ObjektKeyParts, objektKey } from "@/lib/discord/match";
 import { messageKey } from "@/lib/discord/transcript";
 import { EXTENSION_SOURCE, PAGE_SOURCE } from "@/lib/match/extension-handoff";
+import { APP_ORIGIN, MATCH_ORIGIN } from "./app-origin";
 import { lookupArtwork, readArtworkCache } from "./artwork";
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
@@ -535,6 +536,49 @@ void extensionApi.storage.local
   })
   .catch(() => {});
 
+/**
+ * Whether a message came from the objekt.my bridge: a top-level page on the
+ * app or /match origin, the only places `objekt-bridge.js` runs.
+ */
+function fromObjektPage(sender: { url?: string; frameId?: number }): boolean {
+  if (sender.frameId !== 0 || !sender.url) return false;
+  try {
+    const origin = new URL(sender.url).origin;
+    return (
+      origin === new URL(APP_ORIGIN).origin ||
+      origin === new URL(MATCH_ORIGIN).origin
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Put Discord in front of the user, with the panel open: the Discord tab they
+ * used most recently, or a new one when there is none.
+ *
+ * Asked for by the bridge right after a want list arrives from objekt.my —
+ * the user just pressed "Find on Discord", so Discord is where they are going.
+ * Reusing their tab rather than opening another keeps them in the channel
+ * they trade in; the panel shows the list that just arrived.
+ */
+async function showDiscord(): Promise<void> {
+  const tab = pickTab(await extensionApi.tabs.query({ url: DISCORD_MATCHES }));
+  if (typeof tab?.id !== "number") {
+    await extensionApi.tabs.create({ url: "https://discord.com/app" });
+    return;
+  }
+  await extensionApi.tabs.update(tab.id, { active: true });
+  if (typeof tab.windowId === "number")
+    await extensionApi.windows
+      .update(tab.windowId, { focused: true })
+      .catch(() => {});
+  await ensureContentScript(tab.id).catch(() => {});
+  await extensionApi.tabs
+    .sendMessage(tab.id, { type: "open-panel" })
+    .catch(() => {});
+}
+
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
   const panel = fromPanel(sender.url);
@@ -630,6 +674,15 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
             .catch(() => {});
         return true;
       }
+    }
+    // The objekt.my bridge asks for exactly one thing, and only after a want
+    // list the user sent with a click has been stored.
+    if (fromObjektPage(sender)) {
+      if (request?.type === "show-discord") {
+        await showDiscord();
+        return true;
+      }
+      throw new Error("Unsupported request");
     }
     if (!panel) throw new Error("Unsupported request");
     if (request?.type === "open-window") {

@@ -36,5 +36,11 @@ if (!globalThis.__objektBridgeAlive?.()) {
     },
     version: extensionApi.runtime.getManifest().version,
     alive,
+    // The user just pressed "Find on Discord": take them there.
+    onSaved: () => {
+      void extensionApi.runtime
+        .sendMessage({ type: "show-discord" })
+        .catch(() => {});
+    },
   });
 }

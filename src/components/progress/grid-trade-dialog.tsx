@@ -297,10 +297,9 @@ export function GridTradeDialog({
     setSending(true);
     const ok = await sendHuntToExtension(currentHunt(), { source: "grid" });
     setSending(false);
+    // The extension brings the user's Discord tab forward itself, with the
+    // list waiting in its panel — nothing more to say here.
     if (ok) {
-      toast.success(
-        "Added to Objekt Match — open your Discord trade channel and scroll.",
-      );
       onOpenChange(false);
     } else {
       toast.error(
@@ -647,8 +646,8 @@ export function GridTradeDialog({
             </DialogFooter>
             {extensionInstalled && (
               <p className="text-center text-xs text-muted-foreground">
-                Adds these to your Objekt Match extension. Open your Discord
-                trade channel to see who has them.
+                Adds these to Objekt Match and takes you to Discord, where it
+                flags who has them as you scroll.
               </p>
             )}
           </>

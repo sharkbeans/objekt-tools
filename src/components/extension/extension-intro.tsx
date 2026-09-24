@@ -109,14 +109,14 @@ export function ExtensionIntro({
         <div className="space-y-1">
           <p className="font-semibold">Objekt Match is ready</p>
           <p className="text-sm text-muted-foreground">
-            Add your {count} missing objekt{count === 1 ? "" : "s"} to it, then
-            open your Discord trade channel. Posts that have them get flagged as
-            you scroll.
+            Add your {count} missing objekt{count === 1 ? "" : "s"} to it and
+            it&rsquo;ll take you to Discord. Posts that have them get flagged as
+            you scroll your trade channel.
           </p>
         </div>
         <Button onClick={onSend} disabled={sending} className="w-full gap-1.5">
           {sending && <Loader2Icon className="size-4 animate-spin" />}
-          Add to Objekt Match
+          Add and go to Discord
         </Button>
       </div>
     );

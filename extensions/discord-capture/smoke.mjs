@@ -430,7 +430,10 @@ try {
       document.getElementById("wants").value === "SeoYeon CC102\nSeoYeon CC103",
   );
   await popup.locator("#hunt-note").waitFor();
-  assert.match(await popup.locator("#hunt-text").textContent(), /2 missing objekts/);
+  assert.match(
+    await popup.locator("#hunt-text").textContent(),
+    /2 missing objekts/,
+  );
   await popup.locator("#undo-hunt").click();
   await popup.waitForFunction(
     () => document.getElementById("wants").value === "SeoYeon CC101",
