@@ -6,10 +6,12 @@ import {
   ClipboardPasteIcon,
   Loader2Icon,
   PlusIcon,
+  PuzzleIcon,
   ShoppingBagIcon,
   TagIcon,
   XIcon,
 } from "lucide-react";
+import Link from "next/link";
 import {
   type ChangeEvent,
   useCallback,
@@ -39,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
 import {
   fetchInventoryByNickname,
@@ -87,6 +90,11 @@ import {
   readExtensionMessage,
 } from "@/lib/match/extension-handoff";
 import {
+  type HuntParams,
+  readHuntParams,
+  stripHuntParams,
+} from "@/lib/match/hunt-url";
+import {
   authorSeenId,
   postSeenId,
   type SeenId,
@@ -129,6 +137,7 @@ const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
 const PICKED_KEY = "match:picked:v1";
 const COLS_KEY = "match:columns:v1";
+const INSTALL_CTA_KEY = "match:install-cta-dismissed:v1";
 const COLUMN_CHOICES = [4, 5, 6, 7, 8, 10, 12] as const;
 const DEFAULT_COLUMNS = 8;
 const EMPTY_KEYS = new Set<string>();
@@ -265,6 +274,42 @@ function SelectionTray({
   );
 }
 
+/**
+ * Shown on an empty desk. The page can't see the extension yet (its content
+ * scripts only run on discord.com), so "no posts" stands in for "not
+ * installed" until plan 038 adds real presence detection. Paste stays the
+ * fallback either way.
+ */
+function InstallCta({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border bg-card px-4 py-3">
+      <PuzzleIcon className="mt-0.5 size-5 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="text-sm">
+          <span className="font-semibold">Get Objekt Match</span> — it collects
+          trade posts as you scroll Discord, so you never paste again.
+        </p>
+        <Button asChild size="sm" variant="outline">
+          <Link
+            href="/extension"
+            onClick={() => track("match_install_cta_click")}
+          >
+            Get the extension
+          </Link>
+        </Button>
+      </div>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+        className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+      >
+        <XIcon className="size-4" />
+      </button>
+    </div>
+  );
+}
+
 export function MatchClient() {
   const [mode, setMode] = useState<DeskMode>("wtt");
   const [raw, setRaw] = useState("");
@@ -296,6 +341,8 @@ export function MatchClient() {
   const [storedCount, setStoredCount] = useState(0);
   const [seen, setSeen] = useState<ReadonlySet<SeenId>>(EMPTY_SEEN);
   const [hideSeen, setHideSeen] = useState(true);
+  // Hidden until the stored choice is read, so a dismissed card never flashes.
+  const [installCtaDismissed, setInstallCtaDismissed] = useState(true);
   // messageKey -> the SHA-256 ids that identify this post and its author.
   const [seenIds, setSeenIds] =
     useState<ReadonlyMap<string, PostSeenIds>>(EMPTY_SEEN_IDS);
@@ -326,6 +373,7 @@ export function MatchClient() {
         );
       setSeen(loadLocalSeen());
       setHideSeen(loadHideSeen());
+      setInstallCtaDismissed(localStorage.getItem(INSTALL_CTA_KEY) === "1");
       localStorage.removeItem("match:transcript:v1");
     } catch {
       /* A disabled or full store still allows a session. */
@@ -516,6 +564,49 @@ export function MatchClient() {
     post({ source: PAGE_SOURCE, type: "ready" });
     return () => window.removeEventListener("message", onMessage);
   }, [ready, addPaste, loadInventory]);
+
+  /**
+   * Open a hunt: a one-shot search handed over from a grid ("what am I
+   * missing") via `/match?hunt=1…`. Mirrors the extension delivery above —
+   * a new search, fresh selections — but leaves the saved want list alone.
+   * Offers only replace the typed haves in WTT; a WTB hunt never assumes the
+   * user will give anything up.
+   */
+  const applyHunt = useCallback(
+    (hunt: HuntParams) => {
+      setMode(hunt.mode);
+      setSort(hunt.mode === "wtb" ? "price" : "popular");
+      setTheirSearch(hunt.wants.join(", "));
+      setGive(new Set());
+      setGet(new Set());
+      if (hunt.mode === "wtt") setOffering(hunt.offers.join("\n"));
+      const nick = hunt.nickname.trim();
+      if (nick) {
+        setNickname(nick);
+        if (!ownedCount.current) void loadInventory(nick);
+      }
+      track("match_hunt_applied", {
+        mode: hunt.mode,
+        wants: hunt.wants.length,
+        offers: hunt.offers.length,
+      });
+    },
+    [loadInventory],
+  );
+
+  // Applied only once `ready` is true so it lands after the localStorage
+  // restore, then stripped from the URL so a reload keeps the user's edits.
+  useEffect(() => {
+    if (!ready) return;
+    const hunt = readHuntParams(new URLSearchParams(window.location.search));
+    if (!hunt) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      stripHuntParams(window.location.href),
+    );
+    applyHunt(hunt);
+  }, [ready, applyHunt]);
 
   const mine = useMemo(
     () =>
@@ -1064,7 +1155,8 @@ export function MatchClient() {
             Find your next trade
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your collection. Their posts. The people who connect them.
+            Paste or capture your Discord trade channels — see who has what
+            you’re missing.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1077,6 +1169,18 @@ export function MatchClient() {
           </Button>
         </div>
       </header>
+      {ready && messages.length === 0 && !installCtaDismissed && (
+        <InstallCta
+          onDismiss={() => {
+            setInstallCtaDismissed(true);
+            try {
+              localStorage.setItem(INSTALL_CTA_KEY, "1");
+            } catch {
+              /* Dismissed for this session only. */
+            }
+          }}
+        />
+      )}
       <section className="space-y-3" aria-label="Trading mode">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <fieldset
