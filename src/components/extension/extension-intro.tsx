@@ -78,18 +78,28 @@ export function ExtensionIntro({
   sending?: boolean;
 }) {
   const [opened, setOpened] = useState(false);
+  // Back from the store and still no answer. An older store version has no
+  // objekt.my bridge to answer with, and neither does a grid served from a
+  // host the bridge doesn't run on — so waiting must never be a dead end.
+  const [unanswered, setUnanswered] = useState(false);
 
   // Coming back from the store tab: ask again, in case the announcement was
   // missed while this tab was in the background.
   useEffect(() => {
     if (!opened || installed) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const ping = () => {
       if (document.visibilityState !== "visible") return;
       const message: PageMessage = { source: PAGE_SOURCE, type: "ping" };
       window.postMessage(message, window.location.origin);
+      clearTimeout(timer);
+      timer = setTimeout(() => setUnanswered(true), 3000);
     };
     document.addEventListener("visibilitychange", ping);
-    return () => document.removeEventListener("visibilitychange", ping);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", ping);
+    };
   }, [opened, installed]);
 
   if (installed)
@@ -135,7 +145,26 @@ export function ExtensionIntro({
         ))}
       </ul>
 
-      {opened ? (
+      {opened && unanswered ? (
+        <div className="space-y-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+          <p className="text-muted-foreground">
+            Added it already? It may need a page reload, or an update to show up
+            here. You can carry on either way — its <em>Open in match</em>{" "}
+            button brings Discord posts to Match.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              track("extension_intro_unanswered_continue");
+              onSkip();
+            }}
+          >
+            Continue to Match
+          </Button>
+        </div>
+      ) : opened ? (
         <p className="flex items-center justify-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
           <Loader2Icon className="size-4 animate-spin" />
           Come back to this tab once it&rsquo;s added.
