@@ -4,6 +4,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   serial,
   text,
@@ -537,6 +538,42 @@ export const discordPasteSeen = pgTable(
       t.userId,
       t.kind,
       t.hash,
+    ),
+  ],
+);
+
+// A saved hunt: "what am I missing for this grid", kept on the account so it
+// can be set up on a phone and picked up on desktop, where the extension runs.
+// The wants themselves are deliberately not stored — they are recomputed from
+// live ownership on every read, so a hunt shrinks as the user collects. Only
+// the user's own choices are kept: slots they deselected, and dupes they
+// opted to offer. One per user per grid; capped at 20 per user in the API.
+export const hunt = pgTable(
+  "hunt",
+  {
+    id: text("id").primaryKey().$defaultFn(generateId),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** The Cosmo nickname the hunt is for — the user's own linked account. */
+    nickname: text("nickname").notNull(),
+    member: text("member").notNull(),
+    season: text("season").notNull(),
+    edition: integer("edition").notNull(),
+    mode: text("mode").notNull().$type<"wtb" | "wtt">(),
+    /** collectionIds the user explicitly deselected from the missing slots. */
+    skipped: jsonb("skipped").$type<string[]>().notNull().default([]),
+    /** collectionIds of dupes the user opted to offer (wtt only). */
+    offers: jsonb("offers").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("hunt_user_grid_unique").on(
+      t.userId,
+      t.member,
+      t.season,
+      t.edition,
     ),
   ],
 );

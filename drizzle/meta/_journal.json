@@ -232,6 +232,13 @@
       "when": 1789115848854,
       "tag": "0032_unique_active_trade_ban",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790216713650,
+      "tag": "0033_saved_hunts",
+      "breakpoints": true
     }
   ]
 }
