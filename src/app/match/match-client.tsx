@@ -339,6 +339,59 @@ function InstallCta({ onDismiss }: { onDismiss: () => void }) {
 }
 
 /**
+ * Above the paste box, where the chore it replaces is in plain view: pasting
+ * a channel by hand is exactly what the extension does for you. Offered only
+ * where it can be installed; with it installed, a pointer to its own button.
+ */
+function PasteExtensionHint({ installed }: { installed: boolean | null }) {
+  if (installed)
+    return (
+      <p className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+        <PuzzleIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+        <span>
+          You have Objekt Match — press <strong>Open in match</strong> in its
+          panel on Discord to bring posts here without pasting.
+        </span>
+      </p>
+    );
+  const store = installed === false ? extensionStoreForBrowser() : null;
+  if (!store) return null;
+  return (
+    <div className="flex items-start gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+      <PuzzleIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1 space-y-2 text-sm">
+        <p>
+          <span className="font-semibold">Skip the pasting.</span> The free
+          Objekt Match extension collects posts as you scroll Discord and sends
+          them here in one click.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild size="sm">
+            <a
+              href={store.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() =>
+                track("match_install_cta_click", { source: "paste" })
+              }
+            >
+              Add to Chrome — it&rsquo;s free
+            </a>
+          </Button>
+          <Link
+            href="/extension"
+            target="_blank"
+            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            How it works
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * A hunt was just opened here and the extension is installed: offer to make
  * it the extension's want list too, so the next Discord scroll looks for it.
  * This is also the path for grids served from another host (collect.*),
@@ -1851,6 +1904,7 @@ export function MatchClient() {
             </div>
           ) : (
             <div className="space-y-3">
+              <PasteExtensionHint installed={extensionInstalled} />
               <Textarea
                 aria-label="Discord posts"
                 rows={9}
