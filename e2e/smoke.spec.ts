@@ -9,13 +9,13 @@ test("home page exposes the main public tools", async ({ page }) => {
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Trades/i }).first(),
+    page.getByRole("link", { name: /Your grids/i }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Match on Discord/i }).first(),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Lists/i }).first(),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: /Collection/i }).first(),
   ).toBeVisible();
 });
 

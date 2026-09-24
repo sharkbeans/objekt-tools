@@ -46,20 +46,6 @@ import { useSession } from "@/lib/auth-client";
 import { type SectionId, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
-function useMatchCount() {
-  const { data: session } = useSession();
-  const { data: matchData } = useQuery({
-    queryKey: ["matches-count"],
-    queryFn: async () => {
-      const res = await fetch("/api/trades/mine/matches-count");
-      return res.json();
-    },
-    enabled: !!session,
-    refetchInterval: 60000,
-  });
-  return matchData?.count ?? 0;
-}
-
 function useUnreadNotificationCount() {
   const { data: session } = useSession();
   const { data } = useQuery({
@@ -80,7 +66,6 @@ export function Navbar({
   currentSection: SectionId | null;
 }) {
   const { data: session } = useSession();
-  const matchCount = useMatchCount();
   const unreadCount = useUnreadNotificationCount();
   const { profileHref, isLinked, refetch: refetchCosmoLink } = useCosmoLink();
   const [loginCodeOpen, setLoginCodeOpen] = useState(false);
@@ -112,29 +97,18 @@ export function Navbar({
             </Link>
             <nav className="flex items-center gap-4 text-sm">
               <Link
-                href={href("/trades")}
-                className="relative text-muted-foreground hover:text-foreground transition-colors"
-                title="Browse all trades"
-              >
-                Trades
-                {matchCount > 0 && (
-                  <span className="absolute -top-2 -right-4 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
-                    {matchCount > 99 ? "99+" : matchCount}
-                  </span>
-                )}
-              </Link>
-              <Link
-                href={href("/list")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                title="Create and share a have/want list"
-              >
-                Lists
-              </Link>
-              <Link
                 href={href("/collection")}
                 className="text-muted-foreground hover:text-foreground transition-colors"
+                title="See what your grids are missing"
               >
                 Collection
+              </Link>
+              <Link
+                href={href("/match")}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Find who on Discord has what you're missing"
+              >
+                Match
               </Link>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -142,13 +116,13 @@ export function Navbar({
                     type="button"
                     className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Tools
+                    More
                     <ChevronDownIcon className="size-4" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem asChild>
-                    <Link href={href("/match")}>Match from Discord</Link>
+                    <Link href={href("/list")}>Lists</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href={href("/objekt-maker")}>Objektify</Link>
@@ -253,7 +227,6 @@ export function Navbar({
       <MobileNav
         currentSection={currentSection}
         session={session}
-        matchCount={matchCount}
         unreadCount={unreadCount}
         profileHref={profileHref}
         isLinked={isLinked}
@@ -303,7 +276,6 @@ export function Navbar({
 function MobileNav({
   currentSection,
   session,
-  matchCount,
   unreadCount,
   profileHref,
   isLinked,
@@ -313,7 +285,6 @@ function MobileNav({
 }: {
   currentSection: SectionId | null;
   session: ReturnType<typeof useSession>["data"];
-  matchCount: number;
   unreadCount: number;
   profileHref: string;
   isLinked: boolean;
@@ -325,13 +296,14 @@ function MobileNav({
   const [open, setOpen] = useState(false);
   const href = (internal: string) =>
     sectionHref(internal, currentSection ? { currentSection } : undefined);
-  const isToolsRoute =
-    pathname.startsWith("/match") ||
+  const isMoreRoute =
+    pathname.startsWith("/list") ||
     pathname.startsWith("/objekt-maker") ||
     pathname.startsWith("/proofshot") ||
     pathname.startsWith("/spin") ||
+    currentSection === "list" ||
     currentSection === "create";
-  const [toolsOpen, setToolsOpen] = useState(isToolsRoute);
+  const [moreOpen, setMoreOpen] = useState(isMoreRoute);
 
   return (
     <>
@@ -400,27 +372,16 @@ function MobileNav({
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-          <MobileNavLink href={href("/trades")} onClick={() => setOpen(false)}>
-            <span className="flex items-center gap-2">
-              <ArrowLeftRightIcon className="size-4 shrink-0" />
-              Trades
-              {matchCount > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
-                  {matchCount > 99 ? "99+" : matchCount}
-                </span>
-              )}
-            </span>
-          </MobileNavLink>
-          <MobileNavLink href={href("/list")} onClick={() => setOpen(false)}>
-            <ImageIcon className="size-4" />
-            Lists
-          </MobileNavLink>
           <MobileNavLink
             href={href("/collection")}
             onClick={() => setOpen(false)}
           >
             <LibraryIcon className="size-4" />
             Collection
+          </MobileNavLink>
+          <MobileNavLink href={href("/match")} onClick={() => setOpen(false)}>
+            <ArrowLeftRightIcon className="size-4" />
+            Match
           </MobileNavLink>
           {session && (
             <MobileNavLink
@@ -441,31 +402,31 @@ function MobileNav({
           <div className="pt-2">
             <button
               type="button"
-              onClick={() => setToolsOpen((value) => !value)}
+              onClick={() => setMoreOpen((value) => !value)}
               className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-expanded={toolsOpen}
-              aria-controls="mobile-tools-nav"
+              aria-expanded={moreOpen}
+              aria-controls="mobile-more-nav"
             >
               <span className="inline-flex items-center gap-2">
                 <SparklesIcon className="size-4" />
-                Tools
+                More
               </span>
               <ChevronDownIcon
                 className={cn(
                   "size-4 transition-transform",
-                  toolsOpen && "rotate-180",
+                  moreOpen && "rotate-180",
                 )}
               />
             </button>
-            {toolsOpen && (
-              <div id="mobile-tools-nav" className="mt-1 space-y-1">
+            {moreOpen && (
+              <div id="mobile-more-nav" className="mt-1 space-y-1">
                 <MobileNavLink
-                  href={href("/match")}
+                  href={href("/list")}
                   onClick={() => setOpen(false)}
                   className="pl-8"
                 >
-                  <ArrowLeftRightIcon className="size-4" />
-                  Match from Discord
+                  <ImageIcon className="size-4" />
+                  Lists
                 </MobileNavLink>
                 <MobileNavLink
                   href={href("/objekt-maker")}
