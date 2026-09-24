@@ -4,9 +4,11 @@ import {
   ArrowLeftRightIcon,
   Check,
   Loader2Icon,
+  PuzzleIcon,
   SearchIcon,
   ShoppingBagIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useExtensionPresence } from "@/hooks/use-extension-presence";
 import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
@@ -44,7 +47,13 @@ import {
   encodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
-import { buildHuntHref, type HuntMode, huntLabel } from "@/lib/match/hunt-url";
+import {
+  buildHuntHref,
+  type HuntMode,
+  type HuntParams,
+  huntLabel,
+} from "@/lib/match/hunt-url";
+import { sendHuntToExtension } from "@/lib/match/send-hunt";
 import {
   makePosterItem,
   resolvedItemToApiInput,
@@ -96,7 +105,9 @@ export function GridTradeDialog({
   const [huntMode, setHuntMode] = useState<HuntMode>("wtb");
   const [offerIds, setOfferIds] = useState<Set<string>>(() => new Set());
   const [creating, setCreating] = useState(false);
+  const [sending, setSending] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const { installed: extensionInstalled } = useExtensionPresence();
   // Only the profile's own owner can offer its dupes or auto-create a
   // matchable trade list from it — a visitor viewing someone else's grid
   // can't give away that person's objekts, so visitors always hunt in Buy.
@@ -249,29 +260,51 @@ export function GridTradeDialog({
     };
   }
 
-  // Primary path: hand the missing FCOs to /match as a hunt, where the user's
-  // Discord trade posts show who has them. /match is root-only, so from the
-  // collect host sectionHref yields the absolute root URL. A visitor's hunt
-  // carries no nickname — /match would otherwise load the wrong inventory.
+  // The hunt as picked. A visitor's hunt carries no nickname — /match or the
+  // extension would otherwise load the wrong inventory.
+  function currentHunt(): HuntParams {
+    return {
+      mode,
+      wants: rows
+        .filter((r) => selected.has(r.collection.collectionId))
+        .map((r) => huntLabel(r.collection)),
+      offers: offered.map((d) => huntLabel(d.collection)),
+      nickname: isOwnProfile ? nickname : "",
+    };
+  }
+
+  // Hand the missing FCOs to /match as a hunt, where the user's Discord trade
+  // posts show who has them. /match is root-only, so from the collect host
+  // sectionHref yields the absolute root URL.
   const handleFindOnDiscord = () => {
-    const wants = rows
-      .filter((r) => selected.has(r.collection.collectionId))
-      .map((r) => huntLabel(r.collection));
-    const offers = offered.map((d) => huntLabel(d.collection));
+    const hunt = currentHunt();
     track("grid_hunt_find", {
       mode,
-      wants: wants.length,
-      offers: offers.length,
+      wants: hunt.wants.length,
+      offers: hunt.offers.length,
       own: isOwnProfile,
     });
-    const href = buildHuntHref({
-      mode,
-      wants,
-      offers,
-      nickname: isOwnProfile ? nickname : "",
-    });
     onOpenChange(false);
-    router.push(sectionHref(href, { currentSection: "collect" }));
+    router.push(
+      sectionHref(buildHuntHref(hunt), { currentSection: "collect" }),
+    );
+  };
+
+  // With the extension installed, the hunt becomes its want list directly, so
+  // the next scroll of a Discord trade channel is already looking for it.
+  // Only ever on this click: it replaces the list the user has there.
+  const handleSendToExtension = async () => {
+    setSending(true);
+    const ok = await sendHuntToExtension(currentHunt(), { source: "grid" });
+    setSending(false);
+    if (ok) {
+      toast.success("Sent — open your Discord trade channel");
+      onOpenChange(false);
+    } else {
+      toast.error(
+        "Objekt Match didn’t answer. Reload this page and try again, or open the hunt in /match.",
+      );
+    }
   };
 
   // Stash the draft and open the full poster editor so the user can
@@ -464,15 +497,54 @@ export function GridTradeDialog({
               Create list
             </Button>
           )}
-          <Button
-            onClick={handleFindOnDiscord}
-            disabled={selected.size === 0}
-            className="gap-1.5"
-          >
-            <SearchIcon className="h-4 w-4" />
-            Find on Discord
-          </Button>
+          {extensionInstalled ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={handleFindOnDiscord}
+                disabled={selected.size === 0}
+                className="gap-1.5"
+              >
+                <SearchIcon className="h-4 w-4" />
+                Open in /match
+              </Button>
+              <Button
+                onClick={handleSendToExtension}
+                disabled={selected.size === 0 || sending}
+                className="gap-1.5"
+              >
+                {sending ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PuzzleIcon className="h-4 w-4" />
+                )}
+                Send to Objekt Match
+              </Button>
+            </>
+          ) : (
+            <Button
+              onClick={handleFindOnDiscord}
+              disabled={selected.size === 0}
+              className="gap-1.5"
+            >
+              <SearchIcon className="h-4 w-4" />
+              Find on Discord
+            </Button>
+          )}
         </DialogFooter>
+        {extensionInstalled === false && (
+          <p className="text-center text-xs text-muted-foreground">
+            Objekt Match can take this hunt straight to your Discord trade
+            channel.{" "}
+            <Link
+              href={sectionHref("/extension", { currentSection: "collect" })}
+              onClick={() => track("grid_hunt_get_extension")}
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              Get the extension
+            </Link>
+          </p>
+        )}
       </DialogContent>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

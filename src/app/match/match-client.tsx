@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useExtensionPresence } from "@/hooks/use-extension-presence";
 import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
 import {
@@ -110,6 +111,7 @@ import {
   saveHideSeen,
   saveLocalSeen,
 } from "@/lib/match/seen-store";
+import { sendHuntToExtension } from "@/lib/match/send-hunt";
 import {
   blocksToTranscript,
   linksOf,
@@ -275,10 +277,9 @@ function SelectionTray({
 }
 
 /**
- * Shown on an empty desk. The page can't see the extension yet (its content
- * scripts only run on discord.com), so "no posts" stands in for "not
- * installed" until plan 038 adds real presence detection. Paste stays the
- * fallback either way.
+ * Shown when the extension's objekt.my bridge did not answer a ping, i.e. it
+ * is not installed (or not enabled on this site). Paste stays the fallback
+ * either way.
  */
 function InstallCta({ onDismiss }: { onDismiss: () => void }) {
   return (
@@ -298,6 +299,57 @@ function InstallCta({ onDismiss }: { onDismiss: () => void }) {
           </Link>
         </Button>
       </div>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+        className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+      >
+        <XIcon className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * A hunt was just opened here and the extension is installed: offer to make
+ * it the extension's want list too, so the next Discord scroll looks for it.
+ * This is also the path for grids served from another host (collect.*),
+ * where the extension's bridge does not run and the grid dialog cannot offer
+ * it directly.
+ */
+function HuntSendBar({
+  hunt,
+  onDismiss,
+}: {
+  hunt: HuntParams;
+  onDismiss: () => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const send = async () => {
+    setSending(true);
+    const ok = await sendHuntToExtension(hunt, { source: "match" });
+    setSending(false);
+    if (ok) {
+      toast.success("Sent — open your Discord trade channel");
+      onDismiss();
+    } else {
+      toast.error("Objekt Match didn’t answer. Reload this page and retry.");
+    }
+  };
+  const count = hunt.wants.length;
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
+      <PuzzleIcon className="size-5 shrink-0 text-primary" />
+      <p className="min-w-0 flex-1 text-sm">
+        Hunting {count} objekt{count === 1 ? "" : "s"}. Make{" "}
+        {count === 1 ? "it" : "them"} Objekt Match’s want list so your next
+        Discord scroll looks for {count === 1 ? "it" : "them"} too.
+      </p>
+      <Button size="sm" onClick={send} disabled={sending}>
+        {sending && <Loader2Icon className="size-4 animate-spin" />}
+        Send to Objekt Match
+      </Button>
       <button
         type="button"
         aria-label="Dismiss"
@@ -347,6 +399,9 @@ export function MatchClient() {
   const [seenIds, setSeenIds] =
     useState<ReadonlyMap<string, PostSeenIds>>(EMPTY_SEEN_IDS);
   const { data: session } = useSession();
+  const { installed: extensionInstalled } = useExtensionPresence();
+  /** The last hunt applied here, offered to the extension while it is up. */
+  const [activeHunt, setActiveHunt] = useState<HuntParams | null>(null);
   // Persisted, never rendered — a ref keeps pastes out of the render path and
   // keeps `addPaste` free of a stale closure over the previous blocks.
   const blocksRef = useRef<StoredBlock[]>([]);
@@ -588,6 +643,7 @@ export function MatchClient() {
         setNickname(nick);
         if (!ownedCount.current) void loadInventory(nick);
       }
+      setActiveHunt(hunt.wants.length ? hunt : null);
       track("match_hunt_applied", {
         mode: hunt.mode,
         wants: hunt.wants.length,
@@ -1172,7 +1228,10 @@ export function MatchClient() {
           </Button>
         </div>
       </header>
-      {ready && messages.length === 0 && !installCtaDismissed && (
+      {ready && extensionInstalled && activeHunt && (
+        <HuntSendBar hunt={activeHunt} onDismiss={() => setActiveHunt(null)} />
+      )}
+      {ready && extensionInstalled === false && !installCtaDismissed && (
         <InstallCta
           onDismiss={() => {
             setInstallCtaDismissed(true);

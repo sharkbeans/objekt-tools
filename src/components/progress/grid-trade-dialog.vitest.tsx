@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GridTradeDialog } from "@/components/progress/grid-trade-dialog";
 import { readHuntParams } from "@/lib/match/hunt-url";
 import type { ProgressCollection } from "@/lib/progress/types";
+import { installFakeExtension } from "@/test/fake-extension";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -213,5 +214,54 @@ describe("GridTradeDialog hunt", () => {
       offers: ["SeoYeon CC101"],
       nickname: "sjarkbean",
     });
+  });
+});
+
+describe("GridTradeDialog with the extension", () => {
+  afterEach(() => {
+    mocks.push.mockReset();
+    mocks.session = null;
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the hunt to the extension instead of navigating", async () => {
+    const extension = installFakeExtension();
+    try {
+      renderDialog(firstEdition({ "101": 1, "102": 1, "106": 1, "108": 1 }));
+      const send = await screen.findByRole("button", {
+        name: /Send to Objekt Match/,
+      });
+      expect(
+        screen.getByRole("button", { name: /Open in \/match/ }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Get the extension/)).toBeNull();
+      fireEvent.click(send);
+      await waitFor(() => expect(extension.hunts).toHaveLength(1));
+      expect(extension.hunts[0]).toMatchObject({
+        type: "hunt",
+        wants: MISSING.join("\n"),
+        nickname: "",
+      });
+      expect(mocks.push).not.toHaveBeenCalled();
+    } finally {
+      extension.remove();
+    }
+  });
+
+  it("keeps Find on Discord and links the extension when it is absent", async () => {
+    renderDialog(firstEdition({}));
+    expect(
+      await screen.findByRole(
+        "link",
+        { name: /Get the extension/ },
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Find on Discord/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Send to Objekt Match/ }),
+    ).toBeNull();
   });
 });
