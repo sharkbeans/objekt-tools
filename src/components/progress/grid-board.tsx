@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowLeftRightIcon } from "lucide-react";
+import { SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { track } from "@/lib/analytics";
 import type { Edition } from "@/lib/edition";
 import { EDITION_LABELS } from "@/lib/edition";
 import {
@@ -175,11 +176,14 @@ export function GridBoard({
           size="sm"
           variant="outline"
           className="h-7 gap-1.5 px-2.5 text-xs"
-          onClick={() => setTradeOpen(true)}
+          onClick={() => {
+            setTradeOpen(true);
+            track("grid_hunt_open");
+          }}
           disabled={!ownershipLoaded}
         >
-          <ArrowLeftRightIcon className="h-3.5 w-3.5" />
-          Create List
+          <SearchIcon className="h-3.5 w-3.5" />
+          Hunt
         </Button>
       </div>
       <div className="grid w-full grid-cols-3 grid-rows-3 gap-2.5 lg:gap-3">

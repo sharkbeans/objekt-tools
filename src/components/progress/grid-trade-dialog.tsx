@@ -1,6 +1,12 @@
 "use client";
 
-import { Check, Loader2Icon } from "lucide-react";
+import {
+  ArrowLeftRightIcon,
+  Check,
+  Loader2Icon,
+  SearchIcon,
+  ShoppingBagIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -24,7 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
+import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { EDITION_LABELS, type Edition } from "@/lib/edition";
@@ -38,6 +44,7 @@ import {
   encodeGridTradeStash,
   GRID_TRADE_HASH_PARAM,
 } from "@/lib/grid-trade-stash";
+import { buildHuntHref, type HuntMode, huntLabel } from "@/lib/match/hunt-url";
 import {
   makePosterItem,
   resolvedItemToApiInput,
@@ -55,6 +62,11 @@ interface Props {
   nickname: string;
   seasonCollections: ProgressCollection[];
 }
+
+const HUNT_MODES = [
+  { id: "wtb", label: "Buy", icon: ShoppingBagIcon },
+  { id: "wtt", label: "Trade", icon: ArrowLeftRightIcon },
+] as const;
 
 function toEntry(c: ProgressCollection): ObjektEntry {
   return {
@@ -79,13 +91,17 @@ export function GridTradeDialog({
 }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
-  const [offerDupes, setOfferDupes] = useState(true);
+  // Buy by default: grid rank chasers never give up dupes (dupes are future
+  // grids), so haves are strictly opt-in — Trade mode, one tick at a time.
+  const [huntMode, setHuntMode] = useState<HuntMode>("wtb");
+  const [offerIds, setOfferIds] = useState<Set<string>>(() => new Set());
   const [creating, setCreating] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // Only the profile's own owner can auto-create a matchable trade list from
-  // it — a visitor viewing someone else's grid shouldn't be able to spin up
-  // a list claiming that person's dupes under the visitor's own account.
+  // Only the profile's own owner can offer its dupes or auto-create a
+  // matchable trade list from it — a visitor viewing someone else's grid
+  // can't give away that person's objekts, so visitors always hunt in Buy.
   const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const mode: HuntMode = isOwnProfile ? huntMode : "wtb";
 
   useEffect(() => {
     if (!session) {
@@ -151,9 +167,13 @@ export function GridTradeDialog({
   }, [defaultSelection, touched]);
 
   // Closing discards the manual picks, so the next open starts from a default
-  // computed against whatever ownership data has landed by then.
+  // computed against whatever ownership data has landed by then — and from
+  // Buy with nothing offered.
   useEffect(() => {
-    if (!open) setTouched(false);
+    if (open) return;
+    setTouched(false);
+    setHuntMode("wtb");
+    setOfferIds(new Set());
   }, [open]);
 
   // Spare copies across the *whole season*, not just this board's edition —
@@ -172,14 +192,27 @@ export function GridTradeDialog({
     [offerableDupes, selected],
   );
 
-  const dupeCount = useMemo(
-    () => dupes.reduce((sum, d) => sum + d.offerable, 0),
-    [dupes],
+  // Only what the user ticked, and only in Trade mode.
+  const offered = useMemo(
+    () =>
+      mode === "wtt"
+        ? dupes.filter((d) => offerIds.has(d.collection.collectionId))
+        : [],
+    [mode, dupes, offerIds],
   );
 
   const toggle = (id: string) => {
     setTouched(true);
     setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleOffer = (id: string) => {
+    setOfferIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -195,13 +228,11 @@ export function GridTradeDialog({
     // One entry per offerable duplicate copy (not a single pre-aggregated
     // quantity) so the poster's "Combine Duplicates" toggle can actually
     // merge/split them, same as any other multi-copy have.
-    const haves = offerDupes
-      ? dupes.flatMap(({ collection, offerable }) =>
-          Array.from({ length: offerable }, () =>
-            makePosterItem(toEntry(collection)),
-          ),
-        )
-      : [];
+    const haves = offered.flatMap(({ collection, offerable }) =>
+      Array.from({ length: offerable }, () =>
+        makePosterItem(toEntry(collection)),
+      ),
+    );
 
     return {
       username: nickname,
@@ -218,8 +249,33 @@ export function GridTradeDialog({
     };
   }
 
-  // Secondary path: stash the draft and open the full poster editor so the
-  // user can customize before saving.
+  // Primary path: hand the missing FCOs to /match as a hunt, where the user's
+  // Discord trade posts show who has them. /match is root-only, so from the
+  // collect host sectionHref yields the absolute root URL. A visitor's hunt
+  // carries no nickname — /match would otherwise load the wrong inventory.
+  const handleFindOnDiscord = () => {
+    const wants = rows
+      .filter((r) => selected.has(r.collection.collectionId))
+      .map((r) => huntLabel(r.collection));
+    const offers = offered.map((d) => huntLabel(d.collection));
+    track("grid_hunt_find", {
+      mode,
+      wants: wants.length,
+      offers: offers.length,
+      own: isOwnProfile,
+    });
+    const href = buildHuntHref({
+      mode,
+      wants,
+      offers,
+      nickname: isOwnProfile ? nickname : "",
+    });
+    onOpenChange(false);
+    router.push(sectionHref(href, { currentSection: "collect" }));
+  };
+
+  // Stash the draft and open the full poster editor so the user can
+  // customize before saving.
   const handleCustomize = () => {
     const stash = encodeGridTradeStash(buildPosterData());
     onOpenChange(false);
@@ -228,9 +284,8 @@ export function GridTradeDialog({
     );
   };
 
-  // Primary path: create the trade list immediately and land on its Matches
-  // view — skips the editor detour for the common case of "just find me a
-  // trade for this".
+  // Secondary path (own profile only): create a public trade list right away
+  // and land on its Matches view. Haves are the ticked dupes only.
   const handleFindTrades = async () => {
     const posterData = buildPosterData();
     setCreating(true);
@@ -273,14 +328,34 @@ export function GridTradeDialog({
       <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Trade for {firsts[0]?.member} {firsts[0]?.season}{" "}
+            Hunt for {firsts[0]?.member} {firsts[0]?.season}{" "}
             {EDITION_LABELS[edition]}
           </DialogTitle>
           <DialogDescription>
-            Pick which FCOs you still need, then create a trade list with them
-            as your wants.
+            Pick the FCOs you still need, then see who on Discord has them.
           </DialogDescription>
         </DialogHeader>
+
+        {isOwnProfile && (
+          <fieldset
+            className="mx-auto inline-flex rounded-xl border bg-muted/50 p-1"
+            aria-label="Buy or trade"
+          >
+            {HUNT_MODES.map(({ id, label, icon: Icon }) => (
+              <Button
+                key={id}
+                size="sm"
+                variant={mode === id ? "default" : "ghost"}
+                aria-pressed={mode === id}
+                onClick={() => setHuntMode(id)}
+                className="min-w-24 rounded-lg"
+              >
+                <Icon className="size-4" />
+                {label}
+              </Button>
+            ))}
+          </fieldset>
+        )}
 
         <div className="mx-auto grid w-[85%] grid-cols-3 grid-rows-3 gap-2.5">
           {rows.slice(0, slots.length).map(({ collection: c, usable }, i) => {
@@ -331,52 +406,72 @@ export function GridTradeDialog({
           })}
         </div>
 
-        <div className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2">
-          <div>
-            <p className="text-sm font-medium">Offer my duplicates</p>
-            <p className="text-xs text-muted-foreground">
-              {dupeCount > 0
-                ? `Add ${dupeCount} duplicate FCO${dupeCount === 1 ? "" : "s"} from this season as haves`
-                : "No duplicate FCOs available to offer this season"}
-            </p>
+        {mode === "wtt" && (
+          <div className="space-y-2 rounded border border-border px-3 py-2">
+            <div>
+              <p className="text-sm font-medium">Offer duplicates</p>
+              <p className="text-xs text-muted-foreground">
+                Pick dupes you’re willing to trade away. Grid rank chasers:
+                leave these empty.
+              </p>
+            </div>
+            {dupes.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No duplicate FCOs available to offer this season.
+              </p>
+            ) : (
+              <ul className="max-h-48 space-y-1 overflow-y-auto">
+                {dupes.map(({ collection: c, offerable }) => (
+                  <li key={c.collectionId}>
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={offerIds.has(c.collectionId)}
+                        onChange={() => toggleOffer(c.collectionId)}
+                      />
+                      {/* biome-ignore lint/performance/noImgElement: Indexer image URLs are already optimized card assets. */}
+                      <img
+                        src={c.thumbnailImage}
+                        alt=""
+                        loading="lazy"
+                        className="h-8 aspect-photocard rounded-sm object-cover"
+                      />
+                      <span className="flex-1">{huntLabel(c)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {offerable} spare
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          <Switch
-            checked={offerDupes}
-            onCheckedChange={setOfferDupes}
-            disabled={dupeCount === 0}
-          />
-        </div>
+        )}
 
         <DialogFooter className="flex-col-reverse sm:flex-row sm:items-center">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          {isOwnProfile ? (
-            <>
-              <Button
-                variant="outline"
-                onClick={handleCustomize}
-                disabled={selected.size === 0 || creating}
-              >
-                Customize list first
-              </Button>
-              <Button
-                onClick={() => setConfirmOpen(true)}
-                disabled={selected.size === 0 || creating}
-                className="gap-1.5"
-              >
-                {creating && <Loader2Icon className="h-4 w-4 animate-spin" />}
-                Find trades
-              </Button>
-            </>
-          ) : (
+          {isOwnProfile && (
             <Button
-              onClick={handleCustomize}
+              variant="ghost"
+              onClick={() => setConfirmOpen(true)}
               disabled={selected.size === 0 || creating}
+              className="gap-1.5"
             >
-              Create trade list
+              {creating && <Loader2Icon className="h-4 w-4 animate-spin" />}
+              Create list
             </Button>
           )}
+          <Button
+            onClick={handleFindOnDiscord}
+            disabled={selected.size === 0}
+            className="gap-1.5"
+          >
+            <SearchIcon className="h-4 w-4" />
+            Find on Discord
+          </Button>
         </DialogFooter>
       </DialogContent>
 
@@ -386,8 +481,10 @@ export function GridTradeDialog({
             <AlertDialogTitle>Create a trade list?</AlertDialogTitle>
             <AlertDialogDescription>
               This will create a public trade list with these items as your
-              wants, so other traders can find and match with it. You can
-              customize the haves and wants first, or create it now as-is.
+              wants
+              {offered.length > 0 ? " and your ticked dupes as haves" : ""}, so
+              other traders can find and match with it. You can customize it
+              first, or create it now as-is.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -397,7 +494,7 @@ export function GridTradeDialog({
                 handleCustomize();
               }}
             >
-              Edit list
+              Customize first
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {

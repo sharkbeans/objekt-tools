@@ -1,14 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GridTradeDialog } from "@/components/progress/grid-trade-dialog";
+import { readHuntParams } from "@/lib/match/hunt-url";
 import type { ProgressCollection } from "@/lib/progress/types";
 
+const mocks = vi.hoisted(() => ({
+  push: vi.fn(),
+  session: null as { user: { id: string } } | null,
+}));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: mocks.push, replace: vi.fn() }),
 }));
 
 vi.mock("@/lib/auth-client", () => ({
-  useSession: () => ({ data: null }),
+  useSession: () => ({ data: mocks.session }),
 }));
 
 function fco(
@@ -121,5 +127,91 @@ describe("GridTradeDialog want selection", () => {
     );
 
     expect(selectedCount(baseElement as HTMLElement)).toBe(3);
+  });
+});
+
+/** Signed in as the profile's owner: /api/cosmo/status returns its nickname. */
+function signInAsOwner() {
+  mocks.session = { user: { id: "u1" } };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ nickname: "sjarkbean" })),
+  );
+}
+
+function pushedHunt() {
+  expect(mocks.push).toHaveBeenCalledTimes(1);
+  const href = String(mocks.push.mock.calls[0][0]);
+  expect(href.startsWith("/match?")).toBe(true);
+  return readHuntParams(new URL(href, "https://objekt.my").searchParams);
+}
+
+const MISSING = [
+  "SeoYeon CC103",
+  "SeoYeon CC104",
+  "SeoYeon CC105",
+  "SeoYeon CC107",
+];
+
+describe("GridTradeDialog hunt", () => {
+  afterEach(() => {
+    mocks.push.mockReset();
+    mocks.session = null;
+    vi.unstubAllGlobals();
+  });
+
+  // 101 and 102 have spares; 103/104/105/107 are missing.
+  const withDupes = () =>
+    firstEdition({ "101": 3, "102": 2, "106": 1, "108": 1 });
+
+  it("sends a visitor to /match in Buy mode with no nickname", () => {
+    renderDialog(withDupes());
+
+    expect(screen.queryByRole("button", { name: /Trade/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Find on Discord/ }));
+
+    expect(pushedHunt()).toEqual({
+      mode: "wtb",
+      wants: MISSING,
+      offers: [],
+      nickname: "",
+    });
+  });
+
+  it("defaults the owner to Buy with no dupes offered", async () => {
+    signInAsOwner();
+    renderDialog(withDupes());
+
+    const buy = await screen.findByRole("button", { name: /Buy/ });
+    expect(buy).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Find on Discord/ }));
+    expect(pushedHunt()).toEqual({
+      mode: "wtb",
+      wants: MISSING,
+      offers: [],
+      nickname: "sjarkbean",
+    });
+  });
+
+  it("offers only the dupes the owner ticks in Trade mode", async () => {
+    signInAsOwner();
+    renderDialog(withDupes());
+
+    fireEvent.click(await screen.findByRole("button", { name: /Trade/ }));
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) expect(box).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /SeoYeon CC101/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Find on Discord/ }));
+
+    expect(pushedHunt()).toEqual({
+      mode: "wtt",
+      wants: MISSING,
+      offers: ["SeoYeon CC101"],
+      nickname: "sjarkbean",
+    });
   });
 });
