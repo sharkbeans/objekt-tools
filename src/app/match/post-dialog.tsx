@@ -19,6 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { track } from "@/lib/analytics";
 import { INTENT_LABEL } from "@/lib/discord/intent";
 import { type MatchedPoster, objektKey } from "@/lib/discord/match";
@@ -94,7 +100,38 @@ export function CopyDiscordHandle({
  * carry a message link; a pasted transcript has no message id to link to.
  */
 export function JumpToMessage({ href }: { href: string | undefined }) {
-  if (!href) return null;
+  // Shown greyed out rather than hidden, so a missing button reads as "this
+  // post can't be linked" and not as the feature being broken. aria-disabled
+  // rather than disabled: a disabled button gets no hover or focus, so the
+  // tooltip explaining why could never open.
+  if (!href)
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              aria-disabled="true"
+              className="h-8 cursor-not-allowed font-semibold opacity-50 hover:bg-secondary"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            >
+              <DiscordIcon className="size-3.5 shrink-0" />
+              Jump to message
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            No link for this post. It was pasted in, or found in a different
+            channel from the one you searched in. Copy their name to find them
+            in Discord.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   return (
     <Button
       size="sm"
