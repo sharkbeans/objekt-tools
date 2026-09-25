@@ -158,6 +158,7 @@ export function ExtensionSetup({
               alt="Objekt Match searching Discord for SeoYeon CC101 through CC108 and collecting matching posts."
               width={960}
               height={720}
+              unoptimized
               className="h-auto w-full rounded-lg border"
             />
             <figcaption className="text-center text-sm font-medium">
@@ -174,6 +175,7 @@ export function ExtensionSetup({
               alt="Objekt Match showing your cards, trade posts, and matching cards from other traders."
               width={960}
               height={720}
+              unoptimized
               className="h-auto w-full rounded-lg border"
             />
             <figcaption className="text-center text-sm font-medium">
