@@ -152,14 +152,12 @@ export function ExtensionSetup({
       </div>
       {!compact && !ready && (
         <div className="grid items-center gap-3 px-5 pb-5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6 sm:pb-6">
-          {/* Replace these labelled placeholders with recordings of the same
-              query in Discord and the extension when those assets are ready. */}
           <figure className="min-w-0 space-y-3">
             <Image
-              src="/extension/discord-search-placeholder.svg"
-              alt="Placeholder for a screenshot or GIF of searching trade posts in Discord."
+              src="/extension/discord-search.webp"
+              alt="Discord searching a trade channel while Objekt Match collects posts for SeoYeon CC101 through CC108."
               width={640}
-              height={320}
+              height={360}
               className="h-auto w-full rounded-lg border"
             />
             <figcaption className="text-center text-sm font-medium">
@@ -172,14 +170,14 @@ export function ExtensionSetup({
           />
           <figure className="min-w-0 space-y-3">
             <Image
-              src="/extension/results-placeholder.svg"
-              alt="Placeholder for a screenshot or GIF of the extension’s matching cards and collected posts."
+              src="/extension/match-results.webp"
+              alt="Objekt Match selecting cards and showing traders whose haves and wants match."
               width={640}
-              height={320}
+              height={360}
               className="h-auto w-full rounded-lg border"
             />
             <figcaption className="text-center text-sm font-medium">
-              Browse the results
+              Find mutual trades
             </figcaption>
           </figure>
         </div>
