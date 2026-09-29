@@ -316,3 +316,43 @@ JiYeon CC102`);
   await expect(page.getByText("2 lists loaded", { exact: true })).toBeVisible();
   expect(calls).toBe(3);
 });
+
+test("the last Cosmo inventory reloads on the next visit", async ({ page }) => {
+  let loads = 0;
+  await page.route("**/api/objekts/by-nickname/**", (route) => {
+    loads++;
+    return route.fulfill({
+      json: {
+        results: [
+          {
+            collectionId: "cream02-xinyu-101z",
+            artist: "tripleS",
+            member: "Xinyu",
+            collectionNo: "101Z",
+            season: "Cream02",
+            class: "First",
+            serial: 1,
+            objektId: "1",
+          },
+        ],
+      },
+    });
+  });
+  await openDesk(page, "");
+  await deliver(page, "", "inventory");
+  await page.getByRole("button", { name: "Add Cosmo" }).click();
+  await page.getByLabel("Load my Cosmo inventory").fill("tester");
+  await page.getByRole("button", { name: "Load", exact: true }).click();
+  const card = page.getByRole("button", { name: /^My Xinyu CC101,/ });
+  await expect(card).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Change Cosmo" }),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(card).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Change Cosmo" }),
+  ).toBeVisible();
+  expect(loads).toBe(2);
+});

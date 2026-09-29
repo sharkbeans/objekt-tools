@@ -5,6 +5,7 @@ import {
   ArrowLeftRightIcon,
   ClipboardPasteIcon,
   Loader2Icon,
+  PencilIcon,
   PlusIcon,
   PuzzleIcon,
   ShoppingBagIcon,
@@ -137,6 +138,8 @@ import { MyHuntsMenu } from "./my-hunts-menu";
 import { PostDialog } from "./post-dialog";
 
 const NICK_KEY = "match:nickname:v1";
+/** The Cosmo nickname whose inventory last loaded, reloaded on the next visit. */
+const INVENTORY_KEY = "match:inventory-nickname:v1";
 const THEIR_SEARCH_KEY = "match:their-search:v1";
 const SPOTLIGHT_KEY = "match:spotlight:v1";
 const OFFERING_KEY = "match:offering:v1";
@@ -548,24 +551,54 @@ export function MatchClient() {
       input.value = "";
     }
   };
-  const loadInventory = useCallback(async (name: string) => {
-    const nick = name.trim();
-    if (!nick) return;
-    setLoadingInv(true);
+  /** Bumped per load, so only the latest request lands. */
+  const inventoryLoad = useRef(0);
+  const loadInventory = useCallback(
+    async (name: string, { quiet = false }: { quiet?: boolean } = {}) => {
+      const nick = name.trim();
+      if (!nick) return;
+      const load = ++inventoryLoad.current;
+      setLoadingInv(true);
+      try {
+        const entries = await fetchInventoryByNickname(nick);
+        if (load !== inventoryLoad.current) return;
+        setOwned(entries);
+        setGive(new Set());
+        try {
+          localStorage.setItem(INVENTORY_KEY, nick);
+        } catch {
+          /* Loaded for this visit only. */
+        }
+        if (quiet) return;
+        setEditor(null);
+        toast.success(`Loaded ${entries.length} objekts for ${nick}.`);
+      } catch (error) {
+        if (load !== inventoryLoad.current) return;
+        const reason =
+          error instanceof Error ? error.message : "Could not load inventory.";
+        toast.error(
+          quiet ? `Could not reload ${nick}’s inventory. ${reason}` : reason,
+        );
+      } finally {
+        if (load === inventoryLoad.current) setLoadingInv(false);
+      }
+    },
+    [],
+  );
+
+  // Reload the inventory from the last visit — fresh, since trades move cards
+  // — without a toast. Declared before the handoff and hunt effects so a
+  // nickname they bring is the later request, and wins.
+  useEffect(() => {
+    if (!ready) return;
+    let nick: string | null = null;
     try {
-      const entries = await fetchInventoryByNickname(nick);
-      setOwned(entries);
-      setGive(new Set());
-      setEditor(null);
-      toast.success(`Loaded ${entries.length} objekts for ${nick}.`);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not load inventory.",
-      );
-    } finally {
-      setLoadingInv(false);
+      nick = localStorage.getItem(INVENTORY_KEY);
+    } catch {
+      /* No stored inventory to reload. */
     }
-  }, []);
+    if (nick) void loadInventory(nick, { quiet: true });
+  }, [ready, loadInventory]);
 
   // Posts handed over by the capture extension, which injects a script into
   // this tab rather than making the user download and re-import a file. The
@@ -1496,8 +1529,12 @@ export function MatchClient() {
                     size="sm"
                     onClick={() => setEditor("mine")}
                   >
-                    <PlusIcon className="size-4" />
-                    {mine.size ? "Edit" : "Add objekts"}
+                    {owned.length ? (
+                      <PencilIcon className="size-4" />
+                    ) : (
+                      <PlusIcon className="size-4" />
+                    )}
+                    {owned.length ? "Change Cosmo" : "Add Cosmo"}
                   </Button>
                 )}
               </div>
@@ -1834,8 +1871,14 @@ export function MatchClient() {
                       type="button"
                       className="underline"
                       onClick={() => {
+                        inventoryLoad.current++;
                         setOwned([]);
                         setGive(new Set());
+                        try {
+                          localStorage.removeItem(INVENTORY_KEY);
+                        } catch {
+                          /* Nothing stored to forget. */
+                        }
                       }}
                     >
                       Remove loaded inventory
