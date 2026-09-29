@@ -130,7 +130,7 @@ import { stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionHref } from "@/lib/sections";
 import { ContactResults } from "./desk-contacts";
 import { type DeskBadge, DeskGrid } from "./desk-grid";
-import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
+import { matchesDeskQuery, parseDeskQuery, pinMatches } from "./desk-search";
 import { ExtensionSetup } from "./extension-setup";
 import { MatchOnboarding } from "./match-onboarding";
 import { MyHuntsMenu } from "./my-hunts-menu";
@@ -138,6 +138,7 @@ import { PostDialog } from "./post-dialog";
 
 const NICK_KEY = "match:nickname:v1";
 const THEIR_SEARCH_KEY = "match:their-search:v1";
+const SPOTLIGHT_KEY = "match:spotlight:v1";
 const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
 const PICKED_KEY = "match:picked:v1";
@@ -375,6 +376,14 @@ export function MatchClient() {
   );
   const [building, setBuilding] = useState(false);
   const [sort, setSort] = useState<"popular" | "member" | "price">("popular");
+  /**
+   * The want list a Discord search ran on. Not a filter: its cards are pinned
+   * to the front of "Their objekts" and marked, and every other card the
+   * capture found stays in the grid behind them.
+   */
+  const [spotlight, setSpotlight] = useState("");
+  /** Bumped on each delivery to glow the search bar once more. */
+  const [searchNudge, setSearchNudge] = useState(0);
   const [columns, setColumns] = useState<number>(DEFAULT_COLUMNS);
   const [storedCount, setStoredCount] = useState(0);
   const [seen, setSeen] = useState<ReadonlySet<SeenId>>(EMPTY_SEEN);
@@ -400,6 +409,7 @@ export function MatchClient() {
       setOffering(localStorage.getItem(OFFERING_KEY) ?? "");
       setWanting(localStorage.getItem(WANTING_KEY) ?? "");
       setTheirSearch(localStorage.getItem(THEIR_SEARCH_KEY) ?? "");
+      setSpotlight(localStorage.getItem(SPOTLIGHT_KEY) ?? "");
       setNickname(localStorage.getItem(NICK_KEY) ?? "");
       const savedCols = Number(localStorage.getItem(COLS_KEY));
       if (COLUMN_CHOICES.some((choice) => choice === savedCols))
@@ -441,12 +451,13 @@ export function MatchClient() {
       localStorage.setItem(OFFERING_KEY, offering);
       localStorage.setItem(WANTING_KEY, wanting);
       localStorage.setItem(THEIR_SEARCH_KEY, theirSearch);
+      localStorage.setItem(SPOTLIGHT_KEY, spotlight);
       localStorage.setItem(NICK_KEY, nickname);
       localStorage.setItem(COLS_KEY, String(columns));
     } catch {
       /* Keep the in-memory lists usable. */
     }
-  }, [ready, offering, wanting, theirSearch, nickname, columns]);
+  }, [ready, offering, wanting, theirSearch, spotlight, nickname, columns]);
 
   // Hashing is async, so ids arrive a beat after the messages do. Until then a
   // post has no id and stays visible, which is the right way round: a brief
@@ -585,8 +596,13 @@ export function MatchClient() {
         posts = addPaste(message.transcript, message.links);
         handled.set(message.id, posts);
         // Every new delivery opens its own search, including in an existing
-        // desk tab with old selections. Saved personal wants stay separate.
-        setTheirSearch(message.wants.trim().replace(/\s*\n\s*/g, ", "));
+        // desk tab with old selections. The search is pinned rather than
+        // filtered: showing only what was searched for hid everything else
+        // the same posts offered. Saved personal wants stay separate.
+        const searched = message.wants.trim().replace(/\s*\n\s*/g, ", ");
+        setTheirSearch("");
+        setSpotlight(searched);
+        if (searched) setSearchNudge((n) => n + 1);
         setMode("wtt");
         setGive(new Set());
         setGet(new Set());
@@ -619,6 +635,7 @@ export function MatchClient() {
       setMode(hunt.mode);
       setSort(hunt.mode === "wtb" ? "price" : "popular");
       setTheirSearch(hunt.wants.join(", "));
+      setSpotlight("");
       setGive(new Set());
       setGet(new Set());
       if (hunt.mode === "wtt") setOffering(hunt.offers.join("\n"));
@@ -732,6 +749,10 @@ export function MatchClient() {
     [give, mine],
   );
   const theirQuery = useMemo(() => parseDeskQuery(theirSearch), [theirSearch]);
+  const spotlightQuery = useMemo(
+    () => (spotlight.trim() ? parseDeskQuery(spotlight) : null),
+    [spotlight],
+  );
   const searchingTheirCards = mode !== "wts" && theirSearch.trim().length > 0;
   const matchesTheirSearch = useCallback(
     (post: DeskPost) =>
@@ -801,8 +822,9 @@ export function MatchClient() {
       ),
     [mine, demanded, poolDemand, activeGive, get, mode],
   );
-  // "From your Discord paste": most haves first, unless another sort is chosen.
-  const theirCards = useMemo(() => {
+  // "From your Discord paste": most haves first, unless another sort is chosen,
+  // with the Discord search's cards pinned ahead of the rest either way.
+  const sortedTheirCards = useMemo(() => {
     const ranked = byTraders([...offered.values()], poolSupply);
     if (sort === "member")
       return ranked.sort((a, b) =>
@@ -829,6 +851,34 @@ export function MatchClient() {
     }
     return ranked;
   }, [offered, poolSupply, sort, mode]);
+  const theirCards = useMemo(
+    () => pinMatches(sortedTheirCards, spotlightQuery),
+    [sortedTheirCards, spotlightQuery],
+  );
+  const pinnedKeys = useMemo(
+    () =>
+      new Set(
+        spotlightQuery
+          ? theirCards
+              .filter((card) => matchesDeskQuery(card.item, spotlightQuery))
+              .map((card) => card.key)
+          : [],
+      ),
+    [theirCards, spotlightQuery],
+  );
+  // Counted over the whole mode pool, not the picks, so the headline holds
+  // still while the user selects cards.
+  const spotlightStats = useMemo(() => {
+    if (!spotlightQuery) return null;
+    let found = 0;
+    for (const card of poolSupply.values())
+      if (matchesDeskQuery(card.item, spotlightQuery)) found++;
+    return {
+      found,
+      searched: spotlightQuery.alternatives.length || found,
+      others: poolSupply.size - found,
+    };
+  }, [poolSupply, spotlightQuery]);
   const contactPosts = useMemo(
     () =>
       candidates
@@ -839,9 +889,16 @@ export function MatchClient() {
         .sort((a, b) => {
           const score = (post: DeskPost) =>
             [...post.wants.keys()].filter((key) => mine.has(key)).length;
-          return score(b) - score(a);
+          const offersSearched = (post: DeskPost) =>
+            spotlightQuery &&
+            [...post.haves.values()].some((item) =>
+              matchesDeskQuery(item, spotlightQuery),
+            )
+              ? 1
+              : 0;
+          return offersSearched(b) - offersSearched(a) || score(b) - score(a);
         }),
-    [candidates, mine, mode],
+    [candidates, mine, mode, spotlightQuery],
   );
   const searchSummary = !searchingTheirCards
     ? null
@@ -1160,7 +1217,7 @@ export function MatchClient() {
     verified,
     onMarkSeen: markSeen,
     canMarkSeen: seenIds.size > 0,
-    search: searchingTheirCards ? theirQuery : null,
+    search: searchingTheirCards ? theirQuery : spotlightQuery,
     links,
     emptyText:
       searchSummary ??
@@ -1593,10 +1650,51 @@ export function MatchClient() {
                       {searchSummary}
                     </p>
                   )}
+                  {spotlightStats && !searchingTheirCards && (
+                    <div
+                      role="status"
+                      className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                      data-testid="spotlight-summary"
+                    >
+                      <p className="min-w-0 flex-1">
+                        <span className="font-medium">
+                          {spotlightStats.found} of {spotlightStats.searched}{" "}
+                          searched{" "}
+                          {spotlightStats.searched === 1 ? "card" : "cards"}{" "}
+                          found
+                        </span>
+                        {spotlightStats.found > 0 && ", pinned first"}.{" "}
+                        {spotlightStats.others > 0 && (
+                          <>
+                            The same posts offer{" "}
+                            <span className="font-medium">
+                              {spotlightStats.others.toLocaleString()} more
+                            </span>{" "}
+                            below.{" "}
+                          </>
+                        )}
+                        <span className="text-muted-foreground">
+                          Type or paste wants in the search bar to narrow them.
+                        </span>
+                      </p>
+                      <button
+                        type="button"
+                        aria-label="Stop pinning the searched cards"
+                        title="Stop pinning the searched cards"
+                        className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        onClick={() => setSpotlight("")}
+                      >
+                        <XIcon className="size-4" />
+                      </button>
+                    </div>
+                  )}
                   <DeskGrid
                     cards={theirCards}
                     selected={get}
                     onToggle={toggleGet}
+                    pinned={pinnedKeys}
+                    nudge={searchNudge}
+                    placeholder="Search or paste your wants · e.g. sy cc117-120"
                     images={images}
                     side="theirs"
                     search={theirSearch}

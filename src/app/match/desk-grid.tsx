@@ -1,8 +1,20 @@
 "use client";
 
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  SearchIcon,
+} from "lucide-react";
 import Image from "next/image";
-import { type CSSProperties, useMemo, useRef, useState } from "react";
+import {
+  type ClipboardEvent,
+  type CSSProperties,
+  Fragment,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type DeskCard, deskLabel } from "@/lib/discord/trade-desk";
@@ -43,6 +55,9 @@ export function DeskGrid({
   search,
   onSearchChange,
   clearFilters,
+  pinned,
+  nudge = 0,
+  placeholder = "Search member or code · e.g. sy cc101",
 }: {
   cards: DeskCard[];
   selected: ReadonlySet<string>;
@@ -56,11 +71,40 @@ export function DeskGrid({
   search?: string;
   onSearchChange?: (value: string) => void;
   clearFilters?: () => void;
+  /**
+   * Cards from the user's own search, already sorted to the front by the
+   * caller. Marked, and set apart from the rest by a divider.
+   */
+  pinned?: ReadonlySet<string>;
+  /** Raised to glow the search bar until the user focuses it. */
+  nudge?: number;
+  placeholder?: string;
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [localQuery, setLocalQuery] = useState("");
   const query = search ?? localQuery;
   const [page, setPage] = useState(0);
+  const [nudgeSeen, setNudgeSeen] = useState(0);
+  const setQuery = (value: string) => {
+    if (onSearchChange) onSearchChange(value);
+    else setLocalQuery(value);
+    setPage(0);
+  };
+  // A text input drops a pasted list's line breaks, running "SeoYeon CC117"
+  // into "SeoYeon CC118". Joined with commas it parses as the list it was.
+  const pasteList = (event: ClipboardEvent<HTMLInputElement>) => {
+    const text = event.clipboardData.getData("text");
+    if (!/\n/.test(text)) return;
+    event.preventDefault();
+    const list = text
+      .split(/\s*\n\s*/)
+      .filter(Boolean)
+      .join(", ");
+    const input = event.currentTarget;
+    const start = input.selectionStart ?? query.length;
+    const end = input.selectionEnd ?? query.length;
+    setQuery(query.slice(0, start) + list + query.slice(end));
+  };
   const filtered = useMemo(() => {
     const parsed = parseDeskQuery(query);
     return cards.filter((card) => matchesDeskQuery(card.item, parsed));
@@ -77,32 +121,61 @@ export function DeskGrid({
     setLastPool(searchPool);
     setPage(0);
   }
+  // Pinned cards lead (the caller sorts them there); the rest start on a row
+  // of their own under a divider. The pinned group's last row is padded out
+  // with empty slots so pages stay whole rows instead of ending ragged.
+  const { slots, restAt } = useMemo(() => {
+    const pins = pinned?.size
+      ? filtered.findIndex((card) => !pinned.has(card.key))
+      : -1;
+    if (pins <= 0) return { slots: filtered, restAt: -1 };
+    const pad = (columns - (pins % columns)) % columns;
+    return {
+      slots: [
+        ...filtered.slice(0, pins),
+        ...Array<null>(pad).fill(null),
+        ...filtered.slice(pins),
+      ],
+      restAt: pins + pad,
+    };
+  }, [filtered, pinned, columns]);
   const pageSize = columns * ROWS_PER_PAGE;
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(slots.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
+  const visibleSlots = useMemo(
+    () => slots.slice(safePage * pageSize, (safePage + 1) * pageSize),
+    [slots, safePage, pageSize],
+  );
   const visible = useMemo(
-    () => filtered.slice(safePage * pageSize, (safePage + 1) * pageSize),
-    [filtered, safePage, pageSize],
+    () => visibleSlots.filter((card): card is DeskCard => card !== null),
+    [visibleSlots],
   );
   const resolved = useDeskArtwork(visible, images);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Input
-          ref={searchRef}
-          className="min-w-0"
-          aria-label={
-            side === "mine" ? "Search my objekts" : "Search their objekts"
-          }
-          placeholder="Search member or code · e.g. sy cc101"
-          value={query}
-          onChange={(event) => {
-            if (onSearchChange) onSearchChange(event.target.value);
-            else setLocalQuery(event.target.value);
-            setPage(0);
-          }}
-        />
+        <div className="relative min-w-0 flex-1">
+          <Input
+            ref={searchRef}
+            aria-label={
+              side === "mine" ? "Search my objekts" : "Search their objekts"
+            }
+            placeholder={placeholder}
+            value={query}
+            onFocus={() => setNudgeSeen(nudge)}
+            onPaste={pasteList}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {nudge > nudgeSeen && (
+            // Keyed by the nudge so a second delivery replays the glow.
+            <span
+              key={nudge}
+              aria-hidden="true"
+              className="search-nudge pointer-events-none absolute inset-0 rounded-md"
+            />
+          )}
+        </div>
         {clearFilters && (
           <button
             type="button"
@@ -133,8 +206,11 @@ export function DeskGrid({
             className="grid gap-3 [grid-template-columns:repeat(3,minmax(0,1fr))] sm:[grid-template-columns:repeat(var(--desk-cols),minmax(0,1fr))]"
             style={{ "--desk-cols": columns } as CSSProperties}
           >
-            {visible.map((card) => {
+            {visibleSlots.map((card, index) => {
+              if (!card) return null;
               const label = deskLabel(card.item);
+              const isPinned = pinned?.has(card.key) ?? false;
+              const pinsEndHere = safePage * pageSize + index === restAt;
               const chosen = selected.has(card.key);
               const url = images.get(card.key) ?? resolved.get(card.key);
               const info = badge(card);
@@ -143,11 +219,11 @@ export function DeskGrid({
               // either way, since `aria-label` on the button already replaces
               // whatever text is inside it.
               const description = info.kind === "count" ? info.full : info.text;
-              return (
+              const button = (
                 <button
                   key={card.key}
                   type="button"
-                  aria-label={`${side === "mine" ? "My" : "Their"} ${label}, ${description}`}
+                  aria-label={`${side === "mine" ? "My" : "Their"} ${label}, ${description}${isPinned ? ", in your search" : ""}`}
                   aria-pressed={chosen}
                   onClick={() => onToggle(card.key)}
                   className={`overflow-hidden rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${chosen ? "border-primary bg-primary/10 ring-2 ring-primary" : "border-border bg-background hover:border-primary/70"}`}
@@ -195,6 +271,15 @@ export function DeskGrid({
                         <CheckIcon className="size-4" />
                       </span>
                     )}
+                    {isPinned && (
+                      <span
+                        title="In your search"
+                        aria-hidden="true"
+                        className="absolute bottom-1.5 left-1.5 rounded-full bg-background/90 p-1 text-foreground shadow-sm"
+                      >
+                        <SearchIcon className="size-3" />
+                      </span>
+                    )}
                   </div>
                   <div className="space-y-1 p-2">
                     <DeskCardName
@@ -210,6 +295,17 @@ export function DeskGrid({
                     )}
                   </div>
                 </button>
+              );
+              if (!pinsEndHere) return button;
+              return (
+                <Fragment key={card.key}>
+                  <div className="col-span-full flex items-center gap-3 pt-1 text-xs text-muted-foreground">
+                    <span className="h-px flex-1 bg-border" />
+                    More in these posts
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                  {button}
+                </Fragment>
               );
             })}
           </div>

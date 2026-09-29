@@ -63,3 +63,21 @@ export function matchesDeskQuery(item: ParsedItem, query: DeskQuery): boolean {
     .toLowerCase();
   return query.terms.every((term) => haystack.includes(term));
 }
+
+/**
+ * The same cards with those matching `query` moved to the front, each group
+ * keeping its order. How a Discord search stays a highlight on the desk rather
+ * than a filter: what was searched for leads, and everything else the capture
+ * turned up is still there behind it.
+ */
+export function pinMatches<T extends { item: ParsedItem }>(
+  cards: readonly T[],
+  query: DeskQuery | null,
+): T[] {
+  if (!query) return [...cards];
+  const pinned: T[] = [];
+  const rest: T[] = [];
+  for (const card of cards)
+    (matchesDeskQuery(card.item, query) ? pinned : rest).push(card);
+  return [...pinned, ...rest];
+}

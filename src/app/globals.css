@@ -288,6 +288,31 @@
     }
   }
 
+  /* A soft glow round a search bar the user has not tried yet, a few beats
+     then gone. Not a coach-mark: nothing else on the page dims. */
+  @keyframes search-nudge-glow {
+    0%,
+    100% {
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--ring) 35%, transparent);
+    }
+    50% {
+      box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--primary) 80%, transparent),
+        0 0 14px 3px color-mix(in oklch, var(--primary) 30%, transparent);
+    }
+  }
+
+  .search-nudge {
+    animation: search-nudge-glow 1.8s ease-in-out 4;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .search-nudge {
+      animation: none;
+      box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 70%, transparent);
+    }
+  }
+
   .aspect-photocard {
     aspect-ratio: 2 / 3;
   }

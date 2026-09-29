@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseOffering } from "@/lib/discord/match";
 import { deskLabel } from "@/lib/discord/trade-desk";
-import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
+import { matchesDeskQuery, parseDeskQuery, pinMatches } from "./desk-search";
 
 const cards = parseOffering(
   "SeoYeon CC344 345 346\nMayu CC344\nMayu AA101\nSeoYeon AA101",
@@ -41,4 +41,21 @@ test("member, season, partial-code and empty searches still work", () => {
   assert.equal(find("34").length, 4);
   assert.equal(find("").length, cards.length);
   assert.deepEqual(find("unlisted"), []);
+});
+
+test("pinned matches lead, and both groups keep their order", () => {
+  const ranked = cards.map((item) => ({ item }));
+  const order = (search: string | null) =>
+    pinMatches(ranked, search === null ? null : parseDeskQuery(search)).map(
+      (card) => deskLabel(card.item),
+    );
+  assert.deepEqual(order("Mayu CC344, SeoYeon AA101"), [
+    "Mayu CC344",
+    "SeoYeon AA101",
+    "SeoYeon CC344",
+    "SeoYeon CC345",
+    "SeoYeon CC346",
+    "Mayu AA101",
+  ]);
+  assert.deepEqual(order(null), cards.map(deskLabel));
 });
