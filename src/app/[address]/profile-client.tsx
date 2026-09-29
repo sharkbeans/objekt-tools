@@ -7,6 +7,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { UnlinkCosmoDialog } from "@/components/auth/unlink-cosmo-dialog";
+import {
+  EmptyState,
+  LoadingState,
+  PageContainer,
+} from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -86,36 +91,41 @@ export function ProfileClient({
 
   if (!isValidProfile) {
     return (
-      <div className="max-w-2xl mx-auto py-12 text-center">
-        <h1 className="text-2xl font-bold mb-2">Page not found</h1>
-        <p className="text-muted-foreground">
-          Looking for a user profile? Try{" "}
-          <span className="font-mono">/@username</span>
-        </p>
-      </div>
+      <PageContainer>
+        <EmptyState
+          title="Page not found"
+          description={
+            <>
+              Looking for a user profile? Try{" "}
+              <span className="font-mono">/@username</span>
+            </>
+          }
+        />
+      </PageContainer>
     );
   }
 
   if (isLoading || profile === null) {
     return (
-      <div className="max-w-2xl mx-auto py-12 text-center text-muted-foreground">
-        Loading...
-      </div>
+      <PageContainer>
+        <LoadingState />
+      </PageContainer>
     );
   }
 
   if (error || !profile) {
     const message = error instanceof Error ? error.message : "User not found";
     return (
-      <div className="max-w-2xl mx-auto py-12 text-center">
-        <h1 className="text-2xl font-bold mb-2">{message}</h1>
-        {message === "User not found" && (
-          <p className="text-muted-foreground">
-            No Cosmo user or linked objekt.my account named &quot;{identifier}
-            &quot; exists.
-          </p>
-        )}
-      </div>
+      <PageContainer>
+        <EmptyState
+          title={message}
+          description={
+            message === "User not found"
+              ? `No Cosmo user or linked objekt.my account named "${identifier}" exists.`
+              : undefined
+          }
+        />
+      </PageContainer>
     );
   }
 

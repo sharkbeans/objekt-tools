@@ -239,6 +239,21 @@
   body {
     @apply bg-background text-foreground;
   }
+  a,
+  button,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+  :focus-visible {
+    outline-color: var(--ring);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer utilities {

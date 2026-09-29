@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { LoadingState } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -44,15 +45,11 @@ export default function DevicePage() {
   }, [session, checkCode]);
 
   if (sessionPending || !session) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState className="min-h-[70vh] py-0" />;
   }
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
+    <div className="flex min-h-[70vh] items-center justify-center">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle>Log in on another device</CardTitle>

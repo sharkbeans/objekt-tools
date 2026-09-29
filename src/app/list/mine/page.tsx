@@ -1,11 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2Icon, PlusIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import {
+  EmptyState,
+  LoadingState,
+  PageContainer,
+  PageHeader,
+  PagePagination,
+} from "@/components/page-shell";
 import {
   PosterCard,
   type PosterSummary,
@@ -80,38 +87,31 @@ export default function MyListsPage() {
   if (!session) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Lists
-          </p>
-          <h1 className="mt-1 text-2xl font-bold">My Lists</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Review matching trades and keep your list posters ready.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
-            {total} {total === 1 ? "list" : "lists"}
-          </span>
-          <span className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground">
-            {totalMatches} {totalMatches === 1 ? "match" : "matches"}
-          </span>
-          <Button asChild size="sm" className="gap-1.5">
-            <Link href={sectionHref("/list", { currentSection: "list" })}>
-              <PlusIcon className="h-4 w-4" />
-              New List
-            </Link>
-          </Button>
-        </div>
-      </div>
+    <PageContainer width="full">
+      <PageHeader
+        eyebrow="Lists"
+        title="My Lists"
+        description="Review matching trades and keep your list posters ready."
+        actions={
+          <>
+            <span className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+              {total} {total === 1 ? "list" : "lists"}
+            </span>
+            <span className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground">
+              {totalMatches} {totalMatches === 1 ? "match" : "matches"}
+            </span>
+            <Button asChild size="sm" className="gap-1.5">
+              <Link href={sectionHref("/list", { currentSection: "list" })}>
+                <PlusIcon className="h-4 w-4" />
+                New List
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-          <Loader2Icon className="h-4 w-4 animate-spin" />
-          Loading...
-        </div>
+        <LoadingState />
       ) : posters.length > 0 ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -124,40 +124,22 @@ export default function MyListsPage() {
               />
             ))}
           </div>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
+          <PagePagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </>
       ) : (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            You haven&apos;t created any lists yet.{" "}
-            <Link
-              href={sectionHref("/list", { currentSection: "list" })}
-              className="text-primary hover:underline"
-            >
-              Create your first list
-            </Link>
+          <CardContent>
+            <EmptyState description="You haven't created any lists yet.">
+              <Button asChild size="sm">
+                <Link href={sectionHref("/list", { currentSection: "list" })}>
+                  Create your first list
+                </Link>
+              </Button>
+            </EmptyState>
           </CardContent>
         </Card>
       )}
@@ -192,6 +174,6 @@ export default function MyListsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageContainer>
   );
 }
