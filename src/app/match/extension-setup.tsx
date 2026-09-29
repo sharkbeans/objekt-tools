@@ -4,10 +4,12 @@ import { CheckIcon, ExternalLinkIcon, PuzzleIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { DiscordIcon } from "@/components/discord-icon";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import {
   browserStore,
+  DISCORD_WEB_URL,
   EXTENSION_STORE_NAMES,
   EXTENSION_STORE_URLS,
   type ExtensionStore,
@@ -37,6 +39,38 @@ const BADGES: Record<
   },
 };
 
+/**
+ * The store's own badge, greyed out and not a link, until its listing is live.
+ * It is the badge that will replace it, at the same height, so the layout does
+ * not change when the URL is filled in.
+ */
+function ComingSoonBadge({
+  store,
+  className,
+}: {
+  store: ExtensionStore;
+  /** Sets the badge's height. */
+  className: string;
+}) {
+  const { src, width, height } = BADGES[store];
+  return (
+    <span
+      title="Coming soon"
+      className="inline-block cursor-not-allowed select-none"
+    >
+      <Image
+        src={src}
+        alt={`${EXTENSION_STORE_NAMES[store]} add-on, coming soon`}
+        width={width}
+        height={height}
+        unoptimized
+        className={`w-auto opacity-50 grayscale ${className}`}
+      />
+    </span>
+  );
+}
+
+/** A link to the store's listing, or its greyed-out badge while there is none. */
 function StoreBadge({
   store,
   source,
@@ -48,7 +82,7 @@ function StoreBadge({
   className: string;
 }) {
   const url = EXTENSION_STORE_URLS[store];
-  if (!url) return null;
+  if (!url) return <ComingSoonBadge store={store} className={className} />;
   const { src, width, height, alt } = BADGES[store];
   return (
     <a
@@ -71,32 +105,15 @@ function StoreBadge({
 }
 
 /**
- * A badge for every store whose listing is live, the one for the browser in
- * use first. A store still waiting on its listing gets a line saying so
- * instead, and gains its badge once its URL is filled in.
+ * A badge for every store, in the same order whichever browser is in use, so
+ * Chrome and Firefox visitors see the same page. A store still waiting on its
+ * listing shows greyed out, and gains its link once its URL is filled in.
  */
-function InstallBadges({ detected }: { detected: ExtensionStore }) {
-  const order: ExtensionStore[] =
-    detected === "firefox" ? ["firefox", "chrome"] : ["chrome", "firefox"];
-  const soon = order.filter((store) => !EXTENSION_STORE_URLS[store]);
+function InstallBadges() {
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-3">
-        {order.map((store) => (
-          <StoreBadge
-            key={store}
-            store={store}
-            source="empty"
-            className="h-12"
-          />
-        ))}
-      </div>
-      {soon.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {soon.map((store) => EXTENSION_STORE_NAMES[store]).join(" and ")}{" "}
-          add-on coming soon.
-        </p>
-      )}
+    <div className="flex flex-wrap items-center gap-3">
+      <StoreBadge store="chrome" source="empty" className="h-12" />
+      <StoreBadge store="firefox" source="empty" className="h-12" />
     </div>
   );
 }
@@ -128,8 +145,6 @@ export function ExtensionSetup({
   const ready = installed === true;
 
   if (compact || ready) {
-    // The compact offer has nothing to say to a browser with no listing yet.
-    if (!ready && !EXTENSION_STORE_URLS[store]) return null;
     return (
       <SlimOffer
         ready={ready}
@@ -161,7 +176,10 @@ export function ExtensionSetup({
           </div>
 
           <div className="space-y-3">
-            <InstallBadges detected={store} />
+            <InstallBadges />
+            <p className="text-xs text-muted-foreground">
+              Works with Discord in this browser, not the Discord desktop app.
+            </p>
             <Link
               href="/extension"
               target="_blank"
@@ -207,9 +225,13 @@ function SlimOffer({
   compact: boolean;
 }) {
   const action = ready ? (
-    <Button asChild variant="secondary" className="border border-foreground/15">
-      <a href="https://discord.com/app" target="_blank" rel="noreferrer">
-        Open Discord
+    <Button
+      asChild
+      className="bg-[#5865F2] font-semibold text-white shadow-sm hover:bg-[#4752C4]"
+    >
+      <a href={DISCORD_WEB_URL} target="_blank" rel="noreferrer">
+        <DiscordIcon className="size-4" />
+        Open Discord in this browser
         <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
       </a>
     </Button>
@@ -263,11 +285,13 @@ function SlimOffer({
             >
               {ready ? (
                 <>
-                  Scroll a trade channel on Discord, then press{" "}
+                  Open a trade channel in Discord in this browser (not the
+                  Discord app), search for your missing cards in the Objekt
+                  Match panel, then press{" "}
                   <strong className="font-medium text-foreground">
                     Open in match
-                  </strong>{" "}
-                  in the Objekt Match panel.
+                  </strong>
+                  .
                 </>
               ) : (
                 "Objekt Match collects posts as you scroll Discord, so you never paste a channel by hand."

@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import {
+  DISCORD_WEB_URL,
   EXTENSION_STORE_NAMES,
   type ExtensionStore,
 } from "@/lib/extension-links";
@@ -80,7 +81,7 @@ export function CopyAndOpenDiscord({
       setCopied(false);
     }
     track("extension_copy_open_discord", { wants: wants.length });
-    window.open("https://discord.com/app", "_blank", "noopener");
+    window.open(DISCORD_WEB_URL, "_blank", "noopener");
   };
   return (
     <div className={`space-y-1 text-center text-xs ${className}`}>

@@ -14,6 +14,13 @@ export const EXTENSION_STORE_URLS: {
 
 export type ExtensionStore = keyof typeof EXTENSION_STORE_URLS;
 
+/**
+ * Discord's web client. The extension only runs in Discord opened in the same
+ * browser, not in the Discord desktop app, and this address opens the web
+ * client directly where `/app` can offer to switch to the desktop app.
+ */
+export const DISCORD_WEB_URL = "https://discord.com/channels/@me";
+
 /** How each store is named on a button. */
 export const EXTENSION_STORE_NAMES: Record<ExtensionStore, string> = {
   chrome: "Chrome",

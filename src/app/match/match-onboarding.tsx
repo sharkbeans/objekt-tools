@@ -1,17 +1,10 @@
 "use client";
 
-import { CheckIcon, SendIcon } from "lucide-react";
-import Link from "next/link";
+import { CheckIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { DiscordIcon } from "@/components/discord-icon";
 import { Button } from "@/components/ui/button";
-import {
-  browserStore,
-  EXTENSION_STORE_URLS,
-  isPhoneBrowser,
-} from "@/lib/extension-links";
-import { sectionHref } from "@/lib/sections";
+import { browserStore } from "@/lib/extension-links";
 import { ExtensionSetup } from "./extension-setup";
 
 const DISCORD_BUTTON =
@@ -64,11 +57,11 @@ function Step({
 
 /**
  * /match before any posts are in: the grids, filters and counts all need
- * posts to mean anything, so show how to get some instead. Where the
- * extension can be installed (or already is) that leads, and the three steps
- * below are the by-hand way; otherwise the steps come first and the first one
- * gets the only coloured button on the page. Phones get a different first
- * step — a whole channel can't be exported or captured there.
+ * posts to mean anything, so show how to get some instead. In a browser with an
+ * extension store the extension leads, and the three steps below are the
+ * by-hand way; elsewhere the steps come first and the first one gets the only
+ * coloured button on the page. Never shown on a phone: the shell sends those to
+ * a computer instead (see MatchPhoneNotice).
  */
 export function MatchOnboarding({
   haveCount,
@@ -89,30 +82,12 @@ export function MatchOnboarding({
   onAddHaves: () => void;
 }) {
   // Mounted only after the stored posts have loaded, so never server-rendered
-  // and safe to read `navigator` up front (no desktop-copy flash on phones).
-  const [phone] = useState(isPhoneBrowser);
+  // and safe to read `navigator` up front.
   const [store] = useState(browserStore);
-  // Lead with the extension only when it's something to act on: a live
-  // listing to install from, or an install to point at. A browser with no
-  // listing yet still hears about it, but after the steps it can use now.
-  const extensionFirst =
-    !phone &&
-    store !== null &&
-    (extensionInstalled === true || Boolean(EXTENSION_STORE_URLS[store]));
-
-  const sendToComputer = async () => {
-    const url = window.location.href;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "objekt.my Match", url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      toast.success("Link copied. Open it on your computer.");
-    } catch {
-      /* Share sheet dismissed. */
-    }
-  };
+  // Lead with the extension in any browser that has a store, whether or not
+  // that store's listing is live yet, so Chrome and Firefox visitors see the
+  // same page.
+  const extensionFirst = store !== null;
 
   return (
     <section aria-label="Get started" className="space-y-4">
@@ -130,47 +105,19 @@ export function MatchOnboarding({
           title="Import Discord posts"
           state={extensionFirst ? "plain" : "active"}
         >
-          {phone ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Trade channels are long. Importing a whole one works best on a
-                computer, where you can export it to text files or capture it
-                with our extension.
-              </p>
-              <div className="mt-auto flex flex-wrap gap-2">
-                <Button className={DISCORD_BUTTON} onClick={onSample}>
-                  Try a sample
-                </Button>
-                <Button variant="outline" onClick={sendToComputer}>
-                  <SendIcon className="size-4" />
-                  Send to my computer
-                </Button>
-              </div>
-              <button
-                type="button"
-                onClick={onImport}
-                className="w-fit text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-              >
-                Paste a few posts anyway
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Copy posts from a Discord trade channel and paste them here, or
-                import the channel as text files.
-              </p>
-              <div className="mt-auto flex flex-wrap gap-2">
-                <Button className={DISCORD_BUTTON} onClick={onImport}>
-                  <DiscordIcon className="size-4" />
-                  Import Discord posts
-                </Button>
-                <Button variant="outline" onClick={onSample}>
-                  Try a sample
-                </Button>
-              </div>
-            </>
-          )}
+          <p className="text-sm text-muted-foreground">
+            Copy posts from a Discord trade channel and paste them here, or
+            import the channel as text files.
+          </p>
+          <div className="mt-auto flex flex-wrap gap-2">
+            <Button className={DISCORD_BUTTON} onClick={onImport}>
+              <DiscordIcon className="size-4" />
+              Import Discord posts
+            </Button>
+            <Button variant="outline" onClick={onSample}>
+              Try a sample
+            </Button>
+          </div>
           {lookingFor && (
             <p className="line-clamp-2 text-xs text-muted-foreground">
               Then we’ll look for {lookingFor}.
@@ -207,23 +154,6 @@ export function MatchOnboarding({
           </p>
         </Step>
       </ol>
-      {phone ? (
-        <p className="text-sm text-muted-foreground">
-          Hunting a grid? Press <strong>Save grid</strong> on your{" "}
-          <Link
-            href={sectionHref("/collection")}
-            className="underline underline-offset-4 hover:text-foreground"
-          >
-            collection
-          </Link>{" "}
-          page. It’ll be under Saved grids here when you open objekt.my on your
-          computer.
-        </p>
-      ) : (
-        !extensionFirst && (
-          <ExtensionSetup installed={extensionInstalled} source="empty" />
-        )
-      )}
     </section>
   );
 }

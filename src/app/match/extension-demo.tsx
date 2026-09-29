@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { cn } from "@/lib/utils";
 
 /**
  * What the extension does, as three steps that each own one recording. The
@@ -26,6 +27,9 @@ interface DemoStep {
   /** The clip's first frame: shown while it loads and to anyone who prefers
    * reduced motion, and identical to where the clip starts. */
   poster: string;
+  /** Where the clip is anchored when a narrow stage crops it (CSS
+   * `object-position`): the part of the frame the step is about. */
+  focus: string;
   alt: string;
   /** What the recording shows, when that needs saying. */
   caption?: ReactNode;
@@ -34,11 +38,12 @@ interface DemoStep {
 export const DEMO_STEPS: readonly DemoStep[] = [
   {
     id: "collect",
-    title: "Collect posts from Discord",
-    body: "Scroll your trade channel like normal. Objekt Match remembers every post you pass.",
+    title: "Search for your missing cards",
+    body: "Select the objekts you want. Objekt Match runs the search in Discord and collects the posts.",
     video: "/extension/discord-search.mp4",
     poster: "/extension/discord-search-poster.webp",
-    alt: "The Objekt Match panel next to Discord, collecting trade posts that mention SeoYeon CC101 to CC108.",
+    focus: "0% 50%",
+    alt: "The Objekt Match panel next to Discord, searching for trade posts that mention SeoYeon CC101 to CC108.",
     caption: (
       <>
         This clip shows the optional search mode, which types your missing codes
@@ -60,6 +65,7 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     body: "Press Open in match. Posts line up against your collection, and picking a card narrows them to the traders who have it.",
     video: "/extension/match-results.mp4",
     poster: "/extension/match-results-poster.webp",
+    focus: "0% 50%",
     alt: "Picking a card in Objekt Match narrows the other side to the traders who have it, then the page scrolls down to the list of traders to contact.",
   },
   {
@@ -68,6 +74,7 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     body: "One click takes you to that exact message in Discord, ready to reply.",
     video: "/extension/jump-to-message.mp4",
     poster: "/extension/jump-to-message-poster.webp",
+    focus: "85% 50%",
     alt: "Pressing Jump to message on a trader in Objekt Match opens Discord scrolled to their post, with the message highlighted.",
   },
 ];
@@ -79,10 +86,13 @@ export function DemoSteps({
   active,
   onSelect,
   progress,
+  compact = false,
 }: {
   active: number;
   onSelect: (index: number) => void;
   progress: StepProgress;
+  /** Titles only, with the description of the step showing. */
+  compact?: boolean;
 }) {
   return (
     <ol className="space-y-1.5">
@@ -111,9 +121,11 @@ export function DemoSteps({
               </span>
               <span className="min-w-0">
                 <span className="block font-semibold">{step.title}</span>
-                <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">
-                  {step.body}
-                </span>
+                {(!compact || on) && (
+                  <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">
+                    {step.body}
+                  </span>
+                )}
               </span>
               {on && (
                 <span
@@ -155,6 +167,7 @@ function DemoClip({
   run,
   preload,
   progress,
+  crop,
   onEnded,
 }: {
   step: DemoStep;
@@ -162,6 +175,7 @@ function DemoClip({
   run: boolean;
   preload: "auto" | "metadata";
   progress: StepProgress;
+  crop: boolean;
   onEnded: () => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -211,9 +225,12 @@ function DemoClip({
       disablePictureInPicture
       preload={preload}
       onEnded={active ? onEnded : undefined}
-      className={`absolute inset-0 size-full object-contain ${
-        active ? "" : "invisible"
-      }`}
+      style={crop ? { objectPosition: step.focus } : undefined}
+      className={cn(
+        "absolute inset-0 size-full",
+        crop ? "object-cover sm:object-contain" : "object-contain",
+        !active && "invisible",
+      )}
     />
   );
 }
@@ -222,11 +239,18 @@ export function DemoViewer({
   active,
   progress,
   onEnded,
+  crop = false,
+  captions = true,
 }: {
   active: number;
   progress: StepProgress;
   /** The active clip reached its end. */
   onEnded: () => void;
+  /** On a narrow screen, zoom in: a taller stage that crops each clip to the
+   * part its step is about, instead of shrinking the whole frame to fit. */
+  crop?: boolean;
+  /** Whether to say, under a clip, what it shows. */
+  captions?: boolean;
 }) {
   const step = DEMO_STEPS[active] ?? DEMO_STEPS[0];
   // Recordings that run for seconds, and move on by themselves, need a way to
@@ -252,7 +276,10 @@ export function DemoViewer({
     <figure className="min-w-0">
       <div
         ref={stage}
-        className="relative aspect-video overflow-hidden rounded-xl border bg-[#0c0c0f]"
+        className={cn(
+          "relative aspect-video overflow-hidden rounded-xl border bg-[#0c0c0f]",
+          crop && "aspect-4/3 sm:aspect-video",
+        )}
       >
         {DEMO_STEPS.map((clip, index) => (
           <DemoClip
@@ -266,6 +293,7 @@ export function DemoViewer({
                 : "metadata"
             }
             progress={progress}
+            crop={crop}
             onEnded={onEnded}
           />
         ))}
@@ -282,9 +310,11 @@ export function DemoViewer({
           )}
         </button>
       </div>
-      <figcaption className="mt-2 min-h-10 text-xs leading-relaxed text-muted-foreground">
-        {step.caption}
-      </figcaption>
+      {captions && (
+        <figcaption className="mt-2 min-h-10 text-xs leading-relaxed text-muted-foreground">
+          {step.caption}
+        </figcaption>
+      )}
     </figure>
   );
 }
