@@ -92,7 +92,14 @@ export function readMessage(element: Element) {
   const authorNode =
     ownAuthor ??
     (refs.length === 1 ? element.ownerDocument.getElementById(refs[0]) : null);
-  const author = authorNode?.textContent?.trim();
+  // That node is the whole header: the server-tag chip and role badges sit
+  // inside it next to the name, and their text runs straight onto it
+  // ("heejinlover13WAV", "Nexus [채연], Server Tag: 채연채연"). The name has
+  // its own element; the whole header is only the fallback.
+  const nameNode =
+    authorNode?.querySelector('[class^="username_"], [class*=" username_"]') ??
+    authorNode;
+  const author = nameNode?.textContent?.trim();
   if (!author || /[\r\n]/.test(author)) return null;
   const text = readText(body).trim();
   if (!text) return null;

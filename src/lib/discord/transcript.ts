@@ -225,6 +225,44 @@ export interface SplitResult {
   orphanLines: number;
 }
 
+// A header read whole off Discord's DOM (older extension captures) carries
+// the server-tag chip and role badges after the name:
+//
+//   Alifx00 [WAV], Server Tag: WAVWAVWAV     — tag "WAV" twice, badge "WAV"
+//   JC15 [WAV], Server Tag: WAVWAV2nd Official WAV
+//   heejinlover13WAV                          — no tag, badge "WAV"
+//
+// Both hydrate late, so one poster turns up under several names. The tagged
+// form is unambiguous and is cut outright. A bare badge is only cut when the
+// same paste shows that text *as a badge* after a tag, so a name that really
+// ends that way ("miracleofwav", "dcwav22") is left alone.
+const SERVER_TAG = /\s*\[([^\]]*)\],?\s*Server Tag:\s*(.*)$/i;
+/** Discord's own new-member badge; no tagged header ever teaches it. */
+const KNOWN_BADGES = ["I'm new here, say hi!"];
+
+/** Badge text seen after a tag's own two copies, longest first. */
+function learnBadges(names: readonly string[]): string[] {
+  const badges = new Set(KNOWN_BADGES);
+  for (const name of names) {
+    const [, tag, tail] = name.match(SERVER_TAG) ?? [];
+    if (!tag || !tail?.startsWith(tag + tag)) continue;
+    const badge = tail.slice(tag.length * 2).trim();
+    if (badge) badges.add(badge);
+  }
+  return [...badges].sort((a, b) => b.length - a.length);
+}
+
+function authorName(raw: string, badges: readonly string[]): string {
+  const name = raw.trim();
+  // A badge can sit either side of the tag chip ("lippieWAV [김유연], …").
+  let cleaned = name.replace(SERVER_TAG, "").trim();
+  const trailing = () =>
+    badges.find((b) => cleaned.length > b.length && cleaned.endsWith(b));
+  for (let badge = trailing(); badge; badge = trailing())
+    cleaned = cleaned.slice(0, -badge.length).trimEnd();
+  return cleaned || name;
+}
+
 /** Split a raw transcript into message blocks, keeping what was discarded. */
 export function splitTranscript(transcript: string): SplitResult {
   const blocks: {
@@ -238,7 +276,7 @@ export function splitTranscript(transcript: string): SplitResult {
     const match = line.match(AUTHOR_LINE) ?? line.match(DISCRUB_AUTHOR_LINE);
     if (match) {
       blocks.push({
-        author: match[1].trim(),
+        author: match[1],
         lines: [],
         time: parseMessageTime(match[2]),
       });
@@ -248,6 +286,7 @@ export function splitTranscript(transcript: string): SplitResult {
     else if (line.trim()) orphanLines++;
   }
 
+  const badges = learnBadges(blocks.map((b) => b.author));
   return {
     blocks: blocks.map((b) => {
       // Embed chrome only ever trails the body; stop at the last content line.
@@ -257,7 +296,11 @@ export function splitTranscript(transcript: string): SplitResult {
         if (!last.trim() || isEmbedChrome(last)) lines.pop();
         else break;
       }
-      return { author: b.author, body: lines.join("\n").trim(), time: b.time };
+      return {
+        author: authorName(b.author, badges),
+        body: lines.join("\n").trim(),
+        time: b.time,
+      };
     }),
     orphanLines,
   };

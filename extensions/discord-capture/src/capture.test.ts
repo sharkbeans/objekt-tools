@@ -179,6 +179,20 @@ test("a real search result in the open channel links back to its message", () =>
   );
 });
 
+test("the author is the name alone, not the server tag and role badges beside it", () => {
+  const doc = realSearchResult();
+  doc
+    .getElementById("message-username-1552518179870347347")
+    ?.insertAdjacentHTML(
+      "beforeend",
+      '<span class="chipletContainerInner_c19a55"><span class="hiddenVisually_b18fe2">[WAV], Server Tag: </span>WAV</span><span class="roleIcon_c19a55">WAV</span>',
+    );
+  assert.equal(
+    readMessage(doc.querySelector("li") as Element)?.author,
+    "Ddeeee",
+  );
+});
+
 test("a search result from another channel is not placed in the open one", () => {
   const doc = realSearchResult("wts-only, COSMO");
   doc.title = "Discord | #objekt-trade | COSMO";

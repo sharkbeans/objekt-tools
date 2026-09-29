@@ -50,6 +50,53 @@ describe("splitMessages", () => {
     );
   });
 
+  it("drops a captured server-tag tail, so one trader is one name", () => {
+    const blocks =
+      splitMessages(`Alifx00 [WAV], Server Tag: WAVWAVWAV — 2026-09-29T03:12:57.362Z
+HAVE
+Hayeon CC117
+Alifx00 [WAV], Server Tag: WAVWAV — 2026-09-29T03:30:37.832Z
+HAVE
+Hayeon CC118
+Nexus [채연], Server Tag: 채연채연2nd Official WAV — 2026-09-29T02:35:16.927Z
+Have Seoyeon CC119`);
+    assert.deepEqual(
+      blocks.map((b) => b.author),
+      ["Alifx00", "Alifx00", "Nexus"],
+    );
+  });
+
+  it("drops a role badge only when the paste shows it as a badge", () => {
+    const header = (name: string) =>
+      `${name} — 2026-09-29T02:35:16.927Z\nHave Seoyeon CC119`;
+    const authors = (names: string[]) =>
+      splitMessages(names.map(header).join("\n")).map((b) => b.author);
+    assert.deepEqual(
+      authors([
+        "JC15 [WAV], Server Tag: WAVWAV2nd Official WAV",
+        "Alifx00 [WAV], Server Tag: WAVWAVWAV",
+        "lippieWAV [김유연], Server Tag: 김유연김유연WAV",
+        "heejinlover13WAV",
+        "JC152nd Official WAV",
+        "닿탱이WAVI'm new here, say hi!",
+        "miracleofwav",
+        "WAV",
+      ]),
+      [
+        "JC15",
+        "Alifx00",
+        "lippie",
+        "heejinlover13",
+        "JC15",
+        "닿탱이",
+        "miracleofwav",
+        "WAV",
+      ],
+    );
+    // Nothing in this paste shows "WAV" as a badge, so the name keeps it.
+    assert.deepEqual(authors(["heejinlover13WAV"]), ["heejinlover13WAV"]);
+  });
+
   it("strips trailing link-embed chrome from the body", () => {
     const [a, , c] = splitMessages(SAMPLE);
     assert.ok(!a.body.includes("Objekt Tracker"));
