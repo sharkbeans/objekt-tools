@@ -124,11 +124,11 @@ export function DeskGrid({
   // Pinned cards lead (the caller sorts them there); the rest start on a row
   // of their own under a divider. The pinned group's last row is padded out
   // with empty slots so pages stay whole rows instead of ending ragged.
-  const { slots, restAt } = useMemo(() => {
+  const { slots, restAt, rest } = useMemo(() => {
     const pins = pinned?.size
       ? filtered.findIndex((card) => !pinned.has(card.key))
       : -1;
-    if (pins <= 0) return { slots: filtered, restAt: -1 };
+    if (pins <= 0) return { slots: filtered, restAt: -1, rest: 0 };
     const pad = (columns - (pins % columns)) % columns;
     return {
       slots: [
@@ -137,6 +137,7 @@ export function DeskGrid({
         ...filtered.slice(pins),
       ],
       restAt: pins + pad,
+      rest: filtered.length - pins,
     };
   }, [filtered, pinned, columns]);
   const pageSize = columns * ROWS_PER_PAGE;
@@ -301,7 +302,7 @@ export function DeskGrid({
                 <Fragment key={card.key}>
                   <div className="col-span-full flex items-center gap-3 pt-1 text-xs text-muted-foreground">
                     <span className="h-px flex-1 bg-border" />
-                    More in these posts
+                    {rest.toLocaleString()} more in these posts
                     <span className="h-px flex-1 bg-border" />
                   </div>
                   {button}

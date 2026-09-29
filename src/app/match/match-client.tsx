@@ -866,15 +866,6 @@ export function MatchClient() {
       ),
     [theirCards, spotlightQuery],
   );
-  // Everything else the same posts offer, counted over the whole mode pool
-  // rather than the picks, so the number holds still while the user selects.
-  const spotlightOthers = useMemo(() => {
-    if (!spotlightQuery) return 0;
-    let others = 0;
-    for (const card of poolSupply.values())
-      if (!matchesDeskQuery(card.item, spotlightQuery)) others++;
-    return others;
-  }, [poolSupply, spotlightQuery]);
   const contactPosts = useMemo(
     () =>
       candidates
@@ -900,34 +891,30 @@ export function MatchClient() {
   // pinned from a handoff. The pinned one filters nothing, so its counts are
   // taken from the posts that offer one of its cards.
   const focus = searchingTheirCards
-    ? { query: theirQuery, label: `“${theirSearch}”` }
-    : spotlightQuery && mode !== "wts"
-      ? {
-          query: spotlightQuery,
-          label:
-            spotlight.length <= 40
-              ? `“${spotlight}”`
-              : `your search (${spotlightQuery.alternatives.length || "several"} cards)`,
-        }
+    ? theirQuery
+    : mode !== "wts"
+      ? spotlightQuery
       : null;
   const offersFocus = (post: DeskPost) =>
     !!focus &&
-    [...post.haves.values()].some((item) =>
-      matchesDeskQuery(item, focus.query),
-    );
-  const focusOffers = focus ? candidates.filter(offersFocus).length : 0;
-  const focusContacts = focus ? contactPosts.filter(offersFocus).length : 0;
+    [...post.haves.values()].some((item) => matchesDeskQuery(item, focus));
+  // Kept to one plain line. What else the posts offer is on the grid's
+  // divider; how to narrow it is on the search bar.
+  const matched = focus
+    ? traderCount(
+        (mode === "wtb" ? candidates : contactPosts).filter(offersFocus),
+      )
+    : 0;
+  const found = mode === "wtb" ? "seller" : "matched trade";
   const searchSummary = !focus
     ? null
     : loadingInv && mode === "wtt"
-      ? `Checking your inventory for trades matching ${focus.label}…`
+      ? "Checking your inventory…"
       : mode === "wtt" && mine.size === 0
-        ? `Searching for ${focus.label}. Add your objekts to check who wants something you own.`
-        : focusOffers === 0
-          ? `No ${mode === "wtb" ? "WTS" : "WTT"} posts in this paste offer cards matching ${focus.label}${activeGive.size || get.size ? " with your current selections" : ""}. Try clearing selections or importing more posts.`
-          : mode === "wtt" && focusContacts === 0
-            ? `No mutual trades found for ${focus.label} in this paste. ${focusOffers} WTT post${focusOffers === 1 ? " offers" : "s offer"} matching cards, but none lists any of your objekts in return.`
-            : `${focusContacts} ${mode === "wtb" ? "WTS" : "WTT"} post${focusContacts === 1 ? " offers" : "s offer"} cards matching ${focus.label}${mode === "wtt" ? ` and ${focusContacts === 1 ? "lists" : "list"} objekts you own in return` : ""}.`;
+        ? "Add your objekts to find matched trades."
+        : matched === 0
+          ? `No ${found}s for your search.`
+          : `${matched} ${found}${matched === 1 ? "" : "s"} for your search.`;
   /** The summary is about the pinned Discord search, not a typed one. */
   const summaryIsSpotlight = !!searchSummary && !searchingTheirCards;
   const linkedPosts = useMemo(
@@ -1663,34 +1650,13 @@ export function MatchClient() {
                   {searchSummary && (
                     <div
                       role="status"
-                      className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
+                      className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm"
                     >
                       <p
                         className="min-w-0 flex-1"
                         data-testid="search-match-summary"
                       >
                         {searchSummary}
-                        {summaryIsSpotlight && (
-                          <>
-                            {" "}
-                            {spotlightOthers > 0 && (
-                              <>
-                                {pinnedKeys.size > 0
-                                  ? "Your search is pinned first; the same posts offer "
-                                  : "The same posts offer "}
-                                <span className="font-medium">
-                                  {spotlightOthers.toLocaleString()} more objekt
-                                  {spotlightOthers === 1 ? "" : "s"}
-                                </span>{" "}
-                                below.{" "}
-                              </>
-                            )}
-                            <span className="text-muted-foreground">
-                              Type or paste wants in the search bar to narrow
-                              them.
-                            </span>
-                          </>
-                        )}
                       </p>
                       {summaryIsSpotlight && (
                         <button

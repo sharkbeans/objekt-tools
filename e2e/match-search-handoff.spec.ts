@@ -98,14 +98,10 @@ test("handoff pins the searched cards without hiding the rest, and explains offe
   const cards = await theirCards(page);
   expect(cards).toHaveLength(3);
   expect(cards[2]).toMatch(/^Their Mayu CC344,/);
-  await expect(page.getByText("More in these posts")).toBeVisible();
+  await expect(page.getByText("1 more in these posts")).toBeVisible();
 
   const summary = page.getByTestId("search-match-summary");
-  await expect(summary).toContainText("No mutual trades found");
-  await expect(summary).toContainText(
-    "2 WTT posts offer matching cards, but none lists any of your objekts in return",
-  );
-  await expect(summary).toContainText("offer 1 more objekt below");
+  await expect(summary).toHaveText("No matched trades for your search.");
   // The trade that exists — for a card nobody searched for — is still listed.
   await expect(page.getByTestId("trader-result")).toHaveCount(1);
   await expect(page.getByTestId("trader-result")).toContainText("unrelated");
@@ -115,12 +111,12 @@ test("handoff pins the searched cards without hiding the rest, and explains offe
 
   await page.reload();
   await expect(search).toHaveValue("");
-  await expect(summary).toContainText("No mutual trades found");
+  await expect(summary).toHaveText("No matched trades for your search.");
   await page
     .getByRole("button", { name: "Stop pinning the searched cards" })
     .click();
   await expect(summary).toHaveCount(0);
-  await expect(page.getByText("More in these posts")).toHaveCount(0);
+  await expect(page.getByText(/more in these posts/)).toHaveCount(0);
 });
 
 test("a pasted want list keeps its line breaks as separate cards", async ({
@@ -153,8 +149,8 @@ test("either searched card can yield a mutual trade; later deliveries replace ol
   await expect(
     page.getByRole("textbox", { name: "Search their objekts" }),
   ).toHaveValue("");
-  await expect(page.getByTestId("search-match-summary")).toContainText(
-    "2 WTT posts offer",
+  await expect(page.getByTestId("search-match-summary")).toHaveText(
+    "2 matched trades for your search.",
   );
   // Traders offering a searched card lead; the other mutual trade follows.
   const traders = page.getByTestId("trader-result");
@@ -180,24 +176,19 @@ test("missing inventory asks for cards instead of claiming nobody wants them", a
   await openDesk(page, "");
   await deliver(page, "seoyeon cc344 345", "no-inventory");
   await expect(page.getByTestId("search-match-summary")).toContainText(
-    "Add your objekts to check",
-  );
-  await expect(page.getByTestId("search-match-summary")).not.toContainText(
-    "No mutual trades",
+    "Add your objekts to find matched trades.",
   );
 });
 
-test("no offers is distinguished from offers with no mutual trade", async ({
+test("a search nobody offers still lists the trades that do exist", async ({
   page,
 }) => {
   await openDesk(page, "Xinyu CC101");
   await deliver(page, "SeoYeon CC399", "no-offers");
   await expect(page.getByTestId("search-match-summary")).toContainText(
-    "No WTT posts in this paste offer cards matching",
+    "No matched trades for your search.",
   );
-  await expect(page.getByTestId("search-match-summary")).not.toContainText(
-    "pinned first",
-  );
+  await expect(page.getByText(/more in these posts/)).toHaveCount(0);
   // Nothing searched turned up, but what did is still there to trade for.
   await expect(page.getByTestId("trader-result")).toHaveCount(1);
   await expect(page.getByTestId("trader-result")).toContainText("unrelated");
