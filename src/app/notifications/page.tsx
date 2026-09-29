@@ -4,6 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellIcon, CheckCheckIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  EmptyState,
+  LoadingState,
+  PageContainer,
+  PagePagination,
+} from "@/components/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,17 +79,11 @@ export default function NotificationsPage() {
   }
 
   if (isPending || isLoading) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">Loading...</div>
-    );
+    return <LoadingState />;
   }
 
   if (!session) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        Sign in to view notifications.
-      </div>
-    );
+    return <EmptyState description="Sign in to view notifications." />;
   }
 
   const notifications = data?.notifications ?? [];
@@ -93,7 +93,7 @@ export default function NotificationsPage() {
   const hasUnread = unreadCount > 0 || notifications.some((n) => !n.dismissed);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <PageContainer>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -117,9 +117,7 @@ export default function NotificationsPage() {
             </p>
           )}
           {notifications.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              No notifications yet.
-            </p>
+            <EmptyState description="No notifications yet." />
           ) : (
             <div className="space-y-1">
               {notifications.map((n) => {
@@ -130,7 +128,8 @@ export default function NotificationsPage() {
                     className={cn(
                       "flex items-start gap-3 rounded-md px-3 py-2.5 transition-colors",
                       !n.dismissed && "bg-primary/5",
-                      link && "hover:bg-muted cursor-pointer",
+                      link &&
+                        "cursor-pointer hover:bg-muted focus-visible:bg-muted",
                     )}
                   >
                     <div className="pt-1.5 shrink-0">
@@ -177,31 +176,14 @@ export default function NotificationsPage() {
             </div>
           )}
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
+          <PagePagination
+            className="pt-4"
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

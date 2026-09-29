@@ -1,9 +1,10 @@
 "use client";
 
-import { Loader2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LoadingState } from "@/components/page-shell";
+import { buttonVariants } from "@/components/ui/button";
 import {
   clearStoredCosmoIdentity,
   readStoredCosmoAddress,
@@ -52,16 +53,11 @@ export function CollectionHomeRedirect({
   }, [router, walletUnresolved]);
 
   if (!checkedStorage) {
-    return (
-      <div className="mx-auto flex max-w-xl items-center gap-2 px-4 py-12 text-sm text-muted-foreground">
-        <Loader2Icon className="h-4 w-4 animate-spin" />
-        <span>Opening your collection...</span>
-      </div>
-    );
+    return <LoadingState label="Opening your collection..." />;
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 px-4 py-12">
+    <div className="mx-auto max-w-xl space-y-6 py-12">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Collection</h1>
         <p className="text-sm text-muted-foreground">
@@ -73,13 +69,13 @@ export function CollectionHomeRedirect({
       <div className="flex flex-wrap gap-3">
         <Link
           href={sectionHref("/link", { currentSection: "collect" })}
-          className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          className={buttonVariants({ size: "lg" })}
         >
           Link Cosmo account
         </Link>
         <Link
           href={sectionHref("/", { currentSection: "collect" })}
-          className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent"
+          className={buttonVariants({ variant: "outline", size: "lg" })}
         >
           Back to home
         </Link>

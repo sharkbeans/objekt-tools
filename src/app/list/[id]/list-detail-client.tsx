@@ -13,6 +13,11 @@ import {
   ObjektImages,
   useObjektImages,
 } from "@/components/objekt/objekt-images";
+import {
+  EmptyState,
+  LoadingState,
+  PageContainer,
+} from "@/components/page-shell";
 import type {
   PosterData,
   PosterTheme,
@@ -422,27 +427,23 @@ export default function ListDetailClient({
   );
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24 gap-2 text-muted-foreground">
-        <Loader2Icon className="h-4 w-4 animate-spin" />
-        Loading...
-      </div>
-    );
+    return <LoadingState className="py-24" />;
   }
 
   if (notFound || !posterRow) {
     return (
-      <div className="max-w-4xl mx-auto space-y-4 py-12 text-center">
-        <p className="text-lg font-medium">List not found</p>
-        <p className="text-muted-foreground text-sm">
-          This list may have been deleted or the link is invalid.
-        </p>
-        <Button asChild variant="outline">
-          <Link href={sectionHref("/list", { currentSection: "list" })}>
-            Make your own
-          </Link>
-        </Button>
-      </div>
+      <PageContainer width="wide">
+        <EmptyState
+          title="List not found"
+          description="This list may have been deleted or the link is invalid."
+        >
+          <Button asChild variant="outline">
+            <Link href={sectionHref("/list", { currentSection: "list" })}>
+              Make your own
+            </Link>
+          </Button>
+        </EmptyState>
+      </PageContainer>
     );
   }
 

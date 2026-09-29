@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ProgressSearch } from "@/components/progress/progress-search";
 import { StaleIdentityCleanup } from "@/components/progress/stale-identity-cleanup";
+import { buttonVariants } from "@/components/ui/button";
 import { rootUrl } from "@/lib/sections";
 
 // Not-found boundary for every collection URL. Unlike the global 404 this one
@@ -11,7 +12,7 @@ import { rootUrl } from "@/lib/sections";
 // straight back into the saved username — the loop this page exists to end.
 export default function CollectionNotFound() {
   return (
-    <div className="mx-auto max-w-xl space-y-4 px-4 py-12">
+    <div className="mx-auto max-w-xl space-y-6 py-12">
       <StaleIdentityCleanup />
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Collection not found</h1>
@@ -25,13 +26,13 @@ export default function CollectionNotFound() {
       <div className="flex flex-wrap gap-3">
         <Link
           href={`${rootUrl()}/link`}
-          className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          className={buttonVariants({ size: "lg" })}
         >
           Link Cosmo account
         </Link>
         <Link
           href={rootUrl()}
-          className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent"
+          className={buttonVariants({ variant: "outline", size: "lg" })}
         >
           Go home
         </Link>

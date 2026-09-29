@@ -36,7 +36,7 @@ export default function SignInPage() {
   }, [state.status, returnTo]);
 
   return (
-    <div className="flex min-h-[80vh] items-center justify-center">
+    <div className="flex min-h-[70vh] items-center justify-center">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Sign in</CardTitle>

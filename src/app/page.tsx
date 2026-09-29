@@ -13,6 +13,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import type React from "react";
+import { PageContainer, PageHeader } from "@/components/page-shell";
 import { sectionHref } from "@/lib/sections";
 
 function SpinIcon() {
@@ -116,17 +117,17 @@ const moreTools: {
 
 export default function HomePage() {
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4">
-      <h1 className="text-2xl font-bold mb-2">objekt.my</h1>
-      <p className="text-base mb-6 text-muted-foreground">
-        Track your grids. Find who has what you're missing.
-      </p>
+    <PageContainer width="wide">
+      <PageHeader
+        title="objekt.my"
+        description="Track your grids. Find who has what you're missing."
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {primary.map(({ title, description, href, image, Icon, secondary }) => (
           <div
             key={href}
-            className="group relative rounded-2xl overflow-hidden bg-[#1a1a1a] min-h-56 sm:aspect-4/3 flex flex-col justify-between border border-white/5 hover:border-white/70 transition-colors p-5"
+            className="group relative rounded-2xl overflow-hidden bg-[#1a1a1a] min-h-56 sm:aspect-4/3 flex flex-col justify-between border border-white/5 hover:border-white/70 focus-within:border-white/70 transition-colors p-5"
           >
             <Image
               src={image}
@@ -175,7 +176,7 @@ export default function HomePage() {
         ))}
       </div>
 
-      <h2 className="mt-8 mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+      <h2 className="mt-2 -mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
         More tools
       </h2>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -189,7 +190,11 @@ export default function HomePage() {
             iconRotate,
             CustomIcon,
           }) => (
-            <Link key={href} href={sectionHref(href)} className="group">
+            <Link
+              key={href}
+              href={sectionHref(href)}
+              className="group rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
               <div className="relative rounded-xl overflow-hidden bg-[#1a1a1a] aspect-4/3 flex flex-col justify-between border border-white/5 hover:border-white/70 transition-colors p-3">
                 <Image
                   src={image}
@@ -230,6 +235,6 @@ export default function HomePage() {
           ),
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 }
