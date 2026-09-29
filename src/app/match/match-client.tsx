@@ -866,18 +866,14 @@ export function MatchClient() {
       ),
     [theirCards, spotlightQuery],
   );
-  // Counted over the whole mode pool, not the picks, so the headline holds
-  // still while the user selects cards.
-  const spotlightStats = useMemo(() => {
-    if (!spotlightQuery) return null;
-    let found = 0;
+  // Everything else the same posts offer, counted over the whole mode pool
+  // rather than the picks, so the number holds still while the user selects.
+  const spotlightOthers = useMemo(() => {
+    if (!spotlightQuery) return 0;
+    let others = 0;
     for (const card of poolSupply.values())
-      if (matchesDeskQuery(card.item, spotlightQuery)) found++;
-    return {
-      found,
-      searched: spotlightQuery.alternatives.length || found,
-      others: poolSupply.size - found,
-    };
+      if (!matchesDeskQuery(card.item, spotlightQuery)) others++;
+    return others;
   }, [poolSupply, spotlightQuery]);
   const contactPosts = useMemo(
     () =>
@@ -900,17 +896,40 @@ export function MatchClient() {
         }),
     [candidates, mine, mode, spotlightQuery],
   );
-  const searchSummary = !searchingTheirCards
+  // What the summary explains: the typed search, or else the Discord search
+  // pinned from a handoff. The pinned one filters nothing, so its counts are
+  // taken from the posts that offer one of its cards.
+  const focus = searchingTheirCards
+    ? { query: theirQuery, label: `“${theirSearch}”` }
+    : spotlightQuery && mode !== "wts"
+      ? {
+          query: spotlightQuery,
+          label:
+            spotlight.length <= 40
+              ? `“${spotlight}”`
+              : `your search (${spotlightQuery.alternatives.length || "several"} cards)`,
+        }
+      : null;
+  const offersFocus = (post: DeskPost) =>
+    !!focus &&
+    [...post.haves.values()].some((item) =>
+      matchesDeskQuery(item, focus.query),
+    );
+  const focusOffers = focus ? candidates.filter(offersFocus).length : 0;
+  const focusContacts = focus ? contactPosts.filter(offersFocus).length : 0;
+  const searchSummary = !focus
     ? null
     : loadingInv && mode === "wtt"
-      ? `Checking your inventory for trades matching “${theirSearch}”…`
+      ? `Checking your inventory for trades matching ${focus.label}…`
       : mode === "wtt" && mine.size === 0
-        ? `Searching for “${theirSearch}”. Add your objekts to check who wants something you own.`
-        : candidates.length === 0
-          ? `No ${mode === "wtb" ? "WTS" : "WTT"} posts in this paste offer cards matching “${theirSearch}”${activeGive.size || get.size ? " with your current selections" : ""}. Try clearing selections or importing more posts.`
-          : mode === "wtt" && contactPosts.length === 0
-            ? `No mutual trades found for “${theirSearch}” in this paste. ${candidates.length} WTT post${candidates.length === 1 ? " offers" : "s offer"} matching cards, but none lists any of your objekts in return.`
-            : `${contactPosts.length} ${mode === "wtb" ? "WTS" : "WTT"} post${contactPosts.length === 1 ? " offers" : "s offer"} cards matching “${theirSearch}”${mode === "wtt" ? ` and ${contactPosts.length === 1 ? "lists" : "list"} objekts you own in return` : ""}.`;
+        ? `Searching for ${focus.label}. Add your objekts to check who wants something you own.`
+        : focusOffers === 0
+          ? `No ${mode === "wtb" ? "WTS" : "WTT"} posts in this paste offer cards matching ${focus.label}${activeGive.size || get.size ? " with your current selections" : ""}. Try clearing selections or importing more posts.`
+          : mode === "wtt" && focusContacts === 0
+            ? `No mutual trades found for ${focus.label} in this paste. ${focusOffers} WTT post${focusOffers === 1 ? " offers" : "s offer"} matching cards, but none lists any of your objekts in return.`
+            : `${focusContacts} ${mode === "wtb" ? "WTS" : "WTT"} post${focusContacts === 1 ? " offers" : "s offer"} cards matching ${focus.label}${mode === "wtt" ? ` and ${focusContacts === 1 ? "lists" : "list"} objekts you own in return` : ""}.`;
+  /** The summary is about the pinned Discord search, not a typed one. */
+  const summaryIsSpotlight = !!searchSummary && !searchingTheirCards;
   const linkedPosts = useMemo(
     () => indexed.filter((post) => post.message.listLinks.length > 0),
     [indexed],
@@ -1642,50 +1661,48 @@ export function MatchClient() {
                         : "Choose either side to start. Offers update as you select cards."}
                   </p>
                   {searchSummary && (
-                    <p
-                      role="status"
-                      className="rounded-lg border bg-muted/30 p-3 text-sm"
-                      data-testid="search-match-summary"
-                    >
-                      {searchSummary}
-                    </p>
-                  )}
-                  {spotlightStats && !searchingTheirCards && (
                     <div
                       role="status"
                       className="flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm"
-                      data-testid="spotlight-summary"
                     >
-                      <p className="min-w-0 flex-1">
-                        <span className="font-medium">
-                          {spotlightStats.found} of {spotlightStats.searched}{" "}
-                          searched{" "}
-                          {spotlightStats.searched === 1 ? "card" : "cards"}{" "}
-                          found
-                        </span>
-                        {spotlightStats.found > 0 && ", pinned first"}.{" "}
-                        {spotlightStats.others > 0 && (
+                      <p
+                        className="min-w-0 flex-1"
+                        data-testid="search-match-summary"
+                      >
+                        {searchSummary}
+                        {summaryIsSpotlight && (
                           <>
-                            The same posts offer{" "}
-                            <span className="font-medium">
-                              {spotlightStats.others.toLocaleString()} more
-                            </span>{" "}
-                            below.{" "}
+                            {" "}
+                            {spotlightOthers > 0 && (
+                              <>
+                                {pinnedKeys.size > 0
+                                  ? "Your search is pinned first; the same posts offer "
+                                  : "The same posts offer "}
+                                <span className="font-medium">
+                                  {spotlightOthers.toLocaleString()} more objekt
+                                  {spotlightOthers === 1 ? "" : "s"}
+                                </span>{" "}
+                                below.{" "}
+                              </>
+                            )}
+                            <span className="text-muted-foreground">
+                              Type or paste wants in the search bar to narrow
+                              them.
+                            </span>
                           </>
                         )}
-                        <span className="text-muted-foreground">
-                          Type or paste wants in the search bar to narrow them.
-                        </span>
                       </p>
-                      <button
-                        type="button"
-                        aria-label="Stop pinning the searched cards"
-                        title="Stop pinning the searched cards"
-                        className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                        onClick={() => setSpotlight("")}
-                      >
-                        <XIcon className="size-4" />
-                      </button>
+                      {summaryIsSpotlight && (
+                        <button
+                          type="button"
+                          aria-label="Stop pinning the searched cards"
+                          title="Stop pinning the searched cards"
+                          className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                          onClick={() => setSpotlight("")}
+                        >
+                          <XIcon className="size-4" />
+                        </button>
+                      )}
                     </div>
                   )}
                   <DeskGrid

@@ -72,54 +72,106 @@ async function deliver(page: Page, wants: string, id: string) {
   );
 }
 
-test("handoff autofills their search and explains offers without a return trade", async ({
+/** "Their objekts" card labels, in grid order. */
+async function theirCards(page: Page) {
+  return page
+    .getByRole("button", { name: /^Their / })
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label") ?? ""),
+    );
+}
+
+test("handoff pins the searched cards without hiding the rest, and explains offers without a return trade", async ({
   page,
 }) => {
   await openDesk(page, "Xinyu CC101");
   await deliver(page, "seoyeon cc344 345", "empty-mutual");
+  // A highlight, not a filter: the search box stays empty and every card the
+  // posts offer is still in the grid, the searched ones first.
+  const search = page.getByRole("textbox", { name: "Search their objekts" });
+  await expect(search).toHaveValue("");
   await expect(
-    page.getByRole("textbox", { name: "Search their objekts" }),
-  ).toHaveValue("seoyeon cc344 345");
+    page.getByRole("button", {
+      name: /^Their SeoYeon CC34[45],.*in your search$/,
+    }),
+  ).toHaveCount(2);
+  const cards = await theirCards(page);
+  expect(cards).toHaveLength(3);
+  expect(cards[2]).toMatch(/^Their Mayu CC344,/);
+  await expect(page.getByText("More in these posts")).toBeVisible();
+
   const summary = page.getByTestId("search-match-summary");
   await expect(summary).toContainText("No mutual trades found");
   await expect(summary).toContainText(
     "2 WTT posts offer matching cards, but none lists any of your objekts in return",
   );
-  await expect(
-    page.getByRole("button", { name: /^Their SeoYeon CC34[45],/ }),
-  ).toHaveCount(2);
-  await expect(page.getByTestId("trader-result")).toHaveCount(0);
+  await expect(summary).toContainText("offer 1 more objekt below");
+  // The trade that exists — for a card nobody searched for — is still listed.
+  await expect(page.getByTestId("trader-result")).toHaveCount(1);
+  await expect(page.getByTestId("trader-result")).toContainText("unrelated");
   expect(
     await page.evaluate(() => localStorage.getItem("match:wants:v1")),
   ).toBe("Mayu AA101");
 
   await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Search their objekts" }),
-  ).toHaveValue("seoyeon cc344 345");
+  await expect(search).toHaveValue("");
   await expect(summary).toContainText("No mutual trades found");
-  await page.getByRole("textbox", { name: "Search their objekts" }).fill("");
-  await expect(page.getByTestId("trader-result")).toHaveCount(1);
-  await expect(page.getByTestId("trader-result")).toContainText("unrelated");
+  await page
+    .getByRole("button", { name: "Stop pinning the searched cards" })
+    .click();
+  await expect(summary).toHaveCount(0);
+  await expect(page.getByText("More in these posts")).toHaveCount(0);
 });
 
-test("either searched card can yield a mutual trade; later deliveries replace old filters and selections", async ({
+test("a pasted want list keeps its line breaks as separate cards", async ({
+  page,
+}) => {
+  await openDesk(page, "Xinyu CC101");
+  await deliver(page, "", "paste");
+  const search = page.getByRole("textbox", { name: "Search their objekts" });
+  await search.focus();
+  await search.evaluate((input) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "SeoYeon CC344\nMayu CC344\n");
+    input.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  await expect(search).toHaveValue("SeoYeon CC344, Mayu CC344");
+  await expect(page.getByRole("button", { name: /^Their / })).toHaveCount(2);
+});
+
+test("either searched card can yield a mutual trade; later deliveries replace old pins and selections", async ({
   page,
 }) => {
   await openDesk(page, "JiYeon CC102 103\nXinyu CC101");
   await deliver(page, "seoyeon cc344 345", "mutual");
-  await expect(page.getByTestId("trader-result")).toHaveCount(2);
+  await expect(
+    page.getByRole("textbox", { name: "Search their objekts" }),
+  ).toHaveValue("");
   await expect(page.getByTestId("search-match-summary")).toContainText(
     "2 WTT posts offer",
   );
+  // Traders offering a searched card lead; the other mutual trade follows.
+  const traders = page.getByTestId("trader-result");
+  await expect(traders).toHaveCount(3);
+  await expect(traders.nth(2)).toContainText("unrelated");
   await page.getByRole("button", { name: /^Their SeoYeon CC344,/ }).click();
-  await expect(page.getByTestId("trader-result")).toHaveCount(1);
+  await expect(traders).toHaveCount(1);
+  const search = page.getByRole("textbox", { name: "Search their objekts" });
+  await search.fill("seoyeon");
+
   await deliver(page, "Mayu CC344", "next-search");
-  await expect(
-    page.getByRole("textbox", { name: "Search their objekts" }),
-  ).toHaveValue("Mayu CC344");
-  await expect(page.getByTestId("trader-result")).toHaveCount(1);
-  await expect(page.getByTestId("trader-result")).toContainText("unrelated");
+  await expect(search).toHaveValue("");
+  await expect(traders).toHaveCount(3);
+  await expect(traders.first()).toContainText("unrelated");
+  expect((await theirCards(page))[0]).toMatch(
+    /^Their Mayu CC344,.*in your search$/,
+  );
 });
 
 test("missing inventory asks for cards instead of claiming nobody wants them", async ({
@@ -143,7 +195,12 @@ test("no offers is distinguished from offers with no mutual trade", async ({
   await expect(page.getByTestId("search-match-summary")).toContainText(
     "No WTT posts in this paste offer cards matching",
   );
-  await expect(page.getByTestId("trader-result")).toHaveCount(0);
+  await expect(page.getByTestId("search-match-summary")).not.toContainText(
+    "pinned first",
+  );
+  // Nothing searched turned up, but what did is still there to trade for.
+  await expect(page.getByTestId("trader-result")).toHaveCount(1);
+  await expect(page.getByTestId("trader-result")).toContainText("unrelated");
 });
 
 test("linked Objekt.top and Apollo lists load together", async ({ page }) => {
