@@ -6,7 +6,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { DiscordIcon } from "@/components/discord-icon";
 import { Button } from "@/components/ui/button";
-import { isPhoneBrowser } from "@/lib/extension-links";
+import {
+  browserStore,
+  EXTENSION_STORE_URLS,
+  isPhoneBrowser,
+} from "@/lib/extension-links";
 import { sectionHref } from "@/lib/sections";
 import { ExtensionSetup } from "./extension-setup";
 
@@ -21,7 +25,7 @@ function Step({
 }: {
   n: number;
   title: string;
-  state: "active" | "done" | "optional" | "later";
+  state: "active" | "plain" | "done" | "optional" | "later";
   children: React.ReactNode;
 }) {
   const active = state === "active";
@@ -60,8 +64,10 @@ function Step({
 
 /**
  * /match before any posts are in: the grids, filters and counts all need
- * posts to mean anything, so show the three steps instead and give the first
- * one the only coloured button on the page. Phones get a different first
+ * posts to mean anything, so show how to get some instead. Where the
+ * extension can be installed (or already is) that leads, and the three steps
+ * below are the by-hand way; otherwise the steps come first and the first one
+ * gets the only coloured button on the page. Phones get a different first
  * step — a whole channel can't be exported or captured there.
  */
 export function MatchOnboarding({
@@ -85,6 +91,14 @@ export function MatchOnboarding({
   // Mounted only after the stored posts have loaded, so never server-rendered
   // and safe to read `navigator` up front (no desktop-copy flash on phones).
   const [phone] = useState(isPhoneBrowser);
+  const [store] = useState(browserStore);
+  // Lead with the extension only when it's something to act on: a live
+  // listing to install from, or an install to point at. A browser with no
+  // listing yet still hears about it, but after the steps it can use now.
+  const extensionFirst =
+    !phone &&
+    store !== null &&
+    (extensionInstalled === true || Boolean(EXTENSION_STORE_URLS[store]));
 
   const sendToComputer = async () => {
     const url = window.location.href;
@@ -102,8 +116,20 @@ export function MatchOnboarding({
 
   return (
     <section aria-label="Get started" className="space-y-4">
+      {extensionFirst && (
+        <>
+          <ExtensionSetup installed={extensionInstalled} source="empty" />
+          <h2 className="pt-2 text-sm font-medium text-muted-foreground">
+            Or bring posts over yourself
+          </h2>
+        </>
+      )}
       <ol className="grid gap-3 md:grid-cols-3">
-        <Step n={1} title="Import Discord posts" state="active">
+        <Step
+          n={1}
+          title="Import Discord posts"
+          state={extensionFirst ? "plain" : "active"}
+        >
           {phone ? (
             <>
               <p className="text-sm text-muted-foreground">
@@ -194,7 +220,9 @@ export function MatchOnboarding({
           computer.
         </p>
       ) : (
-        <ExtensionSetup installed={extensionInstalled} source="empty" />
+        !extensionFirst && (
+          <ExtensionSetup installed={extensionInstalled} source="empty" />
+        )
       )}
     </section>
   );

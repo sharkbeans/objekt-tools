@@ -1,20 +1,113 @@
 "use client";
 
-import {
-  ArrowRightIcon,
-  CheckIcon,
-  ExternalLinkIcon,
-  PuzzleIcon,
-} from "lucide-react";
+import { CheckIcon, ExternalLinkIcon, PuzzleIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
-import { extensionStoreForBrowser } from "@/lib/extension-links";
+import {
+  browserStore,
+  EXTENSION_STORE_NAMES,
+  EXTENSION_STORE_URLS,
+  type ExtensionStore,
+} from "@/lib/extension-links";
+import { DEMO_STEPS, DemoSteps, DemoViewer } from "./extension-demo";
 
 /**
- * An optional shortcut alongside importing posts. Presence keeps updating
- * after installation in another tab; unsupported browsers get no prompt.
+ * The stores' own badges, used as published: Google asks for the bordered
+ * one on a coloured background and only resizing is allowed, so they're served
+ * as-is and sized by height alone. Each must link to its listing.
+ */
+const BADGES: Record<
+  ExtensionStore,
+  { src: string; width: number; height: number; alt: string }
+> = {
+  chrome: {
+    src: "/extension/badges/chrome-web-store.png",
+    width: 496,
+    height: 150,
+    alt: "Available in the Chrome Web Store",
+  },
+  firefox: {
+    src: "/extension/badges/firefox-get-the-addon.svg",
+    width: 172,
+    height: 60,
+    alt: "Get the Add-on for Firefox",
+  },
+};
+
+function StoreBadge({
+  store,
+  source,
+  className,
+}: {
+  store: ExtensionStore;
+  source: "empty" | "paste";
+  /** Sets the badge's height. */
+  className: string;
+}) {
+  const url = EXTENSION_STORE_URLS[store];
+  if (!url) return null;
+  const { src, width, height, alt } = BADGES[store];
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-block rounded-md transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:transform-none"
+      onClick={() => track("match_install_cta_click", { source, store })}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        unoptimized
+        className={`w-auto ${className}`}
+      />
+    </a>
+  );
+}
+
+/**
+ * A badge for every store whose listing is live, the one for the browser in
+ * use first. A store still waiting on its listing gets a line saying so
+ * instead, and gains its badge once its URL is filled in.
+ */
+function InstallBadges({ detected }: { detected: ExtensionStore }) {
+  const order: ExtensionStore[] =
+    detected === "firefox" ? ["firefox", "chrome"] : ["chrome", "firefox"];
+  const soon = order.filter((store) => !EXTENSION_STORE_URLS[store]);
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-3">
+        {order.map((store) => (
+          <StoreBadge
+            key={store}
+            store={store}
+            source="empty"
+            className="h-12"
+          />
+        ))}
+      </div>
+      {soon.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {soon.map((store) => EXTENSION_STORE_NAMES[store]).join(" and ")}{" "}
+          add-on coming soon.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The offer to install the Objekt Match extension, and the proof it's worth
+ * it: what it does, shown in three steps with a recording each.
+ *
+ * `compact` is the one-line version above the paste box. Presence keeps
+ * updating after installation in another tab; phones and browsers with no
+ * extension store get no prompt.
  */
 export function ExtensionSetup({
   installed,
@@ -28,10 +121,91 @@ export function ExtensionSetup({
   /** A smaller offer above the paste box. */
   compact?: boolean;
 }) {
-  const store = extensionStoreForBrowser();
+  const [step, setStep] = useState(0);
+  const progress = useRef<HTMLSpanElement>(null);
+  const store = browserStore();
   if (!store) return null;
   const ready = installed === true;
 
+  if (compact || ready) {
+    // The compact offer has nothing to say to a browser with no listing yet.
+    if (!ready && !EXTENSION_STORE_URLS[store]) return null;
+    return (
+      <SlimOffer
+        ready={ready}
+        store={store}
+        source={source}
+        compact={compact}
+      />
+    );
+  }
+
+  return (
+    <section
+      aria-label="Objekt Match extension"
+      className="overflow-hidden rounded-xl border bg-card"
+    >
+      <div className="grid gap-x-10 gap-y-6 p-5 sm:p-8 lg:grid-cols-[minmax(0,9fr)_minmax(0,15fr)] lg:items-start">
+        <div className="min-w-0 space-y-5">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Objekt Match extension
+            </p>
+            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
+              Find who has your missing cards on Discord
+            </h2>
+            <p className="max-w-lg leading-relaxed text-muted-foreground">
+              A browser extension that remembers the trade posts you scroll past
+              in Discord and lines them up against your collection.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <InstallBadges detected={store} />
+            <Link
+              href="/extension"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block rounded-sm text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+            >
+              How it works
+            </Link>
+          </div>
+        </div>
+        {/* Above the steps when stacked, so choosing one changes what's in
+            view; beside them, spanning both rows, on wide screens. */}
+        <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-center">
+          <DemoViewer
+            active={step}
+            progress={progress}
+            onEnded={() =>
+              setStep((current) => (current + 1) % DEMO_STEPS.length)
+            }
+          />
+        </div>
+        <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+          <DemoSteps active={step} onSelect={setStep} progress={progress} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The short forms: the one-line offer above the paste box, and the note that
+ * the extension is already installed and what to do with it.
+ */
+function SlimOffer({
+  ready,
+  store,
+  source,
+  compact,
+}: {
+  ready: boolean;
+  store: ExtensionStore;
+  source: "empty" | "paste";
+  compact: boolean;
+}) {
   const action = ready ? (
     <Button asChild variant="secondary" className="border border-foreground/15">
       <a href="https://discord.com/app" target="_blank" rel="noreferrer">
@@ -40,32 +214,7 @@ export function ExtensionSetup({
       </a>
     </Button>
   ) : (
-    <Button
-      asChild
-      className="border border-[#a58cff]/30 bg-[#6d22ff]/15 font-semibold text-[#6d22ff] hover:bg-[#6d22ff]/25 focus-visible:border-[#a58cff] focus-visible:ring-[#a58cff]/30 dark:text-[#a58cff]"
-      size={compact ? "sm" : "default"}
-    >
-      <a
-        href={store.url}
-        target="_blank"
-        rel="noreferrer"
-        onClick={() => track("match_install_cta_click", { source })}
-      >
-        Add to Chrome
-        <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
-      </a>
-    </Button>
-  );
-
-  const details = (
-    <Link
-      href="/extension"
-      target="_blank"
-      rel="noreferrer"
-      className="rounded-sm text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-    >
-      How it works
-    </Link>
+    <StoreBadge store={store} source={source} className="h-10" />
   );
 
   return (
@@ -95,8 +244,7 @@ export function ExtensionSetup({
           </span>
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground">
-              Objekt Match ·{" "}
-              {compact ? "Free Chrome extension" : "Chrome extension"}
+              Objekt Match · Free browser extension
             </p>
             <h2
               className={
@@ -108,7 +256,7 @@ export function ExtensionSetup({
             >
               {ready
                 ? "You’re ready to bring posts over"
-                : "Search 1,000+ trade posts at once"}
+                : "Skip the copy-pasting"}
             </h2>
             <p
               className={`mt-1 text-sm leading-relaxed text-muted-foreground ${compact ? "" : "max-w-lg"}`}
@@ -122,7 +270,7 @@ export function ExtensionSetup({
                   in the Objekt Match panel.
                 </>
               ) : (
-                "Capture posts as you scroll Discord, then search, filter and sort the objekts here to find your next trade."
+                "Objekt Match collects posts as you scroll Discord, so you never paste a channel by hand."
               )}
             </p>
           </div>
@@ -135,55 +283,22 @@ export function ExtensionSetup({
           }
         >
           {action}
-          {!compact && (
+          {!compact && ready && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {ready ? (
-                <>
-                  <CheckIcon className="size-3.5" aria-hidden="true" />
-                  Extension installed
-                </>
-              ) : (
-                "Free · Optional"
-              )}
+              <CheckIcon className="size-3.5" aria-hidden="true" />
+              Extension installed
             </p>
           )}
-          {details}
+          <Link
+            href="/extension"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-sm text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          >
+            How it works
+          </Link>
         </div>
       </div>
-      {!compact && !ready && (
-        <div className="grid items-center gap-3 px-5 pb-5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6 sm:pb-6">
-          <figure className="min-w-0 space-y-3">
-            <Image
-              src="/extension/discord-search-cropped.webp"
-              alt="Objekt Match searching Discord for SeoYeon CC101 through CC108 and collecting matching posts."
-              width={960}
-              height={720}
-              unoptimized
-              className="h-auto w-full rounded-lg border"
-            />
-            <figcaption className="text-center text-sm font-medium">
-              Search Discord
-            </figcaption>
-          </figure>
-          <ArrowRightIcon
-            className="mx-auto size-5 rotate-90 text-muted-foreground sm:-mt-8 sm:rotate-0"
-            aria-hidden="true"
-          />
-          <figure className="min-w-0 space-y-3">
-            <Image
-              src="/extension/match-results-cropped.webp"
-              alt="Objekt Match showing your cards, trade posts, and matching cards from other traders."
-              width={960}
-              height={720}
-              unoptimized
-              className="h-auto w-full rounded-lg border"
-            />
-            <figcaption className="text-center text-sm font-medium">
-              Find mutual trades
-            </figcaption>
-          </figure>
-        </div>
-      )}
     </section>
   );
 }

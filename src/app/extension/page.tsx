@@ -14,9 +14,17 @@ export const metadata: Metadata = {
     "Scroll your Discord trade channels as usual. Objekt Match remembers every post and shows who has what you're missing.",
 };
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  id?: string;
+  children: ReactNode;
+}) {
   return (
-    <section className="space-y-3">
+    <section id={id} className="scroll-mt-20 space-y-3">
       <h2 className="text-xl font-semibold">{title}</h2>
       {children}
     </section>
@@ -60,7 +68,7 @@ export default function ExtensionPage() {
         </ul>
       </Section>
 
-      <Section title="Search mode (optional)">
+      <Section id="search-mode" title="Search mode (optional)">
         <p>
           Besides passive capture, the extension can search for you: it types
           your objekt codes into Discord&rsquo;s own search box and pages

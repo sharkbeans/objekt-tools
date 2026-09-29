@@ -13,6 +13,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
+import {
+  EXTENSION_STORE_NAMES,
+  type ExtensionStore,
+} from "@/lib/extension-links";
 import { PAGE_SOURCE, type PageMessage } from "@/lib/match/extension-handoff";
 import { type SectionId, sectionHref } from "@/lib/sections";
 
@@ -115,6 +119,7 @@ export function CopyAndOpenDiscord({
  */
 export function ExtensionIntro({
   storeUrl,
+  store = "chrome",
   installed,
   count,
   wants,
@@ -124,6 +129,8 @@ export function ExtensionIntro({
   sending = false,
 }: {
   storeUrl: string;
+  /** Which store `storeUrl` is, for naming it on the button. */
+  store?: ExtensionStore;
   installed: boolean;
   /** How many objekts are about to be looked for. */
   count: number;
@@ -187,8 +194,9 @@ export function ExtensionIntro({
         <div className="space-y-1">
           <p className="font-semibold">Let Objekt Match look for you</p>
           <p className="text-sm text-muted-foreground">
-            A free Chrome extension. Scroll your Discord trade channel as usual
-            and it spots who has what you&rsquo;re missing. No copy-pasting.
+            A free {EXTENSION_STORE_NAMES[store]} extension. Scroll your Discord
+            trade channel as usual and it spots who has what you&rsquo;re
+            missing. No copy-pasting.
           </p>
         </div>
       </div>
@@ -239,7 +247,7 @@ export function ExtensionIntro({
               track("extension_intro_install");
             }}
           >
-            Add to Chrome, it&rsquo;s free
+            Add to {EXTENSION_STORE_NAMES[store]}, it&rsquo;s free
           </a>
         </Button>
         <Button
