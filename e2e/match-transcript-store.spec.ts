@@ -43,9 +43,9 @@ const legacyRaw = (page: import("@playwright/test").Page) =>
   page.evaluate(() => localStorage.getItem("match:raw:v1"));
 
 async function paste(page: import("@playwright/test").Page, text: string) {
-  // "Paste Discord posts" on a first visit, "Add posts" once posts are loaded.
+  // "Import Discord posts" on a first visit, "Import more posts" once posts are loaded.
   await page
-    .getByRole("button", { name: /Paste Discord posts|Add posts/ })
+    .getByRole("button", { name: /Import Discord posts|Import more posts/ })
     .first()
     .click();
   const dialog = page.getByRole("dialog");
@@ -59,13 +59,13 @@ test("a paste survives a reload and is stored gzipped in IndexedDB", async ({
 }) => {
   await page.goto("/match");
   await expect(
-    page.getByRole("button", { name: "Paste Discord posts" }),
+    page.getByRole("button", { name: "Import Discord posts" }),
   ).toBeVisible();
 
   await paste(page, SAMPLE);
   // The header button flips once posts are loaded.
   await expect(
-    page.getByRole("button", { name: "Add posts" }).first(),
+    page.getByRole("button", { name: "Import more posts" }),
   ).toBeVisible();
 
   const stored = await readStored(page);
@@ -75,7 +75,7 @@ test("a paste survives a reload and is stored gzipped in IndexedDB", async ({
 
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "Add posts" }).first(),
+    page.getByRole("button", { name: "Import more posts" }),
   ).toBeVisible();
   // Nothing was left behind in the old localStorage key.
   expect(await legacyRaw(page)).toBeNull();
@@ -85,7 +85,7 @@ test("re-pasting the same posts does not grow the store", async ({ page }) => {
   await page.goto("/match");
   await paste(page, SAMPLE);
   await expect(
-    page.getByRole("button", { name: "Add posts" }).first(),
+    page.getByRole("button", { name: "Import more posts" }),
   ).toBeVisible();
   const first = await readStored(page);
 
@@ -106,7 +106,7 @@ test("a transcript left in localStorage migrates into IndexedDB", async ({
   await page.reload();
 
   await expect(
-    page.getByRole("button", { name: "Add posts" }).first(),
+    page.getByRole("button", { name: "Import more posts" }),
   ).toBeVisible();
   expect(await legacyRaw(page)).toBeNull();
   expect(await readStored(page)).not.toBeNull();

@@ -15,13 +15,13 @@ SeoYeon CC101`;
 
 async function setUp(page: import("@playwright/test").Page) {
   await page.goto("/match");
-  await page.getByRole("button", { name: "Paste Discord posts" }).click();
+  await page.getByRole("button", { name: "Import Discord posts" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("textbox", { name: "Discord posts" }).fill(SAMPLE);
   await dialog.getByRole("button", { name: "Add posts" }).click();
   await expect(dialog).toBeHidden();
 
-  await page.getByRole("button", { name: "My lists" }).click();
+  await page.getByRole("button", { name: "My objekts", exact: true }).click();
   await page.getByLabel("Or type what I have").fill("SeoYeon CC101");
   await page.getByRole("button", { name: "Done — show my cards" }).click();
 

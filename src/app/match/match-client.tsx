@@ -11,7 +11,6 @@ import {
   TagIcon,
   XIcon,
 } from "lucide-react";
-import Link from "next/link";
 import {
   type ChangeEvent,
   useCallback,
@@ -76,7 +75,6 @@ import {
   fetchInventoryForVerification,
   type VerificationState,
 } from "@/lib/discord/verify";
-import { extensionStoreForBrowser } from "@/lib/extension-links";
 import {
   type ExternalListImport,
   type ExternalListLink,
@@ -133,6 +131,8 @@ import { sectionHref } from "@/lib/sections";
 import { ContactResults } from "./desk-contacts";
 import { type DeskBadge, DeskGrid } from "./desk-grid";
 import { matchesDeskQuery, parseDeskQuery } from "./desk-search";
+import { ExtensionSetup } from "./extension-setup";
+import { MatchOnboarding } from "./match-onboarding";
 import { MyHuntsMenu } from "./my-hunts-menu";
 import { PostDialog } from "./post-dialog";
 
@@ -279,51 +279,6 @@ function SelectionTray({
 }
 
 /**
- * Shown when the extension's objekt.my bridge did not answer a ping, i.e. it
- * is not installed (or not enabled on this site). Paste stays the fallback
- * either way.
- */
-function EmptyStateExtension() {
-  // Only where it can actually be installed: desktop Chromium today. Phones
-  // and Firefox keep pasting, without an offer they can't take up.
-  const store = extensionStoreForBrowser();
-  if (!store) return null;
-  return (
-    <div className="mx-auto max-w-sm space-y-3 border-t pt-5">
-      <div className="flex items-center justify-center gap-2 text-sm font-semibold">
-        <PuzzleIcon className="size-4 text-primary" />
-        Skip the copy-pasting
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Objekt Match is a free Chrome extension. It saves trade posts while you
-        scroll Discord and brings them here in one click.
-      </p>
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <Button asChild size="sm" variant="outline">
-          <a
-            href={store.url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() =>
-              track("match_install_cta_click", { source: "empty" })
-            }
-          >
-            Add to Chrome
-          </a>
-        </Button>
-        <Link
-          href="/extension"
-          target="_blank"
-          className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        >
-          How it works
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-/**
  * Above the paste box, where the chore it replaces is in plain view: pasting
  * a channel by hand is exactly what the extension does for you. Offered only
  * where it can be installed; with it installed, a pointer to its own button.
@@ -339,41 +294,7 @@ function PasteExtensionHint({ installed }: { installed: boolean | null }) {
         </span>
       </p>
     );
-  const store = installed === false ? extensionStoreForBrowser() : null;
-  if (!store) return null;
-  return (
-    <div className="flex items-start gap-3 rounded-lg border bg-muted/30 px-3 py-2">
-      <PuzzleIcon className="mt-0.5 size-4 shrink-0 text-primary" />
-      <div className="min-w-0 flex-1 space-y-2 text-sm">
-        <p>
-          <span className="font-semibold">Skip the copy-pasting.</span> Objekt
-          Match is a free Chrome extension. It saves trade posts while you
-          scroll Discord and brings them here in one click.
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button asChild size="sm">
-            <a
-              href={store.url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() =>
-                track("match_install_cta_click", { source: "paste" })
-              }
-            >
-              Add to Chrome
-            </a>
-          </Button>
-          <Link
-            href="/extension"
-            target="_blank"
-            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            How it works
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
+  return <ExtensionSetup installed={installed} source="paste" compact />;
 }
 
 /**
@@ -1213,6 +1134,13 @@ export function MatchClient() {
   }, [enriched, openPost, mine, activeGive, get, mode]);
   const selectionCount = activeGive.size + get.size;
   const needsInventory = mode !== "wtb" && mine.size === 0;
+  // No posts yet: nothing below the header means anything, so the page shows
+  // the getting-started steps instead (see MatchOnboarding).
+  const onboarding = messages.length === 0;
+  const trySample = () => {
+    if (!mine.size) setOffering("JiYeon CC102\nXinyu CC101\nNien CC301");
+    addPaste(SAMPLE);
+  };
   const contactTitle =
     mode === "wts"
       ? "Buyers for your objekts"
@@ -1297,478 +1225,483 @@ export function MatchClient() {
         </div>
         <div className="flex flex-wrap gap-2">
           {userId && <MyHuntsMenu onApply={applySavedHunt} />}
-          <Button variant="outline" onClick={() => setEditor("mine")}>
-            My lists
-          </Button>
-          <Button onClick={() => setEditor("paste")}>
-            <ClipboardPasteIcon className="size-4" />
-            {messages.length ? "Add posts" : "Paste Discord posts"}
-          </Button>
+          {/* Before any posts, the onboarding steps carry these actions. */}
+          {!onboarding && (
+            <>
+              <Button variant="outline" onClick={() => setEditor("mine")}>
+                My objekts
+              </Button>
+              <Button variant="outline" onClick={() => setEditor("paste")}>
+                <ClipboardPasteIcon className="size-4" />
+                Import more posts
+              </Button>
+            </>
+          )}
         </div>
       </header>
       {ready && extensionInstalled && activeHunt && (
         <HuntSendBar hunt={activeHunt} onDismiss={() => setActiveHunt(null)} />
       )}
-      <section className="space-y-3" aria-label="Trading mode">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <fieldset
-            className="inline-flex rounded-xl border bg-muted/50 p-1"
-            aria-label="Choose WTT, WTB or WTS"
-          >
-            {MODES.map(({ id, label, icon: Icon }) => (
-              <Button
-                key={id}
-                variant={mode === id ? "default" : "ghost"}
-                aria-pressed={mode === id}
-                onClick={() => changeMode(id)}
-                className="min-w-24 rounded-lg"
+      {!ready ? (
+        // The stored posts are still loading; don't flash either layout.
+        <div className="min-h-64" />
+      ) : onboarding ? (
+        <MatchOnboarding
+          haveCount={mine.size}
+          loadingInv={loadingInv}
+          extensionInstalled={extensionInstalled}
+          lookingFor={theirSearch.trim()}
+          onImport={() => setEditor("paste")}
+          onSample={trySample}
+          onAddHaves={() => setEditor("mine")}
+        />
+      ) : (
+        <>
+          <section className="space-y-3" aria-label="Trading mode">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <fieldset
+                className="inline-flex rounded-xl border bg-muted/50 p-1"
+                aria-label="Choose WTT, WTB or WTS"
               >
-                <Icon className="size-4" />
-                {label}
-              </Button>
-            ))}
-          </fieldset>
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <label className="flex items-center gap-2" htmlFor="desk-columns">
-              Per row
-              <select
-                id="desk-columns"
-                value={columns}
-                onChange={(event) => setColumns(Number(event.target.value))}
-                className="rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
-              >
-                {COLUMN_CHOICES.map((choice) => (
-                  <option key={choice} value={choice}>
-                    {choice}
-                  </option>
+                {MODES.map(({ id, label, icon: Icon }) => (
+                  <Button
+                    key={id}
+                    variant={mode === id ? "default" : "ghost"}
+                    aria-pressed={mode === id}
+                    onClick={() => changeMode(id)}
+                    className="min-w-24 rounded-lg"
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </Button>
                 ))}
-              </select>
-            </label>
-            <span>{messages.length.toLocaleString()} pasted posts</span>
-            {messages.length > 0 ? (
-              <button
-                type="button"
-                className="underline underline-offset-4 hover:text-foreground"
-                onClick={() => setConfirmClear(true)}
-              >
-                Clear posts
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="underline underline-offset-4 hover:text-foreground"
-                onClick={() => {
-                  if (!mine.size)
-                    setOffering("JiYeon CC102\nXinyu CC101\nNien CC301");
-                  addPaste(SAMPLE);
-                }}
-              >
-                Try a sample
-              </button>
-            )}
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {MODES.find((entry) => entry.id === mode)?.hint}
-        </p>
-      </section>
-      <div
-        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
-        aria-live="polite"
-      >
-        <p className="text-sm">
-          {needsInventory ? (
-            <>
-              <span className="block font-semibold">
-                {loadingInv
-                  ? "Loading your Cosmo inventory…"
-                  : mode === "wtt"
-                    ? "Add your haves to find mutual trades"
-                    : "Add your haves to find buyers"}
-              </span>
-              <span className="text-muted-foreground">
-                {loadingInv
-                  ? "Matches will update when your cards are loaded."
-                  : mode === "wtt"
-                    ? "Load your Cosmo inventory or type the objekts you can offer. We’ll check who offers the cards you’re looking for and wants something you own in return."
-                    : "Load your Cosmo inventory or type the objekts you can sell to find buyers who want them."}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="font-semibold">
-                {contactPosts.length}{" "}
-                {mode === "wtb" ? "WTS" : mode === "wts" ? "WTB" : "WTT"} post
-                {contactPosts.length === 1 ? "" : "s"}
-              </span>
-              {selectionCount
-                ? " match your selections"
-                : mode === "wtb"
-                  ? " with cards for sale"
-                  : " want cards you have"}
-              {searchingTheirCards && ` matching “${theirSearch}”`}.{" "}
-              {selectionCount > 1 && (
+              </fieldset>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <label
+                  className="flex items-center gap-2"
+                  htmlFor="desk-columns"
+                >
+                  Per row
+                  <select
+                    id="desk-columns"
+                    value={columns}
+                    onChange={(event) => setColumns(Number(event.target.value))}
+                    className="rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
+                  >
+                    {COLUMN_CHOICES.map((choice) => (
+                      <option key={choice} value={choice}>
+                        {choice}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span>{messages.length.toLocaleString()} pasted posts</span>
+                <button
+                  type="button"
+                  className="underline underline-offset-4 hover:text-foreground"
+                  onClick={() => setConfirmClear(true)}
+                >
+                  Clear posts
+                </button>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {MODES.find((entry) => entry.id === mode)?.hint}
+            </p>
+          </section>
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
+            aria-live="polite"
+          >
+            <p className="text-sm">
+              {needsInventory ? (
+                <>
+                  <span className="block font-semibold">
+                    {loadingInv
+                      ? "Loading your Cosmo inventory…"
+                      : mode === "wtt"
+                        ? "Add your haves to find mutual trades"
+                        : "Add your haves to find buyers"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {loadingInv
+                      ? "Matches will update when your cards are loaded."
+                      : mode === "wtt"
+                        ? "Load your Cosmo inventory or type the objekts you can offer. We’ll check who offers the cards you’re looking for and wants something you own in return."
+                        : "Load your Cosmo inventory or type the objekts you can sell to find buyers who want them."}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold">
+                    {contactPosts.length}{" "}
+                    {mode === "wtb" ? "WTS" : mode === "wts" ? "WTB" : "WTT"}{" "}
+                    post
+                    {contactPosts.length === 1 ? "" : "s"}
+                  </span>
+                  {selectionCount
+                    ? " match your selections"
+                    : mode === "wtb"
+                      ? " with cards for sale"
+                      : " want cards you have"}
+                  {searchingTheirCards && ` matching “${theirSearch}”`}.{" "}
+                  {selectionCount > 1 && (
+                    <span className="text-muted-foreground">
+                      Each post matches at least one selected card on each side.
+                    </span>
+                  )}
+                </>
+              )}
+              {storedCount >= MAX_BLOCKS && (
                 <span className="text-muted-foreground">
-                  Each post matches at least one selected card on each side.
+                  Holding the most recent {MAX_BLOCKS.toLocaleString()} posts;
+                  older ones are dropped as you paste.
                 </span>
               )}
-            </>
-          )}
-          {storedCount >= MAX_BLOCKS && (
-            <span className="text-muted-foreground">
-              Holding the most recent {MAX_BLOCKS.toLocaleString()} posts; older
-              ones are dropped as you paste.
-            </span>
-          )}
-        </p>
-        <div className="flex gap-2">
-          {needsInventory && (
-            <Button
-              size="sm"
-              disabled={loadingInv}
-              onClick={() => setEditor("mine")}
-            >
-              Add haves or Cosmo inventory
-            </Button>
-          )}
-          {(hiddenCount > 0 || (!hideSeen && seen.size > 0)) && (
-            <Button size="sm" variant="ghost" onClick={toggleHideSeen}>
-              {hideSeen ? `Show ${hiddenCount} handled` : "Hide handled posts"}
-            </Button>
-          )}
-          {!hideSeen && seen.size > 0 && (
-            <Button size="sm" variant="ghost" onClick={clearSeen}>
-              Clear handled list
-            </Button>
-          )}
-          {selectionCount > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setGive(new Set());
-                setGet(new Set());
-              }}
-            >
-              Clear selections
-            </Button>
-          )}
-          {mode !== "wts" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                resultsRef.current?.scrollIntoView({ block: "start" })
-              }
-            >
-              See {mode === "wtb" ? "sellers" : "traders"}
-              <ArrowDownIcon className="size-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
-      {/* Stretched, not top-aligned: the two sides are read against each
-          other, and panels of different heights made that harder. */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <section
-          className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
-          aria-label={mode === "wtb" ? "Buying list" : "My objekts"}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
-                {mode === "wtb" ? "Your selection" : "Your side"}
-              </p>
-              <h2 className="mt-1 text-lg font-semibold">
-                {mode === "wtb"
-                  ? "I want to buy"
-                  : mode === "wts"
-                    ? "I want to sell"
-                    : "My objekts"}
-              </h2>
-            </div>
-            {mode !== "wtb" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditor("mine")}
-              >
-                <PlusIcon className="size-4" />
-                {mine.size ? "Edit" : "Add objekts"}
-              </Button>
-            )}
-          </div>
-          {mode === "wtb" ? (
-            <>
-              <SelectionTray
-                selected={get}
-                items={allTheirItems}
-                onToggle={toggleGet}
-                empty="Choose cards for sale on the right →"
-              />
-              <div className="space-y-3 rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
-                <p>You don’t need to offer any objekts to buy.</p>
-                <p>
-                  Compare the prices under each seller, then use their Discord
-                  name button to copy their username and arrange the purchase.
-                </p>
-              </div>
-              {(savedWants.size > 0 || savedPicks.length > 0) && (
-                <Button variant="outline" onClick={useSavedWants}>
-                  Use my saved wants
-                </Button>
-              )}
-              {get.size > 0 && (
+            </p>
+            <div className="flex gap-2">
+              {needsInventory && (
                 <Button
-                  variant="ghost"
-                  disabled={building}
-                  onClick={saveSelection}
+                  size="sm"
+                  disabled={loadingInv}
+                  onClick={() => setEditor("mine")}
                 >
-                  {building ? "Building…" : "Save selection as a list"}
+                  Add my objekts
                 </Button>
               )}
-            </>
-          ) : (
-            <>
-              <SelectionTray
-                selected={activeGive}
-                items={mine}
-                onToggle={toggleGive}
-                empty={
-                  mode === "wts"
-                    ? "Select a card to find cash buyers"
-                    : "Select a card to see what you could get"
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                {mode === "wtt" && get.size
-                  ? "Showing your cards wanted by traders who have your selection."
-                  : "Cards with interested people appear first."}
-              </p>
-              {mine.size === 0 ? (
-                <div className="space-y-3 py-12 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    {mode === "wtt"
-                      ? "Your haves help narrow down which traders can offer the objekts you want in return."
-                      : "Add your haves to see which buyers want your objekts."}
+              {(hiddenCount > 0 || (!hideSeen && seen.size > 0)) && (
+                <Button size="sm" variant="ghost" onClick={toggleHideSeen}>
+                  {hideSeen
+                    ? `Show ${hiddenCount} handled`
+                    : "Hide handled posts"}
+                </Button>
+              )}
+              {!hideSeen && seen.size > 0 && (
+                <Button size="sm" variant="ghost" onClick={clearSeen}>
+                  Clear handled list
+                </Button>
+              )}
+              {selectionCount > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setGive(new Set());
+                    setGet(new Set());
+                  }}
+                >
+                  Clear selections
+                </Button>
+              )}
+              {mode !== "wts" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    resultsRef.current?.scrollIntoView({ block: "start" })
+                  }
+                >
+                  See {mode === "wtb" ? "sellers" : "traders"}
+                  <ArrowDownIcon className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+          {/* Stretched, not top-aligned: the two sides are read against each
+          other, and panels of different heights made that harder. */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <section
+              className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+              aria-label={mode === "wtb" ? "Buying list" : "My objekts"}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
+                    {mode === "wtb" ? "Your selection" : "Your side"}
                   </p>
+                  <h2 className="mt-1 text-lg font-semibold">
+                    {mode === "wtb"
+                      ? "I want to buy"
+                      : mode === "wts"
+                        ? "I want to sell"
+                        : "My objekts"}
+                  </h2>
+                </div>
+                {mode !== "wtb" && (
                   <Button
-                    disabled={loadingInv}
+                    variant="outline"
+                    size="sm"
                     onClick={() => setEditor("mine")}
                   >
-                    {loadingInv ? "Loading inventory…" : "Add my objekts"}
+                    <PlusIcon className="size-4" />
+                    {mine.size ? "Edit" : "Add objekts"}
                   </Button>
-                </div>
-              ) : (
-                <DeskGrid
-                  cards={myCards}
-                  selected={activeGive}
-                  onToggle={toggleGive}
-                  images={images}
-                  side="mine"
-                  badge={mineBadge}
-                  emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
-                  columns={columns}
-                  poolKey={`${mode}|${mine.size}|${pool.length}`}
-                />
-              )}
-            </>
-          )}
-        </section>
-        <section
-          className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
-          aria-label={mode === "wts" ? "Cash buyers" : "Their objekts"}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                From your Discord paste
-              </p>
-              <h2 className="mt-1 text-lg font-semibold">
-                {mode === "wts"
-                  ? contactTitle
-                  : mode === "wtb"
-                    ? "Objekts for sale"
-                    : "Their objekts"}
-              </h2>
-            </div>
-            {mode !== "wts" && (
-              <select
-                aria-label="Sort their objekts"
-                value={sort}
-                onChange={(event) => setSort(event.target.value as typeof sort)}
-                className="rounded-md border bg-background px-2 py-1.5 text-sm"
-              >
-                <option value="popular">Most haves</option>
-                <option value="member">Member</option>
-                {mode === "wtb" && <option value="price">Lowest price</option>}
-              </select>
-            )}
-          </div>
-          {mode === "wts" ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Cash buyers only. Copy a name to contact them in Discord.
-              </p>
-              <ContactResults {...contactProps} />
-            </>
-          ) : (
-            <>
-              {mode === "wtt" && (
-                <SelectionTray
-                  selected={get}
-                  items={allTheirItems}
-                  onToggle={toggleGet}
-                  empty="Select a card to see what they want from you"
-                />
-              )}
-              {mode === "wtt" &&
-                (savedWants.size > 0 || savedPicks.length > 0) && (
-                  <button
-                    type="button"
-                    className="text-xs text-primary underline underline-offset-4"
-                    onClick={useSavedWants}
-                  >
-                    Use my saved wants
-                  </button>
-                )}
-              <p className="text-xs text-muted-foreground">
-                {mode === "wtb"
-                  ? "Asking prices appear on each card. Select one to compare its sellers below."
-                  : activeGive.size
-                    ? "Only offers from traders who want your selected cards."
-                    : "Choose either side to start. Offers update as you select cards."}
-              </p>
-              {searchSummary && (
-                <p
-                  role="status"
-                  className="rounded-lg border bg-muted/30 p-3 text-sm"
-                  data-testid="search-match-summary"
-                >
-                  {searchSummary}
-                </p>
-              )}
-              {messages.length === 0 ? (
-                <div className="space-y-3 py-12 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Paste the trade channel or import your text files.
-                  </p>
-                  <Button onClick={() => setEditor("paste")}>
-                    Import Discord posts
-                  </Button>
-                  {ready && extensionInstalled === false && (
-                    <div className="pt-4">
-                      <EmptyStateExtension />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <DeskGrid
-                  cards={theirCards}
-                  selected={get}
-                  onToggle={toggleGet}
-                  images={images}
-                  side="theirs"
-                  search={theirSearch}
-                  onSearchChange={setTheirSearch}
-                  clearFilters={
-                    theirSearch.trim() || activeGive.size || get.size
-                      ? () => {
-                          setTheirSearch("");
-                          setGive(new Set());
-                          setGet(new Set());
-                        }
-                      : undefined
-                  }
-                  badge={theirBadge}
-                  emptyText={
-                    mode === "wtb"
-                      ? "No listed sale cards match. Remove a selection, open a linked list below, or add WTS posts."
-                      : "No offers connect these selections yet. Remove a card, open a linked list below, or add more posts."
-                  }
-                  columns={columns}
-                  poolKey={`${mode}|${pool.length}`}
-                />
-              )}
-            </>
-          )}
-          {linkedPosts.length > 0 && (
-            <div className="rounded-lg border bg-background px-3 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="max-w-2xl space-y-1">
-                  <p className="text-sm font-medium">
-                    {linkedListCount} linked{" "}
-                    {linkedListCount === 1 ? "list" : "lists"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Found public Objekt.top and Apollo.cafe lists in these
-                    posts. Load them to include the cards traders list there and
-                    surface more possible matches.
-                  </p>
-                </div>
-                {linkedListProgress.loading > 0 ? (
-                  <Button size="sm" disabled>
-                    <Loader2Icon className="size-4 animate-spin" />
-                    Loading{" "}
-                    {linkedListProgress.loaded + linkedListProgress.failed} of{" "}
-                    {linkedListCount}
-                  </Button>
-                ) : linkedListProgress.loaded + linkedListProgress.failed <
-                  linkedListCount ? (
-                  <Button
-                    size="sm"
-                    onClick={() => loadAllLinkedLists(linkedPosts)}
-                  >
-                    {linkedListProgress.loaded + linkedListProgress.failed > 0
-                      ? `Load ${linkedListRemaining} more ${linkedListRemaining === 1 ? "list" : "lists"}`
-                      : `Load all ${linkedListCount} ${linkedListCount === 1 ? "list" : "lists"}`}
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {linkedListProgress.loaded}{" "}
-                    {linkedListProgress.loaded === 1 ? "list" : "lists"} loaded
-                    {linkedListProgress.failed > 0 &&
-                      ` · ${linkedListProgress.failed} unavailable`}
-                  </span>
                 )}
               </div>
-            </div>
-          )}
-        </section>
-      </div>
-      {mode !== "wts" && (
-        <section
-          ref={resultsRef}
-          className="scroll-mt-20 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
-          aria-label={contactTitle}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold">
-                {contactTitle}{" "}
-                <span className="text-muted-foreground">
-                  ({contactPosts.length})
-                </span>
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {mode === "wtb"
-                  ? "Prices belong to each seller. Copy their name to arrange the purchase in Discord."
-                  : "See what they want from you and browse what you could get. Review the post for ratios and conditions."}
-              </p>
-            </div>
-            {mode === "wtt" && get.size > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={building}
-                onClick={saveSelection}
-              >
-                Save wants as a list
-              </Button>
-            )}
+              {mode === "wtb" ? (
+                <>
+                  <SelectionTray
+                    selected={get}
+                    items={allTheirItems}
+                    onToggle={toggleGet}
+                    empty="Choose cards for sale on the right →"
+                  />
+                  <div className="space-y-3 rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+                    <p>You don’t need to offer any objekts to buy.</p>
+                    <p>
+                      Compare the prices under each seller, then use their
+                      Discord name button to copy their username and arrange the
+                      purchase.
+                    </p>
+                  </div>
+                  {(savedWants.size > 0 || savedPicks.length > 0) && (
+                    <Button variant="outline" onClick={useSavedWants}>
+                      Use my saved wants
+                    </Button>
+                  )}
+                  {get.size > 0 && (
+                    <Button
+                      variant="ghost"
+                      disabled={building}
+                      onClick={saveSelection}
+                    >
+                      {building ? "Building…" : "Save selection as a list"}
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <SelectionTray
+                    selected={activeGive}
+                    items={mine}
+                    onToggle={toggleGive}
+                    empty={
+                      mode === "wts"
+                        ? "Select a card to find cash buyers"
+                        : "Select a card to see what you could get"
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {mode === "wtt" && get.size
+                      ? "Showing your cards wanted by traders who have your selection."
+                      : "Cards with interested people appear first."}
+                  </p>
+                  {mine.size === 0 ? (
+                    <div className="space-y-3 py-12 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {mode === "wtt"
+                          ? "Your haves help narrow down which traders can offer the objekts you want in return."
+                          : "Add your haves to see which buyers want your objekts."}
+                      </p>
+                      <Button
+                        disabled={loadingInv}
+                        onClick={() => setEditor("mine")}
+                      >
+                        {loadingInv ? "Loading inventory…" : "Add my objekts"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <DeskGrid
+                      cards={myCards}
+                      selected={activeGive}
+                      onToggle={toggleGive}
+                      images={images}
+                      side="mine"
+                      badge={mineBadge}
+                      emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
+                      columns={columns}
+                      poolKey={`${mode}|${mine.size}|${pool.length}`}
+                    />
+                  )}
+                </>
+              )}
+            </section>
+            <section
+              className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+              aria-label={mode === "wts" ? "Cash buyers" : "Their objekts"}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                    From your Discord paste
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold">
+                    {mode === "wts"
+                      ? contactTitle
+                      : mode === "wtb"
+                        ? "Objekts for sale"
+                        : "Their objekts"}
+                  </h2>
+                </div>
+                {mode !== "wts" && (
+                  <select
+                    aria-label="Sort their objekts"
+                    value={sort}
+                    onChange={(event) =>
+                      setSort(event.target.value as typeof sort)
+                    }
+                    className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                  >
+                    <option value="popular">Most haves</option>
+                    <option value="member">Member</option>
+                    {mode === "wtb" && (
+                      <option value="price">Lowest price</option>
+                    )}
+                  </select>
+                )}
+              </div>
+              {mode === "wts" ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Cash buyers only. Copy a name to contact them in Discord.
+                  </p>
+                  <ContactResults {...contactProps} />
+                </>
+              ) : (
+                <>
+                  {mode === "wtt" && (
+                    <SelectionTray
+                      selected={get}
+                      items={allTheirItems}
+                      onToggle={toggleGet}
+                      empty="Select a card to see what they want from you"
+                    />
+                  )}
+                  {mode === "wtt" &&
+                    (savedWants.size > 0 || savedPicks.length > 0) && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary underline underline-offset-4"
+                        onClick={useSavedWants}
+                      >
+                        Use my saved wants
+                      </button>
+                    )}
+                  <p className="text-xs text-muted-foreground">
+                    {mode === "wtb"
+                      ? "Asking prices appear on each card. Select one to compare its sellers below."
+                      : activeGive.size
+                        ? "Only offers from traders who want your selected cards."
+                        : "Choose either side to start. Offers update as you select cards."}
+                  </p>
+                  {searchSummary && (
+                    <p
+                      role="status"
+                      className="rounded-lg border bg-muted/30 p-3 text-sm"
+                      data-testid="search-match-summary"
+                    >
+                      {searchSummary}
+                    </p>
+                  )}
+                  <DeskGrid
+                    cards={theirCards}
+                    selected={get}
+                    onToggle={toggleGet}
+                    images={images}
+                    side="theirs"
+                    search={theirSearch}
+                    onSearchChange={setTheirSearch}
+                    clearFilters={
+                      theirSearch.trim() || activeGive.size || get.size
+                        ? () => {
+                            setTheirSearch("");
+                            setGive(new Set());
+                            setGet(new Set());
+                          }
+                        : undefined
+                    }
+                    badge={theirBadge}
+                    emptyText={
+                      mode === "wtb"
+                        ? "No listed sale cards match. Remove a selection, open a linked list below, or add WTS posts."
+                        : "No offers connect these selections yet. Remove a card, open a linked list below, or add more posts."
+                    }
+                    columns={columns}
+                    poolKey={`${mode}|${pool.length}`}
+                  />
+                </>
+              )}
+              {linkedPosts.length > 0 && (
+                <div className="rounded-lg border bg-background px-3 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="max-w-2xl space-y-1">
+                      <p className="text-sm font-medium">
+                        {linkedListCount} linked{" "}
+                        {linkedListCount === 1 ? "list" : "lists"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Found public Objekt.top and Apollo.cafe lists in these
+                        posts. Load them to include the cards traders list there
+                        and surface more possible matches.
+                      </p>
+                    </div>
+                    {linkedListProgress.loading > 0 ? (
+                      <Button size="sm" disabled>
+                        <Loader2Icon className="size-4 animate-spin" />
+                        Loading{" "}
+                        {linkedListProgress.loaded + linkedListProgress.failed}{" "}
+                        of {linkedListCount}
+                      </Button>
+                    ) : linkedListProgress.loaded + linkedListProgress.failed <
+                      linkedListCount ? (
+                      <Button
+                        size="sm"
+                        onClick={() => loadAllLinkedLists(linkedPosts)}
+                      >
+                        {linkedListProgress.loaded + linkedListProgress.failed >
+                        0
+                          ? `Load ${linkedListRemaining} more ${linkedListRemaining === 1 ? "list" : "lists"}`
+                          : `Load all ${linkedListCount} ${linkedListCount === 1 ? "list" : "lists"}`}
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {linkedListProgress.loaded}{" "}
+                        {linkedListProgress.loaded === 1 ? "list" : "lists"}{" "}
+                        loaded
+                        {linkedListProgress.failed > 0 &&
+                          ` · ${linkedListProgress.failed} unavailable`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
-          <ContactResults {...contactProps} />
-        </section>
+          {mode !== "wts" && (
+            <section
+              ref={resultsRef}
+              className="scroll-mt-20 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+              aria-label={contactTitle}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    {contactTitle}{" "}
+                    <span className="text-muted-foreground">
+                      ({contactPosts.length})
+                    </span>
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {mode === "wtb"
+                      ? "Prices belong to each seller. Copy their name to arrange the purchase in Discord."
+                      : "See what they want from you and browse what you could get. Review the post for ratios and conditions."}
+                  </p>
+                </div>
+                {mode === "wtt" && get.size > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={building}
+                    onClick={saveSelection}
+                  >
+                    Save wants as a list
+                  </Button>
+                )}
+              </div>
+              <ContactResults {...contactProps} />
+            </section>
+          )}
+        </>
       )}
 
       <Dialog

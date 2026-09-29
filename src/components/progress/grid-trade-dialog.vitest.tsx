@@ -316,7 +316,7 @@ describe("GridTradeDialog with the extension", () => {
     );
     await waitFor(() => expect(open).toHaveBeenCalled());
     expect(writeText).toHaveBeenCalledWith(MISSING.join("\n"));
-    expect(open.mock.calls[0][0]).toBe("https://discord.com/app");
+    expect(open.mock.calls[0][0]).toBe("https://discord.com/channels/@me");
     expect(
       await screen.findByText(/Paste them into the want box/),
     ).toBeTruthy();

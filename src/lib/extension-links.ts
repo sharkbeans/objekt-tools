@@ -12,26 +12,56 @@ export const EXTENSION_STORE_URLS: {
   firefox: null,
 };
 
+export type ExtensionStore = keyof typeof EXTENSION_STORE_URLS;
+
 /**
- * Where the extension can be installed from in this browser, if anywhere.
+ * Discord's web client. The extension only runs in Discord opened in the same
+ * browser, not in the Discord desktop app, and this address opens the web
+ * client directly where `/app` can offer to switch to the desktop app.
+ */
+export const DISCORD_WEB_URL = "https://discord.com/channels/@me";
+
+/** How each store is named on a button. */
+export const EXTENSION_STORE_NAMES: Record<ExtensionStore, string> = {
+  chrome: "Chrome",
+  firefox: "Firefox",
+};
+
+/**
+ * The store this desktop browser installs extensions from, whether or not the
+ * listing is live yet.
  *
  * Chromium desktop browsers (Chrome, Edge, Brave, Opera) all install from the
- * Chrome Web Store. Firefox gets its own listing later. Phones get nothing:
- * Discord's mobile app can't run extensions, so offering one there is noise.
+ * Chrome Web Store. Phones and other desktops (Safari) get nothing: Discord's
+ * mobile app can't run extensions, so offering one there is noise.
  * Client-only — reads `navigator`.
  */
+export function browserStore(): ExtensionStore | null {
+  if (typeof navigator === "undefined" || isPhoneBrowser()) return null;
+  const ua = navigator.userAgent;
+  if (/Firefox\//.test(ua)) return "firefox";
+  if (/Chrome\//.test(ua)) return "chrome";
+  return null;
+}
+
+/**
+ * Where the extension can be installed from in this browser right now, if
+ * anywhere: `browserStore` narrowed to a listing that is live.
+ */
 export function extensionStoreForBrowser(): {
-  store: "chrome" | "firefox";
+  store: ExtensionStore;
   url: string;
 } | null {
-  if (typeof navigator === "undefined") return null;
-  const ua = navigator.userAgent;
-  if (/Android|iPhone|iPad|Mobile/i.test(ua)) return null;
-  if (/Firefox\//.test(ua))
-    return EXTENSION_STORE_URLS.firefox
-      ? { store: "firefox", url: EXTENSION_STORE_URLS.firefox }
-      : null;
-  if (/Chrome\//.test(ua) && EXTENSION_STORE_URLS.chrome)
-    return { store: "chrome", url: EXTENSION_STORE_URLS.chrome };
-  return null;
+  const store = browserStore();
+  const url = store && EXTENSION_STORE_URLS[store];
+  return store && url ? { store, url } : null;
+}
+
+/**
+ * A phone or tablet browser: no extensions, and no practical way to copy a
+ * whole Discord channel. Client-only — reads `navigator`.
+ */
+export function isPhoneBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 }

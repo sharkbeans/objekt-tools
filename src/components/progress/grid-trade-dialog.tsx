@@ -42,7 +42,10 @@ import { track } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
 import type { ObjektEntry } from "@/lib/cosmo/types";
 import { EDITION_LABELS, type Edition } from "@/lib/edition";
-import { extensionStoreForBrowser } from "@/lib/extension-links";
+import {
+  type ExtensionStore,
+  extensionStoreForBrowser,
+} from "@/lib/extension-links";
 import {
   computeHuntRows,
   computeOfferableDupes,
@@ -115,7 +118,10 @@ export function GridTradeDialog({
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   // The one-time extension intro, shown in place of the picker.
-  const [intro, setIntro] = useState<{ storeUrl: string } | null>(null);
+  const [intro, setIntro] = useState<{
+    storeUrl: string;
+    store: ExtensionStore;
+  } | null>(null);
   const { installed: extensionInstalled } = useExtensionPresence();
   // Only the profile's own owner can offer its dupes or auto-create a
   // matchable trade list from it — a visitor viewing someone else's grid
@@ -319,7 +325,7 @@ export function GridTradeDialog({
     }
     const store = extensionStoreForBrowser();
     if (store && !introDismissed()) {
-      setIntro({ storeUrl: store.url });
+      setIntro({ storeUrl: store.url, store: store.store });
       track("extension_intro_shown", { source: "grid" });
       return;
     }
@@ -443,6 +449,7 @@ export function GridTradeDialog({
           <>
             <ExtensionIntro
               storeUrl={intro.storeUrl}
+              store={intro.store}
               installed={extensionInstalled === true}
               count={selected.size}
               wants={currentHunt().wants}
