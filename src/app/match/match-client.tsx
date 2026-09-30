@@ -1667,16 +1667,6 @@ export function MatchClient() {
                       empty="Select a card to see what they want from you"
                     />
                   )}
-                  {mode === "wtt" &&
-                    (savedWants.size > 0 || savedPicks.length > 0) && (
-                      <button
-                        type="button"
-                        className="text-xs text-primary underline underline-offset-4"
-                        onClick={useSavedWants}
-                      >
-                        Use my saved wants
-                      </button>
-                    )}
                   <p className="text-xs text-muted-foreground">
                     {mode === "wtb"
                       ? "Asking prices appear on each card. Select one to compare its sellers below."
