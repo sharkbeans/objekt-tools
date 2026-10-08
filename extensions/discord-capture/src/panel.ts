@@ -7,6 +7,7 @@ import {
   readLedger,
   recentRequests,
 } from "./adaptive-pace";
+import { APP_ORIGIN } from "./app-origin";
 import { extensionApi } from "./browser";
 import {
   acceptAutomation,
@@ -204,8 +205,9 @@ let settingsOpen = false;
  *
  * Both stores require the disclosure to be in the extension's own UI and to be
  * agreed to before anything is collected, so nothing else is shown until it is.
- * Search needs its own agreement, and until it has one the gate stands where
- * the Search button would be.
+ * Search needs its own agreement too, asked for the first time Search is
+ * pressed rather than in the way of it: search is what the panel is for, so
+ * its button is always there (see `gateOpen`).
  */
 function showViews() {
   const capture = captureAllowed(consent);
@@ -217,10 +219,21 @@ function showViews() {
   element("consent").hidden = capture;
   element("main").hidden = !capture || settingsOpen;
   element("settings").hidden = !capture || !settingsOpen;
-  element("automation-gate").hidden = !capture || automation;
-  element("actions").hidden = !automation;
-  element("tuning").hidden = !automation;
+  if (automation) gateOpen = false;
+  // The buttons, the search agreement and the tuning line depend on the run
+  // and the setup as well, which `render` owns.
+  render();
 }
+
+/**
+ * Whether the search agreement is open, above the buttons. It opens the
+ * first time Search is pressed, in the panel rather than over Discord, and
+ * its own button agrees and starts that search in one go.
+ */
+let gateOpen = false;
+
+// The embedded panel has the brand in its titlebar; a window has only this.
+element("brand").hidden = embedded;
 
 function openSettings(open: boolean) {
   settingsOpen = open;
@@ -257,7 +270,16 @@ action("accept-capture", async () => {
 action("accept-automation", async () => {
   consent = acceptAutomation(await readConsentSetting());
   await extensionApi.storage.local.set({ consent });
+  gateOpen = false;
   showViews();
+  // They pressed Search to get here; agreeing is pressing it again.
+  await startSearch();
+});
+
+element("decline-automation").addEventListener("click", () => {
+  gateOpen = false;
+  render();
+  element("run-search").focus();
 });
 
 action(
@@ -372,11 +394,25 @@ element("restore-wants").addEventListener("click", () => {
 
 interface TileNode {
   li: HTMLLIElement;
+  frame: HTMLElement;
   img: HTMLImageElement;
   badge: HTMLElement;
   remove: HTMLButtonElement;
 }
 const tileNodes = new Map<string, TileNode>();
+/** Keys whose art has been asked of the worker and not answered yet. */
+const artPending = new Set<string>();
+
+/** An icon from the sprite in panel.html. */
+function icon(name: string): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "i");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
 
 function tileNode(tile: Tile): TileNode {
   const existing = tileNodes.get(tile.key);
@@ -385,24 +421,27 @@ function tileNode(tile: Tile): TileNode {
   li.className = "tile";
   const frame = document.createElement("div");
   frame.className = "art";
+  // The card reads as loading until its art arrives, then fades it in; one
+  // with no art says its code instead (see `artState`).
+  frame.dataset.art = "loading";
   const img = document.createElement("img");
   img.alt = "";
-  img.hidden = true;
+  img.decoding = "async";
   img.referrerPolicy = "no-referrer";
   const code = document.createElement("span");
   code.className = "code";
   code.textContent = tile.code;
   img.addEventListener("error", () => {
-    img.hidden = true;
-    code.hidden = false;
+    img.dataset.failed = img.getAttribute("src") ?? "";
+    frame.dataset.art = "none";
   });
   img.addEventListener("load", () => {
-    code.hidden = true;
+    frame.dataset.art = "loaded";
   });
-  frame.append(img, code);
   const badge = document.createElement("span");
   badge.className = "badge";
   badge.hidden = true;
+  frame.append(img, code, badge);
   // Member over code, a line each: on one line a card's width fit "SeoYeon"
   // and an ellipsis, which dropped the half that tells two cards apart.
   const name = document.createElement("span");
@@ -415,17 +454,37 @@ function tileNode(tile: Tile): TileNode {
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "remove";
-  remove.textContent = "✕";
+  remove.append(icon("x"));
   remove.title = "Leave this one out of the search";
   remove.setAttribute(
     "aria-label",
     `Remove ${tile.name} ${tile.code} from the search`,
   );
   remove.addEventListener("click", () => removeTile(tile.key));
-  li.append(frame, badge, remove, name);
-  const node = { li, img, badge, remove };
+  li.append(frame, remove, name);
+  const node = { li, frame, img, badge, remove };
   tileNodes.set(tile.key, node);
   return node;
+}
+
+/**
+ * Whether a card is waiting for its art, showing it, or has none to show.
+ *
+ * "Any member" wants never get a picture, and a lookup the worker skipped —
+ * past its per-batch cap, or a request that failed — is not left pulsing
+ * forever: it shows its code until the next lookup tries again.
+ */
+function artState(tile: Tile, node: TileNode): string {
+  const url = art.get(tile.key);
+  if (url) {
+    if (node.img.dataset.failed === url) return "none";
+    return node.img.complete &&
+      node.img.naturalWidth > 0 &&
+      node.img.getAttribute("src") === url
+      ? "loaded"
+      : "loading";
+  }
+  return tile.item.member && artPending.has(tile.key) ? "loading" : "none";
 }
 
 type TileState = "idle" | "queued" | "active" | "done" | "recent";
@@ -469,9 +528,10 @@ function renderTiles() {
       tileList.insertBefore(node.li, tileList.children[index] ?? null);
     const url = art.get(tile.key);
     if (url && node.img.getAttribute("src") !== url) {
+      node.img.loading = index < 24 ? "eager" : "lazy";
       node.img.src = url;
-      node.img.hidden = false;
     }
+    node.frame.dataset.art = artState(tile, node);
     const state = tileState(tile);
     node.li.dataset.state = state;
     // A count only means something for a card this search looked for.
@@ -517,33 +577,43 @@ function showWantsCount() {
   restore.textContent = `${removed.size} removed · restore`;
   count.classList.toggle("none", tiles.length === 0);
   count.textContent = !tiles.length
-    ? "Nothing recognised. Try “SeoYeon CC101”"
-    : found < lines
-      ? `${shown} · some lines not recognised`
-      : String(shown);
+    ? "Nothing recognised yet. Try “SeoYeon CC101”"
+    : `${plural(shown, "objekt")}${found < lines ? " · some lines not recognised" : ""}`;
 }
 
 let artTimer: ReturnType<typeof setTimeout> | undefined;
 /** Ask the worker for art the panel does not have yet, once typing pauses. */
 function fetchArt() {
   clearTimeout(artTimer);
+  const missing = tiles.filter(
+    (tile) => tile.item.member && !art.has(tile.key),
+  );
+  // Marked before the pause, so a card that has just appeared pulses as
+  // loading rather than flashing its code first.
+  for (const tile of missing) artPending.add(tile.key);
+  if (!missing.length) return;
   artTimer = setTimeout(() => {
-    const missing = tiles.filter(
-      (tile) => tile.item.member && !art.has(tile.key),
-    );
-    if (!missing.length) return;
+    const asked = tiles
+      .filter((tile) => tile.item.member && !art.has(tile.key))
+      .map((tile) => tile.key);
+    if (!asked.length) return;
     void request("artwork", {
-      items: missing.map(({ item }) => ({
-        member: item.member,
-        season: item.season,
-        collectionNo: item.collectionNo,
-      })),
+      items: tiles
+        .filter((tile) => asked.includes(tile.key))
+        .map(({ item }) => ({
+          member: item.member,
+          season: item.season,
+          collectionNo: item.collectionNo,
+        })),
     })
       .then((urls: Record<string, string | null>) => {
         for (const [key, url] of Object.entries(urls)) art.set(key, url);
-        renderTiles();
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        for (const key of asked) artPending.delete(key);
+        renderTiles();
+      });
   }, 350);
 }
 
@@ -551,21 +621,33 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function wantsChanged(save: boolean) {
   tiles = tilesFrom(wants.value);
   pruneRemoved();
+  fetchArt();
   showWantsCount();
   showHunt();
   renderTiles();
   render();
-  fetchArt();
   if (!save) return;
   // Saved as typed, not only when a run starts: the content script marks posts
   // that have something on this list, and the next panel opened should find it.
   clearTimeout(saveTimer);
+  unsaved = true;
   saveTimer = setTimeout(() => {
+    unsaved = false;
     void extensionApi.storage.local.set({ wants: wants.value });
     void refresh();
   }, 600);
 }
 wants.addEventListener("input", () => wantsChanged(true));
+/** Typed but not yet saved, because the pause after typing has not come. */
+let unsaved = false;
+// Closing or reloading the panel inside that pause used to lose what was
+// just typed; the write is started on the way out instead.
+addEventListener("pagehide", () => {
+  if (!unsaved) return;
+  clearTimeout(saveTimer);
+  unsaved = false;
+  void extensionApi.storage.local.set({ wants: wants.value });
+});
 
 // ---------------------------------------------------------------------------
 // A hunt sent from objekt.my
@@ -618,6 +700,103 @@ wants.addEventListener("keydown", (event) => {
     event.preventDefault();
     element<HTMLButtonElement>("run-search").click();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Getting started
+//
+// Three things have to be true before the panel can do anything useful:
+// Discord open in this browser, a server channel open in it, and something
+// to look for. Until they are, the content column says which one is missing
+// and offers the click that fixes it — in the panel itself, not in a popup
+// over Discord. Once there are cards it shrinks to the one step still missing,
+// and once all three hold it goes away and the footer leads.
+
+/**
+ * Whether the panel has looked at Discord yet. Until then it does not know
+ * which step is missing, and guessing would flash "Open Discord" at someone
+ * already in their trade channel every time the panel opens.
+ */
+let placed = false;
+/** A Discord tab exists for this panel to act on. */
+let hasTab = false;
+/** Discord is showing its login or sign-up page rather than the app. */
+let loggedOut = false;
+
+function loginPage(url: string | null | undefined): boolean {
+  try {
+    return url ? /^\/(login|register)\b/.test(new URL(url).pathname) : false;
+  } catch {
+    return false;
+  }
+}
+
+/** The getting-started step still to do, or null once all three are done. */
+function setupStep(): string | null {
+  if (!hasTab) return "guide-discord";
+  if (!hasChannel) return "guide-channel";
+  if (!tiles.length) return "guide-wants";
+  return null;
+}
+
+function showGuide() {
+  const steps: [string, boolean][] = [
+    ["guide-discord", hasTab],
+    ["guide-channel", hasChannel],
+    ["guide-wants", tiles.length > 0],
+  ];
+  const current = setupStep();
+  // With Discord and a channel in place, the want list is the step, and the
+  // box itself says so — a list pointing "above" at it was easy to miss. The
+  // box stays where it is, so nothing moves under someone starting to type.
+  const asking = placed && current === "guide-wants";
+  const guide = element("guide");
+  guide.hidden = !placed || !current || asking;
+  guide.classList.toggle("compact", tiles.length > 0);
+  element("empty").hidden = !asking;
+  element("wants-field").classList.toggle("ask", asking);
+  element("wants-label").textContent = tiles.length
+    ? "Looking for"
+    : "What are you looking for?";
+  for (const [id, done] of steps)
+    element(id).dataset.state = done
+      ? "done"
+      : id === current
+        ? "current"
+        : "todo";
+  element("guide-channel-title").textContent = loggedOut
+    ? "Log in to Discord"
+    : "Go to a trade channel";
+  element("guide-channel-text").textContent = loggedOut
+    ? "Then open the server channel where people post their haves and wants. Your login stays with Discord: the extension never sees it."
+    : "Open the server channel where people post their haves and wants. Posts you scroll past are kept from then on. Direct messages are never read.";
+  // Only a window needs a way to Discord; the embedded panel is already on it.
+  element("show-discord").hidden = embedded || !hasTab;
+  const chip = element("no-channel-text");
+  chip.textContent = !hasTab
+    ? "Discord not open"
+    : loggedOut
+      ? "Not logged in"
+      : "No channel";
+}
+
+for (const link of document.querySelectorAll<HTMLAnchorElement>(
+  ".collection-link",
+))
+  link.href = `${APP_ORIGIN}/collection`;
+
+/** The pop-out window, as opposed to the embedded panel or a plain tab. */
+const windowed = params.get("window") === "1";
+
+action("open-discord", async () => {
+  // The panel moves into Discord with it: opened in the tab the worker finds
+  // or creates, and this window closed, so there is still one panel.
+  await request("show-discord", { dock: true });
+  if (windowed) await request("close-window").catch(() => {});
+});
+
+action("show-discord", async () => {
+  await request("show-discord", { dock: false });
 });
 
 // ---------------------------------------------------------------------------
@@ -806,7 +985,7 @@ function readFilters(value: unknown): string | null {
 
 /** Pages per objekt as a run would read it. */
 function pageSetting(): number {
-  return Math.min(20, Math.max(1, Number(pages.value) || 3));
+  return Math.min(20, Math.max(1, Number(pages.value) || DEFAULT_PAGES));
 }
 
 function plural(count: number, noun: string) {
@@ -865,11 +1044,8 @@ function statusLine(): { text: string; bad: boolean } {
       bad: false,
     };
   }
-  if (!hasChannel && automationAllowed(consent))
-    return {
-      text: "Open your trade channel in Discord, then search.",
-      bad: false,
-    };
+  // Until there is a channel, the getting-started steps say what to do.
+  if (!hasChannel) return { text: "", bad: false };
   return { text: "", bad: false };
 }
 
@@ -902,19 +1078,29 @@ function render() {
     !left &&
     lastFilters !== null &&
     lastFilters !== searchFilters(queries, pageSetting());
+  // Open in match does not need search: posts collected while scrolling go
+  // to /match just the same, and without search it is the only action there
+  // is, so it takes the filled style.
+  const searching = automationAllowed(consent);
   const open = element<HTMLButtonElement>("open-match");
   open.hidden = busy || ready === 0;
-  open.textContent = `Open ${ready} in match ↗`;
-  open.classList.toggle("primary", !left && !changed);
+  open.textContent = `Open ${ready} in match`;
+  open.title = runId
+    ? "Send the posts from your last search to objekt.my/match"
+    : "Send every post collected so far to objekt.my/match";
+  // Search leads until there is a search to open: posts collected while
+  // scrolling can go to /match too, but they are the side dish.
+  const searched = runId !== null;
+  open.classList.toggle("primary", searched && !left && !changed);
   const search = element<HTMLButtonElement>("run-search");
-  const searchFirst = !left && (open.hidden || changed);
+  const searchFirst = !left && (open.hidden || changed || !searched);
   search.classList.toggle("primary", searchFirst);
   if (!busy) {
     search.textContent = searchFirst
       ? queries.size
         ? `Search ${plural(queries.size, "code")}`
         : "Search"
-      : "↻ Search again";
+      : "Search again";
   }
   // The content script refuses too; this just stops offering the click.
   // `hold` keeps the click handler from re-enabling it when a refused
@@ -934,7 +1120,23 @@ function render() {
       carryOn.textContent = `${overridden() ? "Continue anyway" : "Continue"} · ${left.left} left`;
   }
   renderTiles();
+  showGuide();
+  // While the agreement is open its buttons are the ones to press.
+  element("automation-gate").hidden = !gateOpen || searching;
+  element("actions").hidden = gateOpen && !searching;
   showTuning();
+  element("foot").classList.toggle(
+    "empty",
+    !status.textContent &&
+      [
+        "search-progress",
+        "automation-gate",
+        "tuning",
+        "cooldown",
+        "actions",
+        "open-match",
+      ].every((id) => element(id).hidden),
+  );
 }
 
 /** Keep the bar and the buttons in step with the run. */
@@ -951,6 +1153,7 @@ function showRunning(busy: boolean) {
   // Claimed for as long as the run lasts, so the click handler that started it
   // does not hand the button back when it returns.
   start.dataset.hold = busy ? "1" : "";
+  start.dataset.busy = busy ? "1" : "";
   start.disabled = busy;
   if (busy) start.textContent = "Searching…";
 }
@@ -964,10 +1167,25 @@ function showRunning(busy: boolean) {
  */
 let refreshing = false;
 let refreshAgain = false;
-/** The channel the chip names, as `channelKey` spells it. */
+/** Where the panel last saw Discord, as `placeKey` spells it. */
 let shownChannel = "";
-function channelKey(channel: string | null, label: ChannelLabel | null) {
-  return `${channel ?? ""}\n${label ? formatChannelLabel(label) : ""}`;
+/**
+ * The Discord tab's state as far as the panel shows it: whether there is one,
+ * whether it is logged out, the channel and its name. The getting-started
+ * steps follow the first two, so a Discord tab opening or a login finishing is
+ * a change worth a refresh just as a channel switch is.
+ */
+function placeKey(
+  tab: { url: string; title: string | null } | null,
+  channel: string | null,
+  label: ChannelLabel | null,
+) {
+  return [
+    tab ? "tab" : "",
+    loginPage(tab?.url) ? "login" : "",
+    channel ?? "",
+    label ? formatChannelLabel(label) : "",
+  ].join("\n");
 }
 async function refresh(): Promise<void> {
   if (refreshing) {
@@ -1009,7 +1227,10 @@ async function refresh(): Promise<void> {
     const channel = channelFromUrl(tab?.url);
     const label = channel ? channelLabelFromTitle(tab?.title) : null;
     hasChannel = channel !== null;
-    shownChannel = channelKey(channel, label);
+    hasTab = tab !== null;
+    loggedOut = loginPage(tab?.url);
+    placed = true;
+    shownChannel = placeKey(tab, channel, label);
     showChannel(
       channel,
       capturing(channel, channelIds(settings.pausedChannels)),
@@ -1147,10 +1368,24 @@ const pagesMain = element<HTMLInputElement>("pages-main");
 const skipRecentMain = element<HTMLInputElement>("skip-recent-main");
 const maxAge = element<HTMLSelectElement>("max-age");
 /**
- * Whether pace and pages follow the recommendation for the codes entered.
- * Moving either control by hand turns it off, until "Use recommended".
+ * Result pages per objekt until the user picks another number. Deep by
+ * default: a code searched before stops paging as soon as a page holds nothing
+ * new, so the extra pages are mostly paid on a code's first search.
  */
-let tuningAuto = true;
+const DEFAULT_PAGES = 10;
+/**
+ * Whether pace and pages follow the recommendation for the codes entered. Off
+ * until "Use recommended" is pressed, so the defaults are what a search uses;
+ * moving either control by hand turns it off again.
+ */
+let tuningAuto = false;
+/**
+ * Bumped when the defaults change in a way a stored, never-hand-tuned pair
+ * should give way to. 2: pages default to 10 and the recommendation is no
+ * longer applied unasked, so a pair it chose (6 pages for nine codes) is
+ * replaced by the defaults once.
+ */
+const TUNING_VERSION = 2;
 /** The code count the controls were last set for, so typing does not reset them. */
 let tunedFor: number | null = null;
 
@@ -1162,7 +1397,10 @@ let tunedFor: number | null = null;
  */
 function showTuning() {
   const seconds = Math.min(MAX_DELAY_S, Math.max(0, Number(delay.value) || 0));
-  const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
+  const pageCount = Math.min(
+    20,
+    Math.max(1, Number(pages.value) || DEFAULT_PAGES),
+  );
   const codes = [
     ...new Set(
       searchTiles()
@@ -1190,13 +1428,17 @@ function showTuning() {
     }
   }
   const matches = seconds === rec.delaySeconds && pageCount === rec.pages;
+  // The recommendation is offered, not applied: pages start at
+  // DEFAULT_PAGES and stay wherever they are put.
   element("tuning-rec-text").textContent =
     count === 0
-      ? ""
-      : tuningAuto && matches
+      ? codes.length
+        ? "Every code here was searched in the last 6 hours."
+        : ""
+      : matches
         ? `Recommended for ${plural(count, "code")}`
-        : `Recommended: ${rec.pages} pages · +${rec.delaySeconds}s`;
-  element("use-recommended").hidden = count === 0 || (tuningAuto && matches);
+        : `Recommended for ${plural(count, "code")}: ${plural(rec.pages, "page")} · +${rec.delaySeconds}s`;
+  element("use-recommended").hidden = count === 0 || matches;
   // A run starts at the slower of the chosen pace and one Discord recently
   // pushed a run to, so that is what the estimate is for.
   const carried = carriedPace(storedPace, Date.now());
@@ -1225,7 +1467,7 @@ function showTuning() {
     .filter(Boolean)
     .join(" ");
   element("tuning-eta").textContent =
-    load.pages > 0 ? describeDuration(load.estimatedMs) : "";
+    load.pages > 0 && count > 0 ? describeDuration(load.estimatedMs) : "";
 }
 
 /** Zero is not "no delay applied" — it is "gated on capture instead". */
@@ -1271,10 +1513,14 @@ skipRecent.addEventListener("change", () => {
 function saveSearchSettings() {
   void extensionApi.storage.local.set({
     searchDelay: Math.min(MAX_DELAY_S, Math.max(0, Number(delay.value) || 0)),
-    searchPages: Math.min(20, Math.max(1, Number(pages.value) || 3)),
+    searchPages: Math.min(
+      20,
+      Math.max(1, Number(pages.value) || DEFAULT_PAGES),
+    ),
     skipRecent: skipRecent.checked,
     searchMaxAgeDays: Number(maxAge.value) || 0,
     tuningAuto,
+    tuningVersion: TUNING_VERSION,
   });
 }
 /** A hand on pace or pages hands them over to the user. */
@@ -1307,6 +1553,21 @@ action("run-search", async () => {
     wants.focus();
     throw new Error("Type what you are looking for first.");
   }
+  if (!automationAllowed(consent)) {
+    gateOpen = true;
+    render();
+    element("accept-automation").focus();
+    return;
+  }
+  await startSearch();
+});
+
+/** Start a run for the cards on screen; the agreement is already given. */
+async function startSearch() {
+  if (!tiles.length) {
+    wants.focus();
+    throw new Error("Type what you are looking for first.");
+  }
   const kept = searchTiles();
   if (!kept.length)
     throw new Error(
@@ -1325,8 +1586,12 @@ action("run-search", async () => {
   const tab = await discordTab();
   await ensureCapturing(tab.url);
   const seconds = Math.min(MAX_DELAY_S, Math.max(0, Number(delay.value) || 0));
-  const pageCount = Math.min(20, Math.max(1, Number(pages.value) || 3));
+  const pageCount = Math.min(
+    20,
+    Math.max(1, Number(pages.value) || DEFAULT_PAGES),
+  );
   clearTimeout(saveTimer);
+  unsaved = false;
   await extensionApi.storage.local.set({
     wants: wants.value,
     searchDelay: seconds,
@@ -1356,7 +1621,7 @@ action("run-search", async () => {
     at: Date.now(),
   };
   render();
-});
+}
 
 action("continue-search", async () => {
   const tab = await discordTab();
@@ -1582,6 +1847,7 @@ void extensionApi.storage.local
     "skipRecent",
     "searchMaxAgeDays",
     "tuningAuto",
+    "tuningVersion",
     "owned",
     "nickname",
     "removedWants",
@@ -1596,16 +1862,23 @@ void extensionApi.storage.local
     showViews();
     if (typeof settings.wants === "string" && !wants.value)
       wants.value = settings.wants;
-    if (typeof settings.searchDelay === "number")
+    // Pace and pages someone set themselves are kept. A pair the old
+    // always-on recommendation picked is not a choice, and gives way to the
+    // current defaults once (see TUNING_VERSION).
+    const tunedHere =
+      settings.tuningVersion === TUNING_VERSION ||
+      settings.tuningAuto === false;
+    if (tunedHere && typeof settings.searchDelay === "number")
       delay.value = String(settings.searchDelay);
-    if (typeof settings.searchPages === "number")
+    if (tunedHere && typeof settings.searchPages === "number")
       pages.value = String(settings.searchPages);
     if (typeof settings.skipRecent === "boolean")
       skipRecent.checked = settings.skipRecent;
     if (typeof settings.searchMaxAgeDays === "number")
       maxAge.value = String(settings.searchMaxAgeDays);
-    if (typeof settings.tuningAuto === "boolean")
+    if (tunedHere && typeof settings.tuningAuto === "boolean")
       tuningAuto = settings.tuningAuto;
+    if (!tunedHere) saveSearchSettings();
     showDelay();
     nickname.value =
       typeof settings.nickname === "string" ? settings.nickname : "";
@@ -1708,7 +1981,7 @@ setInterval(() => {
     .then((tab) => {
       const channel = channelFromUrl(tab?.url);
       const label = channel ? channelLabelFromTitle(tab?.title) : null;
-      if (channelKey(channel, label) !== shownChannel)
+      if (placeKey(tab, channel, label) !== shownChannel)
         void refresh().catch(() => {});
     });
 }, 2_000);

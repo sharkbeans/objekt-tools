@@ -9,7 +9,8 @@ export const EXTENSION_STORE_URLS: {
 } = {
   chrome:
     "https://chromewebstore.google.com/detail/objekt-match/mikcpcdfhmgfmhalkianjbbagbpjjfik",
-  firefox: null,
+  // Without a locale, so AMO serves each visitor's own language.
+  firefox: "https://addons.mozilla.org/firefox/addon/objekt-match/",
 };
 
 export type ExtensionStore = keyof typeof EXTENSION_STORE_URLS;

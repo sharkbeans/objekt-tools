@@ -1829,14 +1829,22 @@ export function MatchClient() {
           </DialogHeader>
           {editor === "mine" ? (
             <div className="space-y-5">
+              {/* The inventory is the way in for nearly everyone, so it is the
+                  field the dialog leads with; typing a list by hand is for
+                  cards Cosmo does not show, and folds away like saved wants. */}
               <div className="space-y-2">
-                <label htmlFor="cosmo-nickname" className="text-sm font-medium">
+                <label
+                  htmlFor="cosmo-nickname"
+                  className="text-base font-medium"
+                >
                   Load my Cosmo inventory
                 </label>
                 <div className="flex gap-2">
                   <Input
                     id="cosmo-nickname"
-                    placeholder="Cosmo nickname"
+                    className="h-12 px-4 text-base md:text-base"
+                    placeholder="Your Cosmo nickname"
+                    autoComplete="off"
                     value={nickname}
                     onChange={(event) => setNickname(event.target.value)}
                     onKeyDown={(event) =>
@@ -1844,6 +1852,7 @@ export function MatchClient() {
                     }
                   />
                   <Button
+                    className="h-12 px-6 text-base"
                     disabled={loadingInv || !nickname.trim()}
                     onClick={() => loadInventory(nickname)}
                   >
@@ -1875,22 +1884,37 @@ export function MatchClient() {
                     </button>
                   </p>
                 )}
+                {mine.size > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {mine.size} distinct cards available to select on your side.
+                  </p>
+                )}
               </div>
-              <div className="space-y-2">
-                <label htmlFor="my-haves" className="text-sm font-medium">
-                  Or type what I have
+              <details className="rounded-lg border p-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Type what I have instead
+                  {offering.trim() && (
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      · {parseOffering(offering).length} typed
+                    </span>
+                  )}
+                </summary>
+                <label
+                  htmlFor="my-haves"
+                  className="mt-3 block text-sm text-muted-foreground"
+                >
+                  What I have, for cards your inventory does not show
                 </label>
                 <Textarea
                   id="my-haves"
+                  className="mt-2"
                   rows={5}
                   placeholder={"JiYeon CC102\nXinyu CC101\nNien CC301"}
                   value={offering}
                   onChange={(event) => setOffering(event.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {mine.size} distinct cards available to select on your side.
-                </p>
-              </div>
+              </details>
               <details className="rounded-lg border p-3">
                 <summary className="cursor-pointer text-sm font-medium">
                   My saved wants (optional)

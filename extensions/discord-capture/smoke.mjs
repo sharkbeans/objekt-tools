@@ -19,7 +19,9 @@ const extension = new URL("./dist", import.meta.url).pathname;
 // would sail straight past every mock below.
 
 /**
- * A real TLS server standing in for objekt.my and imagedelivery.net.
+ * A real TLS server standing in for objekt.my and imagedelivery.net — and
+ * for discord.com, for the one tab the extension opens there itself (the
+ * panel's "Open Discord" step).
  *
  * `context.route` cannot be trusted for these: a tab the extension opens
  * itself with `chrome.tabs.create` (rather than one Playwright navigates)
@@ -31,7 +33,7 @@ const extension = new URL("./dist", import.meta.url).pathname;
  * `context.route` never had a chance to apply to the navigation, and the
  * real page's own script never speaks this test's handoff protocol.
  *
- * `--host-resolver-rules` sends both hostnames to this server at the
+ * `--host-resolver-rules` sends these hostnames to this server at the
  * network layer, before Chromium's request pipeline exists at all, so it
  * has no such race. The certificate is regenerated per run and never
  * touches the repo; `--ignore-certificate-errors` is what lets Chromium
@@ -53,9 +55,39 @@ execFileSync("openssl", [
   "-subj",
   "/CN=objekt.my",
   "-addext",
-  "subjectAltName=DNS:objekt.my,DNS:imagedelivery.net",
+  "subjectAltName=DNS:objekt.my,DNS:imagedelivery.net,DNS:discord.com",
 ]);
 const ART = "https://imagedelivery.net/smoke/seoyeon-101/thumbnail";
+// What the panel shows for ART: the 2x variant, since the thumbnail is blurry.
+const CARD_ART = "https://imagedelivery.net/smoke/seoyeon-101/2x";
+// Discord, as far as this test needs it: a search box, a message list and a
+// results panel. Every Discord navigation is fulfilled with this page — by
+// `context.route` for pages Playwright opens, and by the server below for a
+// tab the extension opens itself (see that server's comment for why).
+const DISCORD_PAGE = `<!doctype html><html lang="en"><head><title>Discord | #trade | Smoke Server</title></head><body>
+        <div role="combobox" contenteditable="true" aria-label="Search"></div>
+        <ol id="messages"></ol>
+        <div id="search-results"></div>
+        <script>
+          // Stands in for Discord answering a search: Enter in the search box
+          // renders one result row for whatever was typed. Everything else —
+          // the typing, the focus, the events — is the real browser.
+          const box = document.querySelector('[role="combobox"]');
+          const results = document.getElementById("search-results");
+          let n = 900;
+          box.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter") return;
+            const query = box.textContent.trim();
+            if (!query) return;
+            const id = ++n;
+            results.innerHTML =
+              '<li><a href="/channels/111/123">#trade</a>' +
+              '<span id="message-username-' + id + '">Seller</span>' +
+              '<time datetime="2026-09-09T05:00:00.000Z"></time>' +
+              '<div id="message-content-' + id + '">HAVE YooYeon ' + query + '</div></li>';
+          });
+        </script>
+      </body></html>`;
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
   "base64",
@@ -69,6 +101,11 @@ const fakeObjekt = https
     (req, res) => {
       const host = (req.headers.host ?? "").replace(/:\d+$/, "");
       const url = new URL(req.url ?? "/", `https://${host}`);
+      if (host === "discord.com") {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(DISCORD_PAGE);
+        return;
+      }
       if (host === "imagedelivery.net") {
         res.writeHead(200, { "content-type": "image/png" });
         res.end(PIXEL);
@@ -123,7 +160,7 @@ const context = await chromium.launchPersistentContext(profile, {
   args: [
     `--disable-extensions-except=${extension}`,
     `--load-extension=${extension}`,
-    `--host-resolver-rules=MAP objekt.my 127.0.0.1:${objektPort},MAP imagedelivery.net 127.0.0.1:${objektPort}`,
+    `--host-resolver-rules=MAP objekt.my 127.0.0.1:${objektPort},MAP imagedelivery.net 127.0.0.1:${objektPort},MAP discord.com 127.0.0.1:${objektPort}`,
     "--ignore-certificate-errors",
   ],
 });
@@ -134,33 +171,7 @@ try {
   const id = new URL(worker.url()).host;
   // Every Discord navigation is fulfilled locally: this test never contacts Discord.
   await context.route("https://discord.com/**", (route) =>
-    route.fulfill({
-      contentType: "text/html",
-      body: `<!doctype html><html lang="en"><head><title>Discord | #trade | Smoke Server</title></head><body>
-        <div role="combobox" contenteditable="true" aria-label="Search"></div>
-        <ol id="messages"></ol>
-        <div id="search-results"></div>
-        <script>
-          // Stands in for Discord answering a search: Enter in the search box
-          // renders one result row for whatever was typed. Everything else —
-          // the typing, the focus, the events — is the real browser.
-          const box = document.querySelector('[role="combobox"]');
-          const results = document.getElementById("search-results");
-          let n = 900;
-          box.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter") return;
-            const query = box.textContent.trim();
-            if (!query) return;
-            const id = ++n;
-            results.innerHTML =
-              '<li><a href="/channels/111/123">#trade</a>' +
-              '<span id="message-username-' + id + '">Seller</span>' +
-              '<time datetime="2026-09-09T05:00:00.000Z"></time>' +
-              '<div id="message-content-' + id + '">HAVE YooYeon ' + query + '</div></li>';
-          });
-        </script>
-      </body></html>`,
-    }),
+    route.fulfill({ contentType: "text/html", body: DISCORD_PAGE }),
   );
   await worker.evaluate(() =>
     // No channel is switched on here: capture is on by default, and the first
@@ -299,9 +310,41 @@ try {
     await popup.locator("#channel-state").textContent(),
     "Capturing",
   );
-  // Capture consent alone must not unlock search automation.
-  assert.equal(await popup.locator("#automation-gate").isVisible(), true);
-  assert.equal(await popup.locator("#actions").isVisible(), false);
+  // Getting started: Discord is open on a channel, so the step left is the
+  // want list. That step is the box itself — raised, with the space below
+  // saying cards will appear there — not a list pointing at it, and search is
+  // not offered before there is anything to search.
+  await popup.locator("#empty").waitFor();
+  assert.equal(await popup.locator("#guide").isVisible(), false);
+  assert.match(
+    (await popup.locator("#wants-field").getAttribute("class")) ?? "",
+    /\bask\b/,
+  );
+  assert.equal(await popup.locator("#automation-gate").isVisible(), false);
+  // A post collected by scrolling goes to /match without search switched on.
+  await popup.waitForFunction(() =>
+    document
+      .getElementById("open-match")
+      .textContent.includes("Open 1 in match"),
+  );
+  assert.equal(await popup.locator("#open-match").isVisible(), true);
+  // Typing a want turns the empty space into its card and offers search.
+  await popup.locator("#wants").fill("SeoYeon CC101 CC102");
+  await popup.locator("#tiles .tile").first().waitFor();
+  assert.equal(await popup.locator("#empty").isVisible(), false);
+  assert.doesNotMatch(
+    (await popup.locator("#wants-field").getAttribute("class")) ?? "",
+    /\bask\b/,
+  );
+  // Reloading straight after typing keeps what was typed.
+  await popup.reload();
+  await popup.waitForFunction(
+    () => document.getElementById("wants").value === "SeoYeon CC101 CC102",
+  );
+  // Search is the main action, so its button is there from the start; the
+  // agreement it needs is not asked for until it is pressed.
+  assert.equal(await popup.locator("#run-search").isVisible(), true);
+  assert.equal(await popup.locator("#automation-gate").isVisible(), false);
   // The saved inventory marks the post that wants one of its objekts, and the
   // mark survives Discord re-rendering the row.
   await page.locator("objekt-match-badge").waitFor();
@@ -325,21 +368,35 @@ try {
   // and the results reaching the index scoped to this run.
   await popup.locator("#pages").fill("1");
   await popup.locator("#close-settings").click();
-  assert.equal(await popup.locator("#actions").isVisible(), false);
-  await popup.locator("#accept-automation").click();
-  await popup.locator("#actions").waitFor();
   await popup.locator("#wants").fill("SeoYeon CC101");
   // The want list becomes a card, with its art from objekt.my.
   await popup.locator("#tiles .tile").waitFor();
   assert.equal(await popup.locator("#tiles .tile").count(), 1);
   await popup.waitForFunction(
     (art) => document.querySelector("#tiles img")?.getAttribute("src") === art,
-    ART,
+    CARD_ART,
   );
+  // Capture consent alone must not unlock search automation: the first press
+  // of Search asks, in place of the buttons, and types nothing until agreed.
+  const searchBox = () =>
+    page.evaluate(
+      () => document.querySelector('[role="combobox"]').textContent,
+    );
   await popup.locator("#run-search").click();
+  await popup.locator("#automation-gate").waitFor();
+  assert.equal(await popup.locator("#run-search").isVisible(), false);
+  assert.equal(await searchBox(), "");
+  // Not now backs out without typing either.
+  await popup.locator("#decline-automation").click();
+  await popup.locator("#automation-gate").waitFor({ state: "hidden" });
+  assert.equal(await searchBox(), "");
+  // Agreeing is pressing Search again: it starts the search that was asked for.
+  await popup.locator("#run-search").click();
+  await popup.locator("#accept-automation").click();
   await popup.waitForFunction(() =>
     document.getElementById("run-detail").textContent.startsWith("Finished"),
   );
+  assert.equal(await popup.locator("#automation-gate").isVisible(), false);
   assert.match(
     await page.evaluate(
       () => document.querySelector('[role="combobox"]').textContent,
@@ -614,9 +671,68 @@ try {
   // Counted against the index rather than the run, because a search has now
   // happened and the status reports both.
   await indexHolds("4 posts in the index");
+
+  // Getting started from the pop-out window with no Discord open, which is
+  // where the toolbar button lands anyone who presses it on another site. The
+  // panel says Discord is the missing step, and its button opens Discord with
+  // the panel moved into it — the window closes, so there is still one panel.
+  await popup.locator("#accept-capture-risk").check();
+  await popup.locator("#accept-capture").click();
+  await page.close();
+  // Recorded as closed, so a panel in the new tab is the button's doing.
+  await worker.evaluate(() =>
+    chrome.storage.local
+      .get("panel")
+      .then(({ panel }) =>
+        chrome.storage.local.set({ panel: { ...panel, open: false } }),
+      ),
+  );
+  const windowOpened = context.waitForEvent("page");
+  await worker.evaluate(
+    (url) => chrome.windows.create({ url, type: "popup" }),
+    `chrome-extension://${id}/panel.html?window=1`,
+  );
+  const windowed = await windowOpened;
+  await windowed.waitForFunction(
+    () => document.getElementById("guide-discord")?.dataset.state === "current",
+  );
+  assert.equal(
+    await windowed.locator("#no-channel-text").textContent(),
+    "Discord not open",
+  );
+  const discordOpened = context.waitForEvent("page");
+  const windowClosed = windowed.waitForEvent("close");
+  await windowed.locator("#open-discord").click();
+  const discord = await discordOpened;
+  await discord.waitForURL("https://discord.com/app");
+  await windowClosed;
+  let docked = null;
+  for (let attempt = 0; attempt < 100 && !docked; attempt++) {
+    docked =
+      discord.frames().find((frame) => frame.url().includes("panel.html")) ??
+      null;
+    if (!docked) await discord.waitForTimeout(100);
+  }
+  assert.ok(docked, "the panel opened in the Discord tab it created");
+  // Discord's home is not a channel: the step left is picking one. The want
+  // list is already there, so only that step shows.
+  await docked.waitForFunction(
+    () => document.getElementById("guide-channel")?.dataset.state === "current",
+  );
+  assert.equal(await docked.locator("#guide-wants").isVisible(), false);
+  // Moving into a channel is a pushState, which the panel notices on its own.
+  await discord.evaluate(() =>
+    history.pushState(null, "", "/channels/111/123"),
+  );
+  await docked.locator("#guide").waitFor({ state: "hidden", timeout: 10_000 });
+  assert.equal(
+    await docked.locator("#channel-state").textContent(),
+    "Capturing",
+  );
+
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, want cards with art, a whole search run end to end, delivery into /match and tab reuse, objekt.my bridge (presence, hunt → want list, undo), run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, getting-started steps (the want box as the step, Open Discord from the pop-out window), typed wants surviving a reload, want cards with art, a whole search run end to end, delivery into /match and tab reuse, objekt.my bridge (presence, hunt → want list, undo), run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();

@@ -52,8 +52,8 @@ sit behind the gear icon, out of the way of the two things a run actually needs.
 floating window inside the Discord page, not a toolbar popup — a popup closes the moment it
 loses focus, and a search run takes minutes, so every glance at Discord used to close the
 thing reporting on it. Drag it by the titlebar (or focus the titlebar and use the arrow keys,
-shift for bigger steps), resize from the bottom-right corner, `—` collapses it to the
-titlebar, `⤢` pops it out into a real browser window, `✕` closes it. Where it was left is
+shift for bigger steps), resize from the bottom-right corner; the titlebar's buttons pop it
+out into a real browser window, collapse it to the titlebar, and close it. Where it was left is
 remembered per browser, including whether it was open, and it is clamped back on screen when
 the window is smaller than it was; a size remembered from before this redesign gives way to
 the new default rather than reopening as a tall column with a wide card inside it.
@@ -63,6 +63,39 @@ it, Discord's scripts cannot see it, and the privileged calls (permission prompt
 happen in an extension document where browsers allow them. `src/panel-frame.ts` owns the
 window chrome, `panel.html` + `src/panel.ts` own the UI, and `src/panel-geometry.ts` holds the
 placement rules that the tests exercise without a browser.
+
+It is drawn in objekt.my's own look — the site's neutral tokens, type and logo mark, its
+outlined and filled buttons, its card grid — rather than a palette of its own, so the panel
+reads as part of objekt.my sitting on Discord, not as a separate tool. The type is set for
+reading at a glance beside Discord's own (15px body text), not squeezed to fit.
+
+The first-run disclosure is one screen in the shape well-liked extensions use for theirs: a
+picture of what it does (a Discord post whose code becomes a matched card, drawn in CSS rather
+than shipped as art), a headline, three one-line points — what it reads, where that stays and
+goes, what it never touches — one short acknowledgement and one button. It says everything the
+old paragraphs did that either store asks a disclosure to say, and fits the default panel
+without scrolling. Rewording it is not a material change; changing what it says is collected
+is, and needs `CONSENT_VERSION` bumped.
+
+Until the basics are in place, the space where the cards go is a short **Get started** list
+in the shape of objekt.my/match's own steps: Discord open in this browser, a server channel
+open in it, and a want list. The step still to do is raised into a card with the click that
+does it — **Open Discord** in the pop-out window (which opens or focuses Discord and moves the
+panel into it, closing the window), **Show Discord** when a window just needs Discord brought
+forward — and finished steps drop to a tick. A logged-out Discord says to log in instead. When
+the want list is the only thing missing, the list steps aside and the box is the step: it asks
+what you are looking for and is drawn as a field waiting to be filled, with placeholder cards
+on the grid below it saying "No results" until something is typed. The box never moves, so
+nothing jumps under someone starting to type. None of it is a popup or an overlay on Discord:
+it is the panel's own content, and it follows the tab as it changes (a Discord tab opening, a
+login finishing, a channel switch). Search is what the panel is for, so **Search** is the main button
+from the start; its agreement is asked for the first time it is pressed — in place of the
+buttons, never over Discord — and agreeing starts that search. **Open in match** sits beside it
+as the secondary action until a search has results, and does not need search at all: posts
+collected by scrolling go to /match the same way. The pace, page and skip-recent controls are always on show above
+the buttons, with the time a search will take. Pages per objekt start at 10 and pace at +5s,
+and stay where they are put: the recommendation for the number of codes is shown beside them
+with **Use recommended**, not applied unasked.
 
 The chip at the top says whether this channel is being collected, and is the switch for it
 (that switch used to live under Troubleshooting, which is the wrong place for the control
@@ -259,7 +292,11 @@ As the want list is typed, each recognised objekt becomes a card and asks objekt
 collection search for its picture (`src/artwork.ts`), the same endpoint `/match`'s own poster
 tool uses. Lookups are cached in `storage.local` by objekt key — a month per hit, a day per
 miss, so a typo is retried rather than remembered forever — and capped at 60 per batch so a
-pasted catalogue is not a request storm. A card also shows how many posts the last search
+pasted catalogue is not a request storm. The search answers with Cloudflare Images'
+`thumbnail` variant, which a browser receives as a ~15 KB AVIF of 314px and which went soft
+and blotchy at the size the panel draws a card, especially on a high-density screen; the
+panel asks for the `2x` variant (582×900, ~35 KB) instead (`cardArt`), and upgrades URLs
+cached before that as it reads them. A card pulses while its art loads and fades it in. A card also shows how many posts the last search
 found with it, and dims, glows or sits plain depending on whether its code is still queued,
 being searched now, or already done.
 
@@ -280,7 +317,9 @@ also pauses every channel. A `!` toolbar badge and panel error report failed sto
 profile, fulfills Discord navigation with a local fixture, and checks: the floating panel
 (opened the way the toolbar button opens it, dragged by its titlebar, held on screen,
 restored where it was left after a reload, and genuinely closed to the page); both consent
-gates; want cards with art fetched from a mocked objekt.my; a whole search run end to end —
+gates; the getting-started steps, including **Open Discord** from a pop-out window with no
+Discord tab, which has to end with the panel docked in the tab it opened; want cards with art
+fetched from a mocked objekt.my; a whole search run end to end —
 real `execCommand` typing into a real contenteditable, a real Enter, results captured and
 scoped to the run; delivery into a mocked `/match` and reuse of the tab a second delivery
 goes to; the run state machine, including a run whose reports stop arriving; capture with
@@ -288,8 +327,9 @@ Discord behind another window; virtualized re-render dedupe; inventory annotatio
 export downloads; pause; and withdrawal. It never contacts Discord.
 
 Discord and objekt.my are both fulfilled locally, but by different mechanisms, because they
-fail differently when live. Discord is only ever reached through `page.goto`, which Playwright
-routes reliably, so `context.route` is enough. objekt.my is also reached by
+fail differently when live. Discord is mostly reached through `page.goto`, which Playwright
+routes reliably, so `context.route` is enough — except for the tab **Open Discord** creates,
+which is served by the same local server as objekt.my, for the reason below. objekt.my is also reached by
 `chrome.tabs.create`, called from the service worker rather than from Playwright itself — and
 that tab's very first request (the navigation) can leave before Playwright's CDP session has
 attached to the new target, slipping straight past `context.route` while every request after

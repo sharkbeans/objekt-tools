@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   artworkUrl,
+  cardArt,
   isArtUrl,
   LOOKUP_CAP,
   lookupArtwork,
@@ -11,6 +12,8 @@ import {
 
 const SEOYEON = { member: "SeoYeon", season: "Atom01", collectionNo: "101" };
 const ART = "https://imagedelivery.net/abc/seoyeon-101/thumbnail";
+/** What the panel shows for ART: the same image, at a size that stays sharp. */
+const SHARP = "https://imagedelivery.net/abc/seoyeon-101/2x";
 
 function results(...rows: Record<string, unknown>[]) {
   return { results: rows };
@@ -36,7 +39,7 @@ test("picks the exact collection number, not a loose match on it", () => {
     },
     { member: "SeoYeon", collectionNo: "101Z", thumbnailImage: ART },
   );
-  assert.equal(pickArtwork(data, SEOYEON), ART);
+  assert.equal(pickArtwork(data, SEOYEON), SHARP);
   assert.equal(
     pickArtwork(
       results({ member: "Mayu", collectionNo: "101A", thumbnailImage: ART }),
@@ -45,6 +48,29 @@ test("picks the exact collection number, not a loose match on it", () => {
     null,
   );
   assert.equal(pickArtwork({ nope: true }, SEOYEON), null);
+});
+
+test("card art is the 2x variant, not the blurry thumbnail", () => {
+  assert.equal(cardArt(ART), SHARP);
+  assert.equal(
+    cardArt("https://imagedelivery.net/abc/seoyeon-101/3x"),
+    SHARP,
+    "any variant the search hands back",
+  );
+  assert.equal(cardArt(SHARP), SHARP);
+  // Not a Cloudflare Images URL, or not one shaped like a variant: left alone.
+  for (const url of [
+    "https://resources.cosmo.fans/x.png",
+    "https://imagedelivery.net/abc/thumbnail",
+    "https://imagedelivery.net/abc/seoyeon-101/2x/extra",
+    "not a url",
+  ])
+    assert.equal(cardArt(url), url);
+  // A cache written before the change is upgraded as it is read.
+  assert.deepEqual(
+    readArtworkCache({ "seoyeon|atom01|101": { url: ART, at: 1 } }),
+    { "seoyeon|atom01|101": { url: SHARP, at: 1 } },
+  );
 });
 
 test("refuses art hosted anywhere objekt.my would not load it from", () => {
@@ -100,8 +126,11 @@ test("serves fresh entries from the cache and fetches the rest once", async () =
     1,
     "the cached card and the duplicate cost nothing",
   );
-  assert.deepEqual(urls, { "seoyeon|atom01|101": ART, "mayu|atom01|102": ART });
-  assert.deepEqual(cache["mayu|atom01|102"], { url: ART, at: now });
+  assert.deepEqual(urls, {
+    "seoyeon|atom01|101": SHARP,
+    "mayu|atom01|102": SHARP,
+  });
+  assert.deepEqual(cache["mayu|atom01|102"], { url: SHARP, at: now });
 });
 
 test("a failed request is not remembered as a miss", async () => {

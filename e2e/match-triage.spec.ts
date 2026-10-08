@@ -22,7 +22,9 @@ async function setUp(page: import("@playwright/test").Page) {
   await expect(dialog).toBeHidden();
 
   await page.getByRole("button", { name: "My objekts", exact: true }).click();
-  await page.getByLabel("Or type what I have").fill("SeoYeon CC101");
+  // Typing a list by hand is folded away behind the inventory field.
+  await page.getByText("Type what I have instead").click();
+  await page.getByLabel("What I have").fill("SeoYeon CC101");
   await page.getByRole("button", { name: "Done — show my cards" }).click();
 
   await expect(page.getByTestId("trader-result")).toHaveCount(2);

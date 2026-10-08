@@ -29,55 +29,70 @@ import {
 const HOST_TAG = "objekt-capture-panel";
 const STYLE = `
 :host { all: initial; }
+/* objekt.my's palette, in the theme Discord is showing (see \`frameTheme\`). */
 .frame {
+  --bg: #0a0a0a; --fg: #fafafa; --muted-fg: #a1a1a1; --accent: #262626;
+  --border: rgb(255 255 255 / 12%); --ring: #737373; --good: #4ade80;
   position: fixed;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #3f3f46;
-  border-radius: 10px;
-  background: #18181b;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .55);
-  font: 13px system-ui, sans-serif;
-  color: #eee;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 50%), 0 2px 8px rgb(0 0 0 / 30%);
+  font: 14px "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--fg);
   color-scheme: dark;
+}
+.frame.light {
+  --bg: #ffffff; --fg: #0a0a0a; --muted-fg: #737373; --accent: #f5f5f5;
+  --border: #e5e5e5; --ring: #a1a1a1; --good: #16a34a;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 16%), 0 2px 8px rgb(0 0 0 / 8%);
+  color-scheme: light;
 }
 .bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: ${BAR_HEIGHT}px;
-  padding: 0 6px 0 10px;
-  background: #27272a;
-  border-bottom: 1px solid #3f3f46;
+  padding: 0 5px 0 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   cursor: grab;
   user-select: none;
   flex: none;
 }
-.bar:focus-visible { outline: 2px solid #818cf8; outline-offset: -2px; }
+.bar:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
 .bar.dragging { cursor: grabbing; }
-.title { flex: 1; font-size: 12px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #6366f1; flex: none; }
-.dot.busy { background: #22c55e; animation: pulse 1.4s ease-in-out infinite; }
+.logo { width: 18px; height: 18px; flex: none; color: var(--fg); }
+.title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status { display: none; align-items: center; gap: 6px; font-size: 13px; color: var(--muted-fg); white-space: nowrap; }
+.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--good); animation: pulse 1.4s ease-in-out infinite; }
+.busy .status { display: inline-flex; }
 @keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .status::before { animation: none; } }
+.spacer { flex: 1; }
 button {
   all: unset;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  text-align: center;
-  line-height: 22px;
-  font-size: 13px;
-  color: #a1a1aa;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--muted-fg);
   cursor: pointer;
   flex: none;
+  transition: background-color .15s, color .15s;
 }
-button:hover { background: #3f3f46; color: #fff; }
-button:focus-visible { outline: 2px solid #818cf8; }
-.body { flex: 1; min-height: 0; position: relative; background: #18181b; }
-iframe { width: 100%; height: 100%; border: 0; display: block; }
-.fallback { position: absolute; inset: 0; padding: 16px; font-size: 12px; color: #d4d4d8; }
-.fallback a { color: #a5b4fc; }
+button:hover { background: var(--accent); color: var(--fg); }
+button:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.body { flex: 1; min-height: 0; position: relative; background: var(--bg); }
+iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--bg); color-scheme: normal; }
+.fallback { position: absolute; inset: 0; padding: 20px; font-size: 15px; line-height: 1.5; color: var(--fg); }
+.fallback a { color: inherit; }
 .grip {
   position: absolute;
   right: 0;
@@ -85,9 +100,12 @@ iframe { width: 100%; height: 100%; border: 0; display: block; }
   width: 16px;
   height: 16px;
   cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 50%, #52525b 50%, #52525b 62%, transparent 62%, transparent 74%, #52525b 74%, #52525b 86%, transparent 86%);
+  opacity: .6;
+  background: linear-gradient(135deg, transparent 55%, var(--muted-fg) 55%, var(--muted-fg) 62%, transparent 62%, transparent 74%, var(--muted-fg) 74%, var(--muted-fg) 81%, transparent 81%);
 }
+.grip:hover { opacity: 1; }
 .collapsed .body, .collapsed .grip { display: none; }
+.collapsed .bar { border-bottom: 0; }
 `;
 
 interface Panel {
@@ -95,8 +113,77 @@ interface Panel {
   frame: HTMLIFrameElement;
   root: HTMLElement;
   bar: HTMLElement;
-  dot: HTMLElement;
   notice: HTMLElement;
+}
+
+const SVG = "http://www.w3.org/2000/svg";
+
+/** An SVG element with attributes, built without markup parsing. */
+function svgElement(
+  name: string,
+  attributes: Record<string, string>,
+  children: Element[] = [],
+): SVGElement {
+  const node = document.createElementNS(SVG, name);
+  for (const [key, value] of Object.entries(attributes))
+    node.setAttribute(key, value);
+  node.append(...children);
+  return node;
+}
+
+/** A 24px line icon, from its path data. */
+function lineIcon(paths: string[], extra: Element[] = []): SVGElement {
+  return svgElement("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" }, [
+    ...paths.map((d) => svgElement("path", { d })),
+    ...extra,
+  ]);
+}
+
+/**
+ * objekt.my's mark: two chamfered squares, the lower one hollow. The same
+ * geometry as `src/components/objekt-logo.tsx`, as an SVG. The mask id only
+ * has to be unique inside this shadow root.
+ */
+function logo(): SVGElement {
+  const cut = svgElement("mask", { id: "objekt-logo-cut" }, [
+    svgElement("rect", { width: "100", height: "100", fill: "#fff" }),
+    svgElement("polygon", {
+      points: "29.46,44.5 55.5,44.5 55.5,69.92 49.92,75.5 24.5,75.5 24.5,49.46",
+      fill: "#000",
+    }),
+  ]);
+  const shapes = svgElement(
+    "g",
+    { mask: "url(#objekt-logo-cut)", fill: "currentColor" },
+    [
+      svgElement("polygon", {
+        points: "43.04,18 80,18 80,54.96 72.96,62 36,62 36,25.04",
+      }),
+      svgElement("polygon", {
+        points: "26.4,40 60,40 60,72.8 52.8,80 20,80 20,46.4",
+      }),
+    ],
+  );
+  return svgElement(
+    "svg",
+    { class: "logo", viewBox: "18 16 64 66", "aria-hidden": "true" },
+    [cut, shapes],
+  );
+}
+
+/**
+ * Follow Discord's own theme, like the panel inside the frame does: Discord
+ * marks its root with \`theme-light\` / \`theme-dark\`.
+ */
+function frameTheme(): "light" | "dark" {
+  return document.documentElement.classList.contains("theme-light")
+    ? "light"
+    : "dark";
+}
+
+/** Repaint the window chrome after Discord switches theme. */
+export function syncPanelTheme(): void {
+  panel?.root.classList.toggle("light", frameTheme() === "light");
 }
 
 let panel: Panel | null = null;
@@ -170,21 +257,19 @@ export function showPanelNotice(message: string): void {
   panel.frame.hidden = true;
   panel.notice.textContent = message;
   panel.notice.hidden = false;
-  panel.dot.classList.remove("busy");
+  panel.root.classList.remove("busy");
 }
 
-/** Turn the titlebar dot green while a run is going, so a covered panel still says so. */
+/** Say "Searching" in the titlebar while a run is going, so a collapsed or covered panel still says so. */
 export function markPanelBusy(busy: boolean): void {
-  panel?.dot.classList.toggle("busy", busy);
+  panel?.root.classList.toggle("busy", busy);
 }
 
 function drag(bar: HTMLElement, frame: HTMLIFrameElement) {
   bar.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
-    if (
-      event.target instanceof HTMLElement &&
-      event.target.tagName === "BUTTON"
-    )
+    // The target is often the icon inside a button, not the button.
+    if (event.target instanceof Element && event.target.closest("button"))
       return;
     const startX = event.clientX - geometry.x;
     const startY = event.clientY - geometry.y;
@@ -292,6 +377,7 @@ export async function openPanel(tabId: number | null): Promise<void> {
   style.textContent = STYLE;
   const root = document.createElement("div");
   root.className = "frame";
+  root.classList.toggle("light", frameTheme() === "light");
   root.style.zIndex = String(LAYER);
   const bar = document.createElement("header");
   bar.className = "bar";
@@ -299,14 +385,17 @@ export async function openPanel(tabId: number | null): Promise<void> {
   bar.setAttribute("role", "toolbar");
   bar.setAttribute(
     "aria-label",
-    "objekt.my capture panel. Drag, or use the arrow keys, to move",
+    "Objekt Match panel. Drag, or use the arrow keys, to move",
   );
-  const dot = document.createElement("span");
-  dot.className = "dot";
   const title = document.createElement("span");
   title.className = "title";
-  title.textContent = "objekt.my";
-  bar.append(dot, title);
+  title.textContent = "Objekt Match";
+  const busy = document.createElement("span");
+  busy.className = "status";
+  busy.textContent = "Searching";
+  const spacer = document.createElement("span");
+  spacer.className = "spacer";
+  bar.append(logo(), title, busy, spacer);
   const body = document.createElement("div");
   body.className = "body";
   const frame = document.createElement("iframe");
@@ -314,7 +403,7 @@ export async function openPanel(tabId: number | null): Promise<void> {
   url.searchParams.set("embedded", "1");
   if (tabId !== null) url.searchParams.set("tab", String(tabId));
   frame.src = url.toString();
-  frame.setAttribute("title", "objekt.my capture");
+  frame.setAttribute("title", "Objekt Match");
   const fallback = document.createElement("div");
   fallback.className = "fallback";
   fallback.hidden = true;
@@ -324,35 +413,50 @@ export async function openPanel(tabId: number | null): Promise<void> {
   const grip = document.createElement("div");
   grip.className = "grip";
 
-  const button = (label: string, hint: string, run: () => void) => {
+  const button = (glyph: SVGElement, hint: string, run: () => void) => {
     const element = document.createElement("button");
-    element.textContent = label;
+    element.append(glyph);
     element.title = hint;
     element.setAttribute("aria-label", hint);
     element.addEventListener("click", run);
     return element;
   };
   bar.append(
-    button("⤢", "Open in a separate window", () => {
-      void extensionApi.runtime.sendMessage({ type: "open-window" });
-    }),
-    button("—", "Collapse to the titlebar", () =>
+    button(
+      lineIcon(
+        ["M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"],
+        [
+          svgElement("rect", {
+            x: "12",
+            y: "13",
+            width: "10",
+            height: "7",
+            rx: "2",
+          }),
+        ],
+      ),
+      "Open in a separate window",
+      () => {
+        void extensionApi.runtime.sendMessage({ type: "open-window" });
+      },
+    ),
+    button(lineIcon(["M5 12h14"]), "Collapse to the titlebar", () =>
       collapse(!geometry.collapsed),
     ),
-    button("✕", "Close the panel", () => closePanel()),
+    button(lineIcon(["M18 6 6 18", "m6 6 12 12"]), "Close the panel", () =>
+      closePanel(),
+    ),
   );
   bar.addEventListener("dblclick", (event) => {
-    if (
-      event.target instanceof HTMLElement &&
-      event.target.tagName === "BUTTON"
-    )
+    // The target is often the icon inside a button, not the button.
+    if (event.target instanceof Element && event.target.closest("button"))
       return;
     collapse(!geometry.collapsed);
   });
 
   root.append(bar, body, grip);
   shadow.append(style, root);
-  panel = { host, frame, root, bar, dot, notice: fallback };
+  panel = { host, frame, root, bar, notice: fallback };
   apply();
   // documentElement, not body: Discord owns everything under its own root and
   // reconciles it, and a panel removed by a re-render is a panel that vanishes

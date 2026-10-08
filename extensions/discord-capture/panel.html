@@ -1,272 +1,538 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>objekt.my</title>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="color-scheme" content="dark light"><title>Objekt Match</title>
 <style>
-/* Two palettes, because the panel sits inside Discord and Discord has a light
-   theme. The content script reports which one is on; nothing here guesses from
-   the operating system, which is a different setting entirely. */
+/* objekt.my's own tokens (src/app/globals.css), in two palettes: the panel sits
+   inside Discord, and Discord has a light theme. The content script reports
+   which one is on; nothing here guesses from the operating system, which is a
+   different setting entirely. */
 :root{
-  --bg:#18181b; --raised:#1f1f24; --line:#2e2e35; --field:#27272a;
-  --text:#ececee; --dim:#a1a1aa;
-  --accent:#4f46e5; --accent-line:#6366f1; --accent-soft:#1e1b4b; --accent-text:#c7d2fe;
-  --warn-line:#854d0e; --warn-bg:#27200a; --warn-text:#fde68a;
-  --track:#f4f4f5;
-  --bad:#fca5a5; --good:#4ade80;
+  --bg:#0a0a0a; --card:#171717; --muted:#262626; --accent:#262626;
+  --fg:#fafafa; --muted-fg:#a1a1a1;
+  --border:rgb(255 255 255 / 10%); --input:rgb(255 255 255 / 15%); --field:rgb(255 255 255 / 4.5%);
+  --primary:#e5e5e5; --primary-fg:#171717; --ring:#737373;
+  --destructive:#ff6467; --good:#4ade80;
+  --warn-fg:#fcd34d; --warn-bg:rgb(245 158 11 / 8%); --warn-line:rgb(245 158 11 / 28%);
+  --track:#404040; --shadow:0 1px 2px rgb(0 0 0 / 40%);
+  color-scheme:dark;
 }
 :root[data-theme="light"]{
-  --bg:#ffffff; --raised:#f6f6f7; --line:#e2e2e6; --field:#ffffff;
-  --text:#1e1f22; --dim:#5c5f66;
-  --accent:#4f46e5; --accent-line:#4338ca; --accent-soft:#eef2ff; --accent-text:#3730a3;
-  --warn-line:#d9b45f; --warn-bg:#fdf7e7; --warn-text:#6d5106;
-  --track:#d4d4d8;
-  --bad:#b42318; --good:#15803d;
+  --bg:#ffffff; --card:#fafafa; --muted:#f5f5f5; --accent:#f5f5f5;
+  --fg:#0a0a0a; --muted-fg:#737373;
+  --border:#e5e5e5; --input:#e5e5e5; --field:#ffffff;
+  --primary:#171717; --primary-fg:#fafafa; --ring:#a1a1a1;
+  --destructive:#e7000b; --good:#16a34a;
+  --warn-fg:#92400e; --warn-bg:#fffbeb; --warn-line:#fcd34d;
+  --track:#d4d4d4; --shadow:0 1px 2px rgb(0 0 0 / 6%);
+  color-scheme:light;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;font:13px/1.4 system-ui,sans-serif;color:var(--text);background:var(--bg)}
+body{margin:0;font:15px/1.5 "Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 button,input,textarea,select{font:inherit;color:inherit}
-a{color:var(--accent-line)}
-/* Anything given a display of its own has to opt back out of it when hidden,
-   or the [hidden] attribute silently stops working on it. */
-[hidden],.view[hidden],.actions[hidden],.tuning[hidden],.chip[hidden],.art img[hidden]{display:none}
-:focus-visible{outline:2px solid var(--accent-line);outline-offset:1px}
-
-/* Each view fills the frame. The panel is resizable, so the card grid takes
-   whatever height is left over and scrolls on its own; nothing else does. */
-.view{height:100%;display:flex;flex-direction:column;gap:10px;padding:12px 14px}
-.row{display:flex;align-items:center;gap:8px}
+a{color:inherit;text-decoration:underline;text-decoration-color:color-mix(in oklab,currentColor 40%,transparent);text-underline-offset:3px}
+a:hover{text-decoration-color:currentColor}
+/* Everything below hands out its own display; [hidden] has to win over all of it. */
+/* biome-ignore lint/complexity/noImportantStyles: [hidden] has to beat every class that sets a display. */
+[hidden]{display:none !important}
+:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 50%,transparent)}
+h1,h2,p{margin:0}
+.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.logo{flex:none;color:var(--fg)}
 .grow{flex:1;min-width:0}
-h1{font-size:14px;margin:0;font-weight:600}
+.note{font-size:13.5px;color:var(--muted-fg)}
+.say{font-size:13.5px;color:var(--muted-fg);white-space:pre-wrap}
+.say.bad{color:var(--destructive)}
 
-button{border:1px solid var(--line);background:var(--field);border-radius:7px;padding:7px 12px;cursor:pointer}
-button:hover:not(:disabled){filter:brightness(1.12)}
-button:disabled{opacity:.55;cursor:default}
-button.primary{background:var(--accent);border-color:var(--accent-line);color:#fff;font-weight:600}
-button.icon{width:30px;height:30px;padding:0;display:grid;place-items:center;font-size:15px;color:var(--dim);background:transparent;border-color:transparent}
-button.icon:hover{background:var(--field);color:var(--text)}
-/* The gear is the only way into Settings; at the shared icon size the glyph
-   rendered smaller than the text beside it and was easy to miss. */
-#open-settings{width:36px;height:36px;font-size:24px;line-height:1}
-input,textarea,select{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%}
+/* Each view fills the frame. The panel is resizable, so the content column
+   takes whatever height is left over and scrolls on its own; nothing else does. */
+.view{height:100%;display:flex;flex-direction:column;gap:14px;padding:16px 18px 18px}
+.scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;margin:0 -4px;padding:0 4px 2px}
 
-/* The want box shares its row with the gear and the capture switch for the open
-   channel, a dot and a word beside it rather than a row of their own. */
-.top{display:flex;gap:6px;flex:none}
-.corner{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;flex:none}
-.chip{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;border-radius:999px;padding:2px 6px;font-size:11px;color:var(--dim);white-space:nowrap}
-button.chip:hover{background:var(--field)}
-.pip{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
-.chip.on{color:var(--text)}
-.chip.on .pip{background:var(--good)}
-/* The open channel and its server, cut short with an ellipsis rather than
-   pushing the want box aside; the chip's title carries the full name. Capped
-   relative to the panel so a narrow panel keeps its want box usable. */
-#toggle{max-width:min(260px,48vw)}
-.chip .where{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--dim)}
-.chip .where::before{content:"·";margin-right:5px}
-.note{font-size:12px;color:var(--dim)}
+/* Buttons, after objekt.my's: an outlined one by default, `primary` filled.
+   Search and Open in match trade the filled style between them as the run
+   moves on, so the plain .btn has to read as an action in its own right. */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:8px;
+  border:1px solid var(--input);background:var(--field);color:var(--fg);font-size:15px;font-weight:500;white-space:nowrap;
+  cursor:pointer;box-shadow:var(--shadow);transition:background-color .15s ease,color .15s ease,opacity .15s ease}
+.btn:hover:not(:disabled){background:color-mix(in oklab,var(--fg) 8%,var(--field))}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-fg)}
+.btn.primary:hover:not(:disabled){background:color-mix(in oklab,var(--primary) 88%,var(--bg))}
+.btn.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--muted-fg)}
+.btn.ghost:hover:not(:disabled){background:var(--accent);color:var(--fg)}
+.btn.sm{height:36px;padding:0 14px;gap:7px;font-size:14px}
+.btn.xs{height:30px;padding:0 11px;gap:6px;font-size:13.5px;border-radius:6px}
+.btn:disabled{opacity:.5;cursor:default}
+.icon-btn{width:36px;height:36px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--muted-fg);
+  display:grid;place-items:center;cursor:pointer;flex:none;transition:background-color .15s,color .15s}
+.icon-btn:hover{background:var(--accent);color:var(--fg)}
+.icon-btn .i{width:20px;height:20px}
+.link{border:0;background:none;padding:0;font-size:13.5px;color:var(--muted-fg);cursor:pointer;text-decoration:underline;
+  text-decoration-color:color-mix(in oklab,currentColor 40%,transparent);text-underline-offset:3px;border-radius:4px}
+.link:hover{color:var(--fg)}
+/* Icons on buttons whose label panel.ts rewrites, drawn as masks so a
+   textContent update does not wipe them. */
+.btn[data-icon]::before{content:"";width:17px;height:17px;flex:none;background:currentColor;
+  -webkit-mask:var(--glyph) center/contain no-repeat;mask:var(--glyph) center/contain no-repeat}
+.btn[data-icon="search"]{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7.5'/%3E%3Cpath d='m20.5 20.5-4-4'/%3E%3C/svg%3E")}
+.btn[data-icon="play"]{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z'/%3E%3C/svg%3E")}
+.btn[data-icon="stop"]{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Crect x='6' y='6' width='12' height='12' rx='2'/%3E%3C/svg%3E")}
+.btn[data-icon="open"]{flex-direction:row-reverse;--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17 17 7M8 7h9v9'/%3E%3C/svg%3E")}
+/* While a run is going, Search's magnifier turns into a spinner. */
+.btn[data-busy="1"]::before{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M21 12a9 9 0 1 1-6.2-8.56'/%3E%3C/svg%3E");animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(1turn)}}
 
-.warn{border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--warn-text)}
-.warn a{color:inherit}
+input,textarea,select{background:var(--field);border:1px solid var(--input);border-radius:8px;padding:7px 12px;width:100%;
+  box-shadow:var(--shadow);transition:border-color .15s,box-shadow .15s}
+input::placeholder,textarea::placeholder{color:var(--muted-fg);opacity:.8}
+input:focus-visible,textarea:focus-visible,select:focus-visible{border-color:var(--ring)}
+input[type=checkbox]{width:18px;height:18px;margin:0;padding:0;flex:none;box-shadow:none;accent-color:var(--fg);cursor:pointer}
+select{height:40px;padding:0 12px}
+input[type=range]{padding:0;border:0;background:transparent;box-shadow:none;accent-color:var(--fg)}
 
-.wants{position:relative;flex:1;min-width:0}
-.wants textarea{height:80px;resize:none;padding-bottom:18px;display:block}
-.wants .count{position:absolute;right:9px;bottom:5px;font-size:11px;color:var(--dim);pointer-events:none}
-.wants .count.none{color:var(--bad)}
-.wants .restore{position:absolute;left:9px;bottom:3px;border:0;background:none;padding:0 2px;font-size:11px;color:var(--accent-line);border-radius:4px}
-/* A hunt sent from objekt.my: one line, with Undo in the restore link's style. */
-.hunt-note{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin:6px 0 0;font-size:12px;color:var(--dim)}
-.hunt-note[hidden]{display:none}
-.hunt-note span{flex:1 1 auto;min-width:0}
-.hunt-note .restore{border:0;background:none;padding:0 2px;font-size:11px;color:var(--accent-line);border-radius:4px}
+.banner{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);background:var(--card);border-radius:10px;
+  padding:10px 12px;font-size:13.5px;color:var(--muted-fg)}
+.banner .i{margin-top:1px}
+.banner.warn{border-color:var(--warn-line);background:var(--warn-bg);color:var(--warn-fg)}
+.check{display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:1.45;cursor:pointer}
+.check input{margin-top:1px}
 
-/* The want list as cards. The art is the thing people recognise; the name
-   under it is there for the cards the catalogue has no picture for. */
-.tiles{flex:1 1 auto;min-height:96px;overflow-y:auto;margin:0;padding:3px;list-style:none;
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:10px 8px;align-content:start}
+/* ---- Before you start ----------------------------------------------------
+   One screen, the way the well-liked extensions do a first run: a picture of
+   what it does, a headline, three points a glance can take in, one button.
+   Everything both stores ask a disclosure to say is still here — what is read,
+   where it is kept, where it goes and what is never touched — in a line each
+   rather than a paragraph. */
+#consent{gap:16px}
+#consent .scroll{gap:18px;align-items:center}
+.welcome{width:100%;max-width:560px;display:flex;flex-direction:column;gap:18px}
+.hero-art{position:relative;display:flex;align-items:center;justify-content:center;gap:18px;padding:22px 18px;border:1px solid var(--border);
+  border-radius:16px;overflow:hidden;
+  background:radial-gradient(120% 90% at 78% 50%,color-mix(in oklab,var(--fg) 7%,transparent),transparent 60%),var(--card)}
+.post{display:flex;gap:10px;padding:12px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--border);
+  font-size:13px;line-height:1.5;color:var(--fg);box-shadow:0 6px 18px rgb(0 0 0 / 18%);flex:none}
+.post .avatar{width:30px;height:30px;border-radius:50%;background:#5865f2;flex:none;display:grid;place-items:center;color:#fff}
+.post .avatar .i{width:17px;height:17px}
+.post p{white-space:nowrap}
+.post-head b{font-weight:600}
+.post-head span{margin-left:7px;font-size:11.5px;color:var(--muted-fg)}
+.post .kw{margin-top:3px;font-size:11.5px;font-weight:700;letter-spacing:.04em;color:var(--muted-fg)}
+.post mark{background:var(--fg);color:var(--bg);border-radius:5px;padding:0 5px;font-weight:600}
+.flow{width:34px;height:16px;flex:none;color:var(--muted-fg);fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cards{position:relative;width:150px;height:118px;flex:none}
+/* Objekt-shaped cards, drawn rather than shipped: a backdrop, a figure and
+   the coloured band down the side every objekt has. */
+.mini{position:absolute;top:2px;width:72px;height:111px;border-radius:9px;overflow:hidden;border:1px solid rgb(0 0 0 / 12%);
+  /* The band, then a soft-focus "photo" of two pastel glows on a pale backdrop. */
+  background:
+    linear-gradient(to left,var(--band) 0 12%,transparent 12%),
+    radial-gradient(62% 42% at 38% 38%,var(--glow1),transparent 72%),
+    radial-gradient(58% 40% at 58% 78%,var(--glow2),transparent 72%),
+    linear-gradient(170deg,#fafafa,#e4e4ea);
+  box-shadow:0 8px 20px rgb(0 0 0 / 28%)}
+/* The band's lettering: a member name up top and the group at the foot. */
+.mini::before,.mini::after{content:"";position:absolute;right:3px;width:3px;border-radius:2px;background:rgb(0 0 0 / 45%)}
+.mini::before{top:8px;height:22px}
+.mini::after{bottom:8px;height:12px}
+.mini.c1{left:0;transform:rotate(-9deg);--band:#f472b6;--glow1:#fbcfe8;--glow2:#e9d5ff}
+.mini.c3{right:0;transform:rotate(9deg);--band:#facc15;--glow1:#fef08a;--glow2:#bae6fd}
+.mini.c2{left:39px;z-index:1;--band:#4ade80;--glow1:#bbf7d0;--glow2:#fde68a;transform:translateY(-4px)}
+.hit{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--good);color:#052e16;
+  display:grid;place-items:center;border:2px solid var(--card)}
+.hit .i{width:13px;height:13px;stroke-width:3.2}
+/* On the front card's corner, outside it so the card's clipping leaves it whole. */
+.cards .hit{top:-10px;left:99px;z-index:2}
+@media (max-width:480px){.hero-art{zoom:.8}}
+@media (max-width:380px){.hero-art .post,.hero-art .flow{display:none}}
+.welcome h1{font-size:24px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-align:center}
+.welcome .lead{font-size:15px;color:var(--muted-fg);text-align:center;max-width:54ch;margin:-8px auto 0}
+.facts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.facts li{display:flex;gap:14px;align-items:flex-start}
+.facts .ic{width:36px;height:36px;border-radius:10px;background:var(--muted);color:var(--fg);display:grid;place-items:center;flex:none}
+.facts .ic .i{width:18px;height:18px}
+.facts strong{display:block;font-size:15px;font-weight:600;line-height:1.35;color:var(--fg)}
+.facts .desc{display:block;margin-top:2px;font-size:13.5px;color:var(--muted-fg)}
+.consent-foot{display:flex;flex-direction:column;gap:12px;flex:none;width:100%;max-width:560px;align-self:center}
+.consent-foot .btn{width:100%}
+.consent-foot .note{text-align:center}
+
+/* ---- Main ------------------------------------------------------------------ */
+.head{display:flex;align-items:center;gap:10px;flex:none;min-height:36px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;letter-spacing:-.01em;margin-right:4px}
+.brand .logo{width:22px;height:22px}
+.brand span{white-space:nowrap}
+/* Narrow: the mark alone, so the channel chip keeps its room. */
+@media (max-width:460px){.brand span{display:none}}
+/* The capture switch for the open channel: a dot, a word and where, cut short
+   with an ellipsis rather than pushing the gear away; the title carries the
+   full name. */
+.chip{display:inline-flex;align-items:center;gap:8px;height:32px;max-width:100%;min-width:0;padding:0 11px 0 10px;border:1px solid var(--border);
+  border-radius:999px;background:transparent;font-size:13.5px;color:var(--muted-fg);white-space:nowrap;cursor:default}
+button.chip{cursor:pointer;transition:background-color .15s,border-color .15s}
+button.chip:hover{background:var(--accent);border-color:var(--input)}
+.pip{width:8px;height:8px;border-radius:50%;background:var(--muted-fg);opacity:.6;flex:none}
+.chip.on{color:var(--fg)}
+.chip.on .pip{background:var(--good);opacity:1;box-shadow:0 0 0 3px color-mix(in oklab,var(--good) 22%,transparent)}
+.chip .where{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--muted-fg)}
+.chip .where::before{content:"·";margin-right:6px}
+#toggle{max-width:min(340px,70vw)}
+
+.hunt-note{display:flex;align-items:center;gap:10px;flex:none;border:1px solid var(--border);background:var(--card);border-radius:10px;padding:8px 8px 8px 12px;font-size:13.5px;color:var(--muted-fg)}
+.hunt-note .logo{width:16px;height:16px}
+.hunt-note span{flex:1 1 auto;min-width:0;color:var(--fg)}
+.hunt-note .icon-btn{width:26px;height:26px}
+.hunt-note .icon-btn .i{width:14px;height:14px}
+
+.field{display:flex;flex-direction:column;gap:8px;flex:none}
+.field-head{display:flex;align-items:baseline;gap:8px;min-height:22px}
+.field-head label{font-size:15px;font-weight:600}
+.count{font-size:13.5px;color:var(--muted-fg);font-variant-numeric:tabular-nums}
+.count.none{color:var(--destructive)}
+.field-head .hint{margin-left:auto;font-size:13px;color:var(--muted-fg);opacity:0;transition:opacity .15s}
+.field:focus-within .hint,.field.ask .hint{opacity:1}
+/* Narrow: the question keeps its line; the placeholder carries the format. */
+@media (max-width:460px){.field-head .hint{display:none}}
+/* A box that reads as one to type in: a search glyph, a placeholder bright
+   enough to see, and a border that is there rather than implied. */
+.input{position:relative}
+.input > .i{position:absolute;left:13px;top:12px;width:18px;height:18px;color:var(--muted-fg);pointer-events:none;transition:color .15s}
+.field textarea{height:84px;resize:none;display:block;line-height:1.45;padding:9px 12px 9px 40px;border-color:color-mix(in oklab,var(--fg) 22%,transparent)}
+.field textarea::placeholder{color:var(--muted-fg);opacity:1}
+.field textarea:focus-visible{border-color:color-mix(in oklab,var(--fg) 55%,transparent)}
+.field:focus-within .input > .i{color:var(--fg)}
+/* When the want list is the one thing missing, the box is the next step: it
+   stands out like a field that is waiting, without moving. */
+.field.ask textarea{border-color:color-mix(in oklab,var(--fg) 55%,transparent);
+  box-shadow:0 0 0 4px color-mix(in oklab,var(--fg) 8%,transparent)}
+.field.ask .input > .i{color:var(--fg)}
+.field.ask textarea:focus-visible{box-shadow:0 0 0 4px color-mix(in oklab,var(--fg) 14%,transparent)}
+
+
+
+/* The content column: the getting-started steps until the basics are in place,
+   then the want list as cards. */
+.content{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;margin:0 -6px;padding:2px 6px 6px}
+
+/* Getting started, in the shape of objekt.my/match's own steps: a number per
+   step, the one to do now raised into a card, finished ones down to a line. */
+.guide{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;flex:none}
+.guide-title{font-size:13.5px;color:var(--muted-fg);margin:0 0 6px 2px}
+.step{display:flex;gap:14px;align-items:flex-start;padding:12px 14px;border:1px solid transparent;border-radius:12px}
+.step[data-state="current"]{border-color:var(--border);background:var(--card)}
+.mark{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:none;font-size:13.5px;font-weight:600;
+  background:var(--muted);color:var(--muted-fg);font-variant-numeric:tabular-nums}
+.mark .i{width:16px;height:16px;stroke-width:2.5;display:none}
+.step[data-state="current"] .mark{background:var(--fg);color:var(--bg)}
+.step[data-state="done"] .mark{background:transparent;border:1px solid var(--border);color:var(--good)}
+.step[data-state="done"] .mark .i{display:block}
+.step[data-state="done"] .mark .n{display:none}
+.step-body{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1;padding-top:2px}
+.step h2{font-size:15px;font-weight:600;line-height:1.35}
+.step p{font-size:14px;color:var(--muted-fg)}
+.step .do{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.step[data-state="done"] h2,.step[data-state="todo"] h2{color:var(--muted-fg);font-weight:500}
+.step:not([data-state="current"]) .detail{display:none}
+/* With cards on screen, only the step still missing stays, as one line. */
+.guide.compact .guide-title,.guide.compact .step:not([data-state="current"]){display:none}
+
+/* The want list as cards, after objekt.my's grid. The art is the thing people
+   recognise; the name under it is there for the cards it has no picture for.
+   Sized for eight a row in the default panel (760px) and pop-out (820px),
+   scrollbar or not. */
+.tiles{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(79px,1fr));gap:14px 10px;align-content:start}
+.tiles:empty{display:none}
 .tile{position:relative;min-width:0}
-.art{aspect-ratio:5.5/8.5;border-radius:6px;overflow:hidden;background:var(--raised);border:1px solid var(--line);
+.art{position:relative;aspect-ratio:582/900;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:var(--muted);
   display:grid;place-items:center;transition:opacity .25s ease}
-.art img{width:100%;height:100%;object-fit:cover;display:block}
-.art .code{font-size:11px;font-weight:600;color:var(--dim);text-align:center;padding:2px}
-.name{display:block;margin-top:3px;font-size:11px;line-height:1.3;color:var(--dim);text-align:center}
+.art::before{content:"";position:absolute;inset:0;background:var(--muted)}
+.art[data-art="loading"]::before{animation:pulse 1s ease-in-out infinite alternate}
+.art[data-art="loaded"]::before{display:none}
+.art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .35s ease}
+.art[data-art="loaded"] img{opacity:1}
+.art .code{position:relative;display:none;font-size:12.5px;font-weight:600;color:var(--muted-fg);text-align:center;padding:4px}
+.art[data-art="none"] .code{display:block}
+.name{display:block;margin-top:5px;font-size:12.5px;line-height:1.3;text-align:center;color:var(--muted-fg)}
 .name span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.name span:first-child{color:var(--text)}
-.badge{position:absolute;top:4px;right:4px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;
-  background:var(--accent);color:#fff;font-size:11px;font-weight:700;line-height:20px;text-align:center;
-  font-variant-numeric:tabular-nums;box-shadow:0 1px 3px rgba(0,0,0,.4)}
-/* Take a card out of the search without editing the text: a red ✕ over the
-   badge corner, shown on hover or keyboard focus. */
-.remove{position:absolute;top:1px;right:1px;z-index:2;width:24px;height:24px;padding:0;border-radius:50%;
-  border:2px solid var(--bg);background:#dc2626;color:#fff;font-size:11px;font-weight:700;line-height:1;
-  display:grid;place-items:center;opacity:0;pointer-events:none;transition:opacity .12s ease;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.name span:first-child{color:var(--fg)}
+/* How many posts from the last search have it, where objekt.my puts a count. */
+.badge{position:absolute;z-index:1;left:6px;bottom:6px;min-width:22px;height:22px;padding:0 7px;border-radius:999px;
+  background:#000;border:1px solid rgb(255 255 255 / 30%);color:#fff;font-size:12.5px;font-weight:700;line-height:20px;
+  text-align:center;font-variant-numeric:tabular-nums}
+.badge.zero{background:rgb(0 0 0 / 55%);color:rgb(255 255 255 / 70%);border-color:rgb(255 255 255 / 18%)}
+/* Take a card out of the search without editing the text, on hover or focus. */
+.remove{position:absolute;top:6px;right:6px;z-index:2;width:22px;height:22px;padding:0;border:0;border-radius:50%;
+  background:color-mix(in oklab,var(--destructive) 90%,transparent);color:#fff;display:grid;place-items:center;cursor:pointer;
+  opacity:0;pointer-events:none;transition:opacity .12s ease}
+.remove .i{width:12px;height:12px;stroke-width:3}
 .tile:hover .remove,.remove:focus-visible{opacity:1;pointer-events:auto}
-.remove:hover:not(:disabled){filter:none;background:#b91c1c}
-.badge.zero{background:var(--raised);color:var(--dim);border:1px solid var(--line);line-height:18px;box-shadow:none}
 .tile[data-state="queued"] .art{opacity:.35}
 .tile[data-state="recent"] .art{opacity:.7}
-.tile[data-state="active"] .art{outline:2px solid var(--accent-line);outline-offset:1px;animation:pulse 1.2s ease-in-out infinite}
-@keyframes pulse{50%{opacity:.55}}
-@media (prefers-reduced-motion:reduce){.tile[data-state="active"] .art{animation:none}}
-/* With no wants yet, placeholder cards stand where the real ones will go. */
-.skeletons{overflow:hidden}
-.tiles:empty{display:none}
-.tiles:not(:empty) + .skeletons{display:none}
-.skeletons .art{border-style:dashed}
-.skeletons .art,.skeletons .bar{background:linear-gradient(100deg,var(--raised) 30%,var(--field) 50%,var(--raised) 70%) 0 0/300% 100%;
-  animation:shimmer 1.6s ease-in-out infinite}
-.skeletons .bar{display:block;height:8px;border-radius:4px;margin:5px auto 0;width:70%}
-.skeletons .bar + .bar{width:45%;margin-top:4px}
-@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
-@media (prefers-reduced-motion:reduce){.skeletons .art,.skeletons .bar{animation:none}}
+.tile[data-state="active"] .art{outline:2px solid var(--fg);outline-offset:2px;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{to{opacity:.5}}
+@media (prefers-reduced-motion:reduce){
+  .tile[data-state="active"] .art,.art[data-art="loading"]::before,.btn[data-busy="1"]::before{animation:none}
+}
 
-.foot{flex:none;display:flex;flex-direction:column;gap:8px}
-.meter{height:4px;border-radius:2px;background:var(--field);overflow:hidden}
-.meter i{display:block;height:100%;width:0;background:var(--accent-line);transition:width .3s ease}
-.say{margin:0;font-size:12px;color:var(--dim);white-space:pre-wrap;min-height:1.4em}
-.say.bad{color:var(--bad)}
-.actions{display:flex;gap:8px}
-.actions .primary{flex:1}
-/* Search and Open in match trade the filled button: Open while the results
-   match the cards, Search once the cards or pages change. Whichever is second
-   is outlined in the accent rather than plain field grey, so it still reads as
-   an action and not as a leftover. */
-#run-search:not(.primary),#open-match:not(.primary){min-width:128px;background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-text);font-weight:600}
+/* Where the cards will go, until there are some: placeholder cards on the
+   card grid itself, so they stand exactly where the real ones will. */
+.empty{display:flex;flex-direction:column;gap:14px}
+/* A small row of them, left-aligned, as many as fit on one line. */
+/* Exactly one card tall; the row gap pushes any wrapped row out of sight. */
+.ghosts{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:60px 10px;height:calc(60px * 900 / 582 + 24px);overflow:hidden}
+.ghosts li{width:60px;display:flex;flex-direction:column;align-items:center;gap:5px}
+.ghosts .art{width:100%;border-style:dashed;border-color:color-mix(in oklab,var(--fg) 18%,transparent);background:var(--card)}
+.ghosts .art::before{display:none}
+.ghosts .bar{display:block;height:7px;border-radius:4px;background:var(--muted);width:66%}
+.ghosts .bar + .bar{width:40%;margin-top:-1px}
+.empty-title{font-size:15px;font-weight:600}
+.empty .note{font-size:14px;margin-top:-10px}
 
-/* Settings: everything a first search does not need. */
-.scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-right:2px}
-.setting > label,.setting > .label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
-.inline{display:flex;gap:6px}
-.inline input{flex:1}
-.inline input[type=number]{flex:none;width:72px}
-input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--accent-line)}
+/* ---- Footer ---------------------------------------------------------------- */
+.foot{flex:none;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--border);margin:0 -18px;padding:14px 18px 0}
+/* Nothing to say and nothing to press: no divider over an empty footer. */
+.foot.empty{border-top:0;padding-top:0}
+.meter{height:3px;border-radius:2px;background:var(--muted);overflow:hidden;margin-top:-4px}
+.meter i{display:block;height:100%;width:0;background:var(--fg);border-radius:2px;transition:width .3s ease}
+.foot .say{min-height:1.45em}
+.foot .say:empty{display:none}
+/* One row: whichever button is filled takes the room, the others size to fit. */
+.buttons{display:flex;gap:8px}
+.buttons .actions{display:contents}
+.buttons .btn{flex:none}
+.buttons .btn.primary{flex:1 1 0;min-width:0}
+/* A running search's button is held disabled, but it is the news, not a dead end. */
+.btn[data-busy="1"]:disabled{opacity:.75}
+
+/* The search agreement, asked once, the first time Search is pressed: in
+   place of the buttons, in the panel, never over Discord. */
+.gate{display:flex;flex-direction:column;gap:12px;border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:12px;padding:14px 16px}
+.gate .grow{display:flex;flex-direction:column;gap:4px}
+.gate strong{font-size:15px;font-weight:600;color:var(--fg)}
+.gate p{font-size:14px;color:var(--muted-fg)}
+.gate-do{display:flex;justify-content:flex-end;gap:8px}
+.gate-do .primary{flex:1 1 auto;max-width:280px}
+
+/* How a run is tuned, always on show: pace, pages and skip-recent, then the
+   recommendation and the time estimate, then any warning. The last two lines
+   keep their height when empty, so nothing above the Search button moves as
+   they fill in or clear under a dragged slider. */
+.tuning{display:flex;flex-direction:column;gap:6px;font-size:13.5px;color:var(--muted-fg)}
+.tuning-grid{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px 20px}
+.tuning-grid > *{min-height:32px;display:flex;align-items:center}
+.tuning label{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.tuning .pace{min-width:0}
+.tuning input[type=range]{flex:1 1 72px;min-width:72px;width:72px}
+.tuning input[type=number]{width:60px;height:32px;padding:0 8px}
+.tuning output{min-width:4.6em;font-variant-numeric:tabular-nums;color:var(--fg)}
+.tuning-rec{min-height:30px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tuning-eta{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--fg)}
+.tuning-warn{color:var(--warn-fg);min-height:1.45em}
+@media (max-width:440px){.tuning-grid{grid-template-columns:minmax(0,1fr)}}
+
 /* The pace slider's fill is coloured by how much of the page budget the run
    uses (set from panel.ts), over a plain track. The fill stops at the thumb's
    centre, which travels 7px in from either end. */
-input[type=range].risk{--risk:hsl(120 80% 50%);--fill:0;appearance:none;-webkit-appearance:none;height:14px}
+input[type=range].risk{--risk:hsl(120 80% 50%);--fill:0;appearance:none;-webkit-appearance:none;height:16px}
 input[type=range].risk::-webkit-slider-runnable-track{height:4px;border-radius:2px;
   background:linear-gradient(to right,var(--risk) calc(7px + (100% - 14px) * var(--fill)),var(--track) 0)}
-input[type=range].risk::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--track);border:3px solid var(--risk)}
+input[type=range].risk::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--bg);border:3px solid var(--risk)}
 input[type=range].risk::-moz-range-track{height:4px;border-radius:2px;background:var(--track)}
 input[type=range].risk::-moz-range-progress{height:4px;border-radius:2px;background:var(--risk)}
-input[type=range].risk::-moz-range-thumb{box-sizing:border-box;width:14px;height:14px;border-radius:50%;background:var(--track);border:3px solid var(--risk)}
-.check{display:flex;align-items:center;gap:8px;font-size:12px}
-.check input{width:auto;margin:0;accent-color:var(--accent-line)}
-details{border-top:1px solid var(--line);padding-top:12px}
-summary{cursor:pointer;font-size:12px;color:var(--dim)}
-.tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.tools button{font-size:12px;padding:5px 9px}
-code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-radius:4px;font-size:11px}
-
-/* The settings a run is tuned with, mirrored from Settings onto the main
-   view. Two rows on a grid — the pace and pages knobs, then the estimate and
-   skip-recent under them, column for column — dropping to one column only
-   when the panel is too narrow for two. Every cell and the warning line keep
-   their height when empty, so nothing above the Search button moves as they
-   fill in or clear. */
-.tuning{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--dim)}
-.tuning-grid{display:grid;grid-template-columns:minmax(0,360px) auto;justify-content:start;align-items:center;gap:6px 20px}
-.tuning-grid > *{min-height:20px;display:flex;align-items:center}
-.tuning label{display:flex;align-items:center;gap:6px;white-space:nowrap}
-.tuning .pace{min-width:0}
-.tuning input[type=range]{flex:1 1 72px;min-width:72px;width:72px}
-.tuning input[type=number]{width:52px;padding:3px 6px}
-.tuning input[type=checkbox]{width:auto;margin:0;accent-color:var(--accent-line)}
-.tuning output{min-width:4.5em;font-variant-numeric:tabular-nums}
-.tuning-eta{font-variant-numeric:tabular-nums}
-.tuning-warn{min-height:20px;margin:0;color:var(--warn-text)}
-/* Keeps its height when empty, like the warning under it. */
-.tuning-rec{min-height:24px;margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.tuning-rec button{font-size:12px;padding:2px 8px}
-/* Two columns need about 370px: Pace's label, shortest slider and value
-   beside the Pages column. Narrower than that, one column beats a crushed
-   slider. */
-@media (max-width:380px){.tuning-grid{grid-template-columns:minmax(0,1fr)}}
+input[type=range].risk::-moz-range-thumb{box-sizing:border-box;width:14px;height:14px;border-radius:50%;background:var(--bg);border:3px solid var(--risk)}
 
 /* The pause after a rate limit. The countdown is its own line so it can be
    read at a glance; the override sits behind a warning that has to be opened,
    read for a few seconds, and ticked. */
 .cooldown{display:flex;flex-direction:column;gap:8px}
-.cooldown[hidden],.cooldown [hidden]{display:none}
-.cooldown-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.cooldown-timer{margin:0;font-size:13px;color:var(--warn-text)}
-.cooldown-timer strong{font-size:16px;font-variant-numeric:tabular-nums}
-.cooldown ul{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
-.cooldown .check{font-size:12px}
-.cooldown .check:has(input:disabled){opacity:.6}
+.cooldown-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:10px;padding:8px 8px 8px 12px}
+.cooldown-timer{font-size:14px;color:var(--warn-fg)}
+.cooldown-timer strong{font-size:17px;font-variant-numeric:tabular-nums}
+.cooldown .banner{flex-direction:column;gap:4px}
+.cooldown ul{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.cooldown .check:has(input:disabled){opacity:.6;cursor:default}
 
-#consent ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
-#consent .scroll{gap:10px}
+/* ---- Settings -------------------------------------------------------------- */
+.head h1{font-size:17px;font-weight:600}
+summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between}
+.group{display:flex;flex-direction:column;gap:12px;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px}
+.group > h2,.group > summary{font-size:15px;font-weight:600}
+.setting{display:flex;flex-direction:column;gap:6px}
+.setting > label,.setting > .lbl{font-size:14px;color:var(--fg)}
+.inline{display:flex;gap:8px}
+.inline input{flex:1;height:40px}
+.inline input[type=number]{flex:none;width:80px}
+details.group{gap:0}
+details.group[open]{gap:12px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";width:14px;height:14px;background:var(--muted-fg);transition:transform .15s;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center/contain no-repeat}
+details[open] summary::after{transform:rotate(180deg)}
+.tools{display:flex;flex-wrap:wrap;gap:6px}
+.tools .danger{color:var(--destructive)}
+code{background:var(--muted);border:1px solid var(--border);padding:0 5px;border-radius:5px;font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
+#diagnosis:not(:empty){font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.5;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--fg)}
+#diagnosis.bad{color:var(--destructive)}
 </style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4-4"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-discord" viewBox="0 0 24 24"><path stroke="none" fill="currentColor" d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.028C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .078-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.029 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.055c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.029zM8.02 15.331c-1.183 0-2.157-1.086-2.157-2.42 0-1.333.956-2.418 2.157-2.418 1.21 0 2.176 1.095 2.157 2.419 0 1.333-.956 2.419-2.157 2.419zm7.975 0c-1.183 0-2.157-1.086-2.157-2.42 0-1.333.955-2.418 2.157-2.418 1.21 0 2.176 1.095 2.157 2.419 0 1.333-.946 2.419-2.157 2.419z"/></symbol>
+  <symbol id="i-logo" viewBox="18 16 64 66">
+    <mask id="logo-cut"><rect x="0" y="0" width="100" height="100" fill="#fff"/><polygon points="29.46,44.5 55.5,44.5 55.5,69.92 49.92,75.5 24.5,75.5 24.5,49.46" fill="#000"/></mask>
+    <g mask="url(#logo-cut)" fill="currentColor" stroke="none"><polygon points="43.04,18 80,18 80,54.96 72.96,62 36,62 36,25.04"/><polygon points="26.4,40 60,40 60,72.8 52.8,80 20,80 20,46.4"/></g>
+  </symbol>
+</svg>
 
 <section id="consent" class="view" hidden>
   <div class="scroll">
-    <h1>Before you start</h1>
-    <ul>
-      <li>Reads the <strong>name, text and time</strong> of posts in the server channels you open, and in searches you run. Capture is <strong>on in every server channel</strong> until you pause it there. Direct messages are never read.</li>
-      <li>Keeps them <strong>in this browser</strong>.</li>
-      <li>Sends them to <strong>objekt.my/match</strong> only when you press <em>Open in match</em>.</li>
-      <li>Gets card pictures for your wants, and your inventory if you add a Cosmo nickname, from <strong>objekt.my</strong>.</li>
-      <li>Never reads your Discord token, calls Discord's API, or posts anything.</li>
-    </ul>
-    <p class="warn"><strong>Read this first:</strong> capture reads the visible posts in every server channel you open, including other people's names and messages, without asking again per channel. Captured content may include personal or sensitive information. Pause it in any channel where you are not allowed to collect and handle those posts.</p>
-    <p class="note">Other people's posts are their words: keep them to yourself.
-    <a href="https://objekt.my/extension-privacy" target="_blank" rel="noreferrer">Privacy policy</a></p>
-    <label class="check"><input type="checkbox" id="accept-capture-risk"> I understand that capture reads visible posts in every server channel I open until I pause it, and I accept responsibility for using it only where I am allowed.</label>
+    <div class="welcome">
+      <div class="hero-art" role="img" aria-label="A Discord trade post, and the objekt in it that you are looking for">
+        <div class="post" aria-hidden="true">
+          <span class="avatar"><svg class="i" aria-hidden="true"><use href="#i-discord"/></svg></span>
+          <div>
+            <p class="post-head"><b>trader</b><span>Today at 3:41</span></p>
+            <p class="kw">HAVE</p>
+            <p>SeoYeon <mark>CC101</mark> CC103</p>
+            <p class="kw">WANT</p>
+            <p>Kaede AA101</p>
+          </div>
+        </div>
+        <svg class="flow" viewBox="0 0 34 16" aria-hidden="true"><path d="M2 8h28M24 2l6 6-6 6"/></svg>
+        <div class="cards" aria-hidden="true">
+          <span class="mini c1"></span><span class="mini c3"></span>
+          <span class="mini c2"></span>
+          <span class="hit"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </div>
+      </div>
+      <h1>Find who has your missing objekts</h1>
+      <p class="lead">Objekt Match keeps the Discord trade posts you scroll past, so objekt.my can show you who has what you need.</p>
+      <ul class="facts">
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg></span><span><strong>Reads the trade posts you see</strong><span class="desc">Names, messages and times, in every server channel you open and every search you run, until you pause it there. Never your DMs.</span></span></li>
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg></span><span><strong>Keeps them in this browser</strong><span class="desc">Sent to objekt.my/match only when you press Open in match. Card pictures, and your Cosmo inventory if you add it, come from objekt.my.</span></span></li>
+        <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg></span><span><strong>Never touches your Discord account</strong><span class="desc">No token, no Discord API, and it never posts anything.</span></span></li>
+      </ul>
+    </div>
   </div>
-  <button type="button" class="primary" id="accept-capture" disabled>I agree</button>
+  <div class="consent-foot">
+    <label class="check"><input type="checkbox" id="accept-capture-risk"> <span>I'll pause it in any channel where I'm not allowed to collect other people's posts.</span></label>
+    <button type="button" class="btn primary" id="accept-capture" disabled>Agree and continue</button>
+    <p class="note"><a href="https://objekt.my/extension-privacy" target="_blank" rel="noreferrer">Privacy policy</a></p>
+  </div>
 </section>
 
 <section id="main" class="view" hidden>
-  <div class="warn" id="health" hidden></div>
-  <div class="top">
-    <div class="wants">
-      <textarea id="wants" aria-label="Objekts you are looking for" spellcheck="false" placeholder="seoyeon cc101 102 bb101 102&#10;yy cc101-108&#10;kaede, nakyoung aa101"></textarea>
+  <div class="banner warn" id="health" hidden></div>
+  <div class="head">
+    <span class="brand" id="brand" title="Objekt Match" hidden><svg class="logo" aria-hidden="true"><use href="#i-logo"/></svg><span>Objekt Match</span></span>
+    <button type="button" class="chip" id="toggle" hidden><span class="pip"></span><span id="channel-state"></span><span class="where" id="channel-name" hidden></span></button>
+    <span class="chip" id="no-channel" hidden><span class="pip"></span><span id="no-channel-text">No channel</span></span>
+    <span class="grow"></span>
+    <button type="button" class="icon-btn" id="open-settings" title="Settings" aria-label="Settings"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg></button>
+  </div>
+  <p class="hunt-note" id="hunt-note" role="status" hidden>
+    <svg class="logo" aria-hidden="true"><use href="#i-logo"/></svg>
+    <span id="hunt-text"></span>
+    <button type="button" class="btn xs ghost" id="undo-hunt" hidden><svg class="i" aria-hidden="true"><use href="#i-undo"/></svg>Undo</button>
+    <button type="button" class="icon-btn" id="dismiss-hunt" aria-label="Dismiss" title="Dismiss"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </p>
+  <div class="field" id="wants-field">
+    <div class="field-head">
+      <label for="wants" id="wants-label">What are you looking for?</label>
       <span class="count" id="wants-count"></span>
-      <button type="button" class="restore" id="restore-wants" hidden></button>
+      <button type="button" class="link" id="restore-wants" hidden></button>
+      <span class="hint" id="wants-hint">One objekt or range per line</span>
     </div>
-    <div class="corner">
-      <button type="button" class="icon" id="open-settings" title="Settings" aria-label="Settings">⚙</button>
-      <button type="button" class="chip" id="toggle" hidden><span class="pip"></span><span id="channel-state"></span><span class="where" id="channel-name" hidden></span></button>
-      <span class="chip" id="no-channel" title="Open a trade channel in Discord" hidden><span class="pip"></span>No channel</span>
+    <div class="input">
+      <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+      <textarea id="wants" spellcheck="false" placeholder="seoyeon cc101 102&#10;yy cc101-108"></textarea>
     </div>
   </div>
-  <p class="hunt-note" id="hunt-note" role="status" hidden><span id="hunt-text"></span><button type="button" class="restore" id="undo-hunt" hidden>Undo, restore my previous list</button><button type="button" class="restore" id="dismiss-hunt" aria-label="Dismiss" title="Dismiss">✕</button></p>
-  <ul class="tiles" id="tiles" aria-label="Your wants"></ul>
-  <ul class="tiles skeletons" aria-hidden="true">
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-    <li class="tile"><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
-  </ul>
-  <div class="foot">
+
+  <div class="content" id="content">
+    <ol class="guide" id="guide" hidden aria-label="Getting started">
+      <li class="guide-title" aria-hidden="true">Get started</li>
+      <li class="step" id="guide-discord">
+        <span class="mark"><span class="n">1</span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>
+        <div class="step-body">
+          <h2>Open Discord in this browser</h2>
+          <div class="detail">
+            <p>Objekt Match works with Discord on the web, not the desktop app.</p>
+            <div class="do"><button type="button" class="btn sm primary" id="open-discord"><svg class="i" aria-hidden="true"><use href="#i-discord"/></svg>Open Discord</button></div>
+          </div>
+        </div>
+      </li>
+      <li class="step" id="guide-channel">
+        <span class="mark"><span class="n">2</span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>
+        <div class="step-body">
+          <h2 id="guide-channel-title">Go to a trade channel</h2>
+          <div class="detail">
+            <p id="guide-channel-text">Open the server channel where people post their haves and wants. Posts you scroll past are kept from then on. Direct messages are never read.</p>
+            <div class="do"><button type="button" class="btn sm" id="show-discord" hidden><svg class="i" aria-hidden="true"><use href="#i-discord"/></svg>Show Discord</button></div>
+          </div>
+        </div>
+      </li>
+      <li class="step" id="guide-wants">
+        <span class="mark"><span class="n">3</span><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>
+        <div class="step-body">
+          <h2>Add the objekts you're looking for</h2>
+          <div class="detail">
+            <p>Type them in the box above, or pick your missing cards on <a class="collection-link" href="https://objekt.my/collection" target="_blank" rel="noreferrer">objekt.my</a> and press <em>Send to Objekt Match</em>.</p>
+          </div>
+        </div>
+      </li>
+    </ol>
+    <div class="empty" id="empty" hidden>
+      <ul class="ghosts" aria-hidden="true">
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+        <li><div class="art"></div><span class="bar"></span><span class="bar"></span></li>
+      </ul>
+      <p class="empty-title">No results</p>
+      <p class="note">Type something in the box above.</p>
+    </div>
+    <ul class="tiles" id="tiles" aria-label="Your wants"></ul>
+  </div>
+
+  <div class="foot" id="foot">
     <div class="meter" id="search-progress" hidden><i></i></div>
     <p class="say" id="status" role="status"></p>
-    <div id="automation-gate" hidden>
-      <p class="warn">Search types your codes into Discord's search box for you. That is automation, which
-      <a href="https://discord.com/terms" target="_blank" rel="noreferrer">Discord's terms</a> do not allow,
-      and Discord may action accounts for it.</p>
-      <div class="actions" style="margin-top:8px"><button type="button" class="primary" id="accept-automation">I understand, turn on search</button></div>
-    </div>
     <div class="tuning" id="tuning">
       <div class="tuning-grid">
         <label class="pace" title="Lower delays are faster, but may trigger Discord rate limits and a forced wait.">Pace
           <input id="delay-main" class="risk" type="range" min="0" max="60" step="1" value="5" aria-describedby="delay-note">
           <output id="delay-main-value" for="delay-main">+5s/page</output></label>
         <label>Pages per objekt
-          <input id="pages-main" type="number" min="1" max="20" step="1" value="3" aria-describedby="tuning-warn"></label>
-        <span class="tuning-eta" id="tuning-eta" title="Estimated time for this search, from its codes, pace and pages"></span>
+          <input id="pages-main" type="number" min="1" max="20" step="1" value="10" aria-describedby="tuning-warn"></label>
         <label title="Skip codes searched in the last 6 hours"><input type="checkbox" id="skip-recent-main" checked> Skip recent</label>
       </div>
-      <p class="tuning-rec"><span id="tuning-rec-text"></span><button type="button" id="use-recommended" hidden>Use recommended</button></p>
+      <p class="tuning-rec"><span id="tuning-rec-text"></span><button type="button" class="btn xs" id="use-recommended" hidden>Use recommended</button><span class="tuning-eta" id="tuning-eta" title="Estimated time for this search, from its codes, pace and pages"></span></p>
       <p class="tuning-warn" id="tuning-warn" role="status"></p>
     </div>
     <div class="cooldown" id="cooldown" hidden>
       <div class="cooldown-head">
         <p class="cooldown-timer" role="timer">Searching paused for <strong id="cooldown-left">10:00</strong></p>
-        <button type="button" id="cooldown-open" aria-expanded="false" aria-controls="cooldown-warning">Continue anyway…</button>
+        <button type="button" class="btn xs ghost" id="cooldown-open" aria-expanded="false" aria-controls="cooldown-warning">Continue anyway…</button>
       </div>
-      <div class="warn" id="cooldown-warning" hidden>
-        <strong>Discord stopped answering your searches.</strong> That is what a rate limit looks like, and it means Discord has noticed this account searching quickly.
+      <div class="banner warn" id="cooldown-warning" hidden>
+        <span><strong>Discord stopped answering your searches.</strong> That is what a rate limit looks like, and it means Discord has noticed this account searching quickly.</span>
         <ul>
           <li>Searching again now makes it more likely Discord <strong>locks, flags or bans your account</strong>. This extension cannot undo that.</li>
           <li>Waiting out the timer is the safe choice. Searches that start too early usually just stall again.</li>
@@ -275,62 +541,81 @@ code{background:var(--field);border:1px solid var(--line);padding:0 4px;border-r
       </div>
       <label class="check" id="cooldown-ack-row" hidden><input type="checkbox" id="cooldown-ack" disabled> <span id="cooldown-ack-text">I understand the risks to my Discord account and want to search anyway.</span></label>
     </div>
-    <div class="actions" id="actions">
-      <button type="button" id="stop-search" hidden>Stop</button>
-      <button type="button" class="primary" id="run-search">Search</button>
-      <button type="button" class="primary" id="continue-search" hidden>Continue</button>
-      <button type="button" class="primary" id="open-match" hidden>Open in match ↗</button>
+    <div class="gate" id="automation-gate" role="group" aria-labelledby="gate-title" hidden>
+      <div class="grow">
+        <strong id="gate-title">Before your first search</strong>
+        <p>Objekt Match types your codes into Discord's search box and collects the results. That is automation, which <a href="https://discord.com/terms" target="_blank" rel="noreferrer">Discord's terms</a> do not allow, and Discord may action accounts for it.</p>
+      </div>
+      <div class="gate-do">
+        <button type="button" class="btn sm ghost" id="decline-automation">Not now</button>
+        <button type="button" class="btn sm primary" id="accept-automation" data-icon="search">I understand, search</button>
+      </div>
+    </div>
+    <div class="buttons">
+      <div class="actions" id="actions">
+        <button type="button" class="btn" id="stop-search" data-icon="stop" hidden>Stop</button>
+        <button type="button" class="btn primary" id="run-search" data-icon="search">Search</button>
+        <button type="button" class="btn primary" id="continue-search" data-icon="play" hidden>Continue</button>
+      </div>
+      <button type="button" class="btn" id="open-match" data-icon="open" hidden>Open in match</button>
     </div>
   </div>
 </section>
 
 <section id="settings" class="view" hidden>
-  <div class="row">
-    <button type="button" class="icon" id="close-settings" title="Back" aria-label="Back">←</button>
+  <div class="head">
+    <button type="button" class="icon-btn" id="close-settings" title="Back" aria-label="Back"><svg class="i" aria-hidden="true"><use href="#i-back"/></svg></button>
     <h1 class="grow">Settings</h1>
   </div>
   <div class="scroll">
-    <div class="setting">
-      <label for="nickname">Cosmo nickname</label>
-      <div class="inline">
-        <input id="nickname" autocomplete="off" maxlength="30" placeholder="yourcosmoname">
-        <button type="button" id="load-inventory">Load</button>
+    <section class="group">
+      <h2>Your Cosmo inventory</h2>
+      <div class="setting">
+        <label for="nickname">Cosmo nickname</label>
+        <div class="inline">
+          <input id="nickname" autocomplete="off" maxlength="30" placeholder="yourcosmoname">
+          <button type="button" class="btn" id="load-inventory">Load</button>
+        </div>
+        <p class="note">Posts that want objekts you own get a mark in Discord. Load again after trading.</p>
+        <p class="say" id="inventory-status" role="status"></p>
       </div>
-      <p class="say" id="inventory-status" role="status"></p>
-    </div>
-    <div class="setting">
-      <label for="pages">Result pages per code</label>
-      <div class="inline"><input id="pages" type="number" min="1" max="20" step="1" value="3"></div>
-    </div>
-    <div class="setting">
-      <label for="delay">Pace · <span id="delay-value">+5s per page</span></label>
-      <input id="delay" class="risk" type="range" min="0" max="60" step="1" value="5" aria-describedby="delay-note">
-      <p class="note" id="delay-note">Lower delays are faster, but may trigger Discord rate limits and a forced wait.</p>
-    </div>
-    <label class="check"><input type="checkbox" id="skip-recent" checked> Skip codes searched in the last 6 hours</label>
-    <div class="setting">
-      <label for="max-age">Stop paging at posts older than</label>
-      <select id="max-age" aria-describedby="max-age-note">
-        <option value="0">Any age</option>
-        <option value="3">3 days</option>
-        <option value="7">7 days</option>
-        <option value="14">14 days</option>
-        <option value="30">30 days</option>
-      </select>
-      <p class="note" id="max-age-note">Results come newest first, and old trade posts are mostly gone. Stopping early sends Discord fewer requests. A code searched before also stops as soon as a page holds nothing new.</p>
-    </div>
-    <details id="step-trouble">
+    </section>
+    <section class="group">
+      <h2>Search</h2>
+      <div class="setting">
+        <label for="pages">Result pages per code</label>
+        <div class="inline"><input id="pages" type="number" min="1" max="20" step="1" value="10"></div>
+      </div>
+      <div class="setting">
+        <label for="delay">Pace · <span id="delay-value">+5s per page</span></label>
+        <input id="delay" class="risk" type="range" min="0" max="60" step="1" value="5" aria-describedby="delay-note">
+        <p class="note" id="delay-note">Lower delays are faster, but may trigger Discord rate limits and a forced wait.</p>
+      </div>
+      <label class="check"><input type="checkbox" id="skip-recent" checked> <span>Skip codes searched in the last 6 hours</span></label>
+      <div class="setting">
+        <label for="max-age">Stop paging at posts older than</label>
+        <select id="max-age" aria-describedby="max-age-note">
+          <option value="0">Any age</option>
+          <option value="3">3 days</option>
+          <option value="7">7 days</option>
+          <option value="14">14 days</option>
+          <option value="30">30 days</option>
+        </select>
+        <p class="note" id="max-age-note">Results come newest first, and old trade posts are mostly gone. Stopping early sends Discord fewer requests. A code searched before also stops as soon as a page holds nothing new.</p>
+      </div>
+    </section>
+    <details class="group" id="step-trouble">
       <summary>Troubleshooting</summary>
       <p class="say" id="run-detail"></p>
       <p class="note" id="index-count"></p>
       <div class="tools">
-        <button type="button" id="dock" hidden>Dock into Discord</button>
-        <button type="button" id="diagnose">Check this tab</button>
-        <button type="button" id="export">Download this search (.txt)</button>
-        <button type="button" id="export-all">Download everything (.txt)</button>
-        <button type="button" id="dump">Download index (.json)</button>
-        <button type="button" id="clear">Clear captured posts</button>
-        <button type="button" id="withdraw">Withdraw consent</button>
+        <button type="button" class="btn xs" id="dock" hidden>Dock into Discord</button>
+        <button type="button" class="btn xs" id="diagnose">Check this tab</button>
+        <button type="button" class="btn xs" id="export">Download this search (.txt)</button>
+        <button type="button" class="btn xs" id="export-all">Download everything (.txt)</button>
+        <button type="button" class="btn xs" id="dump">Download index (.json)</button>
+        <button type="button" class="btn xs danger" id="clear">Clear captured posts</button>
+        <button type="button" class="btn xs danger" id="withdraw">Withdraw consent</button>
       </div>
       <p class="say" id="diagnosis"></p>
       <p class="note">Build <code id="build">…</code></p>
