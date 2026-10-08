@@ -18,6 +18,7 @@ import {
   OBJEKT_ORIGIN,
   openMatchTab,
 } from "./match-tab";
+import { readPanelState } from "./panel-geometry";
 import { capturing, channelIds, isDiscordUrl } from "./settings";
 import {
   type Captured,
@@ -561,10 +562,23 @@ function fromObjektPage(sender: { url?: string; frameId?: number }): boolean {
  * the user just pressed "Find on Discord", so Discord is where they are going.
  * Reusing their tab rather than opening another keeps them in the channel
  * they trade in; the panel shows the list that just arrived.
+ *
+ * Also asked for by the panel's getting-started steps. From a pop-out window
+ * with no Discord tab, the panel moves into the new tab (`panel`, the
+ * default); a window that only wants Discord brought forward passes false and
+ * stays the one panel.
  */
-async function showDiscord(): Promise<void> {
+async function showDiscord({ panel = true } = {}): Promise<void> {
   const tab = pickTab(await extensionApi.tabs.query({ url: DISCORD_MATCHES }));
   if (typeof tab?.id !== "number") {
+    // A tab that does not exist yet cannot be sent "open-panel"; the content
+    // script reopens a panel recorded as open as soon as it starts.
+    if (panel) {
+      const { panel: stored } = await extensionApi.storage.local.get("panel");
+      await extensionApi.storage.local.set({
+        panel: { ...readPanelState(stored), open: true },
+      });
+    }
     await extensionApi.tabs.create({ url: "https://discord.com/app" });
     return;
   }
@@ -573,6 +587,7 @@ async function showDiscord(): Promise<void> {
     await extensionApi.windows
       .update(tab.windowId, { focused: true })
       .catch(() => {});
+  if (!panel) return;
   await ensureContentScript(tab.id).catch(() => {});
   await extensionApi.tabs
     .sendMessage(tab.id, { type: "open-panel" })
@@ -687,6 +702,10 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     if (!panel) throw new Error("Unsupported request");
     if (request?.type === "open-window") {
       await openPanelWindow();
+      return true;
+    }
+    if (request?.type === "show-discord") {
+      await showDiscord({ panel: request.dock === true });
       return true;
     }
     // Firefox gives an extension page framed by a web page no `tabs` API at

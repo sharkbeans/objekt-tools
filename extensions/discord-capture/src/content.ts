@@ -23,6 +23,7 @@ import {
   markPanelBusy,
   openPanel,
   showPanelNotice,
+  syncPanelTheme,
   togglePanel,
   watchPanelPlacement,
 } from "./panel-frame";
@@ -136,15 +137,62 @@ function annotate(element: Element, entry: Entry) {
   const host = document.createElement("objekt-match-badge");
   const shadow = host.attachShadow({ mode: "closed" });
   const badge = document.createElement("span");
-  badge.textContent = match?.isMutual
+  badge.className = match?.isMutual ? "badge mutual" : "badge";
+  const text = document.createElement("span");
+  text.textContent = match?.isMutual
     ? `objekt.my · mutual: wants ${wantCount}, has ${giveCount} you want`
     : wantCount
       ? `objekt.my · wants ${wantCount} of yours`
       : `objekt.my · has ${giveCount} you want`;
-  badge.style.cssText =
-    "display:inline-block;margin:4px 0;padding:3px 8px;border-radius:8px;background:#312e81;color:#eef2ff;font:12px system-ui";
-  shadow.append(badge);
+  badge.append(badgeMark(), text);
+  const style = document.createElement("style");
+  style.textContent = BADGE_STYLE;
+  shadow.append(style, badge);
+  if (document.documentElement.classList.contains("theme-light"))
+    host.dataset.theme = "light";
   element.append(host);
+}
+
+/**
+ * The mark on a post that has something for you, in objekt.my's look: a
+ * neutral pill with its logo, in the palette of the Discord theme it sits on.
+ * A mutual match — they want yours and have yours — gets a green dot.
+ */
+const BADGE_STYLE = `
+.badge{display:inline-flex;align-items:center;gap:7px;margin:4px 0;padding:4px 11px 4px 9px;border-radius:999px;
+  border:1px solid rgb(255 255 255 / 12%);background:#0a0a0a;color:#fafafa;
+  font:500 13.5px/1.45 "Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+:host([data-theme="light"]) .badge{border-color:#e5e5e5;background:#fff;color:#0a0a0a}
+.badge svg{width:14px;height:14px;flex:none}
+.mutual::after{content:"";width:6px;height:6px;border-radius:50%;background:#4ade80;margin-left:2px}
+`;
+
+function badgeMark(): SVGElement {
+  const SVG = "http://www.w3.org/2000/svg";
+  const node = (name: string, attributes: Record<string, string>) => {
+    const created = document.createElementNS(SVG, name);
+    for (const [key, value] of Object.entries(attributes))
+      created.setAttribute(key, value);
+    return created;
+  };
+  const svg = node("svg", { viewBox: "18 16 64 66", "aria-hidden": "true" });
+  const mask = node("mask", { id: "cut" });
+  mask.append(
+    node("rect", { width: "100", height: "100", fill: "#fff" }),
+    node("polygon", {
+      points: "29.46,44.5 55.5,44.5 55.5,69.92 49.92,75.5 24.5,75.5 24.5,49.46",
+      fill: "#000",
+    }),
+  );
+  const shapes = node("g", { mask: "url(#cut)", fill: "currentColor" });
+  shapes.append(
+    node("polygon", {
+      points: "43.04,18 80,18 80,54.96 72.96,62 36,62 36,25.04",
+    }),
+    node("polygon", { points: "26.4,40 60,40 60,72.8 52.8,80 20,80 20,46.4" }),
+  );
+  svg.append(mask, shapes);
+  return svg;
 }
 
 /** Channels the user has paused. Every other server channel is captured. */
@@ -1353,6 +1401,9 @@ function publishTheme() {
   const theme = document.documentElement.classList.contains("theme-light")
     ? "light"
     : "dark";
+  syncPanelTheme();
+  for (const badge of document.querySelectorAll("objekt-match-badge"))
+    (badge as HTMLElement).dataset.theme = theme;
   void extensionApi.storage.local
     .get("discordTheme")
     .then((settings) => {

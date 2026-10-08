@@ -35,7 +35,8 @@ export function readArtworkCache(value: unknown): ArtworkCache {
     const { url, at } = entry as Record<string, unknown>;
     if (typeof at !== "number" || !Number.isFinite(at)) continue;
     if (url !== null && (typeof url !== "string" || !isArtUrl(url))) continue;
-    cache[key] = { url, at };
+    // Entries cached before the variant changed are upgraded as they are read.
+    cache[key] = { url: url === null ? null : cardArt(url), at };
   }
   return cache;
 }
@@ -56,6 +57,35 @@ export function isArtUrl(url: string): boolean {
     );
   } catch {
     return false;
+  }
+}
+
+/**
+ * The size of a card's art the panel shows.
+ *
+ * Cosmo's art is served by Cloudflare Images, whose last path segment names a
+ * variant. The search hands back `thumbnail` — 314px wide, and delivered to a
+ * browser as a heavily compressed AVIF of about 15 KB — which turned soft and
+ * blotchy the moment a card was drawn any bigger than a stamp, or on any
+ * high-density screen. `2x` is 582×900: sharp at every size the panel draws a
+ * card, at roughly 35 KB. `3x` and `original` look no different at that size
+ * and cost two to thirty times as much.
+ */
+export const CARD_VARIANT = "2x";
+
+/** `url` at `CARD_VARIANT`, when it is a Cloudflare Images URL; else as given. */
+export function cardArt(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "imagedelivery.net") return url;
+    const parts = parsed.pathname.split("/");
+    // "", account hash, image id, variant.
+    if (parts.length !== 4 || !parts[1] || !parts[2]) return url;
+    parts[3] = CARD_VARIANT;
+    parsed.pathname = parts.join("/");
+    return parsed.toString();
+  } catch {
+    return url;
   }
 }
 
@@ -105,7 +135,7 @@ export function pickArtwork(
         : typeof r.frontImage === "string"
           ? r.frontImage
           : null;
-    if (url && isArtUrl(url)) return url;
+    if (url && isArtUrl(url)) return cardArt(url);
   }
   return null;
 }
@@ -147,7 +177,8 @@ export async function lookupArtwork(
     const key = objektKey(item);
     if (!key || queued.has(key) || key in urls) continue;
     if (fresh(next[key], now)) {
-      urls[key] = next[key].url;
+      const cached = next[key].url;
+      urls[key] = cached === null ? null : cardArt(cached);
       continue;
     }
     if (queue.length >= LOOKUP_CAP) continue;

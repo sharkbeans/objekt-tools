@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clampGeometry, readPanelState, UNPLACED } from "./panel-geometry";
+import {
+  BAR_HEIGHT,
+  clampGeometry,
+  readPanelState,
+  UNPLACED,
+} from "./panel-geometry";
 
 const screen = { width: 1440, height: 900 };
 
@@ -36,8 +41,8 @@ test("collapsed panels are held to the titlebar, not the full height", () => {
     { x: 10, y: 880, width: 384, height: 640, collapsed: true },
     screen,
   );
-  // 880 + 34 fits in 900, so it stays where it was put.
-  assert.equal(collapsed.y, 866);
+  // Only the titlebar has to fit: it is pulled up just far enough to show.
+  assert.equal(collapsed.y, screen.height - BAR_HEIGHT);
   const expanded = clampGeometry(
     { x: 10, y: 880, width: 384, height: 640, collapsed: false },
     screen,

@@ -8,21 +8,22 @@
 const MIN_WIDTH = 340;
 const MIN_HEIGHT = 300;
 /** Collapsed height, which is the titlebar and nothing else. */
-export const BAR_HEIGHT = 34;
+export const BAR_HEIGHT = 38;
 /**
  * Wide and short. The panel used to be a 384×640 column, which put the want
  * list, the settings, the run and the export in one long scroll; the card art
  * wants width, and nothing in the panel needs that much height.
  */
-const DEFAULT_WIDTH = 720;
-// Room for two rows of cards above the pace controls and the buttons.
-const DEFAULT_HEIGHT = 620;
+const DEFAULT_WIDTH = 760;
+// Room for two rows of cards above the pace controls and the buttons, at the
+// panel's larger type.
+const DEFAULT_HEIGHT = 680;
 /**
  * Bumped when the default size changes for a reason worth overriding a
  * remembered one: a panel resized to suit the old layout is the wrong shape for
  * the new one. Position is kept either way.
  */
-export const LAYOUT = 3;
+export const LAYOUT = 4;
 /** Above Discord's modals, below nothing that matters. */
 export const LAYER = 2147483000;
 const MARGIN = 12;
