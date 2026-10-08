@@ -42,8 +42,8 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     body: "Select the objekts you want. Objekt Match runs the search in Discord and collects the posts.",
     video: "/extension/discord-search.mp4",
     poster: "/extension/discord-search-poster.webp",
-    focus: "0% 50%",
-    alt: "The Objekt Match panel next to Discord, searching for trade posts that mention SeoYeon CC101 to CC108.",
+    focus: "30% 50%",
+    alt: "The Objekt Match panel next to Discord, searching for trade posts that mention SoHyun CC117 to CC120.",
     caption: (
       <>
         This clip shows the optional search mode, which types your missing codes
@@ -74,7 +74,7 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     body: "One click takes you to that exact message in Discord, ready to reply.",
     video: "/extension/jump-to-message.mp4",
     poster: "/extension/jump-to-message-poster.webp",
-    focus: "85% 50%",
+    focus: "0% 50%",
     alt: "Pressing Jump to message on a trader in Objekt Match opens Discord scrolled to their post, with the message highlighted.",
   },
 ];
