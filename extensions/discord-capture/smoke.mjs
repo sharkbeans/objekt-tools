@@ -321,13 +321,9 @@ try {
     /\bask\b/,
   );
   assert.equal(await popup.locator("#automation-gate").isVisible(), false);
-  // A post collected by scrolling goes to /match without search switched on.
-  await popup.waitForFunction(() =>
-    document
-      .getElementById("open-match")
-      .textContent.includes("Open 1 in match"),
-  );
-  assert.equal(await popup.locator("#open-match").isVisible(), true);
+  // A post has been collected by scrolling, but Open in match waits for a
+  // search: one post is not what the extension is for.
+  assert.equal(await popup.locator("#open-match").isVisible(), false);
   // Typing a want turns the empty space into its card and offers search.
   await popup.locator("#wants").fill("SeoYeon CC101 CC102");
   await popup.locator("#tiles .tile").first().waitFor();

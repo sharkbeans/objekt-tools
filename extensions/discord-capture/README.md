@@ -90,9 +90,9 @@ nothing jumps under someone starting to type. None of it is a popup or an overla
 it is the panel's own content, and it follows the tab as it changes (a Discord tab opening, a
 login finishing, a channel switch). Search is what the panel is for, so **Search** is the main button
 from the start; its agreement is asked for the first time it is pressed — in place of the
-buttons, never over Discord — and agreeing starts that search. **Open in match** sits beside it
-as the secondary action until a search has results, and does not need search at all: posts
-collected by scrolling go to /match the same way. The pace, page and skip-recent controls are always on show above
+buttons, never over Discord — and agreeing starts that search. **Open in match** appears once a search has
+run, beside **Search again**: before that, all it could send is the few posts scrolled past,
+which undersells what a search finds. The pace, page and skip-recent controls are always on show above
 the buttons, with the time a search will take. Pages per objekt start at 10 and pace at +5s,
 and stay where they are put: the recommendation for the number of codes is shown beside them
 with **Use recommended**, not applied unasked.
@@ -271,7 +271,7 @@ The other direction. `src/objekt-bridge.ts` is a content script on `objekt.my/*`
 `build.mjs` to the app and match origins, exactly like the host permission) that runs
 `startBridge` from `src/bridge.ts`. It does two things and nothing else: it answers the page's
 `ping` with `present` (so /match and the grid dialog know the extension is installed), and it
-stores a `hunt` — a want list the user sent by pressing **Send to Objekt Match** — in
+stores a `hunt` — a want list the user sent by pressing **Find on Discord** — in
 `storage.local.wants`, answering `hunt-saved`. It reads nothing from the page DOM, sends no
 requests, and never touches objekt.my cookies: the page, which already has the data, posts it
 in, so the extension never has to call objekt.my with the user's session. Messages are
