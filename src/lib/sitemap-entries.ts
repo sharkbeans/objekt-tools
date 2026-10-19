@@ -1,7 +1,9 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { indexer } from "@/lib/db/indexer";
+import { collections, objekts } from "@/lib/db/indexer-schema";
 import { cosmoAccount, poster, tradePost } from "@/lib/db/schema";
-import { membersByArtist } from "@/lib/filters";
+import { membersByArtist, resolveMemberCasing } from "@/lib/filters";
 import {
   rootUrl,
   type SectionId,
@@ -32,10 +34,11 @@ export type SitemapEntry = {
  * profile here by its own action, which is the consent this list relies on.
  */
 export async function listedCollectors() {
-  return getCached("sitemap:collectors:v1", 30 * 60_000, async () => {
+  return getCached("sitemap:collectors:v2", 30 * 60_000, async () => {
     const rows = await db
       .select({
         nickname: cosmoAccount.nickname,
+        address: cosmoAccount.address,
         linkedAt: cosmoAccount.linkedAt,
       })
       .from(cosmoAccount)
@@ -43,8 +46,45 @@ export async function listedCollectors() {
       .orderBy(desc(cosmoAccount.linkedAt))
       .limit(MAX_COLLECTORS);
     return rows.flatMap((row) =>
-      row.nickname ? [{ nickname: row.nickname, linkedAt: row.linkedAt }] : [],
+      row.nickname
+        ? [
+            {
+              nickname: row.nickname,
+              // The indexer stores owners lowercased.
+              address: row.address.toLowerCase(),
+              linkedAt: row.linkedAt,
+            },
+          ]
+        : [],
     );
+  });
+}
+
+/**
+ * The members each address owns at least one objekt of. A member page for
+ * anyone else is an empty grid, and listing every member for every collector
+ * filled the sitemap with dozens of those per person.
+ */
+async function collectedMembers(
+  addresses: string[],
+): Promise<Map<string, Set<string>>> {
+  return getCached("sitemap:collected-members:v1", 30 * 60_000, async () => {
+    const byAddress = new Map<string, Set<string>>();
+    if (addresses.length === 0) return byAddress;
+    const rows = await indexer
+      .selectDistinct({ owner: objekts.owner, member: collections.member })
+      .from(objekts)
+      .innerJoin(collections, eq(objekts.collectionId, collections.id))
+      .where(inArray(objekts.owner, addresses));
+    for (const row of rows) {
+      // Members not on the roster have no page (the route 404s them).
+      const member = resolveMemberCasing(row.member);
+      if (!member) continue;
+      const members = byAddress.get(row.owner) ?? new Set<string>();
+      members.add(member);
+      byAddress.set(row.owner, members);
+    }
+    return byAddress;
   });
 }
 
@@ -113,11 +153,24 @@ export async function sitemapEntriesForSection(
     });
   }
 
+  // Without the indexer, leave member pages out this time rather than fail
+  // the whole sitemap; a previous good result is served stale if there is one.
+  const owned = await collectedMembers(
+    collectors.map((collector) => collector.address),
+  ).catch((error) => {
+    console.warn("sitemap: member pages skipped, indexer unavailable", error);
+    return new Map<string, Set<string>>();
+  });
+
   let memberPages = 0;
   for (const collector of collectors) {
     if (memberPages >= MAX_MEMBER_PAGES) break;
+    const members = owned.get(collector.address);
+    if (!members) continue;
+    // Roster order, so the sitemap doesn't reshuffle between builds.
     for (const member of ALL_MEMBERS) {
       if (memberPages >= MAX_MEMBER_PAGES) break;
+      if (!members.has(member)) continue;
       entries.push({
         path: `/collection/${encodeURIComponent(collector.nickname)}/${encodeURIComponent(member)}`,
         changeFrequency: "weekly",
