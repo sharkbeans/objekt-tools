@@ -1,4 +1,8 @@
-export const metadata = { title: "Objektify — objekt.my" };
+export const metadata = {
+  title: "Objektify: Custom Objekt Maker | objekt.my",
+  description:
+    "Design your own custom objekt cards with objekt-style borders and fonts, one at a time or in bulk.",
+};
 
 export default function ObjektMakerPage() {
   return (

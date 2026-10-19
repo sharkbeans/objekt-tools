@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { MatchClientShell } from "./match-client-shell";
 
 export const metadata: Metadata = {
-  title: "Match on Discord | objekt.my",
+  title: "Objekt Match: Discord trade matcher | objekt.my",
   description:
-    "Paste or capture your Discord trade channels — see who has what you're missing.",
+    "Find who has your missing objekts in Discord trade channels. The free Objekt Match extension for Chrome and Firefox collects the posts as you scroll and lines them up against your collection.",
 };
 
 export default function MatchPage() {
