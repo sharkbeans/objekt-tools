@@ -71,7 +71,7 @@ const primary: {
     href: "/match",
     image: "/home-tiles/trades.png",
     Icon: ArrowLeftRight,
-    secondary: { label: "Get the extension", href: "/extension", Icon: Puzzle },
+    secondary: { label: "Get the extension", href: "/match", Icon: Puzzle },
   },
 ];
 

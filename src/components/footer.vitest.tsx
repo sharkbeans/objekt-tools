@@ -27,7 +27,6 @@ describe("SiteDisclaimerFooter", () => {
 
   it.each([
     "/match",
-    "/extension",
     "/extension-privacy",
   ])("shows the matching disclaimer on %s", (path) => {
     pathnameState.value = path;
