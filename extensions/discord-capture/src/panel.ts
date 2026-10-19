@@ -1078,20 +1078,16 @@ function render() {
     !left &&
     lastFilters !== null &&
     lastFilters !== searchFilters(queries, pageSetting());
-  // Open in match does not need search: posts collected while scrolling go
-  // to /match just the same, and without search it is the only action there
-  // is, so it takes the filled style.
   const searching = automationAllowed(consent);
-  const open = element<HTMLButtonElement>("open-match");
-  open.hidden = busy || ready === 0;
-  open.textContent = `Open ${ready} in match`;
-  open.title = runId
-    ? "Send the posts from your last search to objekt.my/match"
-    : "Send every post collected so far to objekt.my/match";
-  // Search leads until there is a search to open: posts collected while
-  // scrolling can go to /match too, but they are the side dish.
+  // Open in match waits for a search. Before one, all it could send is the
+  // handful of posts scrolled past — "Open 11 in match" — which undersells
+  // what a search finds and was easy to press by mistake.
   const searched = runId !== null;
-  open.classList.toggle("primary", searched && !left && !changed);
+  const open = element<HTMLButtonElement>("open-match");
+  open.hidden = busy || !searched || ready === 0;
+  open.textContent = `Open ${ready} in match`;
+  open.title = "Send the posts from your last search to objekt.my/match";
+  open.classList.toggle("primary", !left && !changed);
   const search = element<HTMLButtonElement>("run-search");
   const searchFirst = !left && (open.hidden || changed || !searched);
   search.classList.toggle("primary", searchFirst);

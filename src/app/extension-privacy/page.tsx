@@ -21,9 +21,17 @@ export const metadata: Metadata = {
 
 const LAST_UPDATED = "2026-09-24";
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  id?: string;
+  children: ReactNode;
+}) {
   return (
-    <section className="space-y-3">
+    <section id={id} className="scroll-mt-20 space-y-3">
       <h2 className="text-xl font-semibold">{title}</h2>
       {children}
     </section>
@@ -233,7 +241,8 @@ export default function ExtensionPrivacyPage() {
         </p>
       </Section>
 
-      <Section title="Automated search">
+      {/* Linked from the search clip's caption on /match. */}
+      <Section id="automated-search" title="Automated search">
         <p>
           If you separately agree to it, the extension can type your objekt
           codes into Discord&rsquo;s own search box and click through the result

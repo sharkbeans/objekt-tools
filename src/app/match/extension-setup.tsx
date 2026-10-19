@@ -181,12 +181,12 @@ export function ExtensionSetup({
               Works with Discord in this browser, not the Discord desktop app.
             </p>
             <Link
-              href="/extension"
+              href="/extension-privacy"
               target="_blank"
               rel="noreferrer"
               className="inline-block rounded-sm text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
             >
-              How it works
+              Privacy policy
             </Link>
           </div>
         </div>
@@ -314,12 +314,12 @@ function SlimOffer({
             </p>
           )}
           <Link
-            href="/extension"
+            href="/extension-privacy"
             target="_blank"
             rel="noreferrer"
             className="rounded-sm text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           >
-            How it works
+            Privacy policy
           </Link>
         </div>
       </div>

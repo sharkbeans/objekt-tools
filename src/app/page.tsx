@@ -10,11 +10,27 @@ import {
   RefreshCcw,
   Rows3,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import type React from "react";
 import { PageContainer, PageHeader } from "@/components/page-shell";
-import { sectionHref } from "@/lib/sections";
+import { rootUrl, sectionHref } from "@/lib/sections";
+
+export const metadata: Metadata = {
+  title: "objekt.my | Cosmo objekt grid tracker & trade matcher",
+  description:
+    "Track your tripleS, ARTMS and idntt objekt grids, see every FCO you're missing, and find who on Discord has them. Free fan-made tools for Cosmo collectors.",
+  alternates: { canonical: "/" },
+};
+
+// Tells Google the site's name, for the name it shows above results.
+const WEBSITE_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "objekt.my",
+  url: `${rootUrl()}/`,
+};
 
 function SpinIcon() {
   return (
@@ -71,7 +87,7 @@ const primary: {
     href: "/match",
     image: "/home-tiles/trades.png",
     Icon: ArrowLeftRight,
-    secondary: { label: "Get the extension", href: "/extension", Icon: Puzzle },
+    secondary: { label: "Get the extension", href: "/match", Icon: Puzzle },
   },
 ];
 
@@ -118,6 +134,13 @@ const moreTools: {
 export default function HomePage() {
   return (
     <PageContainer width="wide">
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD, escaped per the Next.js JSON-LD guide
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(WEBSITE_JSON_LD).replace(/</g, "\\u003c"),
+        }}
+      />
       <PageHeader
         title="objekt.my"
         description="Track your grids. Find who has what you're missing."

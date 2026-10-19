@@ -137,6 +137,15 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(`${rootUrl()}/match`, 301);
   }
 
+  // www.<domain> served the whole site as a second copy for search engines to
+  // index. 308 rather than 301 so a stray API POST keeps its method.
+  if (domain && bareHost === `www.${domain}`) {
+    return NextResponse.redirect(
+      `${rootUrl()}${request.nextUrl.pathname}${request.nextUrl.search}`,
+      308,
+    );
+  }
+
   const who = sectionForHostname(hostname);
   // Unknown/internal hosts (cron container's app:3000, healthcheck on
   // 127.0.0.1, localhost) are left completely untouched.

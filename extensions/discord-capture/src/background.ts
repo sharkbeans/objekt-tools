@@ -149,7 +149,7 @@ extensionApi.runtime.onInstalled.addListener((details) => {
         .catch(() => {});
     }
     // Likewise the objekt.my bridge, so a page that was open while the
-    // extension was installed — the /extension page, typically — can tell it
+    // extension was installed — /match, typically — can tell it
     // is there without a reload. The bridge stands aside if one is running.
     const objektTabs = await extensionApi.tabs
       .query({ url: [...new Set([OBJEKT_ORIGIN, MATCH_PERMISSION])] })

@@ -269,7 +269,7 @@ export function ExtensionIntro({
       <p className="text-center text-xs text-muted-foreground">
         <Link
           href={sectionHref(
-            "/extension",
+            "/match",
             currentSection ? { currentSection } : undefined,
           )}
           target="_blank"

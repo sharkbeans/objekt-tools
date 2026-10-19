@@ -69,6 +69,13 @@ const nextConfig: NextConfig = {
         destination: "/match",
         permanent: true,
       },
+      // The extension's old landing page. Its pitch, install badges and demo
+      // clips live on /match now; store listings and old CTAs still link here.
+      {
+        source: "/extension",
+        destination: "/match",
+        permanent: true,
+      },
     ];
   },
   images: {

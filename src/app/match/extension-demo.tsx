@@ -50,7 +50,7 @@ export const DEMO_STEPS: readonly DemoStep[] = [
         into Discord’s search box for you. Collecting as you scroll needs none
         of that.{" "}
         <Link
-          href="/extension#search-mode"
+          href="/extension-privacy#automated-search"
           target="_blank"
           className="underline underline-offset-4 hover:text-foreground"
         >
