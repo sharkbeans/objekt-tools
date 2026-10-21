@@ -17,11 +17,26 @@ import type React from "react";
 import { PageContainer, PageHeader } from "@/components/page-shell";
 import { rootUrl, sectionHref } from "@/lib/sections";
 
+const description =
+  "Track your tripleS, ARTMS and idntt objekt grids, see every FCO you're missing, and find who on Discord has them. Free fan-made tools for Cosmo collectors.";
+
+// The link preview's image is src/app/opengraph-image.tsx.
 export const metadata: Metadata = {
   title: "objekt.my | Cosmo objekt grid tracker & trade matcher",
-  description:
-    "Track your tripleS, ARTMS and idntt objekt grids, see every FCO you're missing, and find who on Discord has them. Free fan-made tools for Cosmo collectors.",
+  description,
   alternates: { canonical: "/" },
+  openGraph: {
+    title: "objekt.my: Cosmo objekt grid tracker & trade matcher",
+    description,
+    url: "/",
+    siteName: "objekt.my",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "objekt.my: Cosmo objekt grid tracker & trade matcher",
+    description,
+  },
 };
 
 // Tells Google the site's name, for the name it shows above results.
