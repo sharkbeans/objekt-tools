@@ -1,5 +1,5 @@
-import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
+import { cronAuthError } from "@/lib/cron-auth";
 import { syncIndexerMirror } from "@/lib/indexer-mirror-sync";
 
 export const dynamic = "force-dynamic";
@@ -11,19 +11,8 @@ export const dynamic = "force-dynamic";
 // of on the request path. A no-op 502 until MIRROR_DATABASE_URL is set —
 // safe to deploy ahead of the mirror DB existing.
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization") ?? "";
-  const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
-  let authorized = false;
-  try {
-    authorized =
-      authHeader.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
-  } catch {
-    authorized = false;
-  }
-  if (!authorized) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = cronAuthError(request);
+  if (denied) return denied;
 
   try {
     const result = await syncIndexerMirror();

@@ -1,5 +1,5 @@
-import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
+import { cronAuthError } from "@/lib/cron-auth";
 import {
   buildCollectionStats,
   getCollectionStatsUpdatedAt,
@@ -21,19 +21,8 @@ const LOCK_SECONDS = 120;
 // overlapping ticks (e.g. a slow build still running past its own interval)
 // don't double-run the aggregate.
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization") ?? "";
-  const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
-  let authorized = false;
-  try {
-    authorized =
-      authHeader.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
-  } catch {
-    authorized = false;
-  }
-  if (!authorized) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = cronAuthError(request);
+  if (denied) return denied;
 
   const updatedAt = await getCollectionStatsUpdatedAt();
   const stale = updatedAt === null || Date.now() - updatedAt > THROTTLE_MS;
