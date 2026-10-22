@@ -22,6 +22,35 @@ function unauthorized() {
 
 const BOT_USER_AGENTS = ["Discordbot"];
 
+// Discord unfurls a link by fetching the page's HTML for its og: tags, then
+// the image those name (an opengraph-image or one of the .../og routes).
+// Anyone can send Discordbot's user agent, so it only buys those reads: a GET
+// or HEAD of a page or preview image. /api/* (data, sign-in), files with an
+// extension (sitemap.xml, robots.txt, public/) and every other method,
+// including the POSTs behind server actions, still need the password. What
+// it does expose is the test site's server-rendered HTML.
+//
+// proxy.test.ts lists every route handler outside /api and fails until a new
+// one is marked as one the bot may or may not reach.
+function isLinkPreviewFetch(request: NextRequest): boolean {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+
+  const ua = request.headers.get("user-agent") ?? "";
+  if (!BOT_USER_AGENTS.some((bot) => ua.includes(bot))) return false;
+
+  let path: string;
+  try {
+    path = decodeURIComponent(request.nextUrl.pathname);
+  } catch {
+    return false;
+  }
+  return (
+    !path.startsWith("/api/") &&
+    !path.startsWith("/_next/") &&
+    !/\.[a-z0-9]+$/i.test(path)
+  );
+}
+
 // Returns a 401 response when the preview gate rejects the request, or null
 // when the request may proceed.
 function previewGate(request: NextRequest): NextResponse | null {
@@ -32,9 +61,8 @@ function previewGate(request: NextRequest): NextResponse | null {
     return null;
   }
 
-  // Let embed crawlers through so link previews work on the test site.
-  const ua = request.headers.get("user-agent") ?? "";
-  if (BOT_USER_AGENTS.some((bot) => ua.includes(bot))) {
+  // Let embed crawlers fetch what a link preview needs on the test site.
+  if (isLinkPreviewFetch(request)) {
     return null;
   }
 
