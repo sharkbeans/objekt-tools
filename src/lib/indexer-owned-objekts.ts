@@ -13,15 +13,31 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { normalizeArtistId } from "@/lib/artist-utils";
 import { indexer } from "@/lib/db/indexer";
 import { mirror } from "@/lib/db/indexer-mirror";
 import { collections, objekts } from "@/lib/db/indexer-schema";
 import { decodeGroupedValue } from "@/lib/filter-utils";
+import { withIndexerFallback } from "@/lib/indexer-fallback";
+import {
+  type InventoryFilters,
+  matchesInventoryFilters,
+  parseCollectionRange,
+  seasonRangeBounds,
+  toIndexerArtist,
+} from "@/lib/inventory-filter-match";
 import {
   parseObjektSearchGroups,
   resolveObjektMemberAlias,
 } from "@/lib/objekt-search";
+import { fetchOwnedObjekts } from "@/lib/objekt-top-api";
+import { createServerCache } from "@/lib/server-cache";
+
+// Every read keyed by an owner address goes to the remote indexer first and,
+// while it is unreachable, to objekt.top's public API (indexer-fallback.ts).
+// The API returns an address's objekts with their collection's public id but
+// not its database id, so API rows are joined to the local collection mirror
+// by public id; metadata comes from the mirror where it has the collection
+// (original Cosmo image URLs), else from the API.
 
 type CollectionMetadata = {
   id: string;
@@ -60,13 +76,12 @@ export type OwnedObjektRow = {
   objektId: string;
 };
 
-export type InventoryPageFilters = {
-  query?: string;
-  artist?: string[];
-  member?: string[];
-  season?: string[];
-  class?: string[];
-  onOffline?: string[];
+export type InventoryPageFilters = InventoryFilters;
+
+export type OwnedCollectionCount = {
+  collectionDbId: string | null;
+  ownedCount: number;
+  transferableCount: number;
 };
 
 export type InventoryOwnershipCandidate = {
@@ -106,24 +121,31 @@ export async function loadCollectionMetadataByDbIds(
   const missingIds = uniqueIds.filter((id) => !metadataById.has(id));
 
   if (missingIds.length > 0) {
-    const fallbackRows = await indexer
-      .select({
-        id: collections.id,
-        collectionId: collections.collectionId,
-        artist: collections.artist,
-        member: collections.member,
-        collectionNo: collections.collectionNo,
-        season: collections.season,
-        class: collections.class,
-        thumbnailImage: collections.thumbnailImage,
-        frontImage: collections.frontImage,
-        backImage: collections.backImage,
-        accentColor: collections.accentColor,
-        onOffline: collections.onOffline,
-        createdAt: collections.createdAt,
-      })
-      .from(collections)
-      .where(inArray(collections.id, missingIds));
+    // Only collections minted since the mirror's last sync land here; while
+    // the indexer is down they stay unknown until the mirror catches up.
+    const fallbackRows = await withIndexerFallback(
+      "collection metadata",
+      async () =>
+        indexer
+          .select({
+            id: collections.id,
+            collectionId: collections.collectionId,
+            artist: collections.artist,
+            member: collections.member,
+            collectionNo: collections.collectionNo,
+            season: collections.season,
+            class: collections.class,
+            thumbnailImage: collections.thumbnailImage,
+            frontImage: collections.frontImage,
+            backImage: collections.backImage,
+            accentColor: collections.accentColor,
+            onOffline: collections.onOffline,
+            createdAt: collections.createdAt,
+          })
+          .from(collections)
+          .where(inArray(collections.id, missingIds)),
+      async () => [],
+    );
 
     for (const row of fallbackRows) {
       metadataById.set(row.id, row);
@@ -158,13 +180,18 @@ export async function resolveCollectionDbIdsByPublicIds(
   );
 
   if (missingCollectionIds.length > 0) {
-    const fallbackRows = await indexer
-      .select({
-        id: collections.id,
-        collectionId: collections.collectionId,
-      })
-      .from(collections)
-      .where(inArray(collections.collectionId, missingCollectionIds));
+    const fallbackRows = await withIndexerFallback(
+      "collection ids",
+      async () =>
+        indexer
+          .select({
+            id: collections.id,
+            collectionId: collections.collectionId,
+          })
+          .from(collections)
+          .where(inArray(collections.collectionId, missingCollectionIds)),
+      async () => [],
+    );
 
     for (const row of fallbackRows) {
       collectionDbIdByPublicId.set(row.collectionId, row.id);
@@ -174,7 +201,21 @@ export async function resolveCollectionDbIdsByPublicIds(
   return collectionDbIdByPublicId;
 }
 
-export async function loadTransferableInventoryRows(
+export function loadTransferableInventoryRows(
+  address: string,
+): Promise<InventoryRow[]> {
+  return withIndexerFallback(
+    "transferable inventory",
+    () => loadTransferableInventoryRowsFromIndexer(address),
+    async () =>
+      (await loadApiOwnedRows(address))
+        .filter((row) => row.transferable)
+        .sort(compareInventoryRows)
+        .map(toInventoryRow),
+  );
+}
+
+async function loadTransferableInventoryRowsFromIndexer(
   address: string,
 ): Promise<InventoryRow[]> {
   const ownedRows = await indexer
@@ -213,20 +254,26 @@ export async function loadTransferableInventoryRows(
     .sort(compareInventoryRows);
 }
 
-export async function countTransferableInventoryRows(
+export function countTransferableInventoryRows(
   address: string,
   filters: InventoryPageFilters = {},
 ): Promise<number> {
-  const [row] = await indexer
-    .select({ value: count() })
-    .from(objekts)
-    .innerJoin(collections, eq(objekts.collectionId, collections.id))
-    .where(and(...buildInventoryConditions(address, filters)));
+  return withIndexerFallback(
+    "inventory count",
+    async () => {
+      const [row] = await indexer
+        .select({ value: count() })
+        .from(objekts)
+        .innerJoin(collections, eq(objekts.collectionId, collections.id))
+        .where(and(...buildInventoryConditions(address, filters)));
 
-  return Number(row?.value ?? 0);
+      return Number(row?.value ?? 0);
+    },
+    async () => (await loadApiInventoryMatches(address, filters)).length,
+  );
 }
 
-export async function loadTransferableInventoryPage(
+export function loadTransferableInventoryPage(
   address: string,
   filters: InventoryPageFilters,
   page: number,
@@ -234,29 +281,37 @@ export async function loadTransferableInventoryPage(
 ): Promise<InventoryRow[]> {
   const offset = (page - 1) * limit;
 
-  return indexer
-    .select({
-      collectionId: collections.collectionId,
-      artist: collections.artist,
-      member: collections.member,
-      collectionNo: collections.collectionNo,
-      season: collections.season,
-      class: collections.class,
-      thumbnailImage: collections.thumbnailImage,
-      serial: objekts.serial,
-      objektId: objekts.id,
-      createdAt: collections.createdAt,
-    })
-    .from(objekts)
-    .innerJoin(collections, eq(objekts.collectionId, collections.id))
-    .where(and(...buildInventoryConditions(address, filters)))
-    .orderBy(
-      desc(collections.createdAt),
-      asc(collections.collectionNo),
-      asc(objekts.serial),
-    )
-    .limit(limit)
-    .offset(offset);
+  return withIndexerFallback(
+    "inventory page",
+    async () =>
+      indexer
+        .select({
+          collectionId: collections.collectionId,
+          artist: collections.artist,
+          member: collections.member,
+          collectionNo: collections.collectionNo,
+          season: collections.season,
+          class: collections.class,
+          thumbnailImage: collections.thumbnailImage,
+          serial: objekts.serial,
+          objektId: objekts.id,
+          createdAt: collections.createdAt,
+        })
+        .from(objekts)
+        .innerJoin(collections, eq(objekts.collectionId, collections.id))
+        .where(and(...buildInventoryConditions(address, filters)))
+        .orderBy(
+          desc(collections.createdAt),
+          asc(collections.collectionNo),
+          asc(objekts.serial),
+        )
+        .limit(limit)
+        .offset(offset),
+    async () =>
+      (await loadApiInventoryMatches(address, filters))
+        .slice(offset, offset + limit)
+        .map(toInventoryRow),
+  );
 }
 
 export function hasInventoryPageFilters(filters: InventoryPageFilters) {
@@ -270,7 +325,28 @@ export function hasInventoryPageFilters(filters: InventoryPageFilters) {
   );
 }
 
-export async function hasAnyTransferableInventoryCandidate(
+export function hasAnyTransferableInventoryCandidate(
+  address: string,
+  candidates: InventoryOwnershipCandidate[],
+): Promise<boolean> {
+  return withIndexerFallback(
+    "inventory candidates",
+    () => hasAnyTransferableInventoryCandidateInIndexer(address, candidates),
+    async () => {
+      const owned = await loadOwnedFromApi(address);
+      return candidates.some((candidate) =>
+        owned.some(
+          (objekt) =>
+            objekt.transferable &&
+            objekt.collectionId === candidate.collectionId &&
+            (candidate.serial == null || objekt.serial === candidate.serial),
+        ),
+      );
+    },
+  );
+}
+
+async function hasAnyTransferableInventoryCandidateInIndexer(
   address: string,
   candidates: InventoryOwnershipCandidate[],
 ): Promise<boolean> {
@@ -315,30 +391,62 @@ export async function hasAnyTransferableInventoryCandidate(
   return Boolean(match);
 }
 
-export async function loadOwnedCollectionCountsByDbId(address: string) {
-  return indexer
-    .select({
-      collectionDbId: objekts.collectionId,
-      ownedCount: count(),
-      transferableCount:
-        sql<number>`count(*) filter (where ${objekts.transferable})`.mapWith(
-          Number,
-        ),
-    })
-    .from(objekts)
-    .where(eq(objekts.owner, address))
-    .groupBy(objekts.collectionId);
+export function loadOwnedCollectionCountsByDbId(
+  address: string,
+): Promise<OwnedCollectionCount[]> {
+  return withIndexerFallback(
+    "owned collection counts",
+    async () =>
+      indexer
+        .select({
+          collectionDbId: objekts.collectionId,
+          ownedCount: count(),
+          transferableCount:
+            sql<number>`count(*) filter (where ${objekts.transferable})`.mapWith(
+              Number,
+            ),
+        })
+        .from(objekts)
+        .where(eq(objekts.owner, address))
+        .groupBy(objekts.collectionId),
+    async () => {
+      const counts = new Map<string, OwnedCollectionCount>();
+      for (const row of await loadApiOwnedRows(address)) {
+        if (!row.collectionDbId) continue;
+        const entry = counts.get(row.collectionDbId) ?? {
+          collectionDbId: row.collectionDbId,
+          ownedCount: 0,
+          transferableCount: 0,
+        };
+        entry.ownedCount += 1;
+        if (row.transferable) entry.transferableCount += 1;
+        counts.set(row.collectionDbId, entry);
+      }
+      return [...counts.values()];
+    },
+  );
 }
 
-export async function loadOwnedDistinctCollectionDbIds(address: string) {
-  const rows = await indexer
-    .selectDistinct({
-      collectionDbId: objekts.collectionId,
-    })
-    .from(objekts)
-    .where(eq(objekts.owner, address));
+export function loadOwnedDistinctCollectionDbIds(
+  address: string,
+): Promise<string[]> {
+  return withIndexerFallback(
+    "owned collection ids",
+    async () => {
+      const rows = await indexer
+        .selectDistinct({
+          collectionDbId: objekts.collectionId,
+        })
+        .from(objekts)
+        .where(eq(objekts.owner, address));
 
-  return uniqueCollectionDbIds(rows.map((row) => row.collectionDbId));
+      return uniqueCollectionDbIds(rows.map((row) => row.collectionDbId));
+    },
+    async () =>
+      uniqueCollectionDbIds(
+        (await loadApiOwnedRows(address)).map((row) => row.collectionDbId),
+      ),
+  );
 }
 
 /**
@@ -386,7 +494,31 @@ export async function expandAzGroupPublicCollectionIds(
   ];
 }
 
-export async function loadOwnedObjektsForPublicCollectionIds(
+export function loadOwnedObjektsForPublicCollectionIds(
+  address: string,
+  collectionIds: string[],
+): Promise<OwnedObjektRow[]> {
+  return withIndexerFallback(
+    "owned objekts by collection",
+    () =>
+      loadOwnedObjektsForPublicCollectionIdsFromIndexer(address, collectionIds),
+    async () => {
+      const wanted = new Set(collectionIds);
+      return (await loadApiOwnedRows(address))
+        .filter((row) => wanted.has(row.collectionId))
+        .sort((a, b) => a.serial - b.serial)
+        .map((row) => ({
+          collectionDbId: row.collectionDbId,
+          collectionId: row.collectionId,
+          serial: row.serial,
+          transferable: row.transferable,
+          objektId: row.objektId,
+        }));
+    },
+  );
+}
+
+async function loadOwnedObjektsForPublicCollectionIdsFromIndexer(
   address: string,
   collectionIds: string[],
 ): Promise<OwnedObjektRow[]> {
@@ -539,26 +671,10 @@ function buildInventorySearchTerm(term: string): SQL {
       sql<boolean>`substring(lower(${collections.collectionNo}) from 1 for 3) between ${collectionRange.start.collectionNo} and ${collectionRange.end.collectionNo}`,
       sql<boolean>`coalesce(nullif(substring(lower(${collections.collectionNo}) from 4 for 1), ''), 'a') between ${collectionRange.start.type || "a"} and ${collectionRange.end.type || collectionRange.start.type || "z"}`,
     ];
-    if (
-      collectionRange.start.seasonNumber ||
-      collectionRange.end.seasonNumber
-    ) {
-      const startSeason = toSeasonRangeKey(
-        collectionRange.start.seasonCode ||
-          collectionRange.end.seasonCode ||
-          "a",
-        collectionRange.start.seasonNumber || collectionRange.end.seasonNumber,
-      );
-      const endSeason = toSeasonRangeKey(
-        collectionRange.end.seasonCode ||
-          collectionRange.start.seasonCode ||
-          "z",
-        collectionRange.end.seasonNumber ||
-          collectionRange.start.seasonNumber ||
-          99,
-      );
+    const seasons = seasonRangeBounds(collectionRange);
+    if (seasons) {
       conditions.push(
-        sql<boolean>`(right(lower(${collections.season}), 2) || left(lower(${collections.season}), 1)) between ${startSeason} and ${endSeason}`,
+        sql<boolean>`(right(lower(${collections.season}), 2) || left(lower(${collections.season}), 1)) between ${seasons.start} and ${seasons.end}`,
       );
     }
     return and(...conditions) as SQL;
@@ -582,43 +698,6 @@ function buildInventorySearchTerm(term: string): SQL {
   ) as SQL;
 }
 
-function parseCollectionRange(term: string) {
-  const match = term.match(/^([a-z]*)(\d{3})([az]?)-([a-z]*)(\d{3})([az]?)$/i);
-  if (!match) return null;
-  const [
-    ,
-    startPrefix = "",
-    startNo = "",
-    startType = "",
-    endPrefix = "",
-    endNo = "",
-    endType = "",
-  ] = match;
-  return {
-    start: {
-      seasonCode: startPrefix.charAt(0).toLowerCase(),
-      seasonNumber: startPrefix.length,
-      collectionNo: startNo,
-      type: startType.toLowerCase(),
-    },
-    end: {
-      seasonCode: endPrefix.charAt(0).toLowerCase(),
-      seasonNumber: endPrefix.length,
-      collectionNo: endNo,
-      type: endType.toLowerCase(),
-    },
-  };
-}
-
-function toSeasonRangeKey(code: string, number: number) {
-  return `${String(number).padStart(2, "0")}${code.toLowerCase()}`;
-}
-
-function toIndexerArtist(artist: string) {
-  const normalized = normalizeArtistId(artist);
-  return normalized === "tripleS" ? "triples" : normalized;
-}
-
 function uniqueCollectionDbIds(
   collectionDbIds: Array<string | null>,
 ): string[] {
@@ -627,4 +706,100 @@ function uniqueCollectionDbIds(
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+// ---------------------------------------------------------------------------
+// objekt.top API fallback
+// ---------------------------------------------------------------------------
+
+// One API snapshot per address serves every read above for a minute, so a
+// page that asks for counts, a page of rows and candidates at once costs
+// objekt.top one request. A failed refresh keeps serving the stale snapshot.
+const API_OWNED_TTL_MS = 60_000;
+const apiOwnedCache = createServerCache("objekt-top-owned", {
+  maxEntries: 200,
+  staleRetentionMs: 5 * 60_000,
+});
+
+function loadOwnedFromApi(address: string) {
+  const normalized = address.toLowerCase();
+  return apiOwnedCache.getCached(`owned:${normalized}`, API_OWNED_TTL_MS, () =>
+    fetchOwnedObjekts(normalized),
+  );
+}
+
+type ApiOwnedRow = InventoryRow & {
+  collectionDbId: string | null;
+  onOffline: string;
+  transferable: boolean;
+};
+
+async function loadApiOwnedRows(address: string): Promise<ApiOwnedRow[]> {
+  const owned = await loadOwnedFromApi(address);
+  const publicIds = uniqueStrings(owned.map((objekt) => objekt.collectionId));
+  const known = new Map<string, CollectionMetadata>();
+  if (publicIds.length > 0) {
+    const rows = await mirror
+      .select({
+        id: collections.id,
+        collectionId: collections.collectionId,
+        artist: collections.artist,
+        member: collections.member,
+        collectionNo: collections.collectionNo,
+        season: collections.season,
+        class: collections.class,
+        thumbnailImage: collections.thumbnailImage,
+        frontImage: collections.frontImage,
+        backImage: collections.backImage,
+        accentColor: collections.accentColor,
+        onOffline: collections.onOffline,
+        createdAt: collections.createdAt,
+      })
+      .from(collections)
+      .where(inArray(collections.collectionId, publicIds));
+    for (const row of rows) known.set(row.collectionId, row);
+  }
+
+  return owned.map((objekt) => {
+    const collection = known.get(objekt.collectionId);
+    return {
+      collectionDbId: collection?.id ?? null,
+      collectionId: objekt.collectionId,
+      artist: collection?.artist ?? objekt.artist,
+      member: collection?.member ?? objekt.member,
+      collectionNo: collection?.collectionNo ?? objekt.collectionNo,
+      season: collection?.season ?? objekt.season,
+      class: collection?.class ?? objekt.class,
+      thumbnailImage: collection?.thumbnailImage ?? objekt.thumbnailImage,
+      onOffline: collection?.onOffline ?? objekt.onOffline,
+      createdAt: collection?.createdAt ?? new Date(objekt.createdAt),
+      serial: objekt.serial,
+      objektId: objekt.tokenId || objekt.id,
+      transferable: objekt.transferable,
+    };
+  });
+}
+
+async function loadApiInventoryMatches(
+  address: string,
+  filters: InventoryPageFilters,
+): Promise<ApiOwnedRow[]> {
+  return (await loadApiOwnedRows(address))
+    .filter((row) => row.transferable && matchesInventoryFilters(row, filters))
+    .sort(compareInventoryRows);
+}
+
+function toInventoryRow(row: InventoryRow): InventoryRow {
+  return {
+    collectionId: row.collectionId,
+    artist: row.artist,
+    member: row.member,
+    collectionNo: row.collectionNo,
+    season: row.season,
+    class: row.class,
+    thumbnailImage: row.thumbnailImage,
+    serial: row.serial,
+    objektId: row.objektId,
+    createdAt: row.createdAt,
+  };
 }

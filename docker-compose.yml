@@ -131,6 +131,11 @@ services:
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       INDEXER_DATABASE_URL: ${INDEXER_DATABASE_URL:-}
       MIRROR_DATABASE_URL: ${MIRROR_DATABASE_URL:-}
+      # objekt.top public API fallback while the indexer is unreachable —
+      # see src/lib/indexer-fallback.ts. On unless INDEXER_API_FALLBACK=off.
+      INDEXER_API_FALLBACK: ${INDEXER_API_FALLBACK:-}
+      INDEXER_FALLBACK_COOLDOWN_MS: ${INDEXER_FALLBACK_COOLDOWN_MS:-}
+      OBJEKT_TOP_API_URL: ${OBJEKT_TOP_API_URL:-}
       # Diagnostic only — lets /api/health dial the real remote indexer
       # directly, independent of whatever INDEXER_DATABASE_URL points at, so
       # an outage can distinguish "app can't reach its configured indexer

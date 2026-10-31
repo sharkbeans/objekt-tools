@@ -6,8 +6,18 @@ import {
   mirrorLocalPool,
 } from "@/lib/db/indexer-mirror";
 import { collections } from "@/lib/db/indexer-schema";
+import {
+  describeError,
+  isApiFallbackEnabled,
+  markIndexerFailed,
+} from "@/lib/indexer-fallback";
+import {
+  fetchCollectionsIfModified,
+  type ObjektTopCollection,
+} from "@/lib/objekt-top-api";
 
 export type SyncCollectionsResult = {
+  source: "indexer" | "objekt-top-api";
   resumedAfter: string | null;
   upsertedCount: number;
   fetchMs: number;
@@ -65,6 +75,23 @@ async function getCursorTs(key: string): Promise<Date | null> {
   return rows[0]?.cursor_ts ?? null;
 }
 
+async function getCursorId(key: string): Promise<string | null> {
+  const { rows } = await mirrorLocalPool.query<{ cursor_id: string | null }>(
+    "SELECT cursor_id FROM sync_state WHERE key = $1",
+    [key],
+  );
+  return rows[0]?.cursor_id ?? null;
+}
+
+async function setCursorId(key: string, cursorId: string): Promise<void> {
+  await mirrorLocalPool.query(
+    `INSERT INTO sync_state (key, cursor_id, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET cursor_id = excluded.cursor_id, updated_at = excluded.updated_at`,
+    [key, cursorId],
+  );
+}
+
 async function setCursorTs(key: string, cursorTs: Date): Promise<void> {
   await mirrorLocalPool.query(
     `INSERT INTO sync_state (key, cursor_ts, updated_at)
@@ -96,6 +123,7 @@ export async function syncCollections(): Promise<SyncCollectionsResult> {
 
   if (rows.length === 0) {
     return {
+      source: "indexer",
       resumedAfter: cursorTs?.toISOString() ?? null,
       upsertedCount: 0,
       fetchMs,
@@ -133,10 +161,99 @@ export async function syncCollections(): Promise<SyncCollectionsResult> {
   await setCursorTs("collection", newCursorTs);
 
   return {
+    source: "indexer",
     resumedAfter: cursorTs?.toISOString() ?? null,
     upsertedCount: rows.length,
     fetchMs,
   };
+}
+
+// The objekt.top API's Last-Modified for /collections, kept in sync_state's
+// cursor_id so each run sends a conditional request and normally gets an
+// empty 304 back.
+const API_STATE_KEY = "collection-objekt-top-api";
+
+/**
+ * Maps an objekt.top API collection to a mirror row. The API serves its own
+ * re-encoded images (media.objekt.top) and the original Cosmo URLs only for
+ * the front and back, and has no accent colour: the front and back use the
+ * originals, the thumbnail uses objekt.top's copy, and the accent colour is
+ * left empty, which every reader already treats as "none".
+ */
+export function toMirrorCollectionRow(
+  collection: ObjektTopCollection,
+): typeof collections.$inferInsert {
+  return {
+    id: collection.id,
+    collectionId: collection.collectionId,
+    season: collection.season,
+    member: collection.member,
+    artist: collection.artist,
+    collectionNo: collection.collectionNo,
+    class: collection.class,
+    thumbnailImage: collection.thumbnailImage,
+    frontImage: collection.originalFrontImage || collection.frontImage,
+    backImage: collection.originalBackImage || collection.backImage,
+    accentColor: "",
+    onOffline: collection.onOffline,
+    createdAt: new Date(collection.createdAt),
+  };
+}
+
+// Used while the indexer is unreachable. Only inserts collections the mirror
+// lacks and never touches the indexer cursor, so once the indexer is back,
+// syncCollections() resumes where it stopped and its upsert replaces these
+// rows with the indexer's own (original thumbnail, accent colour).
+export async function syncCollectionsFromApi(): Promise<SyncCollectionsResult> {
+  const lastModified = await getCursorId(API_STATE_KEY);
+
+  const start = Date.now();
+  const result = await fetchCollectionsIfModified(lastModified);
+  const fetchMs = Date.now() - start;
+
+  if (result.notModified) {
+    return {
+      source: "objekt-top-api",
+      resumedAfter: lastModified,
+      upsertedCount: 0,
+      fetchMs,
+    };
+  }
+
+  const rows = result.collections.map(toMirrorCollectionRow);
+  let insertedCount = 0;
+  for (let i = 0; i < rows.length; i += COLLECTION_BATCH_SIZE) {
+    const inserted = await mirrorLocal
+      .insert(collections)
+      .values(rows.slice(i, i + COLLECTION_BATCH_SIZE))
+      .onConflictDoNothing()
+      .returning({ id: collections.id });
+    insertedCount += inserted.length;
+  }
+
+  if (result.lastModified) {
+    await setCursorId(API_STATE_KEY, result.lastModified);
+  }
+
+  return {
+    source: "objekt-top-api",
+    resumedAfter: lastModified,
+    upsertedCount: insertedCount,
+    fetchMs,
+  };
+}
+
+async function syncCollectionsWithFallback(): Promise<SyncCollectionsResult> {
+  try {
+    return await syncCollections();
+  } catch (error) {
+    if (!isApiFallbackEnabled()) throw error;
+    markIndexerFailed(error);
+    console.warn(
+      `Indexer collection sync failed (${describeError(error)}); adding new collections from the objekt.top API instead`,
+    );
+    return syncCollectionsFromApi();
+  }
 }
 
 // Orchestrator: the only entrypoint the cron route and CLI script should
@@ -161,7 +278,7 @@ export async function syncIndexerMirror(): Promise<SyncIndexerMirrorResult> {
 
     try {
       await ensureMirrorInfra();
-      const collectionsResult = await syncCollections();
+      const collectionsResult = await syncCollectionsWithFallback();
       return { skipped: false, collections: collectionsResult };
     } finally {
       await client.query("SELECT pg_advisory_unlock($1)", [ADVISORY_LOCK_KEY]);

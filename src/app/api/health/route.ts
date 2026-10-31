@@ -5,6 +5,12 @@ import {
   getMirrorHealthSnapshot,
   isMirrorEnabled,
 } from "@/lib/db/indexer-mirror";
+import {
+  getIndexerFallbackState,
+  isApiFallbackEnabled,
+} from "@/lib/indexer-fallback";
+import { fetchObjektTopStatus } from "@/lib/objekt-top-api";
+import { getCached } from "@/lib/server-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +122,28 @@ async function probeIndexerUpstreamTcp(): Promise<
   return dialTcp(host, port);
 }
 
+// While the indexer is unreachable, owner reads are served from objekt.top's
+// public API (indexer-fallback.ts). If that API answers, the app is serving
+// its data and must stay "healthy": the autoheal watcher restarts unhealthy
+// containers, and a restart can't fix a remote that refuses connections. A
+// container whose own network is broken can't reach objekt.top either, so it
+// still goes unhealthy and gets restarted.
+async function probeApiFallback(): Promise<
+  { ok: true; behind: boolean | null } | { ok: false; error: string }
+> {
+  try {
+    return await getCached("health:objekt-top-status", 30_000, async () => {
+      const status = await fetchObjektTopStatus();
+      return { ok: true as const, behind: status.database?.behind ?? null };
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function GET() {
   const probe = await probeIndexer();
   const tcp = probe.ok ? undefined : await probeIndexerTcp();
@@ -138,11 +166,27 @@ export async function GET() {
     }
   }
 
-  const ok = !saturated && probe.ok;
+  const apiFallback =
+    !probe.ok && isApiFallbackEnabled() ? await probeApiFallback() : undefined;
+
+  const ok = !saturated && (probe.ok || apiFallback?.ok === true);
   return NextResponse.json(
     {
       ok,
+      source: probe.ok
+        ? "indexer"
+        : apiFallback?.ok
+          ? "objekt-top-api"
+          : "unavailable",
       indexerProbe: probe,
+      ...(apiFallback !== undefined
+        ? {
+            apiFallback: {
+              ...apiFallback,
+              ...getIndexerFallbackState(),
+            },
+          }
+        : {}),
       ...(tcp !== undefined ? { indexerTcp: tcp } : {}),
       ...(upstreamTcp !== undefined && upstreamTcp !== "skipped"
         ? { indexerUpstreamTcp: upstreamTcp }
