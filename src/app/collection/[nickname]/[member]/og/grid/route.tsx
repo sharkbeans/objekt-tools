@@ -134,8 +134,14 @@ export async function GET(
     ? (seasons.find((s) => s.toLowerCase() === requestedSeason.toLowerCase()) ??
       latestSeason)
     : latestSeason;
+  // The rank ranks every crafter, which only the indexer's transfer table can
+  // answer (objekt.top's API has no equivalent). While it is unreachable the
+  // card renders without the rank badge instead of failing.
   const gridRank = season
-    ? await getGridRank(progress.address, member, season)
+    ? await getGridRank(progress.address, member, season).catch((error) => {
+        console.warn("Grid OG: rank unavailable", error);
+        return null;
+      })
     : null;
   const seasonCollections = season
     ? progress.collections.filter((c) => c.season === season)

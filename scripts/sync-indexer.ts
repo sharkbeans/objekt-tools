@@ -47,7 +47,7 @@ async function main() {
     }
 
     console.log(
-      `[pass ${iteration}] collections: fetched ${result.collections.upsertedCount} in ${result.collections.fetchMs}ms (resumed after ${result.collections.resumedAfter ?? "beginning"})`,
+      `[pass ${iteration}] collections (${result.collections.source}): fetched ${result.collections.upsertedCount} in ${result.collections.fetchMs}ms (resumed after ${result.collections.resumedAfter ?? "beginning"})`,
     );
 
     // Stop once a pass fetches nothing new — caught up.

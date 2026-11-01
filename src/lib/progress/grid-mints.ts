@@ -1,5 +1,7 @@
 import { indexerPool } from "@/lib/db/indexer";
 import { ZERO_ADDRESS } from "@/lib/indexer-constants";
+import { withIndexerFallback } from "@/lib/indexer-fallback";
+import { fetchMintTransfers } from "@/lib/objekt-top-api";
 import { getCachedStaleWhileRevalidate } from "@/lib/server-cache";
 
 type GridMintCountRow = {
@@ -21,9 +23,12 @@ export async function getGridMintCounts(
   const rows = await getCachedStaleWhileRevalidate(
     `progress:grid-mints:v3:${address}:${member.toLowerCase()}`,
     10 * 60_000,
-    async () => {
-      const result = await indexerPool.query<GridMintCountRow>(
-        `
+    () =>
+      withIndexerFallback(
+        "grid mints",
+        async () => {
+          const result = await indexerPool.query<GridMintCountRow>(
+            `
           select
             c.collection_id,
             count(*)::text as grid_mint_count
@@ -36,12 +41,45 @@ export async function getGridMintCounts(
             and c.on_offline = 'online'
           group by c.collection_id
         `,
-        [ZERO_ADDRESS, address, member],
-      );
-      return result.rows;
-    },
+            [ZERO_ADDRESS, address, member],
+          );
+          return result.rows;
+        },
+        () => loadGridMintCountsFromApi(address, member),
+      ),
   );
   return Object.fromEntries(
     rows.map((row) => [row.collection_id, Number(row.grid_mint_count)]),
   );
+}
+
+// The same counts from objekt.top's public API while the indexer is down.
+// The API's member filter also matches multi-member collections, so the
+// collection's own member is checked again to keep `c.member = $3`.
+async function loadGridMintCountsFromApi(
+  address: string,
+  member: string,
+): Promise<GridMintCountRow[]> {
+  const mints = await fetchMintTransfers(address, {
+    member,
+    class: "Special",
+    onOffline: "online",
+  });
+  const counts = new Map<string, number>();
+  for (const { transfer, objekt } of mints) {
+    if (transfer.from.toLowerCase() !== ZERO_ADDRESS) continue;
+    if (transfer.to.toLowerCase() !== address.toLowerCase()) continue;
+    if (
+      objekt.member !== member ||
+      objekt.class !== "Special" ||
+      objekt.onOffline !== "online"
+    ) {
+      continue;
+    }
+    counts.set(objekt.collectionId, (counts.get(objekt.collectionId) ?? 0) + 1);
+  }
+  return [...counts].map(([collection_id, count]) => ({
+    collection_id,
+    grid_mint_count: String(count),
+  }));
 }

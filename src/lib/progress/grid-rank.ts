@@ -1,5 +1,6 @@
 import { indexerPool } from "@/lib/db/indexer";
 import { ZERO_ADDRESS } from "@/lib/indexer-constants";
+import { isIndexerBypassed } from "@/lib/indexer-fallback";
 import { getCached } from "@/lib/server-cache";
 
 export type GridRank = {
@@ -29,6 +30,9 @@ export async function getGridRank(
     `grid-rank:v1:${member.toLowerCase()}:${season.toLowerCase()}`,
     10 * 60_000,
     async () => {
+      // No API equivalent ranks every crafter; while the indexer is known to
+      // be down, fail at once instead of waiting on a connection timeout.
+      if (isIndexerBypassed()) throw new Error("Indexer unavailable");
       const res = await indexerPool.query<CraftCountRow>(
         `
           select reward."to" as address, count(*)::text as n
