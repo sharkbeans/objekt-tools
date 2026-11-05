@@ -346,6 +346,8 @@ try {
   await page.locator("objekt-match-badge").waitFor();
   await render();
   await page.locator("objekt-match-badge").waitFor();
+  // The whole message is marked, not only the pill under it.
+  assert.equal(await page.locator("[data-objekt-match]").count(), 1);
   await popup.reload();
   await indexHolds("1 post in the index");
   // The file export still exists, one level down in Settings.
@@ -428,6 +430,10 @@ try {
   assert.equal(delivered.length, 1);
   assert.match(delivered[0].transcript, /HAVE YooYeon CC101/);
   assert.equal(delivered[0].wants, "SeoYeon CC101");
+  // A dated search, not an anonymous pile of posts.
+  assert.ok(delivered[0].capture.run);
+  assert.ok(delivered[0].capture.capturedAt <= Date.now());
+  assert.deepEqual(delivered[0].capture.queries, ["CC101"]);
   // A second delivery goes to the same desk, not a second tab.
   await popup.bringToFront();
   await popup.locator("#open-match").click();
@@ -496,6 +502,33 @@ try {
     (await worker.evaluate(() => chrome.storage.local.get("wants"))).wants,
     "SeoYeon CC101",
   );
+
+  // "Run a new scan" with no list to send: Discord comes forward from /match
+  // through the real bridge and worker, and the want list is left alone.
+  await site.bringToFront();
+  const discordInFront = () =>
+    worker.evaluate(async () =>
+      (await chrome.tabs.query({ active: true })).some((tab) =>
+        tab.url?.startsWith("https://discord.com/"),
+      ),
+    );
+  assert.equal(await discordInFront(), false);
+  assert.deepEqual(
+    await ask(
+      { source: "objekt-match", type: "open-panel", id: "smoke-panel" },
+      "panel-opened",
+    ),
+    { source: "objekt-capture", type: "panel-opened", id: "smoke-panel" },
+  );
+  for (let tries = 0; !(await discordInFront()); tries++) {
+    assert.ok(tries < 50, "open-panel never brought Discord forward");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(
+    (await worker.evaluate(() => chrome.storage.local.get("wants"))).wants,
+    "SeoYeon CC101",
+  );
+  await popup.bringToFront();
 
   // A run in progress, stated directly rather than raced against: Stop exists
   // only while there is something to stop, and Search refuses a second run.
@@ -605,7 +638,9 @@ try {
     chrome.storage.local.set({ pausedChannels: ["123"] }),
   );
   await page.waitForFunction(
-    () => !document.querySelector("objekt-match-badge"),
+    () =>
+      !document.querySelector("objekt-match-badge") &&
+      !document.querySelector("[data-objekt-match]"),
   );
   await page.evaluate(() => {
     document.getElementById("message-content-456").textContent =
@@ -653,7 +688,9 @@ try {
     document.getElementById("consent").checkVisibility(),
   );
   await page.waitForFunction(
-    () => !document.querySelector("objekt-match-badge"),
+    () =>
+      !document.querySelector("objekt-match-badge") &&
+      !document.querySelector("[data-objekt-match]"),
   );
   await page.evaluate(() => {
     document
@@ -728,7 +765,7 @@ try {
 
   assert.deepEqual(failures, []);
   console.log(
-    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, getting-started steps (the want box as the step, Open Discord from the pop-out window), typed wants surviving a reload, want cards with art, a whole search run end to end, delivery into /match and tab reuse, objekt.my bridge (presence, hunt → want list, undo), run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",
+    "PASS: floating panel (drag, clamp, restore, closed shadow root, live sync), content-script takeover, consent gates, getting-started steps (the want box as the step, Open Discord from the pop-out window), typed wants surviving a reload, want cards with art, a whole search run end to end, delivery into /match and tab reuse, objekt.my bridge (presence, hunt → want list, undo, open panel), run state and interruption, MV3 capture, background-tab capture, dedupe after virtualized re-render, inventory annotation, export download, pause, withdrawal.",
   );
 } finally {
   await context.close();

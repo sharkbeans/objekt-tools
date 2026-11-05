@@ -1,7 +1,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { useExtensionPresence } from "@/hooks/use-extension-presence";
-import { huntMessage, sendHuntToExtension } from "@/lib/match/send-hunt";
+import {
+  huntMessage,
+  openExtensionPanel,
+  sendHuntToExtension,
+} from "@/lib/match/send-hunt";
 import { installFakeExtension } from "@/test/fake-extension";
 
 const hunt = {
@@ -62,6 +66,21 @@ describe("sendHuntToExtension", () => {
     await expect(sendHuntToExtension(hunt, { timeoutMs: 30 })).resolves.toBe(
       false,
     );
+  });
+});
+
+describe("openExtensionPanel", () => {
+  it("resolves true once the extension has done it", async () => {
+    const extension = installFakeExtension();
+    cleanup = extension.remove;
+    await expect(openExtensionPanel()).resolves.toBe(true);
+    expect(extension.panels).toHaveLength(1);
+  });
+
+  it("resolves false for an extension that predates the message", async () => {
+    const extension = installFakeExtension({ opensPanel: false });
+    cleanup = extension.remove;
+    await expect(openExtensionPanel({ timeoutMs: 30 })).resolves.toBe(false);
   });
 });
 

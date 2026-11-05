@@ -1,6 +1,6 @@
 /**
- * The extension's side of objekt.my pages: say it is installed, and take a
- * hunt as the want list. `objekt-bridge.ts` runs this as a content script on
+ * The extension's side of objekt.my pages: say it is installed, take a hunt as
+ * the want list, and bring Discord forward when asked. `objekt-bridge.ts` runs this as a content script on
  * objekt.my; it is kept apart from that entry point so tests can drive it with
  * a fake window and fake storage.
  *
@@ -9,11 +9,11 @@
  * - It reads nothing from the page — no DOM, no cookies, no storage — only
  *   `window.postMessage` data that `readPageMessage` accepts, and only from
  *   this window on its own origin.
- * - It answers `ping` with `present`, and stores a `hunt` locally and answers
- *   `hunt-saved`. Nothing else is listened for, and it makes no requests.
- *   Once a hunt is stored it asks the extension's own worker to bring the
- *   user's Discord tab forward — the one message it sends inside the
- *   extension.
+ * - It answers `ping` with `present`, stores a `hunt` locally and answers
+ *   `hunt-saved`, and answers `open-panel` with `panel-opened`. Nothing else is
+ *   listened for, and it makes no requests. After a stored hunt or an
+ *   `open-panel` it asks the extension's own worker to bring the user's Discord
+ *   tab forward — the one message it sends inside the extension.
  */
 
 import {
@@ -59,6 +59,8 @@ export interface BridgeOptions {
    * point uses it to bring Discord forward.
    */
   onSaved?: () => void;
+  /** Called on `open-panel`. The entry point brings Discord forward here too. */
+  onOpenPanel?: () => void;
   now?: () => number;
 }
 
@@ -69,6 +71,7 @@ export function startBridge({
   version,
   alive,
   onSaved,
+  onOpenPanel,
   now = Date.now,
 }: BridgeOptions): () => void {
   const post = (message: ExtensionMessage) =>
@@ -94,6 +97,11 @@ export function startBridge({
     if (!message || !alive()) return;
     if (message.type === "ping") {
       present();
+      return;
+    }
+    if (message.type === "open-panel") {
+      onOpenPanel?.();
+      post({ source: EXTENSION_SOURCE, type: "panel-opened", id: message.id });
       return;
     }
     if (message.type !== "hunt") return;

@@ -17,11 +17,14 @@
 // Compression is async, which is the whole reason this module exists rather
 // than a pair of synchronous helpers.
 
+import { type Capture, readCaptures, settleCaptures } from "./captures";
 import { mergeBlocks, type StoredBlock, trimBlocks } from "./transcript-blocks";
 
 const DB_NAME = "objekt-match";
 const STORE_NAME = "kv";
 const BLOCKS_KEY = "match:blocks:v2";
+// Small and read on every load, so plain structured data rather than gzipped.
+const CAPTURES_KEY = "match:captures:v1";
 // Superseded by the IndexedDB store above; read once on load, then dropped.
 const LEGACY_RAW_KEY = "match:raw:v1";
 
@@ -124,6 +127,15 @@ function isBlock(value: unknown): value is StoredBlock {
   if (!("author" in value) || !("body" in value) || !("time" in value)) {
     return false;
   }
+  if (
+    "captures" in value &&
+    !(
+      Array.isArray(value.captures) &&
+      value.captures.every((id) => typeof id === "string")
+    )
+  ) {
+    return false;
+  }
   return (
     typeof value.author === "string" &&
     typeof value.body === "string" &&
@@ -157,14 +169,21 @@ function clearLegacyRaw(): void {
 
 // ------------------------------------------------------------------ public
 
+export interface StoredDesk {
+  blocks: StoredBlock[];
+  captures: Capture[];
+}
+
 /**
- * Read the stored transcript, migrating anything left in `localStorage`.
+ * Read the stored transcript and its captures, migrating anything left in
+ * `localStorage`.
  *
  * Never throws: a blocked, corrupt or absent store yields an empty list, which
  * leaves the page usable and lets the next paste start a fresh store.
  */
-export async function loadBlocks(): Promise<StoredBlock[]> {
+export async function loadDesk(): Promise<StoredDesk> {
   let blocks: StoredBlock[] = [];
+  let captures: Capture[] = [];
   try {
     // Trim on read too: a store written before the cap existed can be larger
     // than the load-time budget allows.
@@ -173,6 +192,11 @@ export async function loadBlocks(): Promise<StoredBlock[]> {
         await runTransaction<unknown>("readonly", (store) =>
           store.get(BLOCKS_KEY),
         ),
+      ),
+    );
+    captures = readCaptures(
+      await runTransaction<unknown>("readonly", (store) =>
+        store.get(CAPTURES_KEY),
       ),
     );
   } catch {
@@ -184,9 +208,10 @@ export async function loadBlocks(): Promise<StoredBlock[]> {
   if (legacy) {
     blocks = mergeBlocks(blocks, legacy);
     clearLegacyRaw();
-    void saveBlocks(blocks);
   }
-  return blocks;
+  captures = settleCaptures(captures, blocks);
+  if (legacy) void saveDesk(blocks, captures);
+  return { blocks, captures };
 }
 
 // Writes are serialised: two quick pastes must not race, and the last one to be
@@ -208,12 +233,18 @@ function requestPersistence(): void {
 }
 
 /**
- * Persist the blocks, replacing whatever was stored.
+ * Persist the posts and their captures, replacing whatever was stored.
+ *
+ * One transaction for both: posts naming a capture the list has lost, or the
+ * reverse, would be a desk that cannot explain itself.
  *
  * Resolves false when the write could not be made, so the caller can tell the
  * user their paste is session-only. Safe to ignore otherwise.
  */
-export function saveBlocks(blocks: StoredBlock[]): Promise<boolean> {
+export function saveDesk(
+  blocks: StoredBlock[],
+  captures: Capture[],
+): Promise<boolean> {
   const done = queue.then(async () => {
     try {
       requestPersistence();
@@ -221,9 +252,10 @@ export function saveBlocks(blocks: StoredBlock[]): Promise<boolean> {
       // as soon as it yields to the microtask queue, so awaiting inside the
       // callback would abort the write.
       const payload = await encodeBlocks(blocks);
-      await runTransaction("readwrite", (store) =>
-        store.put(payload, BLOCKS_KEY),
-      );
+      await runTransaction("readwrite", (store) => {
+        store.put(captures, CAPTURES_KEY);
+        return store.put(payload, BLOCKS_KEY);
+      });
       return true;
     } catch {
       return false;
@@ -234,11 +266,33 @@ export function saveBlocks(blocks: StoredBlock[]): Promise<boolean> {
   return done;
 }
 
+/**
+ * Persist the capture list alone. Turning a capture on or off changes nothing
+ * about the posts, and should not cost a recompress of all of them.
+ */
+export function saveCaptures(captures: Capture[]): Promise<boolean> {
+  const done = queue.then(async () => {
+    try {
+      await runTransaction("readwrite", (store) =>
+        store.put(captures, CAPTURES_KEY),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  queue = done.catch(() => false);
+  return done;
+}
+
 /** Drop everything this module stores, including the legacy key. */
 export function clearBlocks(): Promise<void> {
   const done = queue.then(async () => {
     try {
-      await runTransaction("readwrite", (store) => store.delete(BLOCKS_KEY));
+      await runTransaction("readwrite", (store) => {
+        store.delete(CAPTURES_KEY);
+        return store.delete(BLOCKS_KEY);
+      });
     } catch {
       /* Already unreachable — nothing to clear. */
     }

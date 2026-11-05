@@ -5,11 +5,15 @@ import {
   messageKey,
   UNKNOWN_AUTHOR,
 } from "@/lib/discord/transcript";
+import { PASTE_CAPTURE } from "./captures";
 import {
   blocksToTranscript,
+  dropCapture,
   linksOf,
   MAX_BLOCKS,
+  membershipOf,
   mergeBlocks,
+  readBlocks,
   trimBlocks,
 } from "./transcript-blocks";
 
@@ -191,5 +195,106 @@ Cosmo objekt explorer`;
     const text = blocksToTranscript(mergeBlocks([], withChrome));
     assert.ok(!text.includes("Cosmo objekt explorer"));
     assert.ok(text.includes("WTS ALL"));
+  });
+});
+
+describe("capture membership", () => {
+  const memberOf = (blocks: ReturnType<typeof mergeBlocks>) =>
+    [...membershipOf(blocks).values()].map((ids) => [...ids]);
+
+  it("leaves a pasted post unmarked, as older stores already read", () => {
+    const blocks = mergeBlocks([], SAMPLE);
+    assert.equal(
+      blocks.some((block) => "captures" in block),
+      false,
+    );
+    assert.deepEqual(memberOf(blocks)[0], [PASTE_CAPTURE]);
+  });
+
+  it("names the search that brought a post", () => {
+    const blocks = mergeBlocks([], SAMPLE, {}, "run-1");
+    assert.deepEqual(blocks[0].captures, ["run-1"]);
+  });
+
+  it("stores a post two searches saw once, naming both", () => {
+    const blocks = mergeBlocks(
+      mergeBlocks([], SAMPLE, {}, "run-1"),
+      SAMPLE,
+      {},
+      "run-2",
+    );
+    assert.equal(blocks.length, 3);
+    assert.deepEqual(blocks[0].captures, ["run-1", "run-2"]);
+  });
+
+  it("keeps a pasted post pasted when a search also finds it", () => {
+    const blocks = mergeBlocks(mergeBlocks([], SAMPLE), SAMPLE, {}, "run-1");
+    assert.deepEqual(blocks[0].captures, [PASTE_CAPTURE, "run-1"]);
+  });
+
+  it("does not repeat a capture delivered twice", () => {
+    const blocks = mergeBlocks(
+      mergeBlocks([], SAMPLE, {}, "run-1"),
+      SAMPLE,
+      {},
+      "run-1",
+    );
+    assert.deepEqual(blocks[0].captures, ["run-1"]);
+  });
+
+  it("keeps a link and the capture together", () => {
+    const [first] = mergeBlocks([], SAMPLE);
+    const key = messageKey(first.author, first.body);
+    const url = "https://discord.com/channels/700/800/456";
+    const [block] = mergeBlocks([], SAMPLE, { [key]: url }, "run-1");
+    assert.equal(block.link, url);
+    assert.deepEqual(block.captures, ["run-1"]);
+  });
+
+  it("drops a capture's own posts and spares shared ones", () => {
+    const shared = mergeBlocks([], SAMPLE, {}, "run-1");
+    const blocks = mergeBlocks(shared, DISCRUB, {}, "run-2");
+    const both = mergeBlocks(blocks, SAMPLE, {}, "run-2");
+    const left = dropCapture(both, "run-1");
+    // Everything run-1 had, run-2 saw too.
+    assert.equal(left.length, both.length);
+    assert.ok(left.every((block) => block.captures?.join() === "run-2"));
+    assert.deepEqual(dropCapture(left, "run-2"), []);
+  });
+
+  it("goes back to unmarked when only the paste row is left", () => {
+    const blocks = mergeBlocks(mergeBlocks([], SAMPLE), SAMPLE, {}, "run-1");
+    assert.equal(
+      dropCapture(blocks, "run-1").some((block) => "captures" in block),
+      false,
+    );
+  });
+
+  it("can drop the paste row itself", () => {
+    const blocks = mergeBlocks(mergeBlocks([], SAMPLE), SAMPLE, {}, "run-1");
+    const left = dropCapture(blocks, PASTE_CAPTURE);
+    assert.ok(left.every((block) => block.captures?.join() === "run-1"));
+    assert.deepEqual(dropCapture(mergeBlocks([], SAMPLE), PASTE_CAPTURE), []);
+  });
+
+  it("still round-trips through the transcript text", () => {
+    const blocks = mergeBlocks([], SAMPLE, {}, "run-1");
+    assert.deepEqual(keysOf(blocksToTranscript(blocks)), keysOf(SAMPLE));
+  });
+});
+
+describe("readBlocks", () => {
+  it("reads the same messages a merge stores", () => {
+    assert.deepEqual(readBlocks(SAMPLE), mergeBlocks([], SAMPLE));
+  });
+
+  it("keeps a headerless paste as one anonymous post", () => {
+    assert.deepEqual(readBlocks(" Have\nSeoyeon CC112 "), [
+      { author: UNKNOWN_AUTHOR, time: null, body: "Have\nSeoyeon CC112" },
+    ]);
+  });
+
+  it("reads nothing from blank text", () => {
+    assert.deepEqual(readBlocks("  \n "), []);
   });
 });

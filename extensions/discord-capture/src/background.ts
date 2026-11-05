@@ -6,7 +6,7 @@ import { lookupArtwork, readArtworkCache } from "./artwork";
 import { extensionApi } from "./browser";
 import { automationAllowed, captureAllowed } from "./consent";
 import { messageLink } from "./dom";
-import { exportTranscript } from "./export";
+import { exportTranscript, runCapture, searchPosts } from "./export";
 import { DISCORD_MATCHES, pickTab, resolveTab } from "./host-tab";
 import { loadInventory } from "./inventory";
 import {
@@ -242,7 +242,8 @@ function linkFor(post: Entry, guilds: Record<string, string>): string | null {
  *
  * Scoped to the last search, exactly as the file export was: the index is
  * cumulative, and matching against everything ever browsed pulls in stale
- * posts nobody asked about. Before any search, the whole index goes.
+ * posts nobody asked about. Before any search there is nothing to send, since
+ * /match files what it gets as a search and browsing is not one.
  */
 async function openInMatch(): Promise<{ posts: number; sent: number }> {
   if (!(await objektAllowed(MATCH_PERMISSION)))
@@ -251,6 +252,7 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
     );
   const stored = await extensionApi.storage.local.get([
     "searchRunId",
+    "searchProgress",
     "nickname",
     "wants",
   ]);
@@ -258,8 +260,8 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
     typeof stored.searchRunId === "string" && stored.searchRunId
       ? stored.searchRunId
       : null;
-  const posts = (await entries()).filter((post) => !run || post.run === run);
-  if (!posts.length)
+  const posts = searchPosts(await entries(), run);
+  if (!run || !posts.length)
     throw new Error("Nothing to open yet. Run a search first.");
   const transcript = exportTranscript(posts.map((post) => post.block));
   // Keyed the way /match keys a post, so each can link back to its message.
@@ -282,11 +284,18 @@ async function openInMatch(): Promise<{ posts: number; sent: number }> {
       func: deliverToMatch,
       args: [
         {
-          id: `${run ?? "index"}-${Date.now().toString(36)}`,
+          id: `${run}-${Date.now().toString(36)}`,
           transcript,
           nickname: typeof stored.nickname === "string" ? stored.nickname : "",
           wants: typeof stored.wants === "string" ? stored.wants : "",
           links,
+          capture: runCapture(
+            run,
+            posts,
+            (stored.searchProgress as { queries?: unknown } | undefined)
+              ?.queries,
+            Date.now(),
+          ),
         },
         PAGE_SOURCE,
         EXTENSION_SOURCE,
@@ -559,8 +568,8 @@ function fromObjektPage(sender: { url?: string; frameId?: number }): boolean {
  * used most recently, or a new one when there is none.
  *
  * Asked for by the bridge right after a want list arrives from objekt.my —
- * the user just pressed "Find on Discord", so Discord is where they are going.
- * Reusing their tab rather than opening another keeps them in the channel
+ * the user just pressed "Find on Discord", so Discord is where they are going —
+ * and when /match asks for a new scan with no list to send. Reusing their tab rather than opening another keeps them in the channel
  * they trade in; the panel shows the list that just arrived.
  *
  * Also asked for by the panel's getting-started steps. From a pop-out window
@@ -690,8 +699,8 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
         return true;
       }
     }
-    // The objekt.my bridge asks for exactly one thing, and only after a want
-    // list the user sent with a click has been stored.
+    // The objekt.my bridge asks for exactly one thing, and only after a click:
+    // a want list was sent and stored, or a new scan was asked for.
     if (fromObjektPage(sender)) {
       if (request?.type === "show-discord") {
         await showDiscord();

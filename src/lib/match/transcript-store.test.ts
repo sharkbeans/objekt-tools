@@ -23,6 +23,19 @@ describe("transcript codec", () => {
     assert.deepEqual(await decodeBlocks(await encodeBlocks(blocks)), blocks);
   });
 
+  it("round-trips which captures saw a post", async () => {
+    const blocks = mergeBlocks([], SAMPLE, {}, "run-1");
+    assert.deepEqual(await decodeBlocks(await encodeBlocks(blocks)), blocks);
+  });
+
+  it("reads a capture list that is not one as a corrupt store", async () => {
+    const [block] = mergeBlocks([], SAMPLE);
+    const payload = await encodeBlocks([
+      { ...block, captures: "run-1" as unknown as string[] },
+    ]);
+    assert.deepEqual(await decodeBlocks(payload), []);
+  });
+
   it("round-trips an empty store", async () => {
     assert.deepEqual(await decodeBlocks(await encodeBlocks([])), []);
   });

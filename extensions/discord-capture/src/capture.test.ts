@@ -39,6 +39,36 @@ test("grouped posts use explicit author references, never previous siblings", ()
   doc.getElementById("message-username-455")?.remove();
   assert.equal(readMessage(li), null);
 });
+test("a post records when it was collected, apart from when it was posted", async () => {
+  await clear();
+  const block = {
+    author: "T",
+    body: "HAVE CC101",
+    time: "2026-09-09T03:41:00Z",
+  };
+  await capture(block, "1-1", undefined, undefined, 1_000);
+  const [stored] = await entries();
+  assert.equal(stored.capturedAt, 1_000);
+  assert.equal(stored.block.time, block.time);
+});
+test("a search reaching a post re-dates it; browsing past it does not", async () => {
+  await clear();
+  const block = {
+    author: "T",
+    body: "HAVE CC101",
+    time: "2026-09-09T03:41:00Z",
+  };
+  await capture(block, "1-1", undefined, undefined, 1_000);
+  await capture(block, "1-1", undefined, undefined, 2_000);
+  assert.equal((await entries())[0].capturedAt, 1_000);
+  await capture(block, "1-1", "run-1", undefined, 3_000);
+  assert.equal((await entries())[0].capturedAt, 3_000);
+  // Seen again by the same run: still its first sighting in that search.
+  await capture(block, "1-1", "run-1", undefined, 4_000);
+  assert.equal((await entries())[0].capturedAt, 3_000);
+  await capture(block, "1-1", "run-2", undefined, 5_000);
+  assert.equal((await entries())[0].capturedAt, 5_000);
+});
 test("index survives reopen, dedupes concurrent captures and uses shared range parser", async () => {
   await clear();
   const doc = fixture();

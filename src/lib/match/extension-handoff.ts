@@ -19,6 +19,13 @@
 // so the extension never has to call objekt.my with the user's session: the
 // page already holds the data and posts it, and the extension only stores it.
 //
+// Since 1.4.0 a page can also ask for the panel itself (`open-panel` →
+// `panel-opened`), which is how /match asks for a new scan. The panel lives in
+// the Discord tab, so this brings that tab forward with the panel open; there
+// is no way, and no need, to open the toolbar button's UI from a web page.
+// A delivery now says what it is too (`capture`), so /match can file it as a
+// dated search. Older extensions send neither, and the page copes with both.
+//
 // Kept free of `window` so the extension bundle and the page share it as-is.
 
 /** Stamped on everything the page sends. */
@@ -33,6 +40,8 @@ export const MAX_HANDOFF_CHARS = 32 * 1024 * 1024;
 export const MAX_HUNT_LINES = 40;
 /** And no line longer than this ("SeoYeon CC101" is 13). */
 export const MAX_HUNT_LINE_CHARS = 64;
+/** Queries one delivery can name: `QUERY_CAP` in the extension, with room. */
+export const MAX_CAPTURE_QUERIES = 200;
 /** Cosmo nicknames are short handles: letters, digits and a little more. */
 const NICKNAME = /^[\w.-]{1,32}$/;
 
@@ -58,7 +67,22 @@ export type PageMessage =
       wants: string;
       /** The Cosmo nickname the hunt is for, or "". */
       nickname: string;
-    };
+    }
+  /**
+   * Bring the user's Discord tab forward with the panel open. Sent only when
+   * the user presses a button; answered with `panel-opened`.
+   */
+  | { source: typeof PAGE_SOURCE; type: "open-panel"; id: string };
+
+/** What a delivery came from, so /match can file it as one dated capture. */
+export interface HandoffCapture {
+  /** The search run: the same across a run that was stopped and continued. */
+  run: string;
+  /** When the run last captured a post, in ms. */
+  capturedAt: number;
+  /** What the run searched Discord for: "CC101". */
+  queries: string[];
+}
 
 export interface HandoffPayload {
   /** Identifies one delivery, so a repeat is acknowledged, not re-applied. */
@@ -74,6 +98,8 @@ export interface HandoffPayload {
    * message in Discord. Posts whose guild was not known have none.
    */
   links: Record<string, string>;
+  /** Absent from extensions before 1.4.0, and if it fails validation here. */
+  capture?: HandoffCapture;
 }
 
 export type ExtensionMessage =
@@ -87,7 +113,9 @@ export type ExtensionMessage =
       type: "hunt-saved";
       id: string;
       count: number;
-    };
+    }
+  /** An `open-panel` was carried out. */
+  | { source: typeof EXTENSION_SOURCE; type: "panel-opened"; id: string };
 
 function record(data: unknown): Record<string, unknown> | null {
   return data && typeof data === "object"
@@ -115,6 +143,38 @@ function readLinks(value: unknown): Record<string, string> {
     )
       links[key] = url;
   return links;
+}
+
+/**
+ * A delivery's capture details, or null when they are not usable.
+ *
+ * Refused as a whole rather than patched: a capture with a made-up date is
+ * worse than one the page dates itself, which it does when this is absent.
+ */
+function readCapture(value: unknown): HandoffCapture | null {
+  const capture = record(value);
+  if (
+    !capture ||
+    typeof capture.run !== "string" ||
+    !ID.test(capture.run) ||
+    typeof capture.capturedAt !== "number" ||
+    !Number.isFinite(capture.capturedAt) ||
+    capture.capturedAt <= 0 ||
+    !Array.isArray(capture.queries)
+  )
+    return null;
+  return {
+    run: capture.run,
+    capturedAt: capture.capturedAt,
+    queries: capture.queries
+      .filter(
+        (query): query is string =>
+          typeof query === "string" &&
+          query.length > 0 &&
+          query.length <= MAX_HUNT_LINE_CHARS,
+      )
+      .slice(0, MAX_CAPTURE_QUERIES),
+  };
 }
 
 /**
@@ -146,6 +206,10 @@ export function readExtensionMessage(data: unknown): ExtensionMessage | null {
           count: message.count,
         }
       : null;
+  if (message.type === "panel-opened")
+    return typeof message.id === "string" && ID.test(message.id)
+      ? { source: EXTENSION_SOURCE, type: "panel-opened", id: message.id }
+      : null;
   if (
     message.type !== "import" ||
     typeof message.id !== "string" ||
@@ -155,6 +219,7 @@ export function readExtensionMessage(data: unknown): ExtensionMessage | null {
     message.transcript.length > MAX_HANDOFF_CHARS
   )
     return null;
+  const capture = readCapture(message.capture);
   return {
     source: EXTENSION_SOURCE,
     type: "import",
@@ -165,6 +230,7 @@ export function readExtensionMessage(data: unknown): ExtensionMessage | null {
     wants:
       typeof message.wants === "string" ? message.wants.slice(0, 20_000) : "",
     links: readLinks(message.links),
+    ...(capture ? { capture } : {}),
   };
 }
 
@@ -201,6 +267,10 @@ export function readPageMessage(data: unknown): PageMessage | null {
   if (message?.source !== PAGE_SOURCE) return null;
   if (message.type === "ready") return { source: PAGE_SOURCE, type: "ready" };
   if (message.type === "ping") return { source: PAGE_SOURCE, type: "ping" };
+  if (message.type === "open-panel")
+    return typeof message.id === "string" && ID.test(message.id)
+      ? { source: PAGE_SOURCE, type: "open-panel", id: message.id }
+      : null;
   if (message.type === "hunt") {
     const wants = readHuntWants(message.wants);
     const nickname =
