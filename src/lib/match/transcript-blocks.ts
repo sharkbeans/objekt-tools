@@ -19,6 +19,7 @@ import {
   splitTranscript,
   UNKNOWN_AUTHOR,
 } from "@/lib/discord/transcript";
+import { blockCaptures, PASTE_CAPTURE } from "./captures";
 import { DISCORD_MESSAGE_URL } from "./extension-handoff";
 
 export interface StoredBlock {
@@ -32,6 +33,12 @@ export interface StoredBlock {
   body: string;
   /** Opens the message in Discord. Only posts the capture extension delivered have one. */
   link?: string;
+  /**
+   * The captures that saw this post. Left off for a post that was only pasted,
+   * which is also how every post stored before captures existed reads; see
+   * `blockCaptures`.
+   */
+  captures?: string[];
 }
 
 // Re-parsing every stored block on load costs about 0.25 ms each, so history is
@@ -48,6 +55,34 @@ export const MAX_BLOCKS = 40_000;
 const NO_TIME = "00:00";
 
 /**
+ * The messages in a transcript, as they would be stored.
+ *
+ * No header anywhere: Discord's single-message "Copy Text" omits it. The whole
+ * chunk is kept as one anonymous post rather than dropped — the caller has
+ * already checked that it parses as a trade list.
+ */
+export function readBlocks(pasted: string): StoredBlock[] {
+  const { blocks } = splitTranscript(pasted);
+  if (blocks.length === 0)
+    return pasted.trim()
+      ? [{ author: UNKNOWN_AUTHOR, time: null, body: pasted.trim() }]
+      : [];
+  return blocks.map((block) => ({
+    author: block.author,
+    time: block.time?.raw ?? null,
+    body: block.body,
+  }));
+}
+
+/** `block` belonging to exactly `ids`, in the form it is stored. */
+function inCaptures(block: StoredBlock, ids: readonly string[]): StoredBlock {
+  const { captures: _previous, ...rest } = block;
+  return ids.length === 1 && ids[0] === PASTE_CAPTURE
+    ? rest
+    : { ...rest, captures: [...ids] };
+}
+
+/**
  * Fold a new paste into what is already stored, dropping messages that are
  * already there.
  *
@@ -57,41 +92,57 @@ const NO_TIME = "00:00";
  * Order is last-seen, not first-seen, which is what makes trimming safe: a
  * trader who is still bumping their list moves back to the end and survives,
  * while the ones who stopped posting fall off first.
+ *
+ * `capture` is who brought these posts. A post already stored keeps the
+ * captures that saw it before, so turning the new one off cannot take away a
+ * post another capture still has.
  */
 export function mergeBlocks(
   existing: StoredBlock[],
   pasted: string,
   links: Readonly<Record<string, string>> = {},
+  capture: string = PASTE_CAPTURE,
 ): StoredBlock[] {
-  const { blocks } = splitTranscript(pasted);
-
-  // No header anywhere: Discord's single-message "Copy Text" omits it. Keep the
-  // whole chunk as one anonymous post rather than dropping it — the caller has
-  // already checked that it parses as a trade list.
-  const incoming: StoredBlock[] =
-    blocks.length === 0
-      ? pasted.trim()
-        ? [{ author: UNKNOWN_AUTHOR, time: null, body: pasted.trim() }]
-        : []
-      : blocks.map((block) => ({
-          author: block.author,
-          time: block.time?.raw ?? null,
-          body: block.body,
-        }));
-
   const byKey = new Map(
     existing.map((block) => [messageKey(block.author, block.body), block]),
   );
-  for (const block of incoming) {
+  for (const block of readBlocks(pasted)) {
     const key = messageKey(block.author, block.body);
+    const known = byKey.get(key);
     // A post pasted as plain text keeps the link an earlier delivery gave it.
-    const link = Object.hasOwn(links, key) ? links[key] : byKey.get(key)?.link;
+    const link = Object.hasOwn(links, key) ? links[key] : known?.link;
+    const ids = known
+      ? [...new Set([...blockCaptures(known), capture])]
+      : [capture];
     // Delete before setting so a re-sighted post moves to the end rather than
     // keeping the position of its first sighting.
     byKey.delete(key);
-    byKey.set(key, link ? { ...block, link } : block);
+    byKey.set(key, inCaptures(link ? { ...block, link } : block, ids));
   }
   return trimBlocks([...byKey.values()]);
+}
+
+/**
+ * Take a capture off the stored posts. A post only it had goes with it; one
+ * another capture also saw stays for that one.
+ */
+export function dropCapture(blocks: StoredBlock[], id: string): StoredBlock[] {
+  return blocks.flatMap((block) => {
+    const ids = blockCaptures(block).filter((capture) => capture !== id);
+    return ids.length ? [inCaptures(block, ids)] : [];
+  });
+}
+
+/** Post content key -> the captures that saw it. */
+export function membershipOf(
+  blocks: StoredBlock[],
+): Map<string, readonly string[]> {
+  return new Map(
+    blocks.map((block) => [
+      messageKey(block.author, block.body),
+      blockCaptures(block),
+    ]),
+  );
 }
 
 /**

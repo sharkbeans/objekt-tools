@@ -1,5 +1,6 @@
 import { track } from "@/lib/analytics";
 import {
+  type ExtensionMessage,
   isHuntNickname,
   MAX_HUNT_LINE_CHARS,
   MAX_HUNT_LINES,
@@ -11,6 +12,33 @@ import type { HuntParams } from "@/lib/match/hunt-url";
 
 /** How long to wait for the extension to confirm before giving up. */
 export const SEND_HUNT_TIMEOUT_MS = 2000;
+
+/**
+ * Post `message` to the extension and wait for the reply `answers` recognises.
+ * Resolves false when nothing recognisable comes back in time.
+ */
+function askExtension(
+  message: PageMessage,
+  answers: (reply: ExtensionMessage) => boolean,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const finish = (ok: boolean) => {
+      clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      resolve(ok);
+    };
+    function onMessage(event: MessageEvent) {
+      if (event.source !== window || event.origin !== window.location.origin)
+        return;
+      const reply = readExtensionMessage(event.data);
+      if (reply && answers(reply)) finish(true);
+    }
+    window.addEventListener("message", onMessage);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    window.postMessage(message, window.location.origin);
+  });
+}
 
 /**
  * The `hunt` message for `p`, or null when there is nothing to send.
@@ -38,8 +66,8 @@ export function huntMessage(
   };
 }
 
-function huntId(): string {
-  return `hunt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+function requestId(kind: string): string {
+  return `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -55,33 +83,41 @@ export function sendHuntToExtension(
   options: { source?: string; timeoutMs?: number } = {},
 ): Promise<boolean> {
   if (typeof window === "undefined") return Promise.resolve(false);
-  const id = huntId();
+  const id = requestId("hunt");
   const message = huntMessage(p, id);
   if (!message) return Promise.resolve(false);
   const count = message.wants.split("\n").length;
-  return new Promise((resolve) => {
-    const finish = (ok: boolean) => {
-      clearTimeout(timer);
-      window.removeEventListener("message", onMessage);
-      if (ok)
-        track("extension_hunt_sent", {
-          wants: count,
-          mode: p.mode,
-          ...(options.source ? { source: options.source } : {}),
-        });
-      resolve(ok);
-    };
-    function onMessage(event: MessageEvent) {
-      if (event.source !== window || event.origin !== window.location.origin)
-        return;
-      const reply = readExtensionMessage(event.data);
-      if (reply?.type === "hunt-saved" && reply.id === id) finish(true);
-    }
-    window.addEventListener("message", onMessage);
-    const timer = setTimeout(
-      () => finish(false),
-      options.timeoutMs ?? SEND_HUNT_TIMEOUT_MS,
-    );
-    window.postMessage(message, window.location.origin);
+  return askExtension(
+    message,
+    (reply) => reply.type === "hunt-saved" && reply.id === id,
+    options.timeoutMs ?? SEND_HUNT_TIMEOUT_MS,
+  ).then((ok) => {
+    if (ok)
+      track("extension_hunt_sent", {
+        wants: count,
+        mode: p.mode,
+        ...(options.source ? { source: options.source } : {}),
+      });
+    return ok;
   });
+}
+
+/**
+ * Ask the extension to bring Discord forward with its panel open, leaving its
+ * want list as it is.
+ *
+ * Resolves false when nothing answers, which includes an extension from before
+ * 1.4.0: it is installed and working, it just does not know this message. Call
+ * it only from an explicit click, since it moves the user to another tab.
+ */
+export function openExtensionPanel(
+  options: { timeoutMs?: number } = {},
+): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  const id = requestId("panel");
+  return askExtension(
+    { source: PAGE_SOURCE, type: "open-panel", id },
+    (reply) => reply.type === "panel-opened" && reply.id === id,
+    options.timeoutMs ?? SEND_HUNT_TIMEOUT_MS,
+  );
 }

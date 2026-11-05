@@ -87,6 +87,21 @@ import {
 } from "@/lib/grid-trade-stash";
 import type { SavedHuntView } from "@/lib/hunts/saved-hunts";
 import {
+  addCapture,
+  type Capture,
+  captureLabel,
+  deliveredCapture,
+  formatCoverage,
+  hiddenPosts,
+  type NewCapture,
+  pastedCapture,
+  postCounts,
+  rescanWants,
+  STALE_SNOOZE_MS,
+  settleCaptures,
+  staleCaptures,
+} from "@/lib/match/captures";
+import {
   PAGE_SOURCE,
   type PageMessage,
   readExtensionMessage,
@@ -112,23 +127,28 @@ import {
   saveHideSeen,
   saveLocalSeen,
 } from "@/lib/match/seen-store";
-import { sendHuntToExtension } from "@/lib/match/send-hunt";
+import { openExtensionPanel, sendHuntToExtension } from "@/lib/match/send-hunt";
 import {
   blocksToTranscript,
+  dropCapture,
   linksOf,
   MAX_BLOCKS,
+  membershipOf,
   mergeBlocks,
+  readBlocks,
   type StoredBlock,
 } from "@/lib/match/transcript-blocks";
 import {
   clearBlocks,
-  loadBlocks,
-  saveBlocks,
+  loadDesk,
+  saveCaptures,
+  saveDesk,
 } from "@/lib/match/transcript-store";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { resolveForPoster } from "@/lib/poster/poster-resolver";
 import { stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionHref } from "@/lib/sections";
+import { CaptureTimeline, StaleCapturesAlert } from "./capture-timeline";
 import { ContactResults } from "./desk-contacts";
 import { type DeskBadge, DeskGrid } from "./desk-grid";
 import { matchesDeskQuery, parseDeskQuery, pinMatches } from "./desk-search";
@@ -146,6 +166,10 @@ const OFFERING_KEY = "match:offering:v1";
 const WANTING_KEY = "match:wants:v1";
 const PICKED_KEY = "match:picked:v1";
 const COLS_KEY = "match:columns:v1";
+/** Until when "Not now" on the stale alert holds, in ms. */
+const STALE_SNOOZE_KEY = "match:stale-snooze:v1";
+/** How often an open desk notices its captures have aged. */
+const CLOCK_TICK_MS = 5 * 60_000;
 const COLUMN_CHOICES = [4, 5, 6, 7, 8, 10, 12] as const;
 const DEFAULT_COLUMNS = 8;
 const EMPTY_KEYS = new Set<string>();
@@ -355,7 +379,17 @@ function HuntSendBar({
 export function MatchClient() {
   const [mode, setMode] = useState<DeskMode>("wtt");
   const [raw, setRaw] = useState("");
-  const [messages, setMessages] = useState<TranscriptMessage[]>([]);
+  /** Every stored post, parsed once. `messages` is what the captures let through. */
+  const [allMessages, setAllMessages] = useState<TranscriptMessage[]>([]);
+  const [captures, setCaptures] = useState<Capture[]>([]);
+  /** Post content key -> the captures that saw it. */
+  const [membership, setMembership] = useState<
+    ReadonlyMap<string, readonly string[]>
+  >(() => new Map());
+  // Only ever read once the stored posts have loaded, so the value computed on
+  // the server never reaches the markup.
+  const [now, setNow] = useState(() => Date.now());
+  const [staleSnooze, setStaleSnooze] = useState(0);
   const [offering, setOffering] = useState("");
   const [wanting, setWanting] = useState("");
   const [theirSearch, setTheirSearch] = useState("");
@@ -402,10 +436,26 @@ export function MatchClient() {
   // Persisted, never rendered — a ref keeps pastes out of the render path and
   // keeps `addPaste` free of a stale closure over the previous blocks.
   const blocksRef = useRef<StoredBlock[]>([]);
+  // The same for the capture list, which is rendered too but has to be current
+  // inside `addPaste` even when two deliveries land before a re-render.
+  const capturesRef = useRef<Capture[]>([]);
   const importStarted = useRef(new Set<string>());
   const generation = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
+
+  /** Point everything derived from the stored posts at these. */
+  const applyDesk = useCallback((blocks: StoredBlock[], next: Capture[]) => {
+    blocksRef.current = blocks;
+    capturesRef.current = next;
+    setStoredCount(blocks.length);
+    setLinks(linksOf(blocks));
+    setMembership(membershipOf(blocks));
+    setCaptures(next);
+    // A capture that has just landed is measured against the real time, not
+    // the last tick, or a four-day-old scan delivered now reads as three days.
+    setNow(Date.now());
+  }, []);
 
   useEffect(() => {
     try {
@@ -426,6 +476,7 @@ export function MatchClient() {
         );
       setSeen(loadLocalSeen());
       setHideSeen(loadHideSeen());
+      setStaleSnooze(Number(localStorage.getItem(STALE_SNOOZE_KEY)) || 0);
       localStorage.removeItem("match:transcript:v1");
     } catch {
       /* A disabled or full store still allows a session. */
@@ -433,19 +484,33 @@ export function MatchClient() {
     // The transcript is gzipped in IndexedDB, so reading it is async. `ready`
     // gates the settings writes below until it has landed.
     let cancelled = false;
-    loadBlocks()
+    loadDesk()
       .then((saved) => {
         if (cancelled) return;
-        blocksRef.current = saved;
-        setStoredCount(saved.length);
-        setLinks(linksOf(saved));
-        setMessages(analyzeTranscript(blocksToTranscript(saved)).messages);
+        applyDesk(saved.blocks, saved.captures);
+        // All of them, including captures turned off: parsing is the slow part
+        // of a load, so doing it once is what makes a toggle instant.
+        setAllMessages(
+          analyzeTranscript(blocksToTranscript(saved.blocks)).messages,
+        );
       })
       .finally(() => {
         if (!cancelled) setReady(true);
       });
     return () => {
       cancelled = true;
+    };
+  }, [applyDesk]);
+  // A desk left open for days should notice, without waiting for a reload.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === "visible") setNow(Date.now());
+    };
+    const timer = setInterval(tick, CLOCK_TICK_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
     };
   }, []);
   useEffect(() => {
@@ -464,11 +529,12 @@ export function MatchClient() {
 
   // Hashing is async, so ids arrive a beat after the messages do. Until then a
   // post has no id and stays visible, which is the right way round: a brief
-  // flash of a hidden post beats hiding one the user never triaged.
+  // flash of a hidden post beats hiding one the user never triaged. Every post,
+  // not just those on the desk, so turning a capture on has nothing to wait for.
   useEffect(() => {
     let cancelled = false;
     void Promise.all(
-      messages.map(async (message) => {
+      allMessages.map(async (message) => {
         const [post, author] = await Promise.all([
           postSeenId(message.author, message.body),
           authorSeenId(message.author),
@@ -483,7 +549,7 @@ export function MatchClient() {
     return () => {
       cancelled = true;
     };
-  }, [messages]);
+  }, [allMessages]);
   // Signing in merges both directions: what this browser knew goes up, what
   // other devices knew comes down.
   const userId = session?.user.id;
@@ -504,9 +570,16 @@ export function MatchClient() {
     };
   }, [ready, userId]);
 
-  /** Merge a transcript into the desk. Returns how many posts it held. */
+  /**
+   * Merge a transcript into the desk, as `source` or else as pasted text.
+   * Returns how many posts it held.
+   */
   const addPaste = useCallback(
-    (text: string, messageLinks: Record<string, string> = {}): number => {
+    (
+      text: string,
+      messageLinks: Record<string, string> = {},
+      source: NewCapture = pastedCapture(Date.now()),
+    ): number => {
       const parsed = analyzeTranscript(text);
       if (!parsed.messages.length) {
         toast.error(
@@ -514,14 +587,23 @@ export function MatchClient() {
         );
         return 0;
       }
-      setMessages((previous) => mergeTranscripts(previous, parsed.messages));
+      setAllMessages((previous) => mergeTranscripts(previous, parsed.messages));
       // Dedupe before storing: the paste-scroll-paste workflow guarantees
       // overlapping selections, and traders repost the same list constantly.
-      const next = mergeBlocks(blocksRef.current, text, messageLinks);
-      blocksRef.current = next;
-      setStoredCount(next.length);
-      setLinks(linksOf(next));
-      void saveBlocks(next).then((stored) => {
+      const blocks = mergeBlocks(
+        blocksRef.current,
+        text,
+        messageLinks,
+        source.id,
+      );
+      const { captures: added, replaced } = addCapture(
+        capturesRef.current,
+        source,
+        readBlocks(text),
+      );
+      const next = settleCaptures(added, blocks);
+      applyDesk(blocks, next);
+      void saveDesk(blocks, next).then((stored) => {
         if (!stored)
           toast.warning(
             "This paste is available for this session, but could not be saved in your browser.",
@@ -533,10 +615,24 @@ export function MatchClient() {
         toast.warning(
           `Ignored ${parsed.orphanLines} lines above the first Discord name.`,
         );
-      toast.success(`Read ${parsed.messages.length} posts. Matching updated.`);
+      const saved = next.find((capture) => capture.id === source.id);
+      if (source.kind === "search" && saved) {
+        const coverage = formatCoverage(saved);
+        toast.success(
+          `Saved capture: ${captureLabel(saved)}, ${parsed.messages.length} posts.`,
+          { description: coverage ?? undefined },
+        );
+        if (replaced.length)
+          toast.info(
+            `Turned off ${replaced.length === 1 ? "an older capture" : `${replaced.length} older captures`} of the same search.`,
+          );
+      } else
+        toast.success(
+          `Read ${parsed.messages.length} posts. Matching updated.`,
+        );
       return parsed.messages.length;
     },
-    [],
+    [applyDesk],
   );
   const importFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -626,7 +722,22 @@ export function MatchClient() {
       if (message.type !== "import") return;
       let posts = handled.get(message.id);
       if (posts === undefined) {
-        posts = addPaste(message.transcript, message.links);
+        const source = deliveredCapture(message, Date.now());
+        if (!source) {
+          // Answered, or the extension sits waiting on a tab that said nothing.
+          handled.set(message.id, 0);
+          post({
+            source: PAGE_SOURCE,
+            type: "received",
+            id: message.id,
+            posts: 0,
+          });
+          toast.error(
+            "Those posts were only scrolled past, so they weren’t added. Run a search in Objekt Match to capture posts.",
+          );
+          return;
+        }
+        posts = addPaste(message.transcript, message.links, source);
         handled.set(message.id, posts);
         // Every new delivery opens its own search, including in an existing
         // desk tab with old selections. The search is pinned rather than
@@ -715,6 +826,19 @@ export function MatchClient() {
     applyHunt(hunt);
   }, [ready, applyHunt]);
 
+  // The posts of the captures turned on. Everything below reads this, so a
+  // capture turned off leaves the grids and the trader list alike.
+  const messages = useMemo(() => {
+    const hidden = hiddenPosts(membership, captures);
+    return hidden.size
+      ? allMessages.filter((message) => !hidden.has(message.key))
+      : allMessages;
+  }, [allMessages, membership, captures]);
+  const captureCounts = useMemo(
+    () => postCounts(membership.values()),
+    [membership],
+  );
+  const stale = useMemo(() => staleCaptures(captures, now), [captures, now]);
   const mine = useMemo(
     () =>
       keyedItems([
@@ -1118,10 +1242,8 @@ export function MatchClient() {
   const clearPastes = () => {
     generation.current++;
     importStarted.current.clear();
-    setMessages([]);
-    blocksRef.current = [];
-    setStoredCount(0);
-    setLinks(new Map());
+    setAllMessages([]);
+    applyDesk([], []);
     void clearBlocks();
     setImports(new Map());
     setVerified(new Map());
@@ -1136,6 +1258,91 @@ export function MatchClient() {
     } catch {
       /* Session already cleared. */
     }
+  };
+  const setCaptureList = (next: Capture[]) => {
+    capturesRef.current = next;
+    setCaptures(next);
+    void saveCaptures(next);
+  };
+  const toggleCapture = (id: string) =>
+    setCaptureList(
+      capturesRef.current.map((capture) =>
+        capture.id === id ? { ...capture, active: !capture.active } : capture,
+      ),
+    );
+  const turnOffStale = () => {
+    const old = new Set(stale.map((capture) => capture.id));
+    setCaptureList(
+      capturesRef.current.map((capture) =>
+        old.has(capture.id) ? { ...capture, active: false } : capture,
+      ),
+    );
+  };
+  const removeCapture = (capture: Capture) => {
+    const previous = {
+      blocks: blocksRef.current,
+      captures: capturesRef.current,
+      messages: allMessages,
+    };
+    const blocks = dropCapture(previous.blocks, capture.id);
+    const next = settleCaptures(
+      previous.captures.filter((entry) => entry.id !== capture.id),
+      blocks,
+    );
+    const kept = membershipOf(blocks);
+    setAllMessages((current) =>
+      current.filter((message) => kept.has(message.key)),
+    );
+    applyDesk(blocks, next);
+    void saveDesk(blocks, next);
+    toast.success(`Removed ${captureLabel(capture)}.`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          setAllMessages(previous.messages);
+          applyDesk(previous.blocks, previous.captures);
+          void saveDesk(previous.blocks, previous.captures);
+        },
+      },
+    });
+  };
+  const snoozeStale = () => {
+    const until = Date.now() + STALE_SNOOZE_MS;
+    setStaleSnooze(until);
+    try {
+      localStorage.setItem(STALE_SNOOZE_KEY, String(until));
+    } catch {
+      /* It will simply ask again on the next visit. */
+    }
+  };
+  /**
+   * Send the user off to search these captures again. A want list goes along
+   * when there is one, so the panel opens ready to run the same search; it only
+   * ever opens ready, since searching Discord stays the user's own click.
+   */
+  const rescan = async (targets: readonly Capture[]) => {
+    snoozeStale();
+    if (!extensionInstalled) {
+      setEditor("paste");
+      return;
+    }
+    track("match_rescan", { captures: targets.length });
+    const wants = rescanWants(targets);
+    const opened = wants.length
+      ? await sendHuntToExtension(
+          { mode: "wtt", wants, offers: [], nickname: nickname.trim() },
+          { source: "rescan" },
+        )
+      : await openExtensionPanel();
+    if (!opened)
+      toast.error("Objekt Match didn’t answer.", {
+        description: "Open it from your browser’s toolbar on Discord.",
+        action: {
+          label: "Open Discord",
+          onClick: () =>
+            window.open("https://discord.com/app", "_blank", "noopener"),
+        },
+      });
   };
   const markSeen = (messageKey: string, kind: SeenKind) => {
     const ids = seenIds.get(messageKey);
@@ -1232,7 +1439,9 @@ export function MatchClient() {
   const needsInventory = mode !== "wtb" && mine.size === 0;
   // No posts yet: nothing below the header means anything, so the page shows
   // the getting-started steps instead (see MatchOnboarding).
-  const onboarding = messages.length === 0;
+  // Every post, not the ones showing: with all captures off the desk is empty,
+  // but the switches to turn one back on have to stay on screen.
+  const onboarding = allMessages.length === 0;
   const trySample = () => {
     if (!mine.size) setOffering("JiYeon CC102\nXinyu CC101\nNien CC301");
     addPaste(SAMPLE);
@@ -1391,7 +1600,11 @@ export function MatchClient() {
                     ))}
                   </select>
                 </label>
-                <span>{messages.length.toLocaleString()} pasted posts</span>
+                <span>
+                  {messages.length === allMessages.length
+                    ? `${messages.length.toLocaleString()} posts`
+                    : `${messages.length.toLocaleString()} of ${allMessages.length.toLocaleString()} posts`}
+                </span>
                 <button
                   type="button"
                   className="underline underline-offset-4 hover:text-foreground"
@@ -1405,6 +1618,15 @@ export function MatchClient() {
               {MODES.find((entry) => entry.id === mode)?.hint}
             </p>
           </section>
+          <CaptureTimeline
+            captures={captures}
+            counts={captureCounts}
+            now={now}
+            canRescan={extensionInstalled === true}
+            onToggle={toggleCapture}
+            onRemove={removeCapture}
+            onRescan={(capture) => void rescan([capture])}
+          />
           <div
             className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
             aria-live="polite"
@@ -2004,15 +2226,24 @@ export function MatchClient() {
         linkedImport={openPost ? imports.get(openPost) : undefined}
         onOpenChange={(open) => !open && setOpenPost(null)}
       />
+      <StaleCapturesAlert
+        open={ready && stale.length > 0 && now >= staleSnooze}
+        stale={stale}
+        now={now}
+        extensionInstalled={extensionInstalled === true}
+        onRescan={() => void rescan(stale)}
+        onTurnOff={turnOffStale}
+        onDismiss={snoozeStale}
+      />
       <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Clear {messages.length} pasted posts?
+              Clear all {allMessages.length} posts?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the pasted posts, imported lists and current
-              selections. Your own typed haves and wants are kept.
+              This removes every capture and pasted post, imported lists and
+              current selections. Your own typed haves and wants are kept.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

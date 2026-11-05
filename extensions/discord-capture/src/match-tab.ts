@@ -6,6 +6,7 @@
  * the /match tab, wait for it to load, and run `deliverToMatch` inside it.
  */
 
+import type { HandoffPayload } from "@/lib/match/extension-handoff";
 import { APP_ORIGIN, hostPattern, MATCH_ORIGIN } from "./app-origin";
 
 export const MATCH_URL = `${MATCH_ORIGIN}/match`;
@@ -45,13 +46,7 @@ export type Delivery =
  * page has hydrated — and a page that is not listening yet cannot answer.
  */
 export function deliverToMatch(
-  payload: {
-    id: string;
-    transcript: string;
-    nickname: string;
-    wants: string;
-    links: Record<string, string>;
-  },
+  payload: HandoffPayload,
   pageSource: string,
   extensionSource: string,
   timeoutMs: number,

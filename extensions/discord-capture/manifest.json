@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Objekt Match",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "Find who has your missing Cosmo objekts: search Discord trade channels for your want list, then see every match on objekt.my/match.",
   "author": "objekt.my",
   "homepage_url": "https://objekt.my",

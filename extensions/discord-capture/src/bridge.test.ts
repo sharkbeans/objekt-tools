@@ -191,6 +191,57 @@ describe("startBridge", () => {
     );
   });
 
+  it("brings Discord forward on open-panel and says so", () => {
+    const win = fakeWindow();
+    let opened = 0;
+    startBridge({
+      win,
+      storage: fakeStorage(),
+      version: "1.4.0",
+      alive: () => true,
+      onOpenPanel: () => opened++,
+    });
+    win.deliver({ source: PAGE_SOURCE, type: "open-panel", id: "panel-1" });
+    assert.equal(opened, 1);
+    assert.deepEqual(win.sent.at(-1), {
+      source: EXTENSION_SOURCE,
+      type: "panel-opened",
+      id: "panel-1",
+    });
+  });
+
+  it("does nothing for an open-panel with no usable id", () => {
+    const win = fakeWindow();
+    let opened = 0;
+    startBridge({
+      win,
+      storage: fakeStorage(),
+      version: "1.4.0",
+      alive: () => true,
+      onOpenPanel: () => opened++,
+    });
+    win.deliver({ source: PAGE_SOURCE, type: "open-panel" });
+    assert.equal(opened, 0);
+  });
+
+  it("leaves open-panel unanswered once the extension is gone", () => {
+    const win = fakeWindow();
+    let alive = true;
+    let opened = 0;
+    startBridge({
+      win,
+      storage: fakeStorage(),
+      version: "1.4.0",
+      alive: () => alive,
+      onOpenPanel: () => opened++,
+    });
+    alive = false;
+    const before = win.sent.length;
+    win.deliver({ source: PAGE_SOURCE, type: "open-panel", id: "panel-1" });
+    assert.equal(opened, 0);
+    assert.equal(win.sent.length, before);
+  });
+
   it("stops listening when stopped", () => {
     const win = fakeWindow();
     const stop = startBridge({

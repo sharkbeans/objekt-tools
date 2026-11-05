@@ -107,11 +107,36 @@ dims or glows to say whether it is still queued, being searched now, or already 
 palette follows Discord's own light/dark setting, reported by the content script — not
 `prefers-color-scheme`, which is a different setting and wrong about as often as it is right.
 
+A post with something for you is marked in Discord itself. The whole message gets a tint and
+a bar down its left edge, the shape Discord uses for a mention, with a pill under it saying why:
+green for `has N you want`, stronger green with an outline for a `mutual` match, and a quiet
+blue for `wants N of yours`. It keeps off yellow and blurple, which mean a mention and a reply
+to you. `src/match-mark.ts` owns this. The tint is an overlay that lets clicks through, so it
+shows on search results, which are cards with a surface of their own, and changes no row's
+size, which Discord's virtualised list measures.
+
 The toolbar button toggles the panel on Discord tabs and opens the pop-out window anywhere
 else. Either way the panel acts on a specific Discord tab: the one it is embedded in, or —
 from a window — the Discord tab you used most recently (`src/host-tab.ts`), so it no longer
 matters which tab is in front. A Discord tab that was already open when the extension was
 installed no longer needs a reload either; the worker injects the content script on demand.
+
+## What reaches /match
+
+**Open in match** sends the last search and nothing else. Posts collected by scrolling stay in
+the local index, and with no search run there is nothing to send: /match files each delivery as
+a dated capture, and a slice of a channel has no filter to name it by. Every post records
+`capturedAt`, the last time a search reached it, which is separate from when it was posted. A
+delivery carries `capture` (`run`, `capturedAt`, `queries`), dated by its newest stamp rather than
+by the moment of delivery, so opening a three-day-old search shows it as three days old. Both
+sides of this are in `src/lib/match/extension-handoff.ts`; an extension older than 1.4.0 sends
+no `capture`, and /match dates that delivery on arrival.
+
+/match can also ask for a new scan. With a want list that goes through `hunt`; without one it
+sends `open-panel`, and the bridge asks the worker to bring Discord forward with the panel
+open. Either way the panel only opens ready: searching stays the user's own click.
+
+## What it reads
 
 The content script reads only rendered message bodies, explicit author anchors and
 machine timestamps. Missing or ambiguous author anchors are skipped, including grouped

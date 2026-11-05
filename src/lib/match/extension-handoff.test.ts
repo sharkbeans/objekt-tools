@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   EXTENSION_SOURCE,
   isHuntNickname,
+  MAX_CAPTURE_QUERIES,
   MAX_HANDOFF_CHARS,
   MAX_HUNT_LINE_CHARS,
   MAX_HUNT_LINES,
@@ -71,6 +72,71 @@ describe("readExtensionMessage", () => {
     });
   });
 
+  it("keeps a delivery's capture details", () => {
+    const capture = {
+      run: "abc-def",
+      capturedAt: 1_793_000_000_000,
+      queries: ["CC101", "CC102"],
+    };
+    const withCapture = { ...delivery, capture };
+    assert.deepEqual(readExtensionMessage(withCapture), withCapture);
+  });
+
+  it("reads a delivery from an extension that sends no capture details", () => {
+    const message = readExtensionMessage(delivery);
+    assert.equal(message?.type === "import" && "capture" in message, false);
+  });
+
+  it("drops capture details it cannot trust, and keeps the delivery", () => {
+    const good = { run: "abc-def", capturedAt: 5, queries: [] };
+    for (const capture of [
+      "soon",
+      null,
+      { ...good, run: "no spaces allowed" },
+      { ...good, capturedAt: "yesterday" },
+      { ...good, capturedAt: Number.NaN },
+      { ...good, capturedAt: 0 },
+      { ...good, queries: "CC101" },
+    ]) {
+      const message = readExtensionMessage({ ...delivery, capture });
+      assert.equal(message?.type, "import");
+      assert.equal(message?.type === "import" && "capture" in message, false);
+    }
+  });
+
+  it("bounds the queries a capture can name", () => {
+    const message = readExtensionMessage({
+      ...delivery,
+      capture: {
+        run: "abc-def",
+        capturedAt: 5,
+        queries: [
+          "CC101",
+          "",
+          42,
+          "x".repeat(MAX_HUNT_LINE_CHARS + 1),
+          ...Array.from({ length: MAX_CAPTURE_QUERIES + 5 }, () => "CC102"),
+        ],
+      },
+    });
+    const queries =
+      message?.type === "import" ? (message.capture?.queries ?? []) : [];
+    assert.equal(queries.length, MAX_CAPTURE_QUERIES);
+    assert.equal(queries[0], "CC101");
+    assert.equal(queries[1], "CC102");
+  });
+
+  it("reads panel-opened with a well-formed id only", () => {
+    const opened = {
+      source: EXTENSION_SOURCE,
+      type: "panel-opened",
+      id: "panel-1",
+    };
+    assert.deepEqual(readExtensionMessage(opened), opened);
+    assert.equal(readExtensionMessage({ ...opened, id: "no spaces" }), null);
+    assert.equal(readExtensionMessage({ ...opened, id: 7 }), null);
+  });
+
   it("keeps only links that open a Discord message", () => {
     const message = readExtensionMessage({
       ...delivery,
@@ -118,6 +184,17 @@ describe("readPageMessage", () => {
   });
 
   it("reads a ping", () => {
+    const openPanel = {
+      source: PAGE_SOURCE,
+      type: "open-panel",
+      id: "panel-1",
+    };
+    assert.deepEqual(readPageMessage(openPanel), openPanel);
+    assert.equal(readPageMessage({ ...openPanel, id: "no spaces" }), null);
+    assert.equal(
+      readPageMessage({ source: PAGE_SOURCE, type: "open-panel" }),
+      null,
+    );
     assert.deepEqual(readPageMessage({ source: PAGE_SOURCE, type: "ping" }), {
       source: PAGE_SOURCE,
       type: "ping",

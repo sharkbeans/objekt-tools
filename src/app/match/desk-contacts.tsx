@@ -15,6 +15,7 @@ import {
   deskLabel,
 } from "@/lib/discord/trade-desk";
 import type { VerificationState } from "@/lib/discord/verify";
+import { formatPostTime } from "@/lib/match/captures";
 import type { SeenKind } from "@/lib/match/seen-id";
 import type { ParsedItem } from "@/lib/paste-parser";
 import { ContactGallery } from "./contact-gallery";
@@ -123,7 +124,9 @@ export function ContactResults({
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-xs text-muted-foreground">
-                      {post.message.time?.raw ?? "Pasted post"}
+                      {post.message.time
+                        ? formatPostTime(post.message.time.raw)
+                        : "Pasted post"}
                       {post.message.repeats > 1
                         ? ` · posted ${post.message.repeats}×`
                         : ""}

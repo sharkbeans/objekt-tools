@@ -19,6 +19,12 @@ export interface Entry {
   run?: string;
   /** Opens this message in Discord. Absent when the guild was not known. */
   link?: string;
+  /**
+   * When this post was collected, in ms: the last time a search reached it, or
+   * when browsing first passed it. Not when it was posted, which is
+   * `block.time`. Absent on posts stored before 1.4.0 and not seen since.
+   */
+  capturedAt?: number;
 }
 /**
  * A post as `capture` left it, and whether it was in the index before this
@@ -107,6 +113,7 @@ export function capture(
   id: string,
   run?: string,
   link?: string,
+  now: number = Date.now(),
 ): Promise<Captured> {
   return transaction("readwrite", (store, done) => {
     const key = id;
@@ -144,6 +151,7 @@ export function capture(
         // was first seen.
         if (run && existing.run !== run) {
           existing.run = run;
+          existing.capturedAt = now;
           changed = true;
         }
         // Posts captured before links were kept pick one up when seen again.
@@ -179,6 +187,7 @@ export function capture(
         key,
         block,
         parsed,
+        capturedAt: now,
         ...(run ? { run } : {}),
         ...(link ? { link } : {}),
       };
