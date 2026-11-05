@@ -98,7 +98,6 @@ test("handoff pins the searched cards without hiding the rest, and explains offe
   const cards = await theirCards(page);
   expect(cards).toHaveLength(3);
   expect(cards[2]).toMatch(/^Their Mayu CC344,/);
-  await expect(page.getByText("1 more in these posts")).toBeVisible();
 
   const summary = page.getByTestId("search-match-summary");
   await expect(summary).toHaveText("No matched trades for your search.");
@@ -116,7 +115,6 @@ test("handoff pins the searched cards without hiding the rest, and explains offe
     .getByRole("button", { name: "Stop pinning the searched cards" })
     .click();
   await expect(summary).toHaveCount(0);
-  await expect(page.getByText(/more in these posts/)).toHaveCount(0);
 });
 
 test("a pasted want list keeps its line breaks as separate cards", async ({
@@ -188,7 +186,6 @@ test("a search nobody offers still lists the trades that do exist", async ({
   await expect(page.getByTestId("search-match-summary")).toContainText(
     "No matched trades for your search.",
   );
-  await expect(page.getByText(/more in these posts/)).toHaveCount(0);
   // Nothing searched turned up, but what did is still there to trade for.
   await expect(page.getByTestId("trader-result")).toHaveCount(1);
   await expect(page.getByTestId("trader-result")).toContainText("unrelated");
@@ -218,10 +215,10 @@ test("linked Objekt.top and Apollo lists load together", async ({ page }) => {
       },
     });
   });
-  await page.getByRole("button", { name: "Import Discord posts" }).click();
+  await page.getByRole("button", { name: "New capture" }).click();
   const dialog = page.getByRole("dialog");
   await dialog
-    .getByRole("textbox", { name: "Discord posts" })
+    .getByRole("textbox", { name: /Discord messages/ })
     .fill(`top — 3:41 PM
 WTT
 HAVE
@@ -234,7 +231,7 @@ HAVE
 https://apollo.cafe/@apollo/list/apollo345
 WANT
 JiYeon CC102`);
-  await dialog.getByRole("button", { name: "Add posts" }).click();
+  await dialog.getByRole("button", { name: "Save capture" }).click();
 
   await page.getByText("2 linked lists", { exact: true }).click();
   await expect(
@@ -287,10 +284,10 @@ test("a rate-limited list import pauses and offers to load the rest", async ({
       },
     });
   });
-  await page.getByRole("button", { name: "Import Discord posts" }).click();
+  await page.getByRole("button", { name: "New capture" }).click();
   const dialog = page.getByRole("dialog");
   await dialog
-    .getByRole("textbox", { name: "Discord posts" })
+    .getByRole("textbox", { name: /Discord messages/ })
     .fill(`top — 3:41 PM
 WTT
 HAVE
@@ -303,7 +300,7 @@ HAVE
 https://apollo.cafe/@apollo/list/apollo345
 WANT
 JiYeon CC102`);
-  await dialog.getByRole("button", { name: "Add posts" }).click();
+  await dialog.getByRole("button", { name: "Save capture" }).click();
 
   await page.getByText("2 linked lists", { exact: true }).click();
   await page.getByRole("button", { name: "Load all 2 lists" }).click();

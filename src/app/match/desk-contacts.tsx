@@ -76,10 +76,10 @@ export function ContactResults({
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {emptyText ??
             (mode === "wtb"
-              ? "No seller in this paste lists all of these cards. Remove a selection or import more WTS posts."
+              ? "No seller in your captures lists all of these cards. Remove a selection or capture more WTS posts."
               : mode === "wts"
-                ? "No cash buyer in this paste matches these cards. Try WTT to find people who want a swap, or import more WTB posts."
-                : "No single WTT post connects these selections. Remove a card or import more posts to find another offer.")}
+                ? "No cash buyer in your captures matches these cards. Try WTT to find people who want a swap, or capture more WTB posts."
+                : "No single WTT post connects these selections. Remove a card or capture more posts to find another offer.")}
         </div>
       )}
       <div className="grid gap-3">
@@ -126,7 +126,7 @@ export function ContactResults({
                     <span className="text-xs text-muted-foreground">
                       {post.message.time
                         ? formatPostTime(post.message.time.raw)
-                        : "Pasted post"}
+                        : "No date"}
                       {post.message.repeats > 1
                         ? ` · posted ${post.message.repeats}×`
                         : ""}

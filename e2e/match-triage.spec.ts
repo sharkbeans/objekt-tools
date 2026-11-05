@@ -15,10 +15,10 @@ SeoYeon CC101`;
 
 async function setUp(page: import("@playwright/test").Page) {
   await page.goto("/match");
-  await page.getByRole("button", { name: "Import Discord posts" }).click();
+  await page.getByRole("button", { name: "New capture" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("textbox", { name: "Discord posts" }).fill(SAMPLE);
-  await dialog.getByRole("button", { name: "Add posts" }).click();
+  await dialog.getByRole("textbox", { name: /Discord messages/ }).fill(SAMPLE);
+  await dialog.getByRole("button", { name: "Save capture" }).click();
   await expect(dialog).toBeHidden();
 
   await page.getByRole("button", { name: "My objekts", exact: true }).click();

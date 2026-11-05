@@ -8,6 +8,7 @@ import {
 import { PASTE_CAPTURE } from "./captures";
 import {
   blocksToTranscript,
+  countNewPosts,
   dropCapture,
   linksOf,
   MAX_BLOCKS,
@@ -280,6 +281,20 @@ describe("capture membership", () => {
   it("still round-trips through the transcript text", () => {
     const blocks = mergeBlocks([], SAMPLE, {}, "run-1");
     assert.deepEqual(keysOf(blocksToTranscript(blocks)), keysOf(SAMPLE));
+  });
+});
+
+describe("countNewPosts", () => {
+  it("counts only what is not stored yet", () => {
+    const stored = mergeBlocks([], SAMPLE, {}, "run-1");
+    assert.equal(countNewPosts(stored, readBlocks(SAMPLE)), 0);
+    assert.equal(countNewPosts(stored, readBlocks(DISCRUB)), 2);
+    assert.equal(countNewPosts([], readBlocks(SAMPLE)), 3);
+  });
+
+  it("counts a post repeated within a capture once", () => {
+    const twice = `${DISCRUB}\n${DISCRUB}`;
+    assert.equal(countNewPosts([], readBlocks(twice)), 2);
   });
 });
 

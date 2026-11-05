@@ -125,7 +125,7 @@ export function JumpToMessage({ href }: { href: string | undefined }) {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            No link for this post. It was pasted in, or found in a different
+            No link for this post. It was added by hand, or found in a different
             channel from the one you searched in. Copy their name to find them
             in Discord.
           </TooltipContent>

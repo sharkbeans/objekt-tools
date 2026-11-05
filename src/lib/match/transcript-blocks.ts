@@ -74,6 +74,22 @@ export function readBlocks(pasted: string): StoredBlock[] {
   }));
 }
 
+/** How many of `incoming` are posts `existing` does not already hold. */
+export function countNewPosts(
+  existing: readonly StoredBlock[],
+  incoming: readonly StoredBlock[],
+): number {
+  const known = new Set(
+    existing.map((block) => messageKey(block.author, block.body)),
+  );
+  const added = new Set(
+    incoming
+      .map((block) => messageKey(block.author, block.body))
+      .filter((key) => !known.has(key)),
+  );
+  return added.size;
+}
+
 /** `block` belonging to exactly `ids`, in the form it is stored. */
 function inCaptures(block: StoredBlock, ids: readonly string[]): StoredBlock {
   const { captures: _previous, ...rest } = block;
