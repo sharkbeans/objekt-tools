@@ -10,7 +10,6 @@ import Image from "next/image";
 import {
   type ClipboardEvent,
   type CSSProperties,
-  Fragment,
   useMemo,
   useRef,
   useState,
@@ -73,7 +72,8 @@ export function DeskGrid({
   clearFilters?: () => void;
   /**
    * Cards from the user's own search, already sorted to the front by the
-   * caller. Marked, and set apart from the rest by a divider.
+   * caller. Marked on the card, and otherwise in the same run as the rest, so
+   * this grid's rows stay level with the one beside it.
    */
   pinned?: ReadonlySet<string>;
   /** Raised to glow the search bar until the user focuses it. */
@@ -113,43 +113,20 @@ export function DeskGrid({
   // its first page. Selecting a card rebuilds this list too, and that must not
   // move the reader: the page they were on is kept and only clamped when the
   // narrowed pool has fewer pages, so clearing the pick returns them to it.
-  // Selection trays remain visible outside the grid even when a search hides a
-  // selected collection.
+  // The selection strip stays visible above the grids even when a search hides
+  // a selected card.
   const searchPool = `${poolKey}|${query}`;
   const [lastPool, setLastPool] = useState(searchPool);
   if (lastPool !== searchPool) {
     setLastPool(searchPool);
     setPage(0);
   }
-  // Pinned cards lead (the caller sorts them there); the rest start on a row
-  // of their own under a divider. The pinned group's last row is padded out
-  // with empty slots so pages stay whole rows instead of ending ragged.
-  const { slots, restAt, rest } = useMemo(() => {
-    const pins = pinned?.size
-      ? filtered.findIndex((card) => !pinned.has(card.key))
-      : -1;
-    if (pins <= 0) return { slots: filtered, restAt: -1, rest: 0 };
-    const pad = (columns - (pins % columns)) % columns;
-    return {
-      slots: [
-        ...filtered.slice(0, pins),
-        ...Array<null>(pad).fill(null),
-        ...filtered.slice(pins),
-      ],
-      restAt: pins + pad,
-      rest: filtered.length - pins,
-    };
-  }, [filtered, pinned, columns]);
   const pageSize = columns * ROWS_PER_PAGE;
-  const pageCount = Math.max(1, Math.ceil(slots.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
-  const visibleSlots = useMemo(
-    () => slots.slice(safePage * pageSize, (safePage + 1) * pageSize),
-    [slots, safePage, pageSize],
-  );
   const visible = useMemo(
-    () => visibleSlots.filter((card): card is DeskCard => card !== null),
-    [visibleSlots],
+    () => filtered.slice(safePage * pageSize, (safePage + 1) * pageSize),
+    [filtered, safePage, pageSize],
   );
   const resolved = useDeskArtwork(visible, images);
 
@@ -207,11 +184,9 @@ export function DeskGrid({
             className="grid gap-3 [grid-template-columns:repeat(3,minmax(0,1fr))] sm:[grid-template-columns:repeat(var(--desk-cols),minmax(0,1fr))]"
             style={{ "--desk-cols": columns } as CSSProperties}
           >
-            {visibleSlots.map((card, index) => {
-              if (!card) return null;
+            {visible.map((card) => {
               const label = deskLabel(card.item);
               const isPinned = pinned?.has(card.key) ?? false;
-              const pinsEndHere = safePage * pageSize + index === restAt;
               const chosen = selected.has(card.key);
               const url = images.get(card.key) ?? resolved.get(card.key);
               const info = badge(card);
@@ -220,7 +195,7 @@ export function DeskGrid({
               // either way, since `aria-label` on the button already replaces
               // whatever text is inside it.
               const description = info.kind === "count" ? info.full : info.text;
-              const button = (
+              return (
                 <button
                   key={card.key}
                   type="button"
@@ -248,7 +223,7 @@ export function DeskGrid({
                       // Top-left, not top-right: the selection check lands
                       // top-right, and the two must never share a corner.
                       // Colored by which panel this is — matching the "Your
-                      // side" / "From your Discord paste" header above each
+                      // side" / "From your captures" header above each
                       // grid — so the count reads as "mine" or "theirs" by
                       // color alone, the letter confirming rather than
                       // carrying the meaning on its own.
@@ -296,17 +271,6 @@ export function DeskGrid({
                     )}
                   </div>
                 </button>
-              );
-              if (!pinsEndHere) return button;
-              return (
-                <Fragment key={card.key}>
-                  <div className="col-span-full flex items-center gap-3 pt-1 text-xs text-muted-foreground">
-                    <span className="h-px flex-1 bg-border" />
-                    {rest.toLocaleString()} more in these posts
-                    <span className="h-px flex-1 bg-border" />
-                  </div>
-                  {button}
-                </Fragment>
               );
             })}
           </div>

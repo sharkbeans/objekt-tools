@@ -102,17 +102,17 @@ export function MatchOnboarding({
       <ol className="grid gap-3 md:grid-cols-3">
         <Step
           n={1}
-          title="Import Discord posts"
+          title="Capture Discord posts"
           state={extensionFirst ? "plain" : "active"}
         >
           <p className="text-sm text-muted-foreground">
-            Copy posts from a Discord trade channel and paste them here, or
-            import the channel as text files.
+            Copy posts from a Discord trade channel and add them here, or import
+            the channel as text files.
           </p>
           <div className="mt-auto flex flex-wrap gap-2">
             <Button className={DISCORD_BUTTON} onClick={onImport}>
               <DiscordIcon className="size-4" />
-              Import Discord posts
+              New capture
             </Button>
             <Button variant="outline" onClick={onSample}>
               Try a sample

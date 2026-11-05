@@ -260,7 +260,7 @@ export function ExtensionIntro({
             onSkip();
           }}
         >
-          Not now, I&rsquo;ll paste posts
+          Not now, I&rsquo;ll add posts by hand
         </Button>
       </div>
 

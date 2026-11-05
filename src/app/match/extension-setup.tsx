@@ -294,7 +294,7 @@ function SlimOffer({
                   .
                 </>
               ) : (
-                "Objekt Match collects posts as you scroll Discord, so you never paste a channel by hand."
+                "Objekt Match searches Discord for the cards you want, so you never copy a channel by hand."
               )}
             </p>
           </div>

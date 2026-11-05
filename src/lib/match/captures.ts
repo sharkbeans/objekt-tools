@@ -7,10 +7,10 @@
 // says nothing about CC301. So every search stays a separate, dated capture the
 // user can turn on and off, and several can sit on the desk at once.
 //
-// Only searches are captures. Posts the extension collected while someone
-// scrolled are a random slice of a channel with no filter to describe, so they
-// never reach /match (see `deliveredCapture`). Text pasted by hand has no filter
-// either, but the user chose it, so it keeps one row of its own.
+// Posts the extension collected while someone scrolled are a random slice of a
+// channel with no filter to describe, so they never reach /match (see
+// `deliveredCapture`). Text added by hand has no filter either, but the user
+// chose it, so each batch is a capture of its own.
 //
 // Posts are not stored per capture. Traders repost constantly, so two captures
 // overlap heavily and a copy each would undo the dedupe in `transcript-blocks`.
@@ -18,7 +18,11 @@
 
 import type { HandoffPayload } from "./extension-handoff";
 
-/** The one row every hand-pasted post, and anything older than captures, is in. */
+/**
+ * The one row for posts stored before captures existed, shown as "Earlier
+ * capture". Called "paste" in storage because that is what those posts read as,
+ * and renaming it would mean migrating every browser's store for no gain.
+ */
 export const PASTE_CAPTURE = "paste";
 
 /** Past this, a capture says more about last week than about who has what now. */
@@ -33,9 +37,11 @@ const DAY_MS = 24 * HOUR_MS;
 const LABEL_PARTS = 4;
 
 export interface Capture {
-  /** The search run's id, or `PASTE_CAPTURE`. */
+  /** The search run's id, a `manualCapture` id, or `PASTE_CAPTURE`. */
   id: string;
-  kind: "search" | "paste";
+  kind: "search" | "manual" | "paste";
+  /** What the user called it, in place of the name made from its filters. */
+  name?: string;
   /**
    * When the posts were collected, in ms. Not when they were posted, which is
    * `from`/`to`: a scan run today can reach back a month. Null only for posts
@@ -46,18 +52,20 @@ export interface Capture {
   from: number | null;
   /** Newest post, in ms. Null when no post has a real date. */
   to: number | null;
-  /** What the search looked for: "CC101". Empty for the paste row. */
+  /** What the search looked for: "CC101". Empty unless it was a search. */
   filters: string[];
   /** The want list behind it, one objekt per line, to search again with. */
   wants: string[];
   /** Whether its posts are on the desk. */
   active: boolean;
+  /** Posts it brought that were not already stored; see `newPostsLabel`. */
+  fresh?: number;
 }
 
 /** A capture as it arrives, before the desk knows what it covers. */
 export type NewCapture = Pick<
   Capture,
-  "id" | "kind" | "capturedAt" | "filters" | "wants"
+  "id" | "kind" | "capturedAt" | "filters" | "wants" | "name"
 >;
 
 const PASTE_ONLY: readonly string[] = [PASTE_CAPTURE];
@@ -112,14 +120,16 @@ export function deliveredCapture(
   return { id: run, kind: "search", capturedAt: now, filters: wants, wants };
 }
 
-/** The paste row's half of `addCapture`, for text added by hand at `now`. */
-export function pastedCapture(now: number): NewCapture {
+/** A batch of posts added by hand at `now`, under `name` if it was given one. */
+export function manualCapture(now: number, name = ""): NewCapture {
+  const named = name.trim();
   return {
-    id: PASTE_CAPTURE,
-    kind: "paste",
+    id: `manual-${now.toString(36)}`,
+    kind: "manual",
     capturedAt: now,
     filters: [],
     wants: [],
+    ...(named ? { name: named } : {}),
   };
 }
 
@@ -152,19 +162,7 @@ export function coverageOf(
   return { from, to };
 }
 
-/** The earlier of two times, either of which may be unknown. */
-function earliest(a: number | null, b: number | null): number | null {
-  if (a === null) return b;
-  return b === null ? a : Math.min(a, b);
-}
-
-/** The later of two times, either of which may be unknown. */
-function latest(a: number | null, b: number | null): number | null {
-  if (a === null) return b;
-  return b === null ? a : Math.max(a, b);
-}
-
-/** Newest first, with the paste row last: searches are what the list is for. */
+/** Newest first, with the undated row of older posts last. */
 function sorted(captures: Capture[]): Capture[] {
   return [...captures].sort(
     (a, b) =>
@@ -184,9 +182,10 @@ function supersedes(newer: Capture, older: Capture): boolean {
 /**
  * File a new capture on the desk, turned on.
  *
- * A search run is replaced outright when it comes round again: every delivery
- * of a run carries all of it, so a run that was continued arrives whole. The
- * paste row is added to instead, because each paste is only the latest piece.
+ * A search run is replaced when it comes round again, since every delivery of a
+ * run carries all of it, so a run that was continued arrives whole. It keeps the
+ * name the user gave it, and adds to its count of new posts rather than losing
+ * it: by the second delivery nothing in it is new.
  *
  * An older capture this one fully re-searches is turned off, not deleted.
  * Otherwise the rescan the stale alert asks for would leave the very posts it
@@ -196,19 +195,16 @@ export function addCapture(
   captures: readonly Capture[],
   incoming: NewCapture,
   posts: readonly { time: string | null }[],
+  fresh = 0,
 ): { captures: Capture[]; replaced: Capture[] } {
-  const coverage = coverageOf(posts);
   const previous = captures.find((capture) => capture.id === incoming.id);
-  const added: Capture =
-    incoming.kind === "paste" && previous
-      ? {
-          ...previous,
-          capturedAt: incoming.capturedAt,
-          from: earliest(previous.from, coverage.from),
-          to: latest(previous.to, coverage.to),
-          active: true,
-        }
-      : { ...incoming, ...coverage, active: true };
+  const added: Capture = {
+    ...incoming,
+    ...coverageOf(posts),
+    active: true,
+    fresh: (previous?.fresh ?? 0) + fresh,
+    ...(previous?.name ? { name: previous.name } : {}),
+  };
   const replaced = captures.filter(
     (capture) =>
       capture.id !== added.id && capture.active && supersedes(added, capture),
@@ -225,6 +221,18 @@ export function addCapture(
     ]),
     replaced,
   };
+}
+
+/**
+ * "12 new", or nothing when the number would not mean anything: a first capture
+ * is all new, which says nothing about what changed since the last one.
+ */
+export function newPostsLabel(
+  capture: Pick<Capture, "fresh">,
+  posts: number,
+): string | null {
+  const fresh = capture.fresh ?? 0;
+  return fresh > 0 && fresh < posts ? `${fresh.toLocaleString()} new` : null;
 }
 
 /**
@@ -297,17 +305,37 @@ export function hiddenPosts(
   return hidden;
 }
 
-/** The captures on the desk that have gone past `STALE_AFTER_MS`. */
+/** Whether a capture has gone past `STALE_AFTER_MS`. */
+export function isStale(
+  { capturedAt }: Pick<Capture, "capturedAt">,
+  now: number,
+): boolean {
+  return capturedAt !== null && now - capturedAt > STALE_AFTER_MS;
+}
+
+/** The captures on the desk that have gone stale. */
 export function staleCaptures(
   captures: readonly Capture[],
   now: number,
 ): Capture[] {
-  return captures.filter(
-    (capture) =>
-      capture.active &&
-      capture.capturedAt !== null &&
-      now - capture.capturedAt > STALE_AFTER_MS,
-  );
+  return captures.filter((capture) => capture.active && isStale(capture, now));
+}
+
+/** Longest name a capture can be given; past this it stops fitting its row. */
+export const MAX_CAPTURE_NAME = 60;
+
+/** The list with one capture renamed. A blank name goes back to the automatic one. */
+export function renameCapture(
+  captures: readonly Capture[],
+  id: string,
+  name: string,
+): Capture[] {
+  const named = name.trim().slice(0, MAX_CAPTURE_NAME);
+  return captures.map((capture) => {
+    if (capture.id !== id) return capture;
+    const { name: _previous, ...rest } = capture;
+    return named ? { ...rest, name: named } : rest;
+  });
 }
 
 /** What searching `captures` again takes, one objekt per line. */
@@ -373,65 +401,104 @@ export function filterLabel(
     : shown;
 }
 
-/** What a capture is called in the list, the alert and the toasts. */
-export function captureLabel(
-  capture: Pick<Capture, "kind" | "filters">,
-): string {
-  if (capture.kind === "paste") return "Pasted posts";
-  return filterLabel(capture.filters) || "Discord search";
-}
-
 interface FormatOptions {
   /** Defaults to the reader's own. Tests pin these. */
   locale?: string;
   timeZone?: string;
+  /** What "this year" is measured from. Defaults to the clock. */
+  now?: number;
+}
+
+/** What a capture is called in the list, the alert and the toasts. */
+export function captureLabel(
+  capture: Pick<Capture, "kind" | "filters" | "name" | "capturedAt">,
+  { locale, timeZone }: FormatOptions = {},
+): string {
+  if (capture.name) return capture.name;
+  if (capture.kind === "paste") return "Earlier capture";
+  if (capture.kind === "search")
+    return filterLabel(capture.filters) || "Discord search";
+  if (capture.capturedAt === null) return "Manual capture";
+  const day = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    timeZone,
+  });
+  return `Manual capture, ${day.format(capture.capturedAt)}`;
 }
 
 /**
- * The span a capture covers: "1/11/2026 10:30–18:30", or with both dates when
- * it crosses midnight. Null when no post in it has a real date.
+ * How old a capture is. The row of older posts has no real scan time: its date
+ * is only the newest post in it, a floor good enough to judge staleness by but
+ * not one to present as when anything was scanned.
+ */
+export function captureAge(
+  capture: Pick<Capture, "kind" | "capturedAt">,
+  now: number,
+): string {
+  return capture.kind === "paste" || capture.capturedAt === null
+    ? "no scan date"
+    : formatAge(capture.capturedAt, now);
+}
+
+/**
+ * Month names rather than numbers: `10/8/2026` is October to a browser set to
+ * the US and August to the people reading it here, and a trader deciding
+ * whether a post is stale should not have to work out which. The year only
+ * appears when it is not this one.
+ */
+function dayFormat(
+  instants: readonly number[],
+  { timeZone, now = Date.now() }: FormatOptions,
+): Intl.DateTimeFormatOptions {
+  const year = new Intl.DateTimeFormat("en", { year: "numeric", timeZone });
+  const thisYear = instants.every(
+    (instant) => year.format(instant) === year.format(now),
+  );
+  return {
+    day: "numeric",
+    month: "short",
+    timeZone,
+    ...(thisYear ? {} : { year: "numeric" }),
+  };
+}
+
+/**
+ * The span a capture covers: "1 Nov, 10:30–18:30" inside a day, or just the
+ * dates, "30 Oct – 1 Nov", when it crosses one. Null when no post in it has a
+ * real date.
  */
 export function formatCoverage(
   { from, to }: Pick<Capture, "from" | "to">,
-  { locale, timeZone }: FormatOptions = {},
+  options: FormatOptions = {},
 ): string | null {
   if (from === null || to === null) return null;
-  const date = new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "numeric",
-    year: "numeric",
-    timeZone,
-  });
+  const { locale, timeZone } = options;
+  const day = new Intl.DateTimeFormat(locale, dayFormat([from, to], options));
+  if (day.format(from) !== day.format(to)) return day.formatRange(from, to);
   const time = new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
     timeZone,
   });
-  const fromDate = date.format(from);
-  const toDate = date.format(to);
-  if (fromDate !== toDate)
-    return `${fromDate} ${time.format(from)} – ${toDate} ${time.format(to)}`;
   return time.format(from) === time.format(to)
-    ? `${fromDate} ${time.format(from)}`
-    : `${fromDate} ${time.format(from)}–${time.format(to)}`;
+    ? `${day.format(from)}, ${time.format(from)}`
+    : `${day.format(from)}, ${time.format(from)}–${time.format(to)}`;
 }
 
 /** A post's stamp for reading: ISO stamps get dressed, the rest are as shown. */
 export function formatPostTime(
   raw: string,
-  { locale, timeZone }: FormatOptions = {},
+  options: FormatOptions = {},
 ): string {
   const instant = postInstant(raw);
   if (instant === null) return raw;
-  return new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "numeric",
-    year: "numeric",
+  return new Intl.DateTimeFormat(options.locale, {
+    ...dayFormat([instant], options),
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-    timeZone,
   }).format(instant);
 }
 
@@ -443,30 +510,6 @@ export function formatAge(at: number, now: number): string {
   // Hours up to two days, so a capture just past the 72h line reads "3 days".
   if (age < 2 * DAY_MS) return `${Math.floor(age / HOUR_MS)}h ago`;
   return `${Math.floor(age / DAY_MS)} days ago`;
-}
-
-/** The stretch of time the coverage bars are drawn against. */
-export function timelineSpan(
-  captures: readonly Pick<Capture, "from">[],
-  now: number,
-): { start: number; end: number } | null {
-  const starts = captures.flatMap(({ from }) => (from === null ? [] : [from]));
-  if (!starts.length) return null;
-  return { start: Math.min(...starts), end: now };
-}
-
-/** Where one capture sits on that span, as percentages of its width. */
-export function coverageBar(
-  { from, to }: Pick<Capture, "from" | "to">,
-  span: { start: number; end: number },
-): { left: number; width: number } | null {
-  if (from === null || to === null) return null;
-  const whole = span.end - span.start;
-  if (whole <= 0) return { left: 0, width: 100 };
-  const left = Math.min(100, Math.max(0, ((from - span.start) / whole) * 100));
-  // A scan of one busy afternoon, on a month-long axis, is still a visible mark.
-  const width = Math.max(1.5, ((to - from) / whole) * 100);
-  return { left: Math.min(left, 100 - width), width };
 }
 
 /** Read the stored list back, dropping anything that is not a whole capture. */
@@ -483,7 +526,9 @@ function isCapture(value: unknown): value is Capture {
     Array.isArray(field) && field.every((item) => typeof item === "string");
   return (
     typeof c.id === "string" &&
-    (c.kind === "search" || c.kind === "paste") &&
+    (c.kind === "search" || c.kind === "manual" || c.kind === "paste") &&
+    (c.name === undefined || typeof c.name === "string") &&
+    (c.fresh === undefined || time(c.fresh)) &&
     time(c.capturedAt) &&
     time(c.from) &&
     time(c.to) &&

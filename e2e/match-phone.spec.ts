@@ -24,9 +24,9 @@ test("phones are told to use a computer instead of getting the matcher", async (
   await expect(
     page.getByRole("button", { name: /Search for your missing cards/ }),
   ).toHaveAttribute("aria-current", "step");
-  await expect(
-    page.getByRole("button", { name: "Import Discord posts" }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "New capture" })).toHaveCount(
+    0,
+  );
   await expect(page.getByRole("button", { name: "Try a sample" })).toHaveCount(
     0,
   );

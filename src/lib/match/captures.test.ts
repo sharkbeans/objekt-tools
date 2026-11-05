@@ -4,8 +4,8 @@ import {
   addCapture,
   blockCaptures,
   type Capture,
+  captureAge,
   captureLabel,
-  coverageBar,
   coverageOf,
   deliveredCapture,
   filterLabel,
@@ -13,22 +13,27 @@ import {
   formatCoverage,
   formatPostTime,
   hiddenPosts,
+  isStale,
+  MAX_CAPTURE_NAME,
+  manualCapture,
   type NewCapture,
+  newPostsLabel,
   PASTE_CAPTURE,
-  pastedCapture,
   postCounts,
   postInstant,
   readCaptures,
+  renameCapture,
   rescanWants,
   STALE_AFTER_MS,
   settleCaptures,
   staleCaptures,
-  timelineSpan,
 } from "./captures";
 
 const HOUR = 60 * 60 * 1000;
 const NOW = Date.parse("2026-11-06T12:00:00.000Z");
-const UTC = { locale: "en-GB", timeZone: "UTC" };
+const UTC = { locale: "en-GB", timeZone: "UTC", now: NOW };
+/** `formatRange` separates with thin spaces; these tests read plain ones. */
+const plain = (text: string | null) => text?.replace(/\u2009/g, " ") ?? text;
 
 function capture(overrides: Partial<Capture> = {}): Capture {
   return {
@@ -195,6 +200,7 @@ describe("addCapture", () => {
         from: Date.parse("2026-11-01T10:30:00.000Z"),
         to: Date.parse("2026-11-01T18:30:00.000Z"),
         active: true,
+        fresh: 0,
       },
     ]);
   });
@@ -226,24 +232,29 @@ describe("addCapture", () => {
     assert.equal(captures[0].from, Date.parse("2026-11-01T10:30:00.000Z"));
   });
 
-  it("widens the paste row instead of replacing it", () => {
-    const paste = capture({
-      id: PASTE_CAPTURE,
-      kind: "paste",
-      capturedAt: NOW - HOUR,
-      from: Date.parse("2026-10-30T00:00:00.000Z"),
-      to: Date.parse("2026-10-31T00:00:00.000Z"),
-      filters: [],
-      active: false,
-    });
-    const { captures } = addCapture([paste], pastedCapture(NOW), times);
-    assert.deepEqual(captures[0], {
-      ...paste,
-      capturedAt: NOW,
-      to: Date.parse("2026-11-01T18:30:00.000Z"),
-      // Text just added by hand is meant to be seen.
-      active: true,
-    });
+  it("keeps the name a run was given when it is delivered again", () => {
+    const first = capture({ id: "run-2", name: "SeoYeon grid" });
+    const { captures } = addCapture([first], search(), times);
+    assert.equal(captures[0].name, "SeoYeon grid");
+  });
+
+  it("counts what a capture brought, and keeps counting across deliveries", () => {
+    const { captures } = addCapture([], search(), times, 12);
+    assert.equal(captures[0].fresh, 12);
+    const again = addCapture(captures, search(), times, 3);
+    assert.equal(again.captures[0].fresh, 15);
+    // Delivered again with nothing new: the count it earned is not lost.
+    assert.equal(
+      addCapture(captures, search(), times, 0).captures[0].fresh,
+      12,
+    );
+  });
+
+  it("lists each manual capture separately", () => {
+    const first = addCapture([], manualCapture(NOW), times).captures;
+    const { captures } = addCapture(first, manualCapture(NOW + 1), times);
+    assert.equal(captures.length, 2);
+    assert.ok(captures.every((entry) => entry.kind === "manual"));
   });
 
   it("turns off an older capture of the same search, keeping it", () => {
@@ -371,6 +382,12 @@ describe("hiddenPosts", () => {
 });
 
 describe("staleCaptures", () => {
+  it("judges a capture the same whether or not it is on", () => {
+    const old = capture({ capturedAt: 1, active: false });
+    assert.equal(isStale(old, NOW), true);
+    assert.equal(isStale(capture({ capturedAt: null }), NOW), false);
+  });
+
   it("draws the line at 72 hours", () => {
     const at = (ms: number) => capture({ capturedAt: NOW - ms });
     assert.equal(STALE_AFTER_MS, 72 * HOUR);
@@ -461,15 +478,102 @@ describe("filterLabel", () => {
 describe("captureLabel", () => {
   it("names each kind", () => {
     assert.equal(captureLabel(capture()), "CC101–102");
-    assert.equal(captureLabel(capture({ kind: "paste" })), "Pasted posts");
     assert.equal(captureLabel(capture({ filters: [] })), "Discord search");
+    assert.equal(captureLabel(capture({ kind: "paste" })), "Earlier capture");
+    assert.equal(
+      captureLabel(
+        capture({
+          kind: "manual",
+          capturedAt: Date.parse("2026-11-06T04:00:00.000Z"),
+        }),
+        UTC,
+      ),
+      "Manual capture, 6 Nov",
+    );
+    assert.equal(
+      captureLabel(capture({ kind: "manual", capturedAt: null })),
+      "Manual capture",
+    );
+  });
+
+  it("puts the user's own name first", () => {
+    for (const kind of ["search", "manual", "paste"] as const)
+      assert.equal(captureLabel(capture({ kind, name: "Mine" })), "Mine");
+  });
+});
+
+describe("manualCapture", () => {
+  it("is dated and has nothing to search again", () => {
+    assert.deepEqual(manualCapture(NOW), {
+      id: `manual-${NOW.toString(36)}`,
+      kind: "manual",
+      capturedAt: NOW,
+      filters: [],
+      wants: [],
+    });
+    assert.deepEqual(rescanWants([capture(manualCapture(NOW))]), []);
+  });
+
+  it("takes a name, ignoring one that is blank", () => {
+    assert.equal(manualCapture(NOW, " Mine ").name, "Mine");
+    assert.equal("name" in manualCapture(NOW, "   "), false);
+  });
+});
+
+describe("renameCapture", () => {
+  const list = [capture({ id: "a" }), capture({ id: "b" })];
+
+  it("renames only that capture", () => {
+    const renamed = renameCapture(list, "b", "  SeoYeon grid ");
+    assert.equal(renamed[1].name, "SeoYeon grid");
+    assert.equal("name" in renamed[0], false);
+  });
+
+  it("goes back to the automatic name when cleared", () => {
+    const named = renameCapture(list, "a", "Mine");
+    assert.equal("name" in renameCapture(named, "a", "  ")[0], false);
+  });
+
+  it("caps how long a name can be", () => {
+    const [renamed] = renameCapture(list, "a", "x".repeat(200));
+    assert.equal(renamed.name?.length, MAX_CAPTURE_NAME);
+  });
+});
+
+describe("newPostsLabel", () => {
+  it("says what a rescan found", () => {
+    assert.equal(newPostsLabel({ fresh: 12 }, 214), "12 new");
+  });
+
+  it("stays quiet when the number would mean nothing", () => {
+    assert.equal(newPostsLabel({}, 214), null);
+    assert.equal(newPostsLabel({ fresh: 0 }, 214), null);
+    // A first capture is all new, which says nothing about what changed.
+    assert.equal(newPostsLabel({ fresh: 214 }, 214), null);
+  });
+});
+
+describe("captureAge", () => {
+  it("gives a scan's age, and no invented one for older posts", () => {
+    assert.equal(
+      captureAge(capture({ capturedAt: NOW - 5 * HOUR }), NOW),
+      "5h ago",
+    );
+    assert.equal(
+      captureAge(capture({ kind: "paste", capturedAt: NOW - HOUR }), NOW),
+      "no scan date",
+    );
+    assert.equal(
+      captureAge(capture({ capturedAt: null }), NOW),
+      "no scan date",
+    );
   });
 });
 
 describe("formatCoverage", () => {
   const at = (iso: string) => Date.parse(iso);
 
-  it("gives one date for a span inside a day", () => {
+  it("gives the times for a span inside a day", () => {
     assert.equal(
       formatCoverage(
         {
@@ -478,28 +582,51 @@ describe("formatCoverage", () => {
         },
         UTC,
       ),
-      "01/11/2026 10:30–18:30",
+      "1 Nov, 10:30–18:30",
     );
   });
 
-  it("gives both dates for a span across midnight", () => {
+  it("gives just the dates for a span across days", () => {
     assert.equal(
-      formatCoverage(
-        {
-          from: at("2026-10-31T23:15:00.000Z"),
-          to: at("2026-11-01T00:45:00.000Z"),
-        },
-        UTC,
+      plain(
+        formatCoverage(
+          {
+            from: at("2026-10-31T23:15:00.000Z"),
+            to: at("2026-11-01T00:45:00.000Z"),
+          },
+          UTC,
+        ),
       ),
-      "31/10/2026 23:15 – 01/11/2026 00:45",
+      "31 Oct – 1 Nov",
     );
   });
 
   it("gives one time for a single post", () => {
     const only = at("2026-11-01T10:30:00.000Z");
+    assert.equal(formatCoverage({ from: only, to: only }, UTC), "1 Nov, 10:30");
+  });
+
+  it("names the month, so a date reads the same in any locale", () => {
+    const span = {
+      from: at("2026-10-08T10:30:00.000Z"),
+      to: at("2026-10-08T12:30:00.000Z"),
+    };
+    assert.match(
+      formatCoverage(span, { ...UTC, locale: "en-US" }) ?? "",
+      /^Oct 8,/,
+    );
+  });
+
+  it("adds the year only when it is not this one", () => {
     assert.equal(
-      formatCoverage({ from: only, to: only }, UTC),
-      "01/11/2026 10:30",
+      formatCoverage(
+        {
+          from: at("2025-11-01T10:30:00.000Z"),
+          to: at("2025-11-01T18:30:00.000Z"),
+        },
+        UTC,
+      ),
+      "1 Nov 2025, 10:30–18:30",
     );
   });
 
@@ -510,9 +637,9 @@ describe("formatCoverage", () => {
           from: at("2026-10-31T23:15:00.000Z"),
           to: at("2026-11-01T00:45:00.000Z"),
         },
-        { locale: "en-GB", timeZone: "Asia/Kuala_Lumpur" },
+        { ...UTC, timeZone: "Asia/Kuala_Lumpur" },
       ),
-      "01/11/2026 07:15–08:45",
+      "1 Nov, 07:15–08:45",
     );
   });
 
@@ -525,7 +652,7 @@ describe("formatPostTime", () => {
   it("dresses an ISO stamp and leaves the rest as Discord showed it", () => {
     assert.equal(
       formatPostTime("2026-11-01T10:30:00.000Z", UTC),
-      "01/11/2026, 10:30",
+      "1 Nov, 10:30",
     );
     assert.equal(formatPostTime("3:41 PM", UTC), "3:41 PM");
     assert.equal(
@@ -549,43 +676,6 @@ describe("formatAge", () => {
   });
 });
 
-describe("the coverage bars", () => {
-  const span = { start: 0, end: 1000 };
-
-  it("run from the oldest post to now", () => {
-    assert.deepEqual(
-      timelineSpan([{ from: 500 }, { from: null }, { from: 200 }], 900),
-      { start: 200, end: 900 },
-    );
-    assert.equal(timelineSpan([{ from: null }], 900), null);
-  });
-
-  it("place a capture by when its posts were", () => {
-    assert.deepEqual(coverageBar({ from: 250, to: 750 }, span), {
-      left: 25,
-      width: 50,
-    });
-  });
-
-  it("keep a short capture visible and on the track", () => {
-    assert.deepEqual(coverageBar({ from: 1000, to: 1000 }, span), {
-      left: 98.5,
-      width: 1.5,
-    });
-  });
-
-  it("draw nothing for a capture with no dates", () => {
-    assert.equal(coverageBar({ from: null, to: null }, span), null);
-  });
-
-  it("survive a span of no length", () => {
-    assert.deepEqual(coverageBar({ from: 5, to: 5 }, { start: 5, end: 5 }), {
-      left: 0,
-      width: 100,
-    });
-  });
-});
-
 describe("blockCaptures and postCounts", () => {
   it("reads a post with no list as pasted", () => {
     assert.deepEqual(blockCaptures({}), [PASTE_CAPTURE]);
@@ -604,17 +694,21 @@ describe("blockCaptures and postCounts", () => {
 describe("readCaptures", () => {
   it("keeps whole captures and drops the rest", () => {
     const good = capture();
+    const manual = capture({ kind: "manual", name: "Mine", fresh: 3 });
     assert.deepEqual(
       readCaptures([
         good,
+        manual,
         null,
         "x",
         { ...good, kind: "scroll" },
         { ...good, capturedAt: "soon" },
         { ...good, filters: [1] },
         { ...good, active: "yes" },
+        { ...good, name: 7 },
+        { ...good, fresh: "lots" },
       ]),
-      [good],
+      [good, manual],
     );
   });
 

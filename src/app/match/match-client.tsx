@@ -3,7 +3,6 @@
 import {
   ArrowDownIcon,
   ArrowLeftRightIcon,
-  ClipboardPasteIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
@@ -12,14 +11,7 @@ import {
   TagIcon,
   XIcon,
 } from "lucide-react";
-import {
-  type ChangeEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -93,9 +85,10 @@ import {
   deliveredCapture,
   formatCoverage,
   hiddenPosts,
+  manualCapture,
   type NewCapture,
-  pastedCapture,
   postCounts,
+  renameCapture,
   rescanWants,
   STALE_SNOOZE_MS,
   settleCaptures,
@@ -130,6 +123,7 @@ import {
 import { openExtensionPanel, sendHuntToExtension } from "@/lib/match/send-hunt";
 import {
   blocksToTranscript,
+  countNewPosts,
   dropCapture,
   linksOf,
   MAX_BLOCKS,
@@ -148,13 +142,18 @@ import type { ParsedItem } from "@/lib/paste-parser";
 import { resolveForPoster } from "@/lib/poster/poster-resolver";
 import { stripVariantSuffix } from "@/lib/season-prefix";
 import { sectionHref } from "@/lib/sections";
-import { CaptureTimeline, StaleCapturesAlert } from "./capture-timeline";
+import {
+  CaptureButton,
+  CaptureLibrary,
+  StaleCapturesAlert,
+} from "./capture-library";
+import { captureTraders } from "./capture-matches";
 import { ContactResults } from "./desk-contacts";
 import { type DeskBadge, DeskGrid } from "./desk-grid";
 import { matchesDeskQuery, parseDeskQuery, pinMatches } from "./desk-search";
-import { ExtensionSetup } from "./extension-setup";
 import { MatchOnboarding } from "./match-onboarding";
 import { MyHuntsMenu } from "./my-hunts-menu";
+import { NewCaptureDialog } from "./new-capture-dialog";
 import { PostDialog } from "./post-dialog";
 
 const NICK_KEY = "match:nickname:v1";
@@ -172,7 +171,9 @@ const STALE_SNOOZE_KEY = "match:stale-snooze:v1";
 const CLOCK_TICK_MS = 5 * 60_000;
 const COLUMN_CHOICES = [4, 5, 6, 7, 8, 10, 12] as const;
 const DEFAULT_COLUMNS = 8;
+const COLUMNS_BESIDE_PANEL = 4;
 const EMPTY_KEYS = new Set<string>();
+const NO_TRADERS: ReadonlyMap<string, number> = new Map();
 const EMPTY_SEEN: ReadonlySet<SeenId> = new Set<SeenId>();
 /** The two ids a post can be hidden by: itself, or its author. */
 /** The server is shedding list imports (429/503); retry later, don't report. */
@@ -269,60 +270,41 @@ function byTraders(
     .map(({ card }) => card);
 }
 
+/**
+ * What is picked, from both sides, in one strip above the two columns.
+ *
+ * One strip rather than a tray in each column: a tray appearing on one side only
+ * pushed that side's cards out of line with the other's. A pick can also be on
+ * another page of a grid or filtered out of it, and this is still how to remove
+ * it. Nothing shows until something is picked.
+ */
 function SelectionTray({
-  selected,
-  items,
-  onToggle,
-  empty,
+  picks,
+  onClear,
 }: {
-  selected: ReadonlySet<string>;
-  items: ReadonlyMap<string, ParsedItem>;
-  onToggle: (key: string) => void;
-  empty: string;
+  picks: { key: string; label: string; remove: () => void }[];
+  onClear: () => void;
 }) {
+  if (!picks.length) return null;
   return (
-    <div className="flex max-h-28 min-h-12 flex-wrap items-center gap-2 overflow-y-auto rounded-lg bg-muted/50 p-2">
-      {selected.size === 0 ? (
-        <p className="px-1 text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        [...selected].map((key) => {
-          const item = items.get(key);
-          const label = item ? deskLabel(item) : key.split("|").join(" ");
-          return (
-            <button
-              key={key}
-              type="button"
-              aria-label={`Remove ${label}`}
-              onClick={() => onToggle(key)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-sm text-primary"
-            >
-              {label}
-              <XIcon className="size-3.5" />
-            </button>
-          );
-        })
-      )}
+    <div className="flex max-h-28 flex-wrap items-center gap-2 overflow-y-auto">
+      {picks.map(({ key, label, remove }) => (
+        <button
+          key={key}
+          type="button"
+          aria-label={`Remove ${label}`}
+          onClick={remove}
+          className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-sm text-primary"
+        >
+          {label}
+          <XIcon className="size-3.5" />
+        </button>
+      ))}
+      <Button size="sm" variant="ghost" onClick={onClear}>
+        Clear selections
+      </Button>
     </div>
   );
-}
-
-/**
- * Above the paste box, where the chore it replaces is in plain view: pasting
- * a channel by hand is exactly what the extension does for you. Offered only
- * where it can be installed; with it installed, a pointer to its own button.
- */
-function PasteExtensionHint({ installed }: { installed: boolean | null }) {
-  if (installed)
-    return (
-      <p className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-        <PuzzleIcon className="mt-0.5 size-4 shrink-0 text-primary" />
-        <span>
-          You have Objekt Match. Press <strong>Open in match</strong> in its
-          panel on Discord to bring posts here without pasting.
-        </span>
-      </p>
-    );
-  return <ExtensionSetup installed={installed} source="paste" compact />;
 }
 
 /**
@@ -378,7 +360,6 @@ function HuntSendBar({
 
 export function MatchClient() {
   const [mode, setMode] = useState<DeskMode>("wtt");
-  const [raw, setRaw] = useState("");
   /** Every stored post, parsed once. `messages` is what the captures let through. */
   const [allMessages, setAllMessages] = useState<TranscriptMessage[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
@@ -400,7 +381,8 @@ export function MatchClient() {
   const [get, setGet] = useState<Set<string>>(new Set());
   const [savedPicks, setSavedPicks] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
-  const [editor, setEditor] = useState<"mine" | "paste" | null>(null);
+  const [editor, setEditor] = useState<"mine" | "capture" | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [openPost, setOpenPost] = useState<string | null>(null);
   const [imports, setImports] = useState<Map<string, ImportState>>(new Map());
@@ -441,7 +423,6 @@ export function MatchClient() {
   const capturesRef = useRef<Capture[]>([]);
   const importStarted = useRef(new Set<string>());
   const generation = useRef(0);
-  const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
 
   /** Point everything derived from the stored posts at these. */
@@ -571,14 +552,14 @@ export function MatchClient() {
   }, [ready, userId]);
 
   /**
-   * Merge a transcript into the desk, as `source` or else as pasted text.
-   * Returns how many posts it held.
+   * File a transcript as a capture: `source`, or one added by hand. Returns how
+   * many posts it held.
    */
   const addPaste = useCallback(
     (
       text: string,
       messageLinks: Record<string, string> = {},
-      source: NewCapture = pastedCapture(Date.now()),
+      source: NewCapture = manualCapture(Date.now()),
     ): number => {
       const parsed = analyzeTranscript(text);
       if (!parsed.messages.length) {
@@ -587,9 +568,18 @@ export function MatchClient() {
         );
         return 0;
       }
+      // Dedupe before storing: overlapping captures are the norm, and traders
+      // repost the same list constantly.
+      const incoming = readBlocks(text);
+      const fresh = countNewPosts(blocksRef.current, incoming);
+      // Text added twice is not a second capture. A search that found nothing
+      // new still is: that it ran, and when, is the whole point of it.
+      if (source.kind === "manual" && fresh === 0) {
+        setEditor(null);
+        toast.info("Those posts are already in your captures.");
+        return parsed.messages.length;
+      }
       setAllMessages((previous) => mergeTranscripts(previous, parsed.messages));
-      // Dedupe before storing: the paste-scroll-paste workflow guarantees
-      // overlapping selections, and traders repost the same list constantly.
       const blocks = mergeBlocks(
         blocksRef.current,
         text,
@@ -599,52 +589,47 @@ export function MatchClient() {
       const { captures: added, replaced } = addCapture(
         capturesRef.current,
         source,
-        readBlocks(text),
+        incoming,
+        fresh,
       );
       const next = settleCaptures(added, blocks);
       applyDesk(blocks, next);
       void saveDesk(blocks, next).then((stored) => {
         if (!stored)
           toast.warning(
-            "This paste is available for this session, but could not be saved in your browser.",
+            "This capture is available for this session, but could not be saved in your browser.",
           );
       });
-      setRaw("");
       setEditor(null);
       if (parsed.orphanLines)
         toast.warning(
           `Ignored ${parsed.orphanLines} lines above the first Discord name.`,
         );
       const saved = next.find((capture) => capture.id === source.id);
-      if (source.kind === "search" && saved) {
-        const coverage = formatCoverage(saved);
+      if (saved)
         toast.success(
           `Saved capture: ${captureLabel(saved)}, ${parsed.messages.length} posts.`,
-          { description: coverage ?? undefined },
+          { description: formatCoverage(saved) ?? undefined },
         );
-        if (replaced.length)
-          toast.info(
-            `Turned off ${replaced.length === 1 ? "an older capture" : `${replaced.length} older captures`} of the same search.`,
-          );
-      } else
-        toast.success(
-          `Read ${parsed.messages.length} posts. Matching updated.`,
+      if (replaced.length)
+        toast.info(
+          `Turned off ${replaced.length === 1 ? "an older capture" : `${replaced.length} older captures`} of the same search.`,
         );
       return parsed.messages.length;
     },
     [applyDesk],
   );
-  const importFiles = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const files = Array.from(input.files ?? []);
+  const saveManual = (text: string, name: string) => {
+    addPaste(text, {}, manualCapture(Date.now(), name));
+  };
+  const importFiles = async (files: File[], name: string) => {
     try {
-      addPaste(
+      saveManual(
         (await Promise.all(files.map((file) => file.text()))).join("\n"),
+        name,
       );
     } catch {
       toast.error("Could not read those text files.");
-    } finally {
-      input.value = "";
     }
   };
   /** Bumped per load, so only the latest request lands. */
@@ -895,6 +880,28 @@ export function MatchClient() {
     });
   }, [current, hideSeen, seen, seenIds]);
   const hiddenCount = current.length - indexed.length;
+  // Only while the panel is open: nothing else reads it, and it walks every post
+  // of every capture. A post the user has dealt with is not a lead any more, so
+  // it stops counting, the same as on the desk.
+  const tradersByCapture = useMemo(() => {
+    if (!libraryOpen) return NO_TRADERS;
+    const open = hideSeen
+      ? allMessages.filter((message) => {
+          const ids = seenIds.get(message.key);
+          return !ids || (!seen.has(ids.post) && !seen.has(ids.author));
+        })
+      : allMessages;
+    return captureTraders(captures, open, membership, wanting);
+  }, [
+    libraryOpen,
+    hideSeen,
+    allMessages,
+    seenIds,
+    seen,
+    captures,
+    membership,
+    wanting,
+  ]);
   const allTheirItems = useMemo(() => {
     const items = new Map(savedWants);
     for (const post of indexed)
@@ -979,7 +986,7 @@ export function MatchClient() {
       ),
     [mine, demanded, poolDemand, activeGive, get, mode],
   );
-  // "From your Discord paste": most haves first, unless another sort is chosen,
+  // "From your captures": most haves first, unless another sort is chosen,
   // with the Discord search's cards pinned ahead of the rest either way.
   const sortedTheirCards = useMemo(() => {
     const ranked = byTraders([...offered.values()], poolSupply);
@@ -1055,8 +1062,8 @@ export function MatchClient() {
   const offersFocus = (post: DeskPost) =>
     !!focus &&
     [...post.haves.values()].some((item) => matchesDeskQuery(item, focus));
-  // Kept to one plain line. What else the posts offer is on the grid's
-  // divider; how to narrow it is on the search bar.
+  // Kept to one plain line, in the bar above both columns: inside a column it
+  // pushed that side's cards out of line with the other's.
   const matched = focus
     ? traderCount(
         (mode === "wtb" ? candidates : contactPosts).filter(offersFocus),
@@ -1239,7 +1246,7 @@ export function MatchClient() {
         );
     }
   };
-  const clearPastes = () => {
+  const clearCaptures = () => {
     generation.current++;
     importStarted.current.clear();
     setAllMessages([]);
@@ -1270,6 +1277,8 @@ export function MatchClient() {
         capture.id === id ? { ...capture, active: !capture.active } : capture,
       ),
     );
+  const renameOne = (id: string, name: string) =>
+    setCaptureList(renameCapture(capturesRef.current, id, name));
   const turnOffStale = () => {
     const old = new Set(stale.map((capture) => capture.id));
     setCaptureList(
@@ -1316,22 +1325,15 @@ export function MatchClient() {
     }
   };
   /**
-   * Send the user off to search these captures again. A want list goes along
-   * when there is one, so the panel opens ready to run the same search; it only
-   * ever opens ready, since searching Discord stays the user's own click.
+   * Send the user to Discord to search. A want list goes along when there is
+   * one, so the panel opens ready to run it; it only ever opens ready, since
+   * searching Discord stays the user's own click.
    */
-  const rescan = async (targets: readonly Capture[]) => {
-    snoozeStale();
-    if (!extensionInstalled) {
-      setEditor("paste");
-      return;
-    }
-    track("match_rescan", { captures: targets.length });
-    const wants = rescanWants(targets);
+  const startSearch = async (wants: string[], source: string) => {
     const opened = wants.length
       ? await sendHuntToExtension(
           { mode: "wtt", wants, offers: [], nickname: nickname.trim() },
-          { source: "rescan" },
+          { source },
         )
       : await openExtensionPanel();
     if (!opened)
@@ -1343,6 +1345,16 @@ export function MatchClient() {
             window.open("https://discord.com/app", "_blank", "noopener"),
         },
       });
+    return opened;
+  };
+  const rescan = async (targets: readonly Capture[]) => {
+    snoozeStale();
+    if (!extensionInstalled) {
+      setEditor("capture");
+      return;
+    }
+    track("match_rescan", { captures: targets.length });
+    await startSearch(rescanWants(targets), "rescan");
   };
   const markSeen = (messageKey: string, kind: SeenKind) => {
     const ids = seenIds.get(messageKey);
@@ -1435,7 +1447,35 @@ export function MatchClient() {
       mode === "wts" ? EMPTY_KEYS : get,
     )[0];
   }, [enriched, openPost, mine, activeGive, get, mode]);
+  // The open panel takes a third of the width, and the chosen number of cards
+  // squeezed into what is left leaves them too narrow to read.
+  const gridColumns = libraryOpen
+    ? Math.min(columns, COLUMNS_BESIDE_PANEL)
+    : columns;
   const selectionCount = activeGive.size + get.size;
+  const pickLabel = (items: ReadonlyMap<string, ParsedItem>, key: string) => {
+    const item = items.get(key);
+    return item ? deskLabel(item) : key.split("|").join(" ");
+  };
+  const picks = [
+    ...[...activeGive].map((key) => ({
+      key: `give:${key}`,
+      label: pickLabel(mine, key),
+      remove: () => toggleGive(key),
+    })),
+    ...[...get].map((key) => ({
+      key: `get:${key}`,
+      label: pickLabel(allTheirItems, key),
+      remove: () => toggleGet(key),
+    })),
+  ];
+  const scrollToResults = () => {
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    resultsRef.current?.scrollIntoView({
+      block: "start",
+      behavior: calm ? "auto" : "smooth",
+    });
+  };
   const needsInventory = mode !== "wtb" && mine.size === 0;
   // No posts yet: nothing below the header means anything, so the page shows
   // the getting-started steps instead (see MatchOnboarding).
@@ -1444,8 +1484,16 @@ export function MatchClient() {
   const onboarding = allMessages.length === 0;
   const trySample = () => {
     if (!mine.size) setOffering("JiYeon CC102\nXinyu CC101\nNien CC301");
-    addPaste(SAMPLE);
+    addPaste(SAMPLE, {}, manualCapture(Date.now(), "Sample posts"));
   };
+  const matchesLabel =
+    contactPosts.length === 0
+      ? mode === "wtb"
+        ? "No sellers for these cards"
+        : "No matches for these cards"
+      : mode === "wtb"
+        ? `${contactPosts.length} seller${contactPosts.length === 1 ? "" : "s"} found`
+        : `${contactPosts.length} match${contactPosts.length === 1 ? "" : "es"} found`;
   const contactTitle =
     mode === "wts"
       ? "Buyers for your objekts"
@@ -1502,7 +1550,7 @@ export function MatchClient() {
     };
   };
   // "Their objekts": how many traders have each card to offer — a "have"
-  // badge, colored to match "From your Discord paste" above the grid. wtb
+  // badge, colored to match "From your captures" above the grid. wtb
   // shows the asking price instead; a count of sellers is not what a buyer
   // is scanning for.
   const theirBadge = (card: DeskCard): DeskBadge => {
@@ -1517,15 +1565,17 @@ export function MatchClient() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-5 px-1 pb-12 sm:px-4">
+    <div
+      className={`mx-auto w-full max-w-[100rem] space-y-5 px-1 pb-12 sm:px-4 ${libraryOpen ? "lg:pr-[27rem]" : ""}`}
+    >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Find your next trade
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Paste or capture your Discord trade channels to see who has what
-            you’re missing.
+            Capture your Discord trade channels to see who has what you’re
+            missing.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1536,9 +1586,15 @@ export function MatchClient() {
               <Button variant="outline" onClick={() => setEditor("mine")}>
                 My objekts
               </Button>
-              <Button variant="outline" onClick={() => setEditor("paste")}>
-                <ClipboardPasteIcon className="size-4" />
-                Import more posts
+              <CaptureButton
+                captures={captures}
+                now={now}
+                open={libraryOpen}
+                onClick={() => setLibraryOpen(!libraryOpen)}
+              />
+              <Button onClick={() => setEditor("capture")}>
+                <PlusIcon className="size-4" />
+                New capture
               </Button>
             </>
           )}
@@ -1556,7 +1612,7 @@ export function MatchClient() {
           loadingInv={loadingInv}
           extensionInstalled={extensionInstalled}
           lookingFor={theirSearch.trim()}
-          onImport={() => setEditor("paste")}
+          onImport={() => setEditor("capture")}
           onSample={trySample}
           onAddHaves={() => setEditor("mine")}
         />
@@ -1618,65 +1674,85 @@ export function MatchClient() {
               {MODES.find((entry) => entry.id === mode)?.hint}
             </p>
           </section>
-          <CaptureTimeline
-            captures={captures}
-            counts={captureCounts}
-            now={now}
-            canRescan={extensionInstalled === true}
-            onToggle={toggleCapture}
-            onRemove={removeCapture}
-            onRescan={(capture) => void rescan([capture])}
-          />
           <div
             className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
             aria-live="polite"
           >
-            <p className="text-sm">
-              {needsInventory ? (
-                <>
-                  <span className="block font-semibold">
-                    {loadingInv
-                      ? "Loading your Cosmo inventory…"
-                      : mode === "wtt"
-                        ? "Add your haves to find mutual trades"
-                        : "Add your haves to find buyers"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {loadingInv
-                      ? "Matches will update when your cards are loaded."
-                      : mode === "wtt"
-                        ? "Load your Cosmo inventory or type the objekts you can offer. We’ll check who offers the cards you’re looking for and wants something you own in return."
-                        : "Load your Cosmo inventory or type the objekts you can sell to find buyers who want them."}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="font-semibold">
-                    {contactPosts.length}{" "}
-                    {mode === "wtb" ? "WTS" : mode === "wts" ? "WTB" : "WTT"}{" "}
-                    post
-                    {contactPosts.length === 1 ? "" : "s"}
-                  </span>
-                  {selectionCount
-                    ? " match your selections"
-                    : mode === "wtb"
-                      ? " with cards for sale"
-                      : " want cards you have"}
-                  {searchingTheirCards && ` matching “${theirSearch}”`}.{" "}
-                  {selectionCount > 1 && (
-                    <span className="text-muted-foreground">
-                      Each post matches at least one selected card on each side.
-                    </span>
+            <div className="min-w-0 text-sm">
+              {searchSummary ? (
+                <div className="flex items-center gap-2">
+                  <p
+                    className="font-semibold"
+                    data-testid="search-match-summary"
+                  >
+                    {searchSummary}
+                  </p>
+                  {summaryIsSpotlight && (
+                    <button
+                      type="button"
+                      aria-label="Stop pinning the searched cards"
+                      title="Stop pinning the searched cards"
+                      className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      onClick={() => setSpotlight("")}
+                    >
+                      <XIcon className="size-4" />
+                    </button>
                   )}
-                </>
+                </div>
+              ) : (
+                <p>
+                  {needsInventory ? (
+                    <>
+                      <span className="block font-semibold">
+                        {loadingInv
+                          ? "Loading your Cosmo inventory…"
+                          : mode === "wtt"
+                            ? "Add your haves to find mutual trades"
+                            : "Add your haves to find buyers"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {loadingInv
+                          ? "Matches will update when your cards are loaded."
+                          : mode === "wtt"
+                            ? "Load your Cosmo inventory or type the objekts you can offer. We’ll check who offers the cards you’re looking for and wants something you own in return."
+                            : "Load your Cosmo inventory or type the objekts you can sell to find buyers who want them."}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold">
+                        {contactPosts.length}{" "}
+                        {mode === "wtb"
+                          ? "WTS"
+                          : mode === "wts"
+                            ? "WTB"
+                            : "WTT"}{" "}
+                        post
+                        {contactPosts.length === 1 ? "" : "s"}
+                      </span>
+                      {selectionCount
+                        ? " match your selections"
+                        : mode === "wtb"
+                          ? " with cards for sale"
+                          : " want cards you have"}
+                      {searchingTheirCards && ` matching “${theirSearch}”`}.{" "}
+                      {selectionCount > 1 && (
+                        <span className="text-muted-foreground">
+                          Each post matches at least one selected card on each
+                          side.
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
               )}
               {storedCount >= MAX_BLOCKS && (
-                <span className="text-muted-foreground">
+                <p className="text-muted-foreground">
                   Holding the most recent {MAX_BLOCKS.toLocaleString()} posts;
-                  older ones are dropped as you paste.
-                </span>
+                  older ones are dropped as you capture.
+                </p>
               )}
-            </p>
+            </div>
             <div className="flex gap-2">
               {needsInventory && (
                 <Button
@@ -1699,34 +1775,25 @@ export function MatchClient() {
                   Clear handled list
                 </Button>
               )}
-              {selectionCount > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setGive(new Set());
-                    setGet(new Set());
-                  }}
-                >
-                  Clear selections
-                </Button>
-              )}
-              {mode !== "wts" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    resultsRef.current?.scrollIntoView({ block: "start" })
-                  }
-                >
+              {mode !== "wts" && selectionCount === 0 && (
+                <Button size="sm" variant="outline" onClick={scrollToResults}>
                   See {mode === "wtb" ? "sellers" : "traders"}
                   <ArrowDownIcon className="size-3.5" />
                 </Button>
               )}
             </div>
           </div>
+          <SelectionTray
+            picks={picks}
+            onClear={() => {
+              setGive(new Set());
+              setGet(new Set());
+            }}
+          />
           {/* Stretched, not top-aligned: the two sides are read against each
-          other, and panels of different heights made that harder. */}
+          other, and panels of different heights made that harder. Above each
+          grid is only its header and search bar, the same height on both
+          sides, so their rows of cards line up. */}
           <div className="grid gap-4 md:grid-cols-2">
             <section
               className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
@@ -1762,12 +1829,6 @@ export function MatchClient() {
               </div>
               {mode === "wtb" ? (
                 <>
-                  <SelectionTray
-                    selected={get}
-                    items={allTheirItems}
-                    onToggle={toggleGet}
-                    empty="Choose cards for sale on the right →"
-                  />
                   <div className="space-y-3 rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
                     <p>You don’t need to offer any objekts to buy.</p>
                     <p>
@@ -1791,51 +1852,32 @@ export function MatchClient() {
                     </Button>
                   )}
                 </>
-              ) : (
-                <>
-                  <SelectionTray
-                    selected={activeGive}
-                    items={mine}
-                    onToggle={toggleGive}
-                    empty={
-                      mode === "wts"
-                        ? "Select a card to find cash buyers"
-                        : "Select a card to see what you could get"
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {mode === "wtt" && get.size
-                      ? "Showing your cards wanted by traders who have your selection."
-                      : "Cards with interested people appear first."}
+              ) : mine.size === 0 ? (
+                <div className="space-y-3 py-12 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {mode === "wtt"
+                      ? "Your haves help narrow down which traders can offer the objekts you want in return."
+                      : "Add your haves to see which buyers want your objekts."}
                   </p>
-                  {mine.size === 0 ? (
-                    <div className="space-y-3 py-12 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        {mode === "wtt"
-                          ? "Your haves help narrow down which traders can offer the objekts you want in return."
-                          : "Add your haves to see which buyers want your objekts."}
-                      </p>
-                      <Button
-                        disabled={loadingInv}
-                        onClick={() => setEditor("mine")}
-                      >
-                        {loadingInv ? "Loading inventory…" : "Add my objekts"}
-                      </Button>
-                    </div>
-                  ) : (
-                    <DeskGrid
-                      cards={myCards}
-                      selected={activeGive}
-                      onToggle={toggleGive}
-                      images={images}
-                      side="mine"
-                      badge={mineBadge}
-                      emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
-                      columns={columns}
-                      poolKey={`${mode}|${mine.size}|${pool.length}`}
-                    />
-                  )}
-                </>
+                  <Button
+                    disabled={loadingInv}
+                    onClick={() => setEditor("mine")}
+                  >
+                    {loadingInv ? "Loading inventory…" : "Add my objekts"}
+                  </Button>
+                </div>
+              ) : (
+                <DeskGrid
+                  cards={myCards}
+                  selected={activeGive}
+                  onToggle={toggleGive}
+                  images={images}
+                  side="mine"
+                  badge={mineBadge}
+                  emptyText="None of your cards match these traders’ wants. Remove a selection on the right to see your collection again."
+                  columns={gridColumns}
+                  poolKey={`${mode}|${mine.size}|${pool.length}`}
+                />
               )}
             </section>
             <section
@@ -1845,7 +1887,7 @@ export function MatchClient() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                    From your Discord paste
+                    From your captures
                   </p>
                   <h2 className="mt-1 text-lg font-semibold">
                     {mode === "wts"
@@ -1880,76 +1922,35 @@ export function MatchClient() {
                   <ContactResults {...contactProps} />
                 </>
               ) : (
-                <>
-                  {mode === "wtt" && (
-                    <SelectionTray
-                      selected={get}
-                      items={allTheirItems}
-                      onToggle={toggleGet}
-                      empty="Select a card to see what they want from you"
-                    />
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    {mode === "wtb"
-                      ? "Asking prices appear on each card. Select one to compare its sellers below."
-                      : activeGive.size
-                        ? "Only offers from traders who want your selected cards."
-                        : "Choose either side to start. Offers update as you select cards."}
-                  </p>
-                  {searchSummary && (
-                    <div
-                      role="status"
-                      className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm"
-                    >
-                      <p
-                        className="min-w-0 flex-1"
-                        data-testid="search-match-summary"
-                      >
-                        {searchSummary}
-                      </p>
-                      {summaryIsSpotlight && (
-                        <button
-                          type="button"
-                          aria-label="Stop pinning the searched cards"
-                          title="Stop pinning the searched cards"
-                          className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                          onClick={() => setSpotlight("")}
-                        >
-                          <XIcon className="size-4" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  <DeskGrid
-                    cards={theirCards}
-                    selected={get}
-                    onToggle={toggleGet}
-                    pinned={pinnedKeys}
-                    nudge={searchNudge}
-                    placeholder="Search or paste your wants · e.g. sy cc117-120"
-                    images={images}
-                    side="theirs"
-                    search={theirSearch}
-                    onSearchChange={setTheirSearch}
-                    clearFilters={
-                      theirSearch.trim() || activeGive.size || get.size
-                        ? () => {
-                            setTheirSearch("");
-                            setGive(new Set());
-                            setGet(new Set());
-                          }
-                        : undefined
-                    }
-                    badge={theirBadge}
-                    emptyText={
-                      mode === "wtb"
-                        ? "No listed sale cards match. Remove a selection, open a linked list below, or add WTS posts."
-                        : "No offers connect these selections yet. Remove a card, open a linked list below, or add more posts."
-                    }
-                    columns={columns}
-                    poolKey={`${mode}|${pool.length}`}
-                  />
-                </>
+                <DeskGrid
+                  cards={theirCards}
+                  selected={get}
+                  onToggle={toggleGet}
+                  pinned={pinnedKeys}
+                  nudge={searchNudge}
+                  placeholder="Search or paste your wants · e.g. sy cc117-120"
+                  images={images}
+                  side="theirs"
+                  search={theirSearch}
+                  onSearchChange={setTheirSearch}
+                  clearFilters={
+                    theirSearch.trim() || activeGive.size || get.size
+                      ? () => {
+                          setTheirSearch("");
+                          setGive(new Set());
+                          setGet(new Set());
+                        }
+                      : undefined
+                  }
+                  badge={theirBadge}
+                  emptyText={
+                    mode === "wtb"
+                      ? "No listed sale cards match. Remove a selection, open a linked list below, or capture more WTS posts."
+                      : "No offers connect these selections yet. Remove a card, open a linked list below, or capture more posts."
+                  }
+                  columns={gridColumns}
+                  poolKey={`${mode}|${pool.length}`}
+                />
               )}
               {linkedPosts.length > 0 && (
                 <div className="rounded-lg border bg-background px-3 py-3">
@@ -1997,6 +1998,24 @@ export function MatchClient() {
               )}
             </section>
           </div>
+          {/* Picking is the end of the page's top half and the traders are a
+          long scroll below it, so the next step comes to the user: it rides
+          the bottom of the screen until the list it points at is reached. */}
+          {mode !== "wts" && selectionCount > 0 && (
+            <div className="pointer-events-none sticky bottom-4 z-30 flex justify-center">
+              <Button
+                size="lg"
+                className="pointer-events-auto rounded-full shadow-lg"
+                disabled={contactPosts.length === 0}
+                onClick={scrollToResults}
+              >
+                {matchesLabel}
+                {contactPosts.length > 0 && (
+                  <ArrowDownIcon className="size-4" />
+                )}
+              </Button>
+            </div>
+          )}
           {mode !== "wts" && (
             <section
               ref={resultsRef}
@@ -2035,183 +2054,163 @@ export function MatchClient() {
       )}
 
       <Dialog
-        open={editor !== null}
+        open={editor === "mine"}
         onOpenChange={(open) => !open && setEditor(null)}
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>
-              {editor === "mine" ? "Your trade lists" : "Import Discord posts"}
-            </DialogTitle>
+            <DialogTitle>Your trade lists</DialogTitle>
             <DialogDescription>
-              {editor === "mine"
-                ? "Add the cards you can offer. Your typed lists stay in this browser."
-                : "Paste message text with the Discord name/time lines, or import several text files. Repeated posts are combined."}
+              Add the cards you can offer. Your typed lists stay in this
+              browser.
             </DialogDescription>
           </DialogHeader>
-          {editor === "mine" ? (
-            <div className="space-y-5">
-              {/* The inventory is the way in for nearly everyone, so it is the
+          <div className="space-y-5">
+            {/* The inventory is the way in for nearly everyone, so it is the
                   field the dialog leads with; typing a list by hand is for
                   cards Cosmo does not show, and folds away like saved wants. */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="cosmo-nickname"
-                  className="text-base font-medium"
-                >
-                  Load my Cosmo inventory
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    id="cosmo-nickname"
-                    className="h-12 px-4 text-base md:text-base"
-                    placeholder="Your Cosmo nickname"
-                    autoComplete="off"
-                    value={nickname}
-                    onChange={(event) => setNickname(event.target.value)}
-                    onKeyDown={(event) =>
-                      event.key === "Enter" && void loadInventory(nickname)
-                    }
-                  />
-                  <Button
-                    className="h-12 px-6 text-base"
-                    disabled={loadingInv || !nickname.trim()}
-                    onClick={() => loadInventory(nickname)}
-                  >
-                    {loadingInv ? (
-                      <Loader2Icon className="size-4 animate-spin" />
-                    ) : (
-                      "Load"
-                    )}
-                  </Button>
-                </div>
-                {owned.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {owned.length} loaded ·{" "}
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={() => {
-                        inventoryLoad.current++;
-                        setOwned([]);
-                        setGive(new Set());
-                        try {
-                          localStorage.removeItem(INVENTORY_KEY);
-                        } catch {
-                          /* Nothing stored to forget. */
-                        }
-                      }}
-                    >
-                      Remove loaded inventory
-                    </button>
-                  </p>
-                )}
-                {mine.size > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {mine.size} distinct cards available to select on your side.
-                  </p>
-                )}
-              </div>
-              <details className="rounded-lg border p-3">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Type what I have instead
-                  {offering.trim() && (
-                    <span className="font-normal text-muted-foreground">
-                      {" "}
-                      · {parseOffering(offering).length} typed
-                    </span>
-                  )}
-                </summary>
-                <label
-                  htmlFor="my-haves"
-                  className="mt-3 block text-sm text-muted-foreground"
-                >
-                  What I have, for cards your inventory does not show
-                </label>
-                <Textarea
-                  id="my-haves"
-                  className="mt-2"
-                  rows={5}
-                  placeholder={"JiYeon CC102\nXinyu CC101\nNien CC301"}
-                  value={offering}
-                  onChange={(event) => setOffering(event.target.value)}
+            <div className="space-y-2">
+              <label htmlFor="cosmo-nickname" className="text-base font-medium">
+                Load my Cosmo inventory
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="cosmo-nickname"
+                  className="h-12 px-4 text-base md:text-base"
+                  placeholder="Your Cosmo nickname"
+                  autoComplete="off"
+                  value={nickname}
+                  onChange={(event) => setNickname(event.target.value)}
+                  onKeyDown={(event) =>
+                    event.key === "Enter" && void loadInventory(nickname)
+                  }
                 />
-              </details>
-              <details className="rounded-lg border p-3">
-                <summary className="cursor-pointer text-sm font-medium">
-                  My saved wants (optional)
-                </summary>
-                <label
-                  htmlFor="my-wants"
-                  className="mt-3 block text-sm text-muted-foreground"
-                >
-                  Save cards to compare later, or select them from the
-                  right-hand grid.
-                </label>
-                <Textarea
-                  id="my-wants"
-                  className="mt-2"
-                  rows={4}
-                  placeholder="SeoYeon CC101"
-                  value={wanting}
-                  onChange={(event) => setWanting(event.target.value)}
-                />
-                {mode !== "wts" && savedWants.size > 0 && (
-                  <Button
-                    className="mt-2"
-                    variant="outline"
-                    size="sm"
-                    onClick={useSavedWants}
-                  >
-                    Select these wants
-                  </Button>
-                )}
-              </details>
-              <Button className="w-full" onClick={() => setEditor(null)}>
-                Done — show my cards
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <PasteExtensionHint installed={extensionInstalled} />
-              <Textarea
-                aria-label="Discord posts"
-                rows={9}
-                placeholder={
-                  "trader — 3:41 PM\nHAVE\nSeoYeon CC101\nWANT\nJiYeon CC102"
-                }
-                value={raw}
-                onChange={(event) => setRaw(event.target.value)}
-              />
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".txt,.text,.md,text/plain"
-                multiple
-                className="hidden"
-                onChange={importFiles}
-                aria-label="Import text files"
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button disabled={!raw.trim()} onClick={() => addPaste(raw)}>
-                  <ClipboardPasteIcon className="size-4" />
-                  Add posts
-                </Button>
                 <Button
-                  variant="outline"
-                  onClick={() => inputRef.current?.click()}
+                  className="h-12 px-6 text-base"
+                  disabled={loadingInv || !nickname.trim()}
+                  onClick={() => loadInventory(nickname)}
                 >
-                  Import text files
+                  {loadingInv ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    "Load"
+                  )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Your pasted text stays in this browser. You can choose to load
-                any linked public lists together after importing posts.
-              </p>
+              {owned.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {owned.length} loaded ·{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => {
+                      inventoryLoad.current++;
+                      setOwned([]);
+                      setGive(new Set());
+                      try {
+                        localStorage.removeItem(INVENTORY_KEY);
+                      } catch {
+                        /* Nothing stored to forget. */
+                      }
+                    }}
+                  >
+                    Remove loaded inventory
+                  </button>
+                </p>
+              )}
+              {mine.size > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {mine.size} distinct cards available to select on your side.
+                </p>
+              )}
             </div>
-          )}
+            <details className="rounded-lg border p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                Type what I have instead
+                {offering.trim() && (
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    · {parseOffering(offering).length} typed
+                  </span>
+                )}
+              </summary>
+              <label
+                htmlFor="my-haves"
+                className="mt-3 block text-sm text-muted-foreground"
+              >
+                What I have, for cards your inventory does not show
+              </label>
+              <Textarea
+                id="my-haves"
+                className="mt-2"
+                rows={5}
+                placeholder={"JiYeon CC102\nXinyu CC101\nNien CC301"}
+                value={offering}
+                onChange={(event) => setOffering(event.target.value)}
+              />
+            </details>
+            <details className="rounded-lg border p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                My saved wants (optional)
+              </summary>
+              <label
+                htmlFor="my-wants"
+                className="mt-3 block text-sm text-muted-foreground"
+              >
+                Save cards to compare later, or select them from the right-hand
+                grid.
+              </label>
+              <Textarea
+                id="my-wants"
+                className="mt-2"
+                rows={4}
+                placeholder="SeoYeon CC101"
+                value={wanting}
+                onChange={(event) => setWanting(event.target.value)}
+              />
+              {mode !== "wts" && savedWants.size > 0 && (
+                <Button
+                  className="mt-2"
+                  variant="outline"
+                  size="sm"
+                  onClick={useSavedWants}
+                >
+                  Select these wants
+                </Button>
+              )}
+            </details>
+            <Button className="w-full" onClick={() => setEditor(null)}>
+              Done — show my cards
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
+      <NewCaptureDialog
+        open={editor === "capture"}
+        onOpenChange={(open) => !open && setEditor(null)}
+        extensionInstalled={extensionInstalled}
+        initialWants={(wanting.trim() || theirSearch.trim()).replace(
+          /\s*,\s*/g,
+          "\n",
+        )}
+        onSearch={(wants) => startSearch(wants, "new-capture")}
+        onSave={saveManual}
+        onFiles={importFiles}
+      />
+      <CaptureLibrary
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        captures={captures}
+        counts={captureCounts}
+        traders={tradersByCapture}
+        now={now}
+        canRescan={extensionInstalled === true}
+        onNew={() => setEditor("capture")}
+        onToggle={toggleCapture}
+        onRename={renameOne}
+        onRemove={removeCapture}
+        onRescan={(targets) => void rescan(targets)}
+      />
       <PostDialog
         match={focusedMatch}
         mode={mode}
@@ -2242,13 +2241,13 @@ export function MatchClient() {
               Clear all {allMessages.length} posts?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This removes every capture and pasted post, imported lists and
-              current selections. Your own typed haves and wants are kept.
+              This removes every capture, imported lists and current selections.
+              Your own typed haves and wants are kept.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep posts</AlertDialogCancel>
-            <AlertDialogAction onClick={clearPastes}>
+            <AlertDialogAction onClick={clearCaptures}>
               Clear posts
             </AlertDialogAction>
           </AlertDialogFooter>

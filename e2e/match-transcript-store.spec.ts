@@ -43,14 +43,10 @@ const legacyRaw = (page: import("@playwright/test").Page) =>
   page.evaluate(() => localStorage.getItem("match:raw:v1"));
 
 async function paste(page: import("@playwright/test").Page, text: string) {
-  // "Import Discord posts" on a first visit, "Import more posts" once posts are loaded.
-  await page
-    .getByRole("button", { name: /Import Discord posts|Import more posts/ })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "New capture" }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("textbox", { name: "Discord posts" }).fill(text);
-  await dialog.getByRole("button", { name: "Add posts" }).click();
+  await dialog.getByRole("textbox", { name: /Discord messages/ }).fill(text);
+  await dialog.getByRole("button", { name: "Save capture" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -59,14 +55,12 @@ test("a paste survives a reload and is stored gzipped in IndexedDB", async ({
 }) => {
   await page.goto("/match");
   await expect(
-    page.getByRole("button", { name: "Import Discord posts" }),
+    page.getByRole("heading", { name: "Capture Discord posts" }),
   ).toBeVisible();
 
   await paste(page, SAMPLE);
   // The header button flips once posts are loaded.
-  await expect(
-    page.getByRole("button", { name: "Import more posts" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Captures/ })).toBeVisible();
 
   const stored = await readStored(page);
   expect(stored).not.toBeNull();
@@ -74,9 +68,7 @@ test("a paste survives a reload and is stored gzipped in IndexedDB", async ({
   expect(stored?.size ?? 0).toBeGreaterThan(0);
 
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Import more posts" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Captures/ })).toBeVisible();
   // Nothing was left behind in the old localStorage key.
   expect(await legacyRaw(page)).toBeNull();
 });
@@ -84,9 +76,7 @@ test("a paste survives a reload and is stored gzipped in IndexedDB", async ({
 test("re-pasting the same posts does not grow the store", async ({ page }) => {
   await page.goto("/match");
   await paste(page, SAMPLE);
-  await expect(
-    page.getByRole("button", { name: "Import more posts" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Captures/ })).toBeVisible();
   const first = await readStored(page);
 
   await paste(page, SAMPLE);
@@ -105,9 +95,7 @@ test("a transcript left in localStorage migrates into IndexedDB", async ({
 
   await page.reload();
 
-  await expect(
-    page.getByRole("button", { name: "Import more posts" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Captures/ })).toBeVisible();
   expect(await legacyRaw(page)).toBeNull();
   expect(await readStored(page)).not.toBeNull();
 });
