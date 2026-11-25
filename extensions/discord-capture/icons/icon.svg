@@ -1,8 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <rect width="128" height="128" rx="28" fill="#4338ca"/>
-  <g fill="none" stroke="#eef2ff" stroke-width="12" stroke-linecap="round">
-    <circle cx="56" cy="55" r="26"/>
-    <path d="M76 76 L100 100"/>
-  </g>
-  <rect x="44" y="43" width="24" height="24" rx="5" fill="#eef2ff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect x="0" y="0" width="64" height="64" fill="#fff"/>
+      <rect x="25" y="17" width="31" height="41" rx="8.5" fill="#000"/>
+    </mask>
+  </defs>
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#000000"/>
+  <rect x="10" y="8" width="25" height="35" rx="5" fill="none" stroke="#ffffff" stroke-width="4" mask="url(#gap)"/>
+  <rect x="29" y="21" width="23" height="33" rx="4.5" fill="#ffffff"/>
 </svg>
