@@ -53,7 +53,7 @@ floating window inside the Discord page, not a toolbar popup — a popup closes 
 loses focus, and a search run takes minutes, so every glance at Discord used to close the
 thing reporting on it. Drag it by the titlebar (or focus the titlebar and use the arrow keys,
 shift for bigger steps), resize from the bottom-right corner; the titlebar's buttons pop it
-out into a real browser window, collapse it to the titlebar, and close it. Where it was left is
+out into a real browser window, minimise it to the island, and close it. Where it was left is
 remembered per browser, including whether it was open, and it is clamped back on screen when
 the window is smaller than it was; a size remembered from before this redesign gives way to
 the new default rather than reopening as a tall column with a wide card inside it.
@@ -101,7 +101,11 @@ The chip at the top says whether this channel is being collected, and is the swi
 (that switch used to live under Troubleshooting, which is the wrong place for the control
 that decides whether the extension does anything at all). Typing a want turns it into a card
 — art from objekt.my's collection search where it has it, the code where it doesn't — rather
-than a line of text, because a wall of "SeoYeon CC101" is hard to scan and easy to mistype;
+than a line of text, because a wall of "SeoYeon CC101" is hard to scan and easy to mistype.
+A line at the bottom of the box says what the search will type — "Finds CC101–109 for all
+members" — because a search is by collection code alone, so "seoyeon cc101" brings back every
+member's CC101 rather than only SeoYeon's (see `searchQueries`). The line is always reserved, so the
+box does not grow when it appears;
 a small badge on each card counts how many posts from the last search have it, and the card
 dims or glows to say whether it is still queued, being searched now, or already done. The
 palette follows Discord's own light/dark setting, reported by the content script — not
@@ -121,6 +125,19 @@ from a window — the Discord tab you used most recently (`src/host-tab.ts`), so
 matters which tab is in front. A Discord tab that was already open when the extension was
 installed no longer needs a reload either; the worker injects the content script on demand.
 
+## The island
+
+Minimised, the panel is a small black pill at the top centre of Discord instead of a window
+over the channel — the "island". A search minimises the panel as it starts, because the run
+is Discord's own search and a 760px window is in the way of watching it. The island says what
+the run is doing (`Searching CC103 · 3/9`, with a thin progress bar), carries **Stop** for a
+run going in that tab, and once it is done says what it found (`12 posts found`) with **Open in
+match** beside it. A click anywhere else on it brings the panel back, as does the toolbar
+button; a panel asked for from /match or a hunt always comes back whole. After a reload it
+comes back as it was left. `src/island.ts` decides the wording from the stored
+`searchProgress`, and `panel-frame.ts` draws it, outside the iframe, which is only hidden — so
+the panel is exactly as it was when it returns. No notification permission is involved.
+
 ## What reaches /match
 
 **Open in match** sends the last search and nothing else. Posts collected by scrolling stay in
@@ -134,7 +151,10 @@ no `capture`, and /match dates that delivery on arrival.
 
 /match can also ask for a new scan. With a want list that goes through `hunt`; without one it
 sends `open-panel`, and the bridge asks the worker to bring Discord forward with the panel
-open. Either way the panel only opens ready: searching stays the user's own click.
+open. Either way the panel only opens ready: searching stays the user's own click. With no
+Discord tab open, the new one opens on the channel the last search was started in
+(`lastChannel`, recorded as a run starts and read back through `channelUrl`, so it can only
+ever be a Discord server channel), or Discord's home before there has been a search.
 
 ## What it reads
 
@@ -257,7 +277,10 @@ worst kind:
   and checks that one panel survives and the run still works.
 
   A first install opens the panel in a Discord tab if one is open, since an extension that
-  installs and then does nothing gives no hint that a toolbar button is what starts it.
+  installs and then does nothing gives no hint that a toolbar button is what starts it, and
+  then brings objekt.my/match forward — the open /match tab if there is one, which is usually
+  the page that sent them to the store, or a new one — so the next step is on screen. Updates
+  open nothing.
   <kbd>Alt+Shift+O</kbd> toggles the panel too.
 
 ## Validation still requiring a real Discord session

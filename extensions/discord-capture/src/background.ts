@@ -19,7 +19,7 @@ import {
   openMatchTab,
 } from "./match-tab";
 import { readPanelState } from "./panel-geometry";
-import { capturing, channelIds, isDiscordUrl } from "./settings";
+import { capturing, channelIds, channelUrl, isDiscordUrl } from "./settings";
 import {
   type Captured,
   capture,
@@ -135,8 +135,9 @@ extensionApi.action.onClicked.addListener((tab) => {
  * is enough: it announces itself and the old one stands down.
  *
  * On a first install there is nothing to replace, so the panel is opened
- * instead — otherwise the extension is installed, does nothing, and gives no
- * hint that a toolbar button is what starts it.
+ * instead, and objekt.my/match comes forward — otherwise the extension is
+ * installed, does nothing, and gives no hint that a toolbar button is what
+ * starts it. Updates open nothing.
  */
 extensionApi.runtime.onInstalled.addListener((details) => {
   if (details.reason !== "install" && details.reason !== "update") return;
@@ -169,6 +170,10 @@ extensionApi.runtime.onInstalled.addListener((details) => {
       await extensionApi.tabs
         .sendMessage(first.id, { type: "open-panel" })
         .catch(() => {});
+    // Then to /match, which says what to do next now that the extension is
+    // there. A /match tab already open (the one that sent them to the store,
+    // usually) is brought forward rather than doubled.
+    await openMatchTab(matchTabs).catch(() => {});
   })().catch(() => {});
 });
 
@@ -565,7 +570,8 @@ function fromObjektPage(sender: { url?: string; frameId?: number }): boolean {
 
 /**
  * Put Discord in front of the user, with the panel open: the Discord tab they
- * used most recently, or a new one when there is none.
+ * used most recently, or a new one when there is none — opened on the channel
+ * their last search ran in, or Discord's home before there has been one.
  *
  * Asked for by the bridge right after a want list arrives from objekt.my —
  * the user just pressed "Find on Discord", so Discord is where they are going —
@@ -582,13 +588,21 @@ async function showDiscord({ panel = true } = {}): Promise<void> {
   if (typeof tab?.id !== "number") {
     // A tab that does not exist yet cannot be sent "open-panel"; the content
     // script reopens a panel recorded as open as soon as it starts.
+    const { panel: stored, lastChannel } = await extensionApi.storage.local.get(
+      ["panel", "lastChannel"],
+    );
+    // Open and whole: this was asked for, so not the island it was left as.
     if (panel) {
-      const { panel: stored } = await extensionApi.storage.local.get("panel");
       await extensionApi.storage.local.set({
-        panel: { ...readPanelState(stored), open: true },
+        panel: { ...readPanelState(stored), open: true, collapsed: false },
       });
     }
-    await extensionApi.tabs.create({ url: "https://discord.com/app" });
+    // Straight to the channel the last search ran in, when there was one:
+    // that is where they trade. Read back through `channelUrl`, so a stored
+    // value can only ever open a Discord server channel.
+    await extensionApi.tabs.create({
+      url: channelUrl(lastChannel) ?? "https://discord.com/app",
+    });
     return;
   }
   await extensionApi.tabs.update(tab.id, { active: true });
@@ -689,6 +703,10 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
       // Keeping time for a tab whose own timers are being throttled.
       if (request?.type === "wake") return wake(Number(request.ms));
       if (request?.type === "tab-id") return sender.tab?.id ?? null;
+      // The island's one button. It sends the last search to /match exactly
+      // as the panel's Open in match does, and nothing a page could reach:
+      // only extension code can message the worker.
+      if (request?.type === "open-match") return await openInMatch();
       if (request?.type === "open-window") {
         await openPanelWindow();
         // One live panel at a time: the embedded one closes as the window opens.

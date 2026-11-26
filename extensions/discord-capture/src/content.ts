@@ -28,7 +28,9 @@ import {
   closePanel,
   discardPanel,
   markPanelBusy,
+  minimisePanel,
   openPanel,
+  setIslandStop,
   showPanelNotice,
   syncPanelTheme,
   togglePanel,
@@ -74,6 +76,7 @@ import {
   channelFromUrl,
   channelIds,
   channelLabelFromTitle,
+  channelUrl,
   formatChannelLabel,
 } from "./settings";
 import type { Entry } from "./store";
@@ -592,8 +595,9 @@ async function tabId(): Promise<number | null> {
   }
   return ownTabId;
 }
-async function showPanel() {
-  await openPanel(await tabId());
+/** `expand` for an explicit request; without it a minimised panel stays so. */
+async function showPanel(expand = false) {
+  await openPanel(await tabId(), { expand });
 }
 extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
   if (sender.id !== extensionApi.runtime.id) return;
@@ -614,7 +618,7 @@ extensionApi.runtime.onMessage.addListener((request, sender, reply) => {
     return true;
   }
   if (request?.type === "open-panel") {
-    void showPanel();
+    void showPanel(true);
     reply({ ok: true, value: true });
     return true;
   }
@@ -877,6 +881,17 @@ const RELOAD_WAIT_MS = 120_000;
 async function driveRun(plan: RunPlan): Promise<void> {
   searching = true;
   markPanelBusy(true);
+  // The run is Discord's own search, so the panel gets out of the way of it:
+  // the island at the top says how it is going and brings the panel back.
+  minimisePanel();
+  // Minimised is not unstoppable: the island carries Stop for this run.
+  setIslandStop(() => {
+    searchSignal.cancelled = true;
+  });
+  // Where this search was started is the user's trade channel, and where
+  // "Open Discord" goes next time there is no Discord tab to bring forward.
+  const back = channelUrl(location.href);
+  if (back) void extensionApi.storage.local.set({ lastChannel: back });
   holdWorkerOpen(true);
   searchSignal.cancelled = false;
   // A fresh run counts from zero, so the panel's total reflects this search.
@@ -1052,6 +1067,7 @@ async function driveRun(plan: RunPlan): Promise<void> {
   } finally {
     searching = false;
     markPanelBusy(false);
+    setIslandStop(null);
     holdWorkerOpen(false);
     void flushSearched();
   }
@@ -1156,7 +1172,8 @@ async function resume(
   // Show the panel first, even if it was closed. This types into Discord's
   // search box on the user's behalf, and doing that with no visible UI — no
   // progress, and no Stop button — is not something to spring on someone who
-  // has just watched their browser fall over.
+  // has just watched their browser fall over. The run then minimises it to
+  // the island, which keeps both on screen.
   if (reopened) await showPanel().catch(() => {});
   void driveRun({
     queries: plan.queries,

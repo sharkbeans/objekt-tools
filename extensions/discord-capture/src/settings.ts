@@ -30,6 +30,21 @@ export function channelFromUrl(url: string | undefined | null): string | null {
 }
 
 /**
+ * The server channel `url` is on, as a URL to come back to, or null.
+ *
+ * Only the channel: a message link or a thread inside it comes back as its
+ * channel. DMs are not channels here (see `channelFromUrl`), so they give null,
+ * and so does anything that is not Discord — a stored value read back through
+ * this cannot send a tab anywhere else.
+ */
+export function channelUrl(url: unknown): string | null {
+  if (typeof url !== "string" || !isDiscordUrl(url)) return null;
+  const { origin, pathname } = new URL(url);
+  const path = pathname.match(/^\/channels\/\d+\/\d+/)?.[0];
+  return path ? `${origin}${path}` : null;
+}
+
+/**
  * Whether passive capture keeps posts from `channel`.
  *
  * On by default: a channel is captured unless the user has paused it. That is

@@ -5,10 +5,8 @@ import { useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
 import { Button } from "@/components/ui/button";
 import { browserStore } from "@/lib/extension-links";
-import { ExtensionSetup } from "./extension-setup";
-
-const DISCORD_BUTTON =
-  "bg-[#5865F2] font-semibold text-white shadow-sm hover:bg-[#4752C4]";
+import { CosmoButton } from "./cosmo-button";
+import { DISCORD_BUTTON, ExtensionSetup } from "./extension-setup";
 
 function Step({
   n,
@@ -65,18 +63,27 @@ function Step({
  */
 export function MatchOnboarding({
   haveCount,
+  cosmoLoaded,
   loadingInv,
   extensionInstalled,
   lookingFor,
+  initialWants,
+  onSearch,
   onImport,
   onSample,
   onAddHaves,
 }: {
   haveCount: number;
+  /** A Cosmo inventory is loaded, so its button changes it. */
+  cosmoLoaded: boolean;
   loadingInv: boolean;
   extensionInstalled: boolean | null;
   /** A search carried over from a grid hunt or a previous visit. */
   lookingFor: string;
+  /** The want list to start the extension's search box with, one per line. */
+  initialWants: string;
+  /** Hand a want list (or nothing) to the extension and bring Discord up. */
+  onSearch: (wants: string[]) => Promise<boolean>;
   onImport: () => void;
   onSample: () => void;
   onAddHaves: () => void;
@@ -93,7 +100,12 @@ export function MatchOnboarding({
     <section aria-label="Get started" className="space-y-4">
       {extensionFirst && (
         <>
-          <ExtensionSetup installed={extensionInstalled} source="empty" />
+          <ExtensionSetup
+            installed={extensionInstalled}
+            source="empty"
+            initialWants={initialWants}
+            onSearch={onSearch}
+          />
           <h2 className="pt-2 text-sm font-medium text-muted-foreground">
             Or bring posts over yourself
           </h2>
@@ -134,18 +146,12 @@ export function MatchOnboarding({
               ? `${haveCount} card${haveCount === 1 ? "" : "s"} ready. We’ll find traders who want them.`
               : "Load your Cosmo inventory or type what you have, so we can find traders who want something you own."}
           </p>
-          <Button
-            variant="outline"
+          <CosmoButton
             className="mt-auto w-fit"
-            disabled={loadingInv}
+            loaded={cosmoLoaded}
+            loading={loadingInv}
             onClick={onAddHaves}
-          >
-            {loadingInv
-              ? "Loading inventory…"
-              : haveCount > 0
-                ? "Edit my objekts"
-                : "Add my objekts"}
-          </Button>
+          />
         </Step>
         <Step n={3} title="See who to DM" state="later">
           <p className="text-sm text-muted-foreground">

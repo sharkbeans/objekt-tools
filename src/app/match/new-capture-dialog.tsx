@@ -2,6 +2,7 @@
 
 import { CheckIcon, ChevronDownIcon, Loader2Icon } from "lucide-react";
 import { type ChangeEvent, useRef, useState } from "react";
+import { DiscordIcon } from "@/components/discord-icon";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { parseOffering } from "@/lib/discord/match";
 import { MAX_CAPTURE_NAME } from "@/lib/match/captures";
-import { ExtensionSetup } from "./extension-setup";
+import { DISCORD_BUTTON, ExtensionSetup } from "./extension-setup";
 
 const STEPS = [
   "Discord is open with your list ready",
@@ -211,8 +212,16 @@ function NewCaptureBody({
           )}
         </div>
         <div className="space-y-1.5">
-          <Button className="w-full" disabled={searching} onClick={search}>
-            {searching && <Loader2Icon className="size-4 animate-spin" />}
+          <Button
+            className={`h-11 w-full text-base ${DISCORD_BUTTON}`}
+            disabled={searching}
+            onClick={search}
+          >
+            {searching ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <DiscordIcon className="size-5" />
+            )}
             Search Discord
           </Button>
           <p className="text-center text-xs text-muted-foreground">

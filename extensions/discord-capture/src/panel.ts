@@ -42,6 +42,7 @@ import {
 } from "./run-clock";
 import { searchQueryFor } from "./search";
 import {
+  codeRanges,
   DEFAULT_COOLDOWN_MS,
   loadHue,
   MAX_DELAY_S,
@@ -559,6 +560,7 @@ function renderTiles() {
  * of typing beats finding out after a run returns nothing.
  */
 function showWantsCount() {
+  showWantsTip();
   const count = element("wants-count");
   const text = wants.value.trim();
   if (!text) {
@@ -580,6 +582,29 @@ function showWantsCount() {
     ? "Nothing recognised yet. Try “SeoYeon CC101”"
     : `${plural(shown, "objekt")}${found < lines ? " · some lines not recognised" : ""}`;
 }
+
+/**
+ * Say what the search will actually look for: the codes alone, so every
+ * member's posts with them come back, not just the member typed (see
+ * `searchQueries`). Without this, "seoyeon cc101" reads as a search for
+ * SeoYeon's card only.
+ */
+function showWantsTip() {
+  const tip = element("wants-tip");
+  const codes = searchTiles()
+    .map((tile) => tile.query)
+    .filter(Boolean);
+  tip.classList.toggle("on", codes.length > 0);
+  if (!codes.length) {
+    tip.replaceChildren();
+    return;
+  }
+  const ranges = document.createElement("b");
+  ranges.textContent = codeRanges(codes);
+  tip.replaceChildren("Finds ", ranges, " for all members");
+  tip.title = tip.textContent ?? "";
+}
+element("wants-tip").addEventListener("click", () => wants.focus());
 
 let artTimer: ReturnType<typeof setTimeout> | undefined;
 /** Ask the worker for art the panel does not have yet, once typing pauses. */

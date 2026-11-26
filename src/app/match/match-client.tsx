@@ -4,7 +4,6 @@ import {
   ArrowDownIcon,
   ArrowLeftRightIcon,
   Loader2Icon,
-  PencilIcon,
   PlusIcon,
   PuzzleIcon,
   ShoppingBagIcon,
@@ -148,6 +147,7 @@ import {
   StaleCapturesAlert,
 } from "./capture-library";
 import { captureTraders } from "./capture-matches";
+import { CosmoButton } from "./cosmo-button";
 import { ContactResults } from "./desk-contacts";
 import { type DeskBadge, DeskGrid } from "./desk-grid";
 import { matchesDeskQuery, parseDeskQuery, pinMatches } from "./desk-search";
@@ -1609,9 +1609,15 @@ export function MatchClient() {
       ) : onboarding ? (
         <MatchOnboarding
           haveCount={mine.size}
+          cosmoLoaded={owned.length > 0}
           loadingInv={loadingInv}
           extensionInstalled={extensionInstalled}
           lookingFor={theirSearch.trim()}
+          initialWants={(wanting.trim() || theirSearch.trim()).replace(
+            /\s*,\s*/g,
+            "\n",
+          )}
+          onSearch={(wants) => startSearch(wants, "onboarding")}
           onImport={() => setEditor("capture")}
           onSample={trySample}
           onAddHaves={() => setEditor("mine")}
@@ -1755,13 +1761,12 @@ export function MatchClient() {
             </div>
             <div className="flex gap-2">
               {needsInventory && (
-                <Button
+                <CosmoButton
                   size="sm"
-                  disabled={loadingInv}
+                  loaded={owned.length > 0}
+                  loading={loadingInv}
                   onClick={() => setEditor("mine")}
-                >
-                  Add my objekts
-                </Button>
+                />
               )}
               {(hiddenCount > 0 || (!hideSeen && seen.size > 0)) && (
                 <Button size="sm" variant="ghost" onClick={toggleHideSeen}>
@@ -1812,19 +1817,13 @@ export function MatchClient() {
                         : "My objekts"}
                   </h2>
                 </div>
-                {mode !== "wtb" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
+                {/* Empty, the side below carries this button itself. */}
+                {mode !== "wtb" && mine.size > 0 && (
+                  <CosmoButton
+                    loaded={owned.length > 0}
+                    loading={loadingInv}
                     onClick={() => setEditor("mine")}
-                  >
-                    {owned.length ? (
-                      <PencilIcon className="size-4" />
-                    ) : (
-                      <PlusIcon className="size-4" />
-                    )}
-                    {owned.length ? "Change Cosmo" : "Add Cosmo"}
-                  </Button>
+                  />
                 )}
               </div>
               {mode === "wtb" ? (
@@ -1859,12 +1858,11 @@ export function MatchClient() {
                       ? "Your haves help narrow down which traders can offer the objekts you want in return."
                       : "Add your haves to see which buyers want your objekts."}
                   </p>
-                  <Button
-                    disabled={loadingInv}
+                  <CosmoButton
+                    loaded={owned.length > 0}
+                    loading={loadingInv}
                     onClick={() => setEditor("mine")}
-                  >
-                    {loadingInv ? "Loading inventory…" : "Add my objekts"}
-                  </Button>
+                  />
                 </div>
               ) : (
                 <DeskGrid

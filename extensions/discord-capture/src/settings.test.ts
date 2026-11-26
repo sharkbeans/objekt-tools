@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   capturing,
   channelLabelFromTitle,
+  channelUrl,
   formatChannelLabel,
 } from "./settings";
 
@@ -62,4 +63,20 @@ test("formats as '#channel - server', or the channel alone", () => {
     formatChannelLabel({ channel: "#general", server: null }),
     "#general",
   );
+});
+
+test("channel url keeps a server channel and nothing else", () => {
+  assert.equal(
+    channelUrl("https://discord.com/channels/111/222"),
+    "https://discord.com/channels/111/222",
+  );
+  // A message link comes back as its channel.
+  assert.equal(
+    channelUrl("https://ptb.discord.com/channels/111/222/333?x=1#y"),
+    "https://ptb.discord.com/channels/111/222",
+  );
+  assert.equal(channelUrl("https://discord.com/channels/@me/222"), null);
+  assert.equal(channelUrl("https://discord.com/app"), null);
+  assert.equal(channelUrl("https://evil.example/channels/111/222"), null);
+  assert.equal(channelUrl(42), null);
 });

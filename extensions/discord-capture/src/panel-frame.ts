@@ -15,6 +15,7 @@
  * resize and where it all sits.
  */
 import { extensionApi } from "./browser";
+import { islandView } from "./island";
 import {
   BAR_HEIGHT,
   clampGeometry,
@@ -104,9 +105,95 @@ iframe { width: 100%; height: 100%; border: 0; display: block; background: var(-
   background: linear-gradient(135deg, transparent 55%, var(--muted-fg) 55%, var(--muted-fg) 62%, transparent 62%, transparent 74%, var(--muted-fg) 74%, var(--muted-fg) 81%, transparent 81%);
 }
 .grip:hover { opacity: 1; }
-.collapsed .body, .collapsed .grip { display: none; }
-.collapsed .bar { border-bottom: 0; }
+/* Minimised, the window goes away and the island stands in for it. The
+   iframe is only hidden, so the panel is exactly as it was when it comes back. */
+.frame.collapsed { display: none; }
+
+/* The island: a small black pill at the top of Discord, the shape a phone
+   uses for "something is going on" — what a run is doing, one button when
+   there is something to do, and a click to bring the panel back. Black in
+   either theme, like the thing it is named after. */
+.island {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 5px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #000;
+  color: #fafafa;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 35%), 0 0 0 1px rgb(255 255 255 / 10%);
+  font: 13.5px/1 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+  overflow: hidden;
+  transform-origin: 50% 0;
+  animation: island-in .32s cubic-bezier(.2, .9, .3, 1.15);
+}
+.island.on { display: flex; }
+@keyframes island-in { from { opacity: 0; transform: translateX(-50%) scale(.55); } }
+.island .expand {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 12px 0 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color .15s;
+}
+.island .expand:hover { background: rgb(255 255 255 / 9%); }
+.island .expand:focus-visible, .island .act:focus-visible { box-shadow: 0 0 0 2px #737373; }
+.island .logo { width: 18px; height: 18px; color: #fafafa; stroke: none; }
+.island .mark { display: none; width: 7px; height: 7px; flex: none; border-radius: 50%; background: #4ade80; }
+.island[data-state="running"] .mark { display: block; animation: pulse 1.4s ease-in-out infinite; }
+.island[data-state="done"] .mark { display: block; }
+.island[data-state="stopped"] .mark { display: block; background: #fbbf24; }
+.island .label { min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.island .meta { color: #a1a1a1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.island .meta:empty { display: none; }
+.island .act {
+  all: unset;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #fafafa;
+  color: #0a0a0a;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .15s, opacity .15s;
+}
+.island .act:hover { background: #e5e5e5; }
+.island .act[data-kind="stop"] { background: rgb(255 255 255 / 14%); color: #fafafa; }
+.island .act[data-kind="stop"]:hover { background: rgb(255 255 255 / 22%); }
+.island .act[hidden] { display: none; }
+.island .act[aria-busy="true"] { opacity: .6; cursor: default; }
+.island .track { display: none; position: absolute; left: 20px; right: 20px; bottom: 3px; height: 2px; border-radius: 2px; background: rgb(255 255 255 / 14%); overflow: hidden; }
+.island[data-state="running"] .track { display: block; }
+.island .track > span { display: block; width: 0; height: 100%; background: #4ade80; transition: width .4s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .island { animation: none; }
+  .island[data-state="running"] .mark { animation: none; }
+}
 `;
+
+interface Island {
+  root: HTMLElement;
+  expand: HTMLButtonElement;
+  label: HTMLElement;
+  meta: HTMLElement;
+  act: HTMLButtonElement;
+  fill: HTMLElement;
+}
 
 interface Panel {
   host: HTMLElement;
@@ -114,6 +201,7 @@ interface Panel {
   root: HTMLElement;
   bar: HTMLElement;
   notice: HTMLElement;
+  island: Island;
 }
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -196,15 +284,120 @@ function viewport() {
 
 function apply() {
   if (!panel) return;
-  const { root } = panel;
+  const { root, island } = panel;
   root.style.left = `${geometry.x}px`;
   root.style.top = `${geometry.y}px`;
   root.style.width = `${geometry.width}px`;
-  root.style.height = geometry.collapsed
-    ? `${BAR_HEIGHT}px`
-    : `${geometry.height}px`;
+  root.style.height = `${geometry.height}px`;
   root.classList.toggle("collapsed", geometry.collapsed);
+  island.root.classList.toggle("on", geometry.collapsed);
 }
+
+/** The run as last reported, which is what the island shows. */
+let runReport: unknown = null;
+/**
+ * Stops the run going in this tab, while there is one. Runs are per tab and
+ * the report is shared, so another Discord tab's island shows the run but
+ * cannot stop it — its panel's Stop goes to the right tab.
+ */
+let stopRun: (() => void) | null = null;
+/** Rechecks a running report for going stale, which no write announces. */
+let islandTimer: ReturnType<typeof setInterval> | undefined;
+
+function renderIsland() {
+  if (!panel) return;
+  const { island } = panel;
+  const view = islandView(runReport, Date.now());
+  island.root.dataset.state = view.state;
+  island.label.textContent = view.label;
+  island.meta.textContent = view.meta;
+  island.fill.style.width = `${Math.round(view.progress * 100)}%`;
+  // One button: Stop while this tab's run goes, Open in match after.
+  const stoppable = view.state === "running" && stopRun !== null;
+  island.act.hidden = !(stoppable || view.canOpen);
+  if (island.act.getAttribute("aria-busy") !== "true") {
+    island.act.dataset.kind = stoppable ? "stop" : "open";
+    island.act.textContent = stoppable ? "Stop" : "Open in match";
+    island.act.title = stoppable
+      ? "Stop this search. What it found so far is kept"
+      : "Send this search's posts to objekt.my/match";
+  }
+  island.expand.title = view.meta
+    ? `${view.label} · ${view.meta}. Click to open the panel`
+    : `${view.label}. Click to open the panel`;
+}
+
+/**
+ * Open in match from the island. On a refusal the panel comes back, since it
+ * is where the reason is shown and where Search is.
+ */
+async function islandAct() {
+  if (!panel) return;
+  const { act } = panel.island;
+  if (act.getAttribute("aria-busy") === "true") return;
+  if (act.dataset.kind === "stop") {
+    // The run's own final report clears the button.
+    stopRun?.();
+    act.setAttribute("aria-busy", "true");
+    act.textContent = "Stopping…";
+    return;
+  }
+  act.setAttribute("aria-busy", "true");
+  act.textContent = "Opening…";
+  try {
+    const response = await extensionApi.runtime.sendMessage({
+      type: "open-match",
+    });
+    if (!response?.ok) throw new Error(response?.error);
+  } catch {
+    collapse(false);
+  } finally {
+    act.removeAttribute("aria-busy");
+    renderIsland();
+  }
+}
+
+/** Give the island a Stop button for this tab's run, or take it away. */
+export function setIslandStop(stop: (() => void) | null): void {
+  stopRun = stop;
+  if (!stop) panel?.island.act.removeAttribute("aria-busy");
+  renderIsland();
+}
+
+function buildIsland(): Island {
+  const root = document.createElement("div");
+  root.className = "island";
+  root.setAttribute("role", "group");
+  root.setAttribute("aria-label", "Objekt Match, minimised");
+  const expand = document.createElement("button");
+  expand.className = "expand";
+  expand.setAttribute("aria-label", "Open the Objekt Match panel");
+  const mark = document.createElement("span");
+  mark.className = "mark";
+  const label = document.createElement("span");
+  label.className = "label";
+  label.setAttribute("aria-live", "polite");
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  expand.append(logo(), mark, label, meta);
+  expand.addEventListener("click", () => collapse(false));
+  const act = document.createElement("button");
+  act.className = "act";
+  act.hidden = true;
+  act.addEventListener("click", () => void islandAct());
+  const track = document.createElement("span");
+  track.className = "track";
+  const fill = document.createElement("span");
+  track.append(fill);
+  root.append(expand, act, track);
+  return { root, expand, label, meta, act, fill };
+}
+
+extensionApi.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.searchProgress) return;
+  runReport = changes.searchProgress.newValue;
+  renderIsland();
+});
 
 /**
  * Persist where the panel is, coalesced.
@@ -228,6 +421,7 @@ export function closePanel(): void {
   if (!panel) return;
   panel.host.remove();
   panel = null;
+  clearInterval(islandTimer);
   save(false);
 }
 
@@ -240,6 +434,7 @@ export function closePanel(): void {
  */
 export function discardPanel(): void {
   clearTimeout(saveTimer);
+  clearInterval(islandTimer);
   panel?.host.remove();
   panel = null;
 }
@@ -254,6 +449,8 @@ export function discardPanel(): void {
  */
 export function showPanelNotice(message: string): void {
   if (!panel) return;
+  // The island cannot say this; the window can.
+  if (geometry.collapsed) collapse(false);
   panel.frame.hidden = true;
   panel.notice.textContent = message;
   panel.notice.hidden = false;
@@ -349,9 +546,23 @@ function resize(grip: HTMLElement, frame: HTMLIFrameElement) {
 }
 
 function collapse(on: boolean) {
+  if (!panel) return;
   geometry = clampGeometry({ ...geometry, collapsed: on }, viewport());
   apply();
+  renderIsland();
+  // Focus goes where the user is now looking, not to a hidden element.
+  if (on) panel.island.expand.focus({ preventScroll: true });
+  else panel.frame.focus();
   save(true);
+}
+
+/**
+ * Shrink the panel to the island, if it is open here. A search does this as
+ * it starts: the run is in Discord's own search, and a window over the channel
+ * is in the way of watching it.
+ */
+export function minimisePanel(): void {
+  if (panel && !geometry.collapsed) collapse(true);
 }
 
 /**
@@ -361,16 +572,25 @@ function collapse(on: boolean) {
  * in rather than on whichever tab happens to be active — the two are the same
  * thing right up until the user clicks another tab mid-run.
  */
-export async function openPanel(tabId: number | null): Promise<void> {
+export async function openPanel(
+  tabId: number | null,
+  { expand = false } = {},
+): Promise<void> {
   if (panel) {
-    panel.frame.focus();
+    if (expand && geometry.collapsed) collapse(false);
+    else panel.frame.focus();
     return;
   }
   const stored = await extensionApi.storage.local
     .get("panel")
     .then((settings) => readPanelState(settings.panel))
     .catch(() => ({ ...UNPLACED }));
-  geometry = clampGeometry(stored, viewport());
+  // Restored after a reload, the panel comes back as it was left, island and
+  // all. Asked for — the toolbar button, /match, a hunt — it comes back whole.
+  geometry = clampGeometry(
+    expand ? { ...stored, collapsed: false } : stored,
+    viewport(),
+  );
   const host = document.createElement(HOST_TAG);
   const shadow = host.attachShadow({ mode: "closed" });
   const style = document.createElement("style");
@@ -440,8 +660,8 @@ export async function openPanel(tabId: number | null): Promise<void> {
         void extensionApi.runtime.sendMessage({ type: "open-window" });
       },
     ),
-    button(lineIcon(["M5 12h14"]), "Collapse to the titlebar", () =>
-      collapse(!geometry.collapsed),
+    button(lineIcon(["M5 12h14"]), "Minimise to the top of the page", () =>
+      collapse(true),
     ),
     button(lineIcon(["M18 6 6 18", "m6 6 12 12"]), "Close the panel", () =>
       closePanel(),
@@ -451,13 +671,24 @@ export async function openPanel(tabId: number | null): Promise<void> {
     // The target is often the icon inside a button, not the button.
     if (event.target instanceof Element && event.target.closest("button"))
       return;
-    collapse(!geometry.collapsed);
+    collapse(true);
   });
 
   root.append(bar, body, grip);
-  shadow.append(style, root);
-  panel = { host, frame, root, bar, notice: fallback };
+  const island = buildIsland();
+  shadow.append(style, root, island.root);
+  panel = { host, frame, root, bar, notice: fallback, island };
   apply();
+  renderIsland();
+  void extensionApi.storage.local
+    .get("searchProgress")
+    .then((stored) => {
+      runReport = stored.searchProgress;
+      renderIsland();
+    })
+    .catch(() => {});
+  clearInterval(islandTimer);
+  islandTimer = setInterval(renderIsland, 15_000);
   // documentElement, not body: Discord owns everything under its own root and
   // reconciles it, and a panel removed by a re-render is a panel that vanishes
   // mid-run.
@@ -476,9 +707,11 @@ export async function openPanel(tabId: number | null): Promise<void> {
   save(true);
 }
 
+/** The toolbar button: the island grows back into the panel; a panel closes. */
 export function togglePanel(tabId: number | null): void {
-  if (panel) closePanel();
-  else void openPanel(tabId);
+  if (panel && geometry.collapsed) collapse(false);
+  else if (panel) closePanel();
+  else void openPanel(tabId, { expand: true });
 }
 
 /**

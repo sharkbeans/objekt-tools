@@ -337,7 +337,7 @@ test("the last Cosmo inventory reloads on the next visit", async ({ page }) => {
   });
   await openDesk(page, "");
   await deliver(page, "", "inventory");
-  await page.getByRole("button", { name: "Add Cosmo" }).click();
+  await page.getByRole("button", { name: "Add from Cosmo" }).first().click();
   await page.getByLabel("Load my Cosmo inventory").fill("tester");
   await page.getByRole("button", { name: "Load", exact: true }).click();
   const card = page.getByRole("button", { name: /^My Xinyu CC101,/ });

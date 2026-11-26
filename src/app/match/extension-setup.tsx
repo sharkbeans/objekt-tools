@@ -1,12 +1,19 @@
 "use client";
 
-import { CheckIcon, ExternalLinkIcon, PuzzleIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
+  PuzzleIcon,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { track } from "@/lib/analytics";
+import { parseOffering } from "@/lib/discord/match";
 import {
   browserStore,
   DISCORD_WEB_URL,
@@ -130,6 +137,8 @@ export function ExtensionSetup({
   installed,
   source,
   compact = false,
+  initialWants = "",
+  onSearch,
 }: {
   /** null while the ping is unanswered. */
   installed: boolean | null;
@@ -137,12 +146,22 @@ export function ExtensionSetup({
   source: "empty" | "paste";
   /** A smaller offer above the paste box. */
   compact?: boolean;
+  /** Where the want box starts, once the extension is in. */
+  initialWants?: string;
+  /**
+   * Hand the extension a want list, or nothing, and bring Discord up with its
+   * panel open. Resolves false when it did not answer.
+   */
+  onSearch?: (wants: string[]) => Promise<boolean>;
 }) {
   const [step, setStep] = useState(0);
   const progress = useRef<HTMLSpanElement>(null);
   const store = browserStore();
   if (!store) return null;
   const ready = installed === true;
+
+  if (ready && !compact && onSearch)
+    return <ReadyToSearch initialWants={initialWants} onSearch={onSearch} />;
 
   if (compact || ready) {
     return (
@@ -209,6 +228,108 @@ export function ExtensionSetup({
   );
 }
 
+/** Discord's own blurple, so the button says where it goes before it is read. */
+export const DISCORD_BUTTON =
+  "bg-[#5865F2] font-semibold text-white shadow-sm hover:bg-[#4752C4]";
+
+/**
+ * The extension is in: the next thing is a want list and Discord. The list is
+ * typed here and handed over, so Discord opens with it already in the panel —
+ * one click instead of open Discord, find the toolbar button, type it again.
+ * With nothing typed the button still opens Discord with the panel up.
+ */
+function ReadyToSearch({
+  initialWants,
+  onSearch,
+}: {
+  initialWants: string;
+  onSearch: (wants: string[]) => Promise<boolean>;
+}) {
+  const [wants, setWants] = useState(initialWants);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const lines = wants
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const cards = parseOffering(wants).length;
+  const go = async () => {
+    setBusy(true);
+    track("match_ready_search", { wants: lines.length });
+    const opened = await onSearch(lines);
+    setBusy(false);
+    setSent(opened);
+  };
+  return (
+    <section
+      aria-label="Objekt Match extension"
+      className="space-y-4 rounded-xl border bg-card p-5 sm:p-6"
+    >
+      <div className="flex gap-4">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-[#a58cff]/20 bg-[#6d22ff]/10 text-[#6d22ff] dark:text-[#a58cff]">
+          <PuzzleIcon className="size-6" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CheckIcon className="size-3.5" aria-hidden="true" />
+            Objekt Match is installed
+          </p>
+          <h2 className="mt-1 text-lg font-semibold">
+            Search Discord for your missing cards
+          </h2>
+          <p className="mt-1 max-w-lg text-sm leading-relaxed text-muted-foreground">
+            Discord opens with your list in the Objekt Match panel. Press Search
+            there, then{" "}
+            <strong className="font-medium text-foreground">
+              Open in match
+            </strong>{" "}
+            to see who has them.
+          </p>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor="ready-wants" className="text-sm font-medium">
+          What are you looking for?
+        </label>
+        <Textarea
+          id="ready-wants"
+          rows={3}
+          placeholder={"SeoYeon CC101-109\nYooYeon CC115"}
+          value={wants}
+          onChange={(event) => {
+            setWants(event.target.value);
+            setSent(false);
+          }}
+        />
+        {cards > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {cards} card{cards === 1 ? "" : "s"}
+          </p>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button
+          className={`h-11 px-5 text-base ${DISCORD_BUTTON}`}
+          disabled={busy}
+          onClick={() => void go()}
+        >
+          {busy ? (
+            <Loader2Icon className="size-4 animate-spin" />
+          ) : (
+            <DiscordIcon className="size-5" />
+          )}
+          {lines.length ? "Search on Discord" : "Open Discord"}
+        </Button>
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {sent
+            ? "Discord is open with the panel. Press Search there."
+            : "Discord in this browser, not the Discord app."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /**
  * The short forms: the one-line offer above the paste box, and the note that
  * the extension is already installed and what to do with it.
@@ -225,10 +346,7 @@ function SlimOffer({
   compact: boolean;
 }) {
   const action = ready ? (
-    <Button
-      asChild
-      className="bg-[#5865F2] font-semibold text-white shadow-sm hover:bg-[#4752C4]"
-    >
+    <Button asChild className={DISCORD_BUTTON}>
       <a href={DISCORD_WEB_URL} target="_blank" rel="noreferrer">
         <DiscordIcon className="size-4" />
         Open Discord in this browser

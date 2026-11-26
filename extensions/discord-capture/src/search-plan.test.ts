@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  codeRanges,
   describePlan,
   loadHue,
   pageBudget,
@@ -165,4 +166,27 @@ test("a carried-over pace is paid while it eases off, not on every page", () => 
   assert.equal(searchLoad(16, 1, 0, null).estimatedMs, 64_000);
   // Starting at +2s: 8 pages at 2s, then 8 at 1s — not 16 at 2s.
   assert.equal(searchLoad(16, 1, 0, null, 2_000).estimatedMs, 64_000 + 24_000);
+});
+
+test("code ranges collapse consecutive codes under one prefix", () => {
+  const codes = Array.from({ length: 9 }, (_, i) => `CC${101 + i}`);
+  assert.equal(codeRanges(codes), "CC101–109");
+  assert.equal(codeRanges(["CC103", "CC101", "CC102"]), "CC101–103");
+});
+
+test("code ranges keep gaps, single codes and typed prefix order", () => {
+  assert.equal(
+    codeRanges(["D201", "CC101", "CC102", "CC105", "D202"]),
+    "D201–202, CC101–102, CC105",
+  );
+  assert.equal(codeRanges(["CC101", "CC101"]), "CC101");
+  assert.equal(codeRanges([]), "");
+});
+
+test("code ranges count what does not fit rather than listing it", () => {
+  assert.equal(
+    codeRanges(["A101", "B101", "C101", "D101", "E101"]),
+    "A101, B101, C101 +2 more",
+  );
+  assert.equal(codeRanges(["A101", "B101"], 1), "A101 +1 more");
 });

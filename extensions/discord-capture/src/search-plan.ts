@@ -215,6 +215,55 @@ export function searchFilters(codes: Iterable<string>, pages: number): string {
   return `${[...new Set(codes)].sort().join(",")}|${pages}`;
 }
 
+/**
+ * The codes a search looks for, written short: "CC101–109, D201".
+ *
+ * Consecutive numbers under one prefix collapse into a range, prefixes keep
+ * the order they were typed in, and past `maxParts` the rest are counted
+ * rather than listed, so the line fits under the want box.
+ */
+export function codeRanges(codes: readonly string[], maxParts = 3): string {
+  const groups = new Map<string, { digits: string; n: number }[]>();
+  const loose: string[] = [];
+  for (const code of new Set(codes)) {
+    const match = /^(.*?)(\d+)$/.exec(code);
+    if (!match) {
+      loose.push(code);
+      continue;
+    }
+    const [, prefix, digits] = match;
+    const list = groups.get(prefix) ?? [];
+    list.push({ digits, n: Number(digits) });
+    groups.set(prefix, list);
+  }
+  const parts: string[] = [];
+  for (const [prefix, list] of groups) {
+    list.sort((a, b) => a.n - b.n);
+    let start = list[0];
+    let end = list[0];
+    const flush = () =>
+      parts.push(
+        start === end
+          ? `${prefix}${start.digits}`
+          : `${prefix}${start.digits}–${end.digits}`,
+      );
+    for (const item of list.slice(1)) {
+      if (item.n === end.n + 1) {
+        end = item;
+        continue;
+      }
+      flush();
+      start = item;
+      end = item;
+    }
+    flush();
+  }
+  parts.push(...loose);
+  const cap = Math.max(1, maxParts);
+  if (parts.length <= cap) return parts.join(", ");
+  return `${parts.slice(0, cap).join(", ")} +${parts.length - cap} more`;
+}
+
 /** One line saying what was left out, or nothing when nothing was. */
 export function describePlan(plan: Plan): string {
   const parts: string[] = [];

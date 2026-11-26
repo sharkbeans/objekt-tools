@@ -173,6 +173,18 @@ try {
   await context.route("https://discord.com/**", (route) =>
     route.fulfill({ contentType: "text/html", body: DISCORD_PAGE }),
   );
+  // A first install sends the user to /match. That tab is closed again here,
+  // so the delivery further down still has to open a /match tab of its own.
+  const installTab = await worker.evaluate(async () => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const [tab] = await chrome.tabs.query({ url: "https://objekt.my/match" });
+      if (tab) return tab.id;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return null;
+  });
+  assert.notEqual(installTab, null, "a first install opens objekt.my/match");
+  await worker.evaluate((tabId) => chrome.tabs.remove(tabId), installTab);
   await worker.evaluate(() =>
     // No channel is switched on here: capture is on by default, and the first
     // post being kept after consent is what proves it.
@@ -332,6 +344,11 @@ try {
     (await popup.locator("#wants-field").getAttribute("class")) ?? "",
     /\bask\b/,
   );
+  // The tip inside the box says the codes are searched for every member.
+  assert.equal(
+    await popup.locator("#wants-tip").textContent(),
+    "Finds CC101–102 for all members",
+  );
   // Reloading straight after typing keeps what was typed.
   await popup.reload();
   await popup.waitForFunction(
@@ -410,6 +427,24 @@ try {
   // The Search button hands itself back once the run is over.
   assert.equal(await popup.locator("#run-search").isDisabled(), false);
   assert.equal(await popup.locator("#stop-search").isVisible(), false);
+  // Searching minimised the panel in the Discord tab to the island, and
+  // remembered the channel the search ran in for the next "Open Discord".
+  let minimised = false;
+  for (let attempt = 0; attempt < 20 && !minimised; attempt++) {
+    minimised = (await stored())?.collapsed === true;
+    if (!minimised) await page.waitForTimeout(100);
+  }
+  assert.ok(minimised, "a search minimises the panel");
+  assert.equal(
+    await (await embedded.frameElement()).isVisible(),
+    false,
+    "the minimised panel's window is out of the way",
+  );
+  assert.equal(
+    (await worker.evaluate(() => chrome.storage.local.get("lastChannel")))
+      .lastChannel,
+    "https://discord.com/channels/111/123",
+  );
 
   // Straight into /match: the run's posts, the want list with them, delivered
   // to a page that only starts listening after it has loaded.
@@ -712,6 +747,8 @@ try {
   await popup.locator("#accept-capture-risk").check();
   await popup.locator("#accept-capture").click();
   await page.close();
+  // With no search channel remembered, Open Discord goes to Discord's home.
+  await worker.evaluate(() => chrome.storage.local.remove("lastChannel"));
   // Recorded as closed, so a panel in the new tab is the button's doing.
   await worker.evaluate(() =>
     chrome.storage.local

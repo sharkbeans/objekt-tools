@@ -127,6 +127,7 @@ export function ExtensionIntro({
   currentSection,
   onSkip,
   onSend,
+  onInstall,
   sending = false,
 }: {
   storeUrl: string;
@@ -140,6 +141,11 @@ export function ExtensionIntro({
   currentSection?: SectionId;
   onSkip: () => void;
   onSend: () => void;
+  /**
+   * Called as the store opens. Installing sends the user to /match, so a
+   * caller with a list can move this tab there with it (see the grid dialog).
+   */
+  onInstall?: () => void;
   sending?: boolean;
 }) {
   const [opened, setOpened] = useState(false);
@@ -246,6 +252,7 @@ export function ExtensionIntro({
             onClick={() => {
               setOpened(true);
               track("extension_intro_install");
+              onInstall?.();
             }}
           >
             Add to {EXTENSION_STORE_NAMES[store]}, it&rsquo;s free

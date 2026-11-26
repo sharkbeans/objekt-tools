@@ -297,6 +297,18 @@ export function GridTradeDialog({
     );
   };
 
+  // Installing from here: the store opens in its own tab, and once the
+  // extension is added it brings /match forward. This tab goes to the hunt on
+  // /match now, so that is where the list is waiting — offered to the
+  // extension the moment it arrives. A URL rather than storage, because the
+  // grid may be on another host and /match cannot read that host's storage.
+  const handleInstall = () => {
+    onOpenChange(false);
+    router.push(
+      sectionHref(buildHuntHref(currentHunt()), { currentSection: "collect" }),
+    );
+  };
+
   // With the extension installed, the hunt becomes its want list directly, so
   // the next scroll of a Discord trade channel is already looking for it.
   // Only ever on this click: it replaces the list the user has there.
@@ -456,6 +468,7 @@ export function GridTradeDialog({
               currentSection="collect"
               onSkip={handleFindOnDiscord}
               onSend={() => void handleSendToExtension()}
+              onInstall={handleInstall}
               sending={sending}
             />
             <button

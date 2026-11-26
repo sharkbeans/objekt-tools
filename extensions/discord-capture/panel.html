@@ -192,19 +192,30 @@ button.chip:hover{background:var(--accent);border-color:var(--input)}
 /* Narrow: the question keeps its line; the placeholder carries the format. */
 @media (max-width:460px){.field-head .hint{display:none}}
 /* A box that reads as one to type in: a search glyph, a placeholder bright
-   enough to see, and a border that is there rather than implied. */
-.input{position:relative}
+   enough to see, and a border that is there rather than implied. The border is
+   the wrapper's, not the textarea's, so the tip line sits inside the box. */
+.input{position:relative;background:var(--field);border:1px solid color-mix(in oklab,var(--fg) 22%,transparent);
+  border-radius:8px;box-shadow:var(--shadow);transition:border-color .15s,box-shadow .15s}
 .input > .i{position:absolute;left:13px;top:12px;width:18px;height:18px;color:var(--muted-fg);pointer-events:none;transition:color .15s}
-.field textarea{height:84px;resize:none;display:block;line-height:1.45;padding:9px 12px 9px 40px;border-color:color-mix(in oklab,var(--fg) 22%,transparent)}
+.field textarea{height:76px;resize:none;display:block;line-height:1.45;padding:9px 12px 2px 40px;
+  border:0;border-radius:8px 8px 0 0;background:transparent;box-shadow:none}
 .field textarea::placeholder{color:var(--muted-fg);opacity:1}
-.field textarea:focus-visible{border-color:color-mix(in oklab,var(--fg) 55%,transparent)}
+.field textarea:focus-visible{box-shadow:none}
+.field:focus-within .input{border-color:color-mix(in oklab,var(--fg) 55%,transparent);
+  box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 50%,transparent)}
 .field:focus-within .input > .i{color:var(--fg)}
+/* What the typed list will search, once there is one: one quiet line at the
+   bottom of the box. The line is always there, so the box never grows. */
+.tip{height:22px;padding:0 12px 0 40px;font-size:12.5px;line-height:20px;color:var(--muted-fg);cursor:text;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity .15s}
+.tip.on{opacity:1}
+.tip b{font-weight:600;color:var(--fg)}
 /* When the want list is the one thing missing, the box is the next step: it
    stands out like a field that is waiting, without moving. */
-.field.ask textarea{border-color:color-mix(in oklab,var(--fg) 55%,transparent);
+.field.ask .input{border-color:color-mix(in oklab,var(--fg) 55%,transparent);
   box-shadow:0 0 0 4px color-mix(in oklab,var(--fg) 8%,transparent)}
 .field.ask .input > .i{color:var(--fg)}
-.field.ask textarea:focus-visible{box-shadow:0 0 0 4px color-mix(in oklab,var(--fg) 14%,transparent)}
+.field.ask:focus-within .input{box-shadow:0 0 0 4px color-mix(in oklab,var(--fg) 14%,transparent)}
 
 
 
@@ -457,7 +468,8 @@ code{background:var(--muted);border:1px solid var(--border);padding:0 5px;border
     </div>
     <div class="input">
       <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
-      <textarea id="wants" spellcheck="false" placeholder="seoyeon cc101 102&#10;yy cc101-108"></textarea>
+      <textarea id="wants" spellcheck="false" placeholder="seoyeon cc101 102&#10;yy cc101-108" aria-describedby="wants-tip"></textarea>
+      <p class="tip" id="wants-tip"></p>
     </div>
   </div>
 
