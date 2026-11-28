@@ -14,7 +14,7 @@ import {
   type ProgressSuggestResponse,
 } from "@/lib/progress/suggest";
 import type { ProgressIdentityResponse } from "@/lib/progress/types";
-import { sectionHref } from "@/lib/sections";
+import { sectionForHostname, sectionHref } from "@/lib/sections";
 import { cn } from "@/lib/utils";
 
 export type ProgressNavigationState = {
@@ -139,11 +139,16 @@ export function ProgressSearch({
   const openIdentity = useCallback(
     (data: ProgressIdentityResponse) => {
       storeCosmoUsername(data.nickname, data.address);
+      // Read the host here, on click, not during render: this search sits on
+      // both the root home page and the collect host, and a link built for
+      // the wrong one sends a nickname to its root-domain profile.
+      const host = sectionForHostname(window.location.hostname);
       const href = buildHref
         ? buildHref(data.nickname, data)
-        : sectionHref(`/collection/${encodeURIComponent(data.nickname)}`, {
-            currentSection: "collect",
-          });
+        : sectionHref(
+            `/collection/${encodeURIComponent(data.nickname)}`,
+            host && host !== "root" ? { currentSection: host } : undefined,
+          );
       const target = new URL(href, window.location.href);
       const current = new URL(window.location.href);
       if (

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
   isRootOnlyPath,
+  legacyCollectPath,
   rootDomain,
   rootUrl,
   sectionForHostname,
@@ -184,8 +185,20 @@ export function proxy(request: NextRequest) {
   }
 
   // Section host.
-  if (isRootOnlyPath(path)) {
+  if (isRootOnlyPath(path, who)) {
     return NextResponse.redirect(`${rootUrl()}${path}${search}`, 301);
+  }
+
+  // Collections moved from collect.<domain>/nick to /@nick; old links
+  // (shared in Discord, bookmarked) follow.
+  if (who === "collect") {
+    const moved = legacyCollectPath(path);
+    if (moved) {
+      return NextResponse.redirect(
+        `${sectionOrigin("collect")}${moved}${search}`,
+        301,
+      );
+    }
   }
 
   // Internal-form paths (list.../list/abc) and wrong-section paths

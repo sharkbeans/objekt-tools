@@ -107,13 +107,36 @@ export function sectionForHostname(
   return null;
 }
 
-export function isRootOnlyPath(path: string): boolean {
-  if (path.startsWith("/@") || path.startsWith("/%40")) return true;
+// "/@nick" and its encoded form "/%40nick" → "nick", else null.
+function atSegment(path: string): string | null {
+  if (path.startsWith("/@")) return path.slice(2);
+  if (path.startsWith("/%40")) return path.slice(4);
+  return null;
+}
+
+// Collection routes on the collect host that aren't a nickname.
+const COLLECT_FIXED_SEGMENTS = new Set(["by-wallet"]);
+
+// `section` is the host being served. On the collect host "/@nick" is that
+// collector's grids, not their root-domain profile.
+export function isRootOnlyPath(path: string, section?: SectionId): boolean {
+  if (atSegment(path) !== null) return section !== "collect";
   return ROOT_ONLY_PREFIXES.some((prefix) => matchBase(path, prefix) !== null);
 }
 
+// A collection link from before collect URLs took an "@"
+// (collect.<domain>/nick/member): the "/@nick/member" it moved to, or null
+// for paths that are already current or aren't a nickname.
+export function legacyCollectPath(path: string): string | null {
+  if (path === "/" || atSegment(path) !== null) return null;
+  const first = path.split("/")[1] ?? "";
+  if (!first || COLLECT_FIXED_SEGMENTS.has(first)) return null;
+  return `/@${path.slice(1)}`;
+}
+
 // Internal path → owning section + clean external path.
-// "/list/abc" → { list, "/abc" }; "/collection" → { collect, "/" }.
+// "/list/abc" → { list, "/abc" }; "/collection" → { collect, "/" };
+// "/collection/nick" → { collect, "/@nick" }, like a profile link.
 // Returns null for root-owned paths.
 export function toExternalPath(
   internalPath: string,
@@ -122,7 +145,14 @@ export function toExternalPath(
     for (const base of SECTIONS[section].bases) {
       const rest = matchBase(internalPath, base);
       if (rest === null) continue;
-      return { section, path: rest === "" ? "/" : rest };
+      if (rest === "") return { section, path: "/" };
+      if (section === "collect") {
+        const first = rest.split("/")[1] ?? "";
+        if (first && !COLLECT_FIXED_SEGMENTS.has(first)) {
+          return { section, path: `/@${rest.slice(1)}` };
+        }
+      }
+      return { section, path: rest };
     }
   }
   return null;
@@ -134,7 +164,10 @@ export function toInternalPath(
   externalPath: string,
 ): string {
   const base = SECTIONS[section].bases[0];
-  return externalPath === "/" ? base : `${base}${externalPath}`;
+  if (externalPath === "/") return base;
+  const nick = section === "collect" ? atSegment(externalPath) : null;
+  if (nick !== null) return `${base}/${nick}`;
+  return `${base}${externalPath}`;
 }
 
 function splitHref(href: string): { path: string; suffix: string } {

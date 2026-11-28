@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   allOrigins,
   isRootOnlyPath,
+  legacyCollectPath,
   sectionAbsoluteUrl,
   sectionForHostname,
   sectionHref,
@@ -95,9 +96,14 @@ describe("sections (enabled)", () => {
       section: "collect",
       path: "/",
     });
+    // A collection's clean URL is /@nick, like a profile link.
     assert.deepEqual(toExternalPath("/collection/nick/member"), {
       section: "collect",
-      path: "/nick/member",
+      path: "/@nick/member",
+    });
+    assert.deepEqual(toExternalPath("/collection/by-wallet/0xabc"), {
+      section: "collect",
+      path: "/by-wallet/0xabc",
     });
     assert.deepEqual(toExternalPath("/list/abc/og"), {
       section: "list",
@@ -119,7 +125,15 @@ describe("sections (enabled)", () => {
 
   it("toInternalPath is the inverse mapping", () => {
     assert.equal(toInternalPath("collect", "/"), "/collection");
-    assert.equal(toInternalPath("collect", "/nick"), "/collection/nick");
+    assert.equal(toInternalPath("collect", "/@nick"), "/collection/nick");
+    assert.equal(
+      toInternalPath("collect", "/%40nick/member"),
+      "/collection/nick/member",
+    );
+    assert.equal(
+      toInternalPath("collect", "/by-wallet/0xabc"),
+      "/collection/by-wallet/0xabc",
+    );
     assert.equal(toInternalPath("list", "/abc/og"), "/list/abc/og");
     assert.equal(toInternalPath("create", "/"), "/objekt-maker");
   });
@@ -127,7 +141,9 @@ describe("sections (enabled)", () => {
   it("round-trips every mapping", () => {
     for (const internal of [
       "/collection",
+      "/collection/nick",
       "/collection/nick/member",
+      "/collection/by-wallet/0xabc",
       "/list",
       "/list/abc",
       "/objekt-maker",
@@ -138,6 +154,15 @@ describe("sections (enabled)", () => {
     }
   });
 
+  it("legacyCollectPath moves pre-@ collection links to /@nick", () => {
+    assert.equal(legacyCollectPath("/nick"), "/@nick");
+    assert.equal(legacyCollectPath("/nick/member"), "/@nick/member");
+    assert.equal(legacyCollectPath("/@nick"), null);
+    assert.equal(legacyCollectPath("/%40nick"), null);
+    assert.equal(legacyCollectPath("/by-wallet/0xabc"), null);
+    assert.equal(legacyCollectPath("/"), null);
+  });
+
   it("isRootOnlyPath", () => {
     assert.equal(isRootOnlyPath("/notifications"), true);
     assert.equal(isRootOnlyPath("/link"), true);
@@ -146,6 +171,11 @@ describe("sections (enabled)", () => {
     assert.equal(isRootOnlyPath("/sign-in"), true);
     assert.equal(isRootOnlyPath("/@nick"), true);
     assert.equal(isRootOnlyPath("/%40nick"), true);
+    // On the collect host "/@nick" is that collector's grids.
+    assert.equal(isRootOnlyPath("/@nick", "collect"), false);
+    assert.equal(isRootOnlyPath("/%40nick", "collect"), false);
+    assert.equal(isRootOnlyPath("/@nick", "list"), true);
+    assert.equal(isRootOnlyPath("/link", "collect"), true);
     // The extension store listings and the extension's own panel link here —
     // one stable URL. Before this was root-only it fell through to the
     // [address] profile route and rendered an empty profile with a 200.
@@ -193,7 +223,7 @@ describe("sections (enabled)", () => {
     assert.equal(sectionHref("/list"), "https://list.objekt.my/");
     assert.equal(
       sectionHref("/collection/nick", { currentSection: "list" }),
-      "https://collect.objekt.my/nick",
+      "https://collect.objekt.my/@nick",
     );
     assert.equal(
       sectionHref("/list/mine?x=1"),
@@ -225,7 +255,7 @@ describe("sections (enabled)", () => {
   it("sectionAbsoluteUrl points at the owning host", () => {
     assert.equal(
       sectionAbsoluteUrl("/collection/nick"),
-      "https://collect.objekt.my/nick",
+      "https://collect.objekt.my/@nick",
     );
     assert.equal(
       sectionAbsoluteUrl("/list/abc/og?v=2"),
