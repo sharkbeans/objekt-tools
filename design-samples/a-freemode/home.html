@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Freemode · Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="page-home">
+<div class="screen">
+  <header class="topbar">
+    <a class="brand" href="home.html"><span data-logo="24"></span>objekt.my</a>
+    <nav class="tabs" aria-label="Main">
+      <a class="tab is-active" data-tab href="home.html" aria-current="page">Home</a>
+      <a class="tab" data-tab href="#">Collection</a>
+      <a class="tab" data-tab href="match.html">Match</a>
+      <a class="tab" data-tab href="#">Tools</a>
+    </nav>
+    <div class="top-right">
+      <span class="kst">KST <b data-clock>--:--</b></span>
+      <button type="button" class="btn btn-outline btn-sm" data-icon="logIn" data-size="14">Sign in</button>
+    </div>
+  </header>
+
+  <section class="hero" aria-label="Featured tool">
+    <div class="wall" aria-hidden="true"><div class="wall-grid" data-wall></div></div>
+    <div class="hero-shade"></div>
+    <div class="hero-copy" data-hero>
+      <p class="overline" data-h="overline"></p>
+      <h1 class="hero-title" data-h="title"></h1>
+      <p class="hero-body" data-h="body"></p>
+      <div class="hero-cta">
+        <a href="#" class="btn btn-primary" data-open><span data-h="cta"></span><span class="key" aria-hidden="true">↵</span></a>
+        <a href="#" class="btn btn-outline" data-secondary><span data-h="cta2"></span></a>
+      </div>
+    </div>
+    <p class="hero-pos" data-h="pos"></p>
+  </section>
+
+  <div class="tiles" data-tiles></div>
+  <template id="tile-tpl"><button type="button" class="tile"><img data-f="img" alt="" width="720" height="720"><span class="tile-label" data-f="short"></span></button></template>
+
+  <footer class="home-foot">
+    <p class="foot-hint" data-h="hint"></p>
+    <div class="keys" aria-hidden="true">
+      <span class="keyhint">Move <span class="key">←</span><span class="key">→</span></span>
+      <span class="keyhint">Tab <span class="key">Q</span><span class="key">E</span></span>
+      <span class="keyhint">Open <span class="key">↵</span></span>
+    </div>
+  </footer>
+  <p class="disclaimer">Fan-made grid and trade-matching tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO</p>
+</div>
+
+<script src="../shared/data.js"></script>
+<script src="../shared/common.js"></script>
+<script>
+  // The stage: a table of objekts seen at an angle. Each tool moves the
+  // camera and lights a few cards; the rest stay in greyscale.
+  (() => {
+    const { cards } = window.SAMPLE;
+    const wall = document.querySelector("[data-wall]");
+    const order = [3, 11, 0, 20, 7, 14, 25, 2, 9, 17, 5, 22, 12, 1, 27, 8, 16, 4, 24, 10, 19, 6, 13, 28, 15, 21, 26, 18, 23];
+    const html = [];
+    for (let i = 0; i < 60; i++) {
+      const card = cards[order[i % order.length]];
+      html.push(`<img class="wall-card" src="${card.img}" alt="" loading="${i < 30 ? "eager" : "lazy"}" decoding="async" width="582" height="900">`);
+    }
+    wall.innerHTML = html.join("");
+    const imgs = [...wall.children];
+    const CAM = {
+      collection: "rotateX(52deg) rotateZ(-27deg) translate3d(-4%, 6%, 0) scale(1.02)",
+      match: "rotateX(46deg) rotateZ(-14deg) translate3d(-10%, 0%, 0) scale(1.12)",
+      lists: "rotateX(58deg) rotateZ(-38deg) translate3d(2%, -4%, 0) scale(0.98)",
+      objektify: "rotateX(40deg) rotateZ(-20deg) translate3d(-18%, 6%, 120px) scale(1.25)",
+      proofshot: "rotateX(54deg) rotateZ(-8deg) translate3d(-6%, -6%, 0) scale(1.08)",
+      spin: "rotateX(60deg) rotateZ(-45deg) translate3d(0%, 4%, 0) scale(1.0)",
+    };
+    document.addEventListener("toolchange", ({ detail: { tool } }) => {
+      wall.style.setProperty("--cam", CAM[tool.id]);
+      const lit = new Set(tool.lit);
+      imgs.forEach((img, i) => img.classList.toggle("is-lit", lit.has(i)));
+    });
+  })();
+</script>
+<script src="../shared/home.js"></script>
+</body>
+</html>

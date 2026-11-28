@@ -1534,7 +1534,7 @@ export function MatchClient() {
     return prices[0] ? `From ${formatPrice(prices[0])}` : "Ask for price";
   };
   // "My objekts": how many traders want each of the viewer's own cards — a
-  // "want" badge, colored to match "Your side" above the grid.
+  // "want" badge, drawn solid.
   const traders = (card: DeskCard) => traderCount(card.posts);
   const mineBadge = (card: DeskCard): DeskBadge => {
     const count = traders(card);
@@ -1550,7 +1550,7 @@ export function MatchClient() {
     };
   };
   // "Their objekts": how many traders have each card to offer — a "have"
-  // badge, colored to match "From your captures" above the grid. wtb
+  // badge, drawn as an outline. wtb
   // shows the asking price instead; a count of sellers is not what a buyer
   // is scanning for.
   const theirBadge = (card: DeskCard): DeskBadge => {
@@ -1568,9 +1568,15 @@ export function MatchClient() {
     <div
       className={`mx-auto w-full max-w-[100rem] space-y-5 px-1 pb-12 sm:px-4 ${libraryOpen ? "lg:pr-[27rem]" : ""}`}
     >
-      <header className="flex flex-wrap items-start justify-between gap-3">
+      <header className="relative isolate flex flex-wrap items-end justify-between gap-3 pt-2">
+        <p
+          aria-hidden
+          className="pointer-events-none absolute right-0 -bottom-[0.16em] -z-10 select-none font-wide text-[clamp(4.5rem,12vw,12rem)] leading-[0.8] font-black tracking-[-0.02em] text-background [font-stretch:125%] [-webkit-text-stroke:2px_rgb(255_255_255/0.09)] [paint-order:stroke_fill]"
+        >
+          MATCH
+        </p>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-[2rem] leading-tight font-extrabold tracking-[-0.035em] sm:text-[2.75rem]">
             Find your next trade
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -1621,16 +1627,16 @@ export function MatchClient() {
           <section className="space-y-3" aria-label="Trading mode">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <fieldset
-                className="inline-flex rounded-xl border bg-muted/50 p-1"
+                className="inline-flex gap-1"
                 aria-label="Choose WTT, WTB or WTS"
               >
                 {MODES.map(({ id, label, icon: Icon }) => (
                   <Button
                     key={id}
-                    variant={mode === id ? "default" : "ghost"}
+                    variant={mode === id ? "default" : "outline"}
                     aria-pressed={mode === id}
                     onClick={() => changeMode(id)}
-                    className="min-w-24 rounded-lg"
+                    className="min-w-24 rounded-[3px] font-semibold tracking-wide"
                   >
                     <Icon className="size-4" />
                     {label}
@@ -1675,7 +1681,7 @@ export function MatchClient() {
             </p>
           </section>
           <div
-            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-[3px] border bg-secondary px-4 py-3"
             aria-live="polite"
           >
             <div className="min-w-0 text-sm">
@@ -1796,15 +1802,14 @@ export function MatchClient() {
           sides, so their rows of cards line up. */}
           <div className="grid gap-4 md:grid-cols-2">
             <section
-              className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+              className="min-w-0 space-y-4 rounded-[3px] border bg-card p-4 sm:p-5"
               aria-label={mode === "wtb" ? "Buying list" : "My objekts"}
             >
-              <div className="flex items-center justify-between gap-2">
+              {/* Same height on both sides (a button here, a select there)
+                  so the two grids' rows line up. */}
+              <div className="flex min-h-9 items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
-                    {mode === "wtb" ? "Your selection" : "Your side"}
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold">
+                  <h2 className="text-xl font-bold tracking-tight">
                     {mode === "wtb"
                       ? "I want to buy"
                       : mode === "wts"
@@ -1881,15 +1886,12 @@ export function MatchClient() {
               )}
             </section>
             <section
-              className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+              className="min-w-0 space-y-4 rounded-[3px] border bg-card p-4 sm:p-5"
               aria-label={mode === "wts" ? "Cash buyers" : "Their objekts"}
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                    From your captures
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold">
+                  <h2 className="text-xl font-bold tracking-tight">
                     {mode === "wts"
                       ? contactTitle
                       : mode === "wtb"
@@ -2019,12 +2021,12 @@ export function MatchClient() {
           {mode !== "wts" && (
             <section
               ref={resultsRef}
-              className="scroll-mt-20 space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+              className="scroll-mt-20 space-y-4 rounded-[3px] border bg-card p-4 sm:p-5"
               aria-label={contactTitle}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold">
+                  <h2 className="text-xl font-bold tracking-tight">
                     {contactTitle}{" "}
                     <span className="text-muted-foreground">
                       ({contactPosts.length})

@@ -30,7 +30,7 @@ const SUGGEST_DEBOUNCE_MS = 400;
 export function ProgressSearch({
   defaultNickname,
   showLabel = true,
-  placeholder = "e.g. sharkbeans",
+  placeholder = "Cosmo nickname",
   buttonLabel = "Search",
   buildHref,
   onNavigationChange,
@@ -241,14 +241,13 @@ export function ProgressSearch({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
-      {showLabel && (
-        <Label
-          htmlFor="progress-search-nickname"
-          className="text-sm font-medium"
-        >
-          Cosmo Username
-        </Label>
-      )}
+      {/* Always labelled; hidden visually when the caller has its own heading. */}
+      <Label
+        htmlFor="progress-search-nickname"
+        className={showLabel ? "text-sm font-medium" : "sr-only"}
+      >
+        Cosmo Username
+      </Label>
       <div className={cn("t-input-wrap", error && "is-error")}>
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">

@@ -202,7 +202,7 @@ export function DeskGrid({
                   aria-label={`${side === "mine" ? "My" : "Their"} ${label}, ${description}${isPinned ? ", in your search" : ""}`}
                   aria-pressed={chosen}
                   onClick={() => onToggle(card.key)}
-                  className={`overflow-hidden rounded-lg border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${chosen ? "border-primary bg-primary/10 ring-2 ring-primary" : "border-border bg-background hover:border-primary/70"}`}
+                  className={`overflow-hidden rounded-[3px] border text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${chosen ? "border-primary bg-primary/10 ring-2 ring-primary" : "border-border bg-background hover:border-primary/70"}`}
                 >
                   <div className="relative aspect-[11/17] bg-muted">
                     {url ? (
@@ -222,20 +222,20 @@ export function DeskGrid({
                     {info.kind === "count" && (
                       // Top-left, not top-right: the selection check lands
                       // top-right, and the two must never share a corner.
-                      // Colored by which panel this is — matching the "Your
-                      // side" / "From your captures" header above each
-                      // grid — so the count reads as "mine" or "theirs" by
-                      // color alone, the letter confirming rather than
+                      // Filled by which panel this is: solid on your side
+                      // (traders want it), outlined on theirs (traders have
+                      // it), so the count reads as "mine" or "theirs" by
+                      // fill alone, the letter confirming rather than
                       // carrying the meaning on its own.
                       <span
                         title={info.full}
                         aria-hidden="true"
-                        className={`absolute top-1.5 left-1.5 min-w-6 rounded-full px-1.5 py-0.5 text-center text-[11px] font-bold leading-[1.15rem] shadow-sm ${
+                        className={`absolute top-1.5 left-1.5 min-w-6 rounded-[2px] px-1.5 py-0.5 text-center text-[11px] font-bold leading-[1.15rem] tabular-nums shadow-sm ${
                           info.count === 0
                             ? "bg-background/90 text-muted-foreground"
                             : info.tone === "have"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-emerald-500 text-white"
+                              ? "bg-black/80 text-foreground ring-1 ring-foreground ring-inset"
+                              : "bg-foreground text-background"
                         }`}
                       >
                         {info.count}

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en" data-type="geist">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Freemode 2 · Home</title>
+<script>try { const t = localStorage.getItem("fm2-type"); if (t === "geist" || t === "barlow" || t === "manrope") document.documentElement.dataset.type = t; } catch {}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=Barlow:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="page-home">
+<div class="screen">
+  <header class="topbar">
+    <a class="brand" href="home.html"><span data-logo="24"></span>objekt.my</a>
+    <nav class="tabs" aria-label="Main">
+      <a class="tab is-active" data-tab href="home.html" aria-current="page">Home</a>
+      <a class="tab" data-tab href="#">Collection</a>
+      <a class="tab" data-tab href="match.html">Match</a>
+      <a class="tab" data-tab href="#">Tools</a>
+    </nav>
+    <div class="top-right">
+      <span class="kst">KST <b data-clock>--:--</b></span>
+      <button type="button" class="btn btn-outline btn-sm" data-icon="logIn" data-size="14">Sign in</button>
+    </div>
+  </header>
+
+  <h1 class="sr-only">objekt.my: Cosmo grid tracker and trade matcher</h1>
+
+  <div class="showcase">
+    <section class="feature" data-item data-tool="collection" data-hint="Select to see what your grids are missing" aria-labelledby="f-collection">
+      <div class="wall" aria-hidden="true"><div class="wall-grid" data-wall="collection"></div></div>
+      <div class="feature-shade"></div>
+      <a class="feature-link" href="#" data-open="collection" aria-label="Open collection"></a>
+      <div class="feature-chips" aria-hidden="true"><span class="chip">tripleS · ARTMS · idntt</span></div>
+      <div class="feature-copy">
+        <p class="overline">Collection</p>
+        <h2 class="feature-title" id="f-collection">Every grid, one screen</h2>
+        <p class="feature-body">Link your Cosmo and see how close each grid is, with every first-class objekt you're still missing.</p>
+        <div class="feature-cta">
+          <a href="#" class="btn btn-primary" data-open="collection">Open collection <span class="key" aria-hidden="true">↵</span></a>
+          <a href="#" class="btn btn-outline" data-secondary="Link Cosmo">Link Cosmo</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="feature" data-item data-tool="match" data-hint="Select to match your Discord trade posts" aria-labelledby="f-match">
+      <div class="wall" aria-hidden="true"><div class="wall-grid" data-wall="match"></div></div>
+      <div class="feature-shade"></div>
+      <a class="feature-link" href="match.html" data-open="match" aria-label="Open matcher"></a>
+      <div class="feature-chips" aria-hidden="true"><span class="chip">Chrome · Firefox</span><span class="chip">WTT · WTB · WTS</span></div>
+      <div class="feature-copy">
+        <p class="overline">Objekt Match</p>
+        <h2 class="feature-title" id="f-match">Find who has what you're missing</h2>
+        <p class="feature-body">The extension reads the Discord trade channels you already scroll and lines every post up against your collection.</p>
+        <div class="feature-cta">
+          <a href="match.html" class="btn btn-primary" data-open="match">Open matcher <span class="key" aria-hidden="true">↵</span></a>
+          <a href="#" class="btn btn-outline" data-secondary="Get the extension">Get the extension</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="more">
+    <p class="more-label">More tools</p>
+    <div class="tiles">
+      <a class="tile" href="#" data-item data-tool="lists" data-hint="Select to turn a tradelist into a shareable page"><img src="../assets/tiles/lists.webp" alt="" width="720" height="720"><span class="tile-bar"><span class="tile-label">Lists</span><span class="tile-desc">Turn a tradelist into a page.</span></span></a>
+      <a class="tile" href="#" data-item data-tool="objektify" data-hint="Select to create a custom objekt card"><img src="../assets/tiles/objektify.webp" alt="" width="720" height="548"><span class="tile-bar"><span class="tile-label">Objektify</span><span class="tile-desc">Create custom objekt cards.</span></span></a>
+      <a class="tile" href="#" data-item data-tool="proofshot" data-hint="Select to generate a proofshot image"><img src="../assets/tiles/proofshot.webp" alt="" width="720" height="720"><span class="tile-bar"><span class="tile-label">Proofshot</span><span class="tile-desc">Generate proofshot images.</span></span></a>
+      <a class="tile" href="#" data-item data-tool="spin" data-hint="Select to run a random draw"><img src="../assets/tiles/spin.webp" alt="" width="720" height="720"><span class="tile-bar"><span class="tile-label">Spin</span><span class="tile-desc">Random draw.</span></span></a>
+    </div>
+  </div>
+
+  <footer class="home-foot">
+    <p class="foot-hint" data-hint-out></p>
+    <div class="keys" aria-hidden="true">
+      <span class="keyhint">Move <span class="key">←</span><span class="key">→</span><span class="key">↑</span><span class="key">↓</span></span>
+      <span class="keyhint">Tab <span class="key">Q</span><span class="key">E</span></span>
+      <span class="keyhint">Open <span class="key">↵</span></span>
+    </div>
+  </footer>
+  <p class="disclaimer">Fan-made grid and trade-matching tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO</p>
+</div>
+
+<script src="../shared/data.js"></script>
+<script src="../shared/common.js"></script>
+<script src="type.js"></script>
+<script>
+  (() => {
+    const { cards } = window.SAMPLE;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const canHover = matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+    // ---- The two card tables (8 columns x 6 rows) ----
+    // Collection lights a 4 x 2 grid with two empty slots: the cards you
+    // still need. Match lights the few cards a trader offers.
+    const WALLS = {
+      collection: {
+        order: [14, 3, 22, 9, 27, 5, 17, 11, 25, 1, 19, 7, 13, 24, 2, 20, 8, 28, 16, 4, 23, 10, 26, 6, 15, 21, 12, 18],
+        place: { 10: 0, 11: 1, 12: 2, 13: 3, 18: 4, 19: 5 },
+        missing: [20, 21],
+        cam: "rotateX(52deg) rotateZ(-27deg) translate3d(-2%, 4%, 0) scale(1.02)",
+        camActive: "rotateX(49deg) rotateZ(-23deg) translate3d(-5%, 2%, 0) scale(1.07)",
+      },
+      match: {
+        order: [6, 20, 12, 26, 1, 17, 9, 23, 4, 28, 14, 0, 19, 8, 25, 11, 3, 21, 16, 7, 27, 2, 24, 10, 18, 5, 22, 13],
+        place: { 11: 13, 20: 15, 29: 18, 14: 20 },
+        missing: [],
+        cam: "rotateX(50deg) rotateZ(-20deg) translate3d(-6%, 4%, 0) scale(1.06)",
+        camActive: "rotateX(47deg) rotateZ(-16deg) translate3d(-9%, 2%, 0) scale(1.12)",
+      },
+    };
+    for (const grid of document.querySelectorAll("[data-wall]")) {
+      const conf = WALLS[grid.dataset.wall];
+      const missing = new Set(conf.missing);
+      const html = [];
+      for (let i = 0; i < 48; i++) {
+        if (missing.has(i)) {
+          html.push(`<span class="wall-slot">+</span>`);
+          continue;
+        }
+        const placed = conf.place[i];
+        const card = cards[placed ?? conf.order[i % conf.order.length]];
+        html.push(`<img class="wall-card${placed !== undefined ? " is-lit" : ""}" src="${card.img}" alt="" decoding="async" width="582" height="900">`);
+      }
+      grid.innerHTML = html.join("");
+      grid.style.setProperty("--cam", conf.cam);
+    }
+
+    // ---- Selection: two rows, features on top and tools below ----
+    const items = [...document.querySelectorAll("[data-item]")];
+    const features = items.filter((el) => el.classList.contains("feature"));
+    const tiles = items.filter((el) => el.classList.contains("tile"));
+    const hintOut = document.querySelector("[data-hint-out]");
+    let active = items[0];
+
+    function select(el) {
+      if (!el) return;
+      active = el;
+      for (const item of items) item.classList.toggle("is-active", item === el);
+      hintOut.textContent = el.dataset.hint;
+      for (const f of features) {
+        const grid = f.querySelector("[data-wall]");
+        const conf = WALLS[grid.dataset.wall];
+        grid.style.setProperty("--cam", f === el ? conf.camActive : conf.cam);
+      }
+    }
+
+    function open(tool) {
+      if (tool === "match") location.href = "match.html";
+      else {
+        const name = { collection: "Collection", lists: "Lists", objektify: "Objektify", proofshot: "Proofshot", spin: "Spin" }[tool];
+        window.UI.toast(`${name} isn't part of this sample. Try Match.`);
+      }
+    }
+
+    for (const el of items) {
+      if (canHover) el.addEventListener("mouseenter", () => select(el));
+      el.addEventListener("focusin", (event) => {
+        if (event.target.matches(":focus-visible")) select(el);
+      });
+    }
+    // Tapping on a phone selects too, so the frame shows what was tapped.
+    for (const el of items) el.addEventListener("pointerdown", () => select(el));
+
+    document.addEventListener("click", (event) => {
+      const openEl = event.target.closest("[data-open]");
+      const tile = event.target.closest(".tile");
+      const secondary = event.target.closest("[data-secondary]");
+      if (secondary) {
+        event.preventDefault();
+        window.UI.toast(`"${secondary.dataset.secondary}" isn't part of this sample.`);
+      } else if (openEl) {
+        event.preventDefault();
+        open(openEl.dataset.open);
+      } else if (tile) {
+        event.preventDefault();
+        open(tile.dataset.tool);
+      }
+    });
+
+    function focusTarget(el) {
+      return el.classList.contains("feature") ? el.querySelector(".feature-link") : el;
+    }
+    function move(next) {
+      select(next);
+      focusTarget(next).focus({ preventScroll: false });
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.target.closest("input, select, textarea")) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const inTop = features.includes(active);
+      const row = inTop ? features : tiles;
+      const i = row.indexOf(active);
+      switch (event.key) {
+        case "ArrowRight": move(i < row.length - 1 ? row[i + 1] : inTop ? tiles[0] : features[0]); break;
+        case "ArrowLeft": move(i > 0 ? row[i - 1] : inTop ? tiles.at(-1) : features.at(-1)); break;
+        // Up/down keep roughly the same column between the two rows.
+        case "ArrowDown": if (inTop) move(tiles[i === 0 ? 0 : 2]); else return; break;
+        case "ArrowUp": if (!inTop) move(features[i < 2 ? 0 : 1]); else return; break;
+        case "Enter":
+          // Links and buttons already open on Enter through their own click.
+          if (event.target.closest("a, button")) return;
+          open(active.dataset.tool);
+          break;
+        case "q": case "Q": case "e": case "E": {
+          const tabs = [...document.querySelectorAll("[data-tab]")];
+          const cur = tabs.findIndex((t) => t.classList.contains("is-active"));
+          const step = event.key.toLowerCase() === "q" ? -1 : 1;
+          const next = (cur + step + tabs.length) % tabs.length;
+          tabs.forEach((t, n) => t.classList.toggle("is-active", n === next));
+          break;
+        }
+        default: return;
+      }
+      event.preventDefault();
+    });
+
+    select(features[0]);
+    if (reduce) for (const g of document.querySelectorAll("[data-wall]")) g.style.transition = "none";
+  })();
+</script>
+</body>
+</html>

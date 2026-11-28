@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Studio · Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="page-home">
+<div class="screen">
+  <header class="topbar">
+    <a class="brand" href="home.html"><span data-logo="26"></span><span>objekt.my</span></a>
+    <nav class="tabs" aria-label="Main">
+      <a class="tab is-active" data-tab href="home.html" aria-current="page">Home</a>
+      <a class="tab" data-tab href="#">Collection</a>
+      <a class="tab" data-tab href="match.html">Match</a>
+      <a class="tab" data-tab href="#">Tools</a>
+    </nav>
+    <div class="top-right">
+      <span class="kst">KST <b data-clock>--:--</b></span>
+      <button type="button" class="btn btn-primary btn-sm">Sign in</button>
+    </div>
+  </header>
+
+  <section class="hero" aria-label="Featured tool">
+    <div class="hero-copy" data-hero>
+      <p class="overline" data-h="overline"></p>
+      <h1 class="hero-title" data-h="title"></h1>
+      <p class="hero-body" data-h="body"></p>
+      <div class="hero-cta">
+        <a href="#" class="btn btn-primary" data-open><span data-h="cta"></span><span class="key" aria-hidden="true">↵</span></a>
+        <a href="#" class="btn btn-outline" data-secondary><span data-h="cta2"></span></a>
+      </div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <img class="hv-glow" data-h="img" alt="" width="720" height="720">
+      <div class="hv-frame">
+        <div class="hv-bar"><i></i><i></i><i></i><span>objekt.my / <span data-h="label"></span></span></div>
+        <img class="hv-shot" data-h="img" alt="" width="720" height="720">
+      </div>
+    </div>
+    <div class="hero-progress"><span data-h="pos"></span><span class="bars" data-bars></span></div>
+  </section>
+
+  <div class="tiles" data-tiles></div>
+  <template id="tile-tpl"><button type="button" class="tile"><span class="tile-media"><img data-f="img" alt="" width="720" height="720"></span><span class="tile-text"><span class="tile-title" data-f="short"></span><span class="tile-desc" data-f="desc"></span></span></button></template>
+
+  <footer class="home-foot">
+    <p class="foot-hint" data-h="hint"></p>
+    <div class="keys" aria-hidden="true">
+      <span class="keyhint">Move <span class="key">←</span><span class="key">→</span></span>
+      <span class="keyhint">Tab <span class="key">Q</span><span class="key">E</span></span>
+      <span class="keyhint">Open <span class="key">↵</span></span>
+    </div>
+  </footer>
+  <p class="disclaimer">Fan-made grid and trade-matching tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO</p>
+</div>
+
+<script src="../shared/data.js"></script>
+<script src="../shared/common.js"></script>
+<script>
+  // Position bars under the hero copy: one per tool, the current one long.
+  document.addEventListener("toolchange", ({ detail: { index } }) => {
+    const bars = document.querySelector("[data-bars]");
+    bars.innerHTML = window.SAMPLE.tools.map((_, i) => `<i class="${i === index ? "on" : ""}"></i>`).join("");
+  });
+</script>
+<script src="../shared/home.js"></script>
+</body>
+</html>

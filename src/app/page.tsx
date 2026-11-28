@@ -1,20 +1,15 @@
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowLeftRight,
-  Camera,
-  ChevronRight,
-  CreditCard,
-  Library,
-  Puzzle,
-  RectangleVertical,
-  RefreshCcw,
-  Rows3,
-} from "lucide-react";
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
-import type React from "react";
-import { PageContainer, PageHeader } from "@/components/page-shell";
+import {
+  type HomeCopy,
+  HomeScreen,
+  type HomeTool,
+} from "@/components/home/home-screen";
+// Screenshots of each tool in use. Imported, not served from public/, so
+// each gets a content-hashed URL and a replaced file is never cached stale.
+import listsTile from "@/components/home/tiles/lists.webp";
+import objektifyTile from "@/components/home/tiles/objektify.webp";
+import proofshotTile from "@/components/home/tiles/proofshot.webp";
+import spinTile from "@/components/home/tiles/spin.webp";
 import { rootUrl, sectionHref } from "@/lib/sections";
 
 const description =
@@ -47,108 +42,65 @@ const WEBSITE_JSON_LD = {
   url: `${rootUrl()}/`,
 };
 
-function SpinIcon() {
-  return (
-    <div
-      className="relative"
-      style={{ width: "36px", height: "36px" }}
-      suppressHydrationWarning
-    >
-      <RectangleVertical
-        className="text-white absolute"
-        style={{
-          width: "43px",
-          height: "43px",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-        }}
-        strokeWidth={1.25}
-      />
-      <RefreshCcw
-        className="text-white absolute"
-        style={{
-          width: "18px",
-          height: "18px",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-        }}
-        strokeWidth={2.5}
-      />
-    </div>
-  );
-}
-
-/** The loop the site is built around: see what's missing, find who has it. */
-const primary: {
-  title: string;
-  description: string;
-  href: string;
-  image: string;
-  Icon: LucideIcon;
-  secondary?: { label: string; href: string; Icon: LucideIcon };
-}[] = [
-  {
-    title: "Your grids",
-    description: "See every FCO you're missing for your next grid.",
-    href: "/collection",
-    image: "/home-tiles/collection.png",
-    Icon: Library,
+// The loop the site is built around, as two steps for someone new: see what
+// your grids are missing, then find who on Discord has it. The intro title
+// is the page's heading for screen readers only.
+const copy: HomeCopy = {
+  intro: {
+    title: "Cosmo Tools for Collectors",
   },
-  {
-    title: "Match on Discord",
-    description: "Match the trade posts you already scroll past.",
-    href: "/match",
-    image: "/home-tiles/trades.png",
-    Icon: ArrowLeftRight,
-    secondary: { label: "Get the extension", href: "/match", Icon: Puzzle },
+  grids: {
+    word: "Grids",
+    title: "Find missing Objekts",
+    body: "Check your collection and grid progress.",
+    searchPlaceholder: "Cosmo nickname",
+    searchButton: "See grids",
+    linkPrompt: "Your own account?",
+    link: { label: "Link your Cosmo", href: sectionHref("/link") },
   },
-];
+  match: {
+    word: "Match",
+    title: "Find trades on channels",
+    body: "Smart search for Discord trade posts that have the objekts you need.",
+    primary: { label: "Open matcher", href: sectionHref("/match") },
+    secondary: { label: "Get the extension", href: sectionHref("/match") },
+  },
+};
 
-const moreTools: {
-  title: string;
-  description: string;
-  href: string;
-  image: string;
-  Icon?: LucideIcon;
-  iconRotate?: number;
-  CustomIcon?: React.ComponentType;
-}[] = [
+const tools: HomeTool[] = [
   {
-    title: "Lists",
+    id: "lists",
+    label: "Lists",
     description: "Turn a tradelist into a shareable page.",
-    href: "/list",
-    image: "/home-tiles/lists.png",
-    Icon: Rows3,
+    href: sectionHref("/list"),
+    image: listsTile,
   },
   {
-    title: "Objektify",
+    id: "objektify",
+    label: "Objektify",
     description: "Create custom objekt cards.",
-    href: "/objekt-maker",
-    image: "/home-tiles/objektify.png",
-    Icon: CreditCard,
-    iconRotate: 90,
+    href: sectionHref("/objekt-maker"),
+    image: objektifyTile,
   },
   {
-    title: "Proofshot",
+    id: "proofshot",
+    label: "Proofshot",
     description: "Generate proofshot images.",
-    href: "/proofshot",
-    image: "/home-tiles/proofshot.png",
-    Icon: Camera,
+    href: sectionHref("/proofshot"),
+    image: proofshotTile,
   },
   {
-    title: "Spin",
-    description: "Random draw.",
-    href: "/spin",
-    image: "/home-tiles/spin.png",
-    CustomIcon: SpinIcon,
+    id: "spin",
+    label: "Spin Simulator",
+    description: "Try a Cosmo spin. Not a real draw.",
+    href: sectionHref("/spin"),
+    image: spinTile,
   },
 ];
 
 export default function HomePage() {
   return (
-    <PageContainer width="wide">
+    <>
       <script
         type="application/ld+json"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: static JSON-LD, escaped per the Next.js JSON-LD guide
@@ -156,123 +108,7 @@ export default function HomePage() {
           __html: JSON.stringify(WEBSITE_JSON_LD).replace(/</g, "\\u003c"),
         }}
       />
-      <PageHeader
-        title="objekt.my"
-        description="Track your grids. Find who has what you're missing."
-      />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {primary.map(({ title, description, href, image, Icon, secondary }) => (
-          <div
-            key={href}
-            className="group relative rounded-2xl overflow-hidden bg-[#1a1a1a] min-h-56 sm:aspect-4/3 flex flex-col justify-between border border-white/5 hover:border-white/70 focus-within:border-white/70 transition-colors p-5"
-          >
-            <Image
-              src={image}
-              alt=""
-              aria-hidden
-              fill
-              sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover object-top opacity-60 transition-transform duration-500 ease-out group-hover:scale-105"
-            />
-            {/* Keeps the title/description legible over the portrait. */}
-            <div className="absolute inset-0 bg-linear-to-t from-black via-black/75 to-black/30" />
-            <Icon
-              className="relative text-white"
-              style={{ width: "44px", height: "44px" }}
-              strokeWidth={1.25}
-            />
-            {/* The card link covers the whole card; the secondary link
-                  sits above it so both stay clickable without nesting
-                  anchors. */}
-            <Link
-              href={sectionHref(href)}
-              aria-label={title}
-              className="absolute inset-0 z-10"
-            />
-            <div className="relative">
-              <p className="text-white font-bold text-xl leading-snug">
-                {title}
-              </p>
-              <div className="flex items-center justify-between mt-1">
-                <p className="text-white/75 text-sm leading-snug">
-                  {description}
-                </p>
-                <ChevronRight className="text-white/60 w-5 h-5 shrink-0 ml-1 -mr-1 group-hover:text-white transition-colors" />
-              </div>
-              {secondary && (
-                <Link
-                  href={sectionHref(secondary.href)}
-                  className="relative z-20 mt-3 inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-black/40 px-2.5 py-1 text-xs font-medium text-white hover:border-white/60 transition-colors"
-                >
-                  <secondary.Icon className="size-3.5" />
-                  {secondary.label}
-                </Link>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <h2 className="mt-2 -mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-        More tools
-      </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {moreTools.map(
-          ({
-            title,
-            description,
-            href,
-            image,
-            Icon,
-            iconRotate,
-            CustomIcon,
-          }) => (
-            <Link
-              key={href}
-              href={sectionHref(href)}
-              className="group rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
-              <div className="relative rounded-xl overflow-hidden bg-[#1a1a1a] aspect-4/3 flex flex-col justify-between border border-white/5 hover:border-white/70 transition-colors p-3">
-                <Image
-                  src={image}
-                  alt=""
-                  aria-hidden
-                  fill
-                  sizes="(min-width: 640px) 25vw, 50vw"
-                  className="object-cover object-top opacity-50 transition-transform duration-500 ease-out group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-black via-black/75 to-black/30" />
-                <div className="relative flex-1 flex items-center justify-center">
-                  {CustomIcon ? (
-                    <CustomIcon />
-                  ) : Icon ? (
-                    <Icon
-                      className="text-white"
-                      style={{
-                        width: "36px",
-                        height: "36px",
-                        transform: iconRotate
-                          ? `rotate(${iconRotate}deg)`
-                          : undefined,
-                      }}
-                      strokeWidth={1.25}
-                    />
-                  ) : null}
-                </div>
-                <div className="relative">
-                  <p className="text-white font-semibold text-sm leading-snug">
-                    {title}
-                  </p>
-                  <p className="text-white/70 text-xs leading-snug">
-                    {description}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ),
-        )}
-      </div>
-    </PageContainer>
+      <HomeScreen copy={copy} tools={tools} />
+    </>
   );
 }

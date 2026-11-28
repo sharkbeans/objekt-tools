@@ -93,6 +93,9 @@ const nextConfig: NextConfig = {
         hostname: "media.objekt.top",
       },
     ],
+    // A collection's image URL never changes, so resized copies (the home
+    // page's card tables) can be kept for a month.
+    minimumCacheTTL: 2_678_400,
   },
 };
 

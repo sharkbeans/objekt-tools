@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Freemode 3 · Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,900&family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="page-home">
+<div class="screen">
+  <header class="topbar">
+    <a class="brand" href="home.html"><span data-logo="24"></span>objekt.my</a>
+    <nav class="tabs" aria-label="Main">
+      <a class="tab is-active" data-tab href="home.html" aria-current="page">Home</a>
+      <a class="tab" data-tab href="#">Collection</a>
+      <a class="tab" data-tab href="match.html">Match</a>
+      <a class="tab" data-tab href="#">Tools</a>
+    </nav>
+    <div class="top-right">
+      <button type="button" class="btn btn-outline btn-sm" data-icon="logIn" data-size="14">Sign in</button>
+    </div>
+  </header>
+
+  <h1 class="sr-only">objekt.my: Cosmo grid tracker and trade matcher</h1>
+
+  <div class="showcase">
+    <section class="feature" data-item data-tool="collection" data-hint="Select to see what your grids are missing" aria-labelledby="f-collection">
+      <div class="wall" aria-hidden="true"><div class="wall-grid" data-wall="collection"></div></div>
+      <div class="feature-shade"></div>
+      <p class="ghost" aria-hidden="true">Grids</p>
+      <a class="feature-link" href="#" data-open="collection" aria-label="Open collection"></a>
+      <div class="feature-copy">
+        <h2 class="feature-title" id="f-collection">Every grid, one screen</h2>
+        <p class="feature-body">Link your Cosmo and see how close each grid is, with every first-class objekt you're still missing.</p>
+        <div class="feature-cta">
+          <a href="#" class="btn btn-primary" data-open="collection">Open collection</a>
+          <a href="#" class="btn btn-outline" data-secondary="Link Cosmo">Link Cosmo</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="feature" data-item data-tool="match" data-hint="Select to match your Discord trade posts" aria-labelledby="f-match">
+      <div class="wall" aria-hidden="true"><div class="wall-grid" data-wall="match"></div></div>
+      <div class="feature-shade"></div>
+      <p class="ghost" aria-hidden="true">Match</p>
+      <a class="feature-link" href="match.html" data-open="match" aria-label="Open matcher"></a>
+      <div class="feature-copy">
+        <h2 class="feature-title" id="f-match">Find who has what you're missing</h2>
+        <p class="feature-body">The extension reads the Discord trade channels you already scroll and lines every post up against your collection.</p>
+        <div class="feature-cta">
+          <a href="match.html" class="btn btn-primary" data-open="match">Open matcher</a>
+          <a href="#" class="btn btn-outline" data-secondary="Get the extension">Get the extension</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="tiles">
+    <a class="tile" href="#" data-item data-tool="lists" data-hint="Select to turn a tradelist into a shareable page"><img src="../assets/tiles/lists.webp" alt="" width="720" height="720"><span class="tile-bar"><span class="tile-label">Lists</span><span class="tile-desc">Turn a tradelist into a page.</span></span></a>
+    <a class="tile" href="#" data-item data-tool="objektify" data-hint="Select to create a custom objekt card"><img src="../assets/tiles/objektify.webp" alt="" width="720" height="548"><span class="tile-bar"><span class="tile-label">Objektify</span><span class="tile-desc">Create custom objekt cards.</span></span></a>
+    <a class="tile" href="#" data-item data-tool="proofshot" data-hint="Select to generate a proofshot image"><img src="../assets/tiles/proofshot.webp" alt="" width="720" height="720"><span class="tile-bar"><span class="tile-label">Proofshot</span><span class="tile-desc">Generate proofshot images.</span></span></a>
+    <a class="tile" href="#" data-item data-tool="spin" data-hint="Select to run a random draw"><img src="../assets/tiles/spin.webp" alt="" width="720" height="720"><span class="tile-bar"><span class="tile-label">Spin</span><span class="tile-desc">Random draw.</span></span></a>
+  </div>
+
+  <footer class="home-foot">
+    <p class="foot-hint" data-hint-out></p>
+  </footer>
+  <p class="disclaimer">Fan-made grid and trade-matching tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO</p>
+</div>
+
+<script src="../shared/data.js"></script>
+<script src="../shared/common.js"></script>
+<script>
+  (() => {
+    const { cards } = window.SAMPLE;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const canHover = matchMedia("(hover: hover) and (pointer: fine)").matches;
+    const COLS = 8;
+    // Keep in step with the swap animation's duration in style.css.
+    const SWAP_MS = 1800;
+    const SWAP_EVERY_MS = 6500;
+
+    // ---- Two card tables (8 columns x 6 rows) ----
+    // place: cell -> card index for the lit cards.
+    // Collection settles six owned cards into a 4 x 2 grid and leaves two
+    // empty slots, the cards still missing. Match now and then trades a
+    // pair of cards across the table.
+    const WALLS = {
+      collection: {
+        order: [14, 3, 22, 9, 27, 5, 17, 11, 25, 1, 19, 7, 13, 24, 2, 20, 8, 28, 16, 4, 23, 10, 26, 6, 15, 21, 12, 18],
+        place: { 10: 0, 11: 1, 12: 2, 13: 3, 18: 4, 19: 5 },
+        missing: [20, 21],
+        deal: true,
+        cam: "rotateX(52deg) rotateZ(-27deg) translate3d(-2%, 4%, 0) scale(1.02)",
+        camActive: "rotateX(51deg) rotateZ(-25deg) translate3d(-3%, 3%, 0) scale(1.04)",
+      },
+      match: {
+        order: [6, 20, 12, 26, 1, 17, 9, 23, 4, 28, 14, 0, 19, 8, 25, 11, 3, 21, 16, 7, 27, 2, 24, 10, 18, 5, 22, 13],
+        place: { 10: 0, 14: 13, 19: 2, 22: 18 },
+        missing: [],
+        pairs: [[10, 14], [19, 22]],
+        cam: "rotateX(50deg) rotateZ(-20deg) translate3d(-6%, 10%, 0) scale(1.06)",
+        camActive: "rotateX(49deg) rotateZ(-18deg) translate3d(-7%, 9%, 0) scale(1.08)",
+      },
+    };
+
+    const cells = {};
+    for (const grid of document.querySelectorAll("[data-wall]")) {
+      const id = grid.dataset.wall;
+      const conf = WALLS[id];
+      const missing = new Set(conf.missing);
+      const html = [];
+      let dealt = 0;
+      for (let i = 0; i < 48; i++) {
+        if (missing.has(i)) {
+          html.push(`<span class="wall-slot"></span>`);
+          continue;
+        }
+        const placed = conf.place[i];
+        const card = cards[placed ?? conf.order[i % conf.order.length]];
+        let cls = "wall-card";
+        let style = "";
+        if (placed !== undefined) {
+          cls += " is-lit";
+          if (conf.deal) {
+            cls += " deal";
+            // A small, slightly different starting point for each card, so
+            // they settle onto the table rather than all moving as one.
+            const dx = ((dealt * 7) % 9) - 4;
+            const dy = -(10 + ((dealt * 5) % 8));
+            const rot = ((dealt * 5) % 7) - 3;
+            style = ` style="--i:${dealt};--dx:${dx}%;--dy:${dy}%;--rot:${rot}deg"`;
+            dealt++;
+          }
+        }
+        html.push(`<img class="${cls}"${style} src="${card.img}" alt="" decoding="async" width="582" height="900">`);
+      }
+      grid.innerHTML = html.join("");
+      grid.style.setProperty("--cam", conf.cam);
+      cells[id] = [...grid.children];
+    }
+
+    // ---- Settle (collection), once when the page opens ----
+    const gridWall = document.querySelector('[data-wall="collection"]');
+    function settle() {
+      if (reduce) {
+        gridWall.classList.add("is-dealt");
+        return;
+      }
+      requestAnimationFrame(() => requestAnimationFrame(() => gridWall.classList.add("is-dealt")));
+    }
+
+    // ---- Trade (match): two cards change places, now and then ----
+    const matchCells = cells.match;
+    let pairIndex = 0;
+    let swapping = false;
+    function swap() {
+      if (swapping || reduce || document.hidden) return;
+      const [a, b] = WALLS.match.pairs[pairIndex++ % WALLS.match.pairs.length];
+      const A = matchCells[a];
+      const B = matchCells[b];
+      const dist = (b % COLS) - (a % COLS);
+      swapping = true;
+      A.style.setProperty("--sx", `calc(${dist} * (100% + var(--gap, 12px)))`);
+      B.style.setProperty("--sx", `calc(${-dist} * (100% + var(--gap, 12px)))`);
+      // They pass each other with a little room, one above and one below.
+      A.style.setProperty("--my", "-22%");
+      B.style.setProperty("--my", "22%");
+      A.style.setProperty("--srot", "-2.5deg");
+      B.style.setProperty("--srot", "2.5deg");
+      A.classList.add("swap");
+      B.classList.add("swap");
+      setTimeout(() => {
+        // Land for real: trade the pictures, then drop the animation.
+        A.classList.add("no-tr");
+        B.classList.add("no-tr");
+        [A.src, B.src] = [B.src, A.src];
+        A.classList.remove("swap");
+        B.classList.remove("swap");
+        void A.offsetWidth;
+        requestAnimationFrame(() => {
+          A.classList.remove("no-tr");
+          B.classList.remove("no-tr");
+          swapping = false;
+        });
+      }, SWAP_MS + 40);
+    }
+
+    // ---- Selection: two rows, features on top and tools below ----
+    const items = [...document.querySelectorAll("[data-item]")];
+    const features = items.filter((el) => el.classList.contains("feature"));
+    const tiles = items.filter((el) => el.classList.contains("tile"));
+    const hintOut = document.querySelector("[data-hint-out]");
+    let active = null;
+
+    function select(el) {
+      if (!el || el === active) return;
+      active = el;
+      for (const item of items) item.classList.toggle("is-active", item === el);
+      hintOut.textContent = el.dataset.hint;
+      for (const f of features) {
+        const grid = f.querySelector("[data-wall]");
+        const conf = WALLS[grid.dataset.wall];
+        grid.style.setProperty("--cam", f === el ? conf.camActive : conf.cam);
+      }
+    }
+
+    function open(tool) {
+      if (tool === "match") location.href = "match.html";
+      else {
+        const name = { collection: "Collection", lists: "Lists", objektify: "Objektify", proofshot: "Proofshot", spin: "Spin" }[tool];
+        window.UI.toast(`${name} isn't part of this sample. Try Match.`);
+      }
+    }
+
+    for (const el of items) {
+      if (canHover) el.addEventListener("mouseenter", () => select(el));
+      el.addEventListener("focusin", (event) => {
+        if (event.target.matches(":focus-visible")) select(el);
+      });
+      el.addEventListener("pointerdown", () => select(el));
+    }
+
+    document.addEventListener("click", (event) => {
+      const openEl = event.target.closest("[data-open]");
+      const tile = event.target.closest(".tile");
+      const secondary = event.target.closest("[data-secondary]");
+      if (secondary) {
+        event.preventDefault();
+        window.UI.toast(`"${secondary.dataset.secondary}" isn't part of this sample.`);
+      } else if (openEl) {
+        event.preventDefault();
+        open(openEl.dataset.open);
+      } else if (tile) {
+        event.preventDefault();
+        open(tile.dataset.tool);
+      }
+    });
+
+    // Arrow keys still move between panels and tiles, Enter opens.
+    const focusTarget = (el) => (el.classList.contains("feature") ? el.querySelector(".feature-link") : el);
+    const move = (next) => { select(next); focusTarget(next).focus(); };
+
+    document.addEventListener("keydown", (event) => {
+      if (event.target.closest("input, select, textarea")) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const inTop = features.includes(active);
+      const row = inTop ? features : tiles;
+      const i = row.indexOf(active);
+      switch (event.key) {
+        case "ArrowRight": move(i < row.length - 1 ? row[i + 1] : inTop ? tiles[0] : features[0]); break;
+        case "ArrowLeft": move(i > 0 ? row[i - 1] : inTop ? tiles.at(-1) : features.at(-1)); break;
+        case "ArrowDown": if (inTop) move(tiles[i === 0 ? 0 : 2]); else return; break;
+        case "ArrowUp": if (!inTop) move(features[i < 2 ? 0 : 1]); else return; break;
+        case "Enter":
+          // Links and buttons already open on Enter through their own click.
+          if (event.target.closest("a, button")) return;
+          open(active.dataset.tool);
+          break;
+        default: return;
+      }
+      event.preventDefault();
+    });
+
+    select(features[0]);
+    if (reduce) {
+      for (const g of document.querySelectorAll("[data-wall]")) g.style.transition = "none";
+      settle();
+    } else {
+      setTimeout(settle, 300);
+      setTimeout(() => { swap(); setInterval(swap, SWAP_EVERY_MS); }, 3000);
+    }
+  })();
+</script>
+</body>
+</html>
