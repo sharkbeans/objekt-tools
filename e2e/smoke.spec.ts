@@ -3,16 +3,13 @@ import { expect, test } from "@playwright/test";
 test("home page exposes the main public tools", async ({ page }) => {
   await page.goto("/");
 
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  // Step one is a Cosmo name search; step two leads to the matcher.
   await expect(
-    page.getByRole("heading", {
-      name: "objekt.my",
-    }),
+    page.getByRole("combobox", { name: /Cosmo Username/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Your grids/i }).first(),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: /Match on Discord/i }).first(),
+    page.getByRole("link", { name: /Open matcher/i }).first(),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Lists/i }).first(),

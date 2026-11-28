@@ -60,6 +60,35 @@ function useUnreadNotificationCount() {
   return data?.count ?? 0;
 }
 
+type NavTab = "home" | "collection" | "match" | "tools" | null;
+
+/** Which top-level tab the current page belongs to. */
+function activeTab(pathname: string, section: SectionId | null): NavTab {
+  if (section === "collect") return "collection";
+  if (section === "list" || section === "create") return "tools";
+  if (pathname === "/") return "home";
+  if (pathname.startsWith("/collection")) return "collection";
+  if (pathname.startsWith("/match")) return "match";
+  if (
+    ["/list", "/objekt-maker", "/proofshot", "/spin"].some((p) =>
+      pathname.startsWith(p),
+    )
+  ) {
+    return "tools";
+  }
+  return null;
+}
+
+// The selected tab is a solid white box, as on a game menu's tab row.
+function tabClass(active: boolean) {
+  return cn(
+    "rounded-[3px] px-3 py-1.5 text-[15px] font-medium transition-colors",
+    active
+      ? "bg-foreground text-background"
+      : "text-muted-foreground hover:text-foreground",
+  );
+}
+
 export function Navbar({
   currentSection,
 }: {
@@ -80,32 +109,44 @@ export function Navbar({
   // Subscribe to per-user realtime events so notification count updates without polling
   useUserRealtime(session?.user?.id);
 
+  const pathname = usePathname();
+  const tab = activeTab(pathname, currentSection);
+
   return (
     <>
       {/* Desktop navbar — hidden on mobile */}
-      <header className="hidden sm:block border-b border-border">
-        <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-6">
+      <header className="hidden sm:block">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+          <div className="flex items-center gap-7">
             <Link
               href={href("/")}
-              className="flex items-center gap-2 font-bold text-lg"
+              className="flex items-center gap-2 text-lg font-bold tracking-tight"
             >
               <ObjektLogo />
               <span className="t-shimmer" data-text="objekt.my">
                 objekt.my
               </span>
             </Link>
-            <nav className="flex items-center gap-4 text-sm">
+            <nav className="flex items-center gap-1" aria-label="Main">
+              <Link
+                href={href("/")}
+                className={tabClass(tab === "home")}
+                aria-current={tab === "home" ? "page" : undefined}
+              >
+                Home
+              </Link>
               <Link
                 href={href("/collection")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className={tabClass(tab === "collection")}
+                aria-current={tab === "collection" ? "page" : undefined}
                 title="See what your grids are missing"
               >
                 Collection
               </Link>
               <Link
                 href={href("/match")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className={tabClass(tab === "match")}
+                aria-current={tab === "match" ? "page" : undefined}
                 title="Find who on Discord has what you're missing"
               >
                 Match
@@ -114,9 +155,12 @@ export function Navbar({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                    className={cn(
+                      tabClass(tab === "tools"),
+                      "inline-flex items-center gap-1",
+                    )}
                   >
-                    More
+                    Tools
                     <ChevronDownIcon className="size-4" />
                   </button>
                 </DropdownMenuTrigger>
@@ -214,8 +258,11 @@ export function Navbar({
               </DropdownMenu>
             ) : (
               <div className="flex items-center gap-2">
-                <Button size="sm" asChild>
-                  <Link href={href("/sign-in")}>Sign in</Link>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={href("/sign-in")}>
+                    <LogInIcon />
+                    Sign in
+                  </Link>
                 </Button>
               </div>
             )}

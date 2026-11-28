@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Archivo, Manrope } from "next/font/google";
 import { headers } from "next/headers";
 import { DiscordBanner } from "@/components/auth/discord-banner";
 import { SiteDisclaimerFooter } from "@/components/footer";
@@ -10,6 +11,23 @@ import {
   subdomainsEnabled,
 } from "@/lib/sections";
 import "./globals.css";
+
+// The site's one typeface, for headings and text alike.
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+  display: "swap",
+});
+
+// Only the oversized outlined words behind the home and match headlines use
+// Archivo, at its widest cut, so it isn't preloaded.
+const archivo = Archivo({
+  subsets: ["latin"],
+  axes: ["wdth"],
+  variable: "--font-archivo",
+  display: "swap",
+  preload: false,
+});
 
 export const metadata: Metadata = {
   title: "objekt.my",
@@ -33,7 +51,11 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`dark ${manrope.variable} ${archivo.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script
           defer

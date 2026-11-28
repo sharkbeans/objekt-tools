@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Expanded · Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="page-home">
+<div class="screen">
+  <header class="topbar">
+    <a class="brand" href="home.html"><span data-logo="24"></span>objekt.my</a>
+    <nav class="tabs" aria-label="Main">
+      <a class="tab is-active" data-tab href="home.html" aria-current="page">Home</a>
+      <a class="tab" data-tab href="#">Collection</a>
+      <a class="tab" data-tab href="match.html">Match</a>
+      <a class="tab" data-tab href="#">Tools</a>
+    </nav>
+    <div class="top-right">
+      <span class="kst">Seoul <b data-clock>--:--</b></span>
+      <button type="button" class="btn btn-outline btn-sm">Sign in</button>
+    </div>
+  </header>
+
+  <section class="hero" aria-label="Featured tool">
+    <p class="ghost" data-h="label" aria-hidden="true"></p>
+    <div class="hero-copy" data-hero>
+      <p class="overline"><span data-h="pos"></span><span data-h="overline"></span></p>
+      <h1 class="hero-title" data-h="title"></h1>
+      <p class="hero-body" data-h="body"></p>
+      <div class="hero-cta">
+        <a href="#" class="btn btn-primary" data-open><span data-h="cta"></span><span class="key" aria-hidden="true">↵</span></a>
+        <a href="#" class="btn btn-outline" data-secondary><span data-h="cta2"></span></a>
+      </div>
+    </div>
+    <div class="deck" aria-hidden="true" data-deck></div>
+  </section>
+
+  <div class="tiles" data-tiles></div>
+  <template id="tile-tpl"><button type="button" class="tile"><span class="tile-media"><img data-f="img" alt="" width="720" height="720"></span><span class="tile-text"><span class="tile-title" data-f="short"></span><span class="tile-desc" data-f="desc"></span></span></button></template>
+
+  <footer class="home-foot">
+    <p class="foot-hint" data-h="hint"></p>
+    <div class="keys" aria-hidden="true">
+      <span class="keyhint">Move <span class="key">←</span><span class="key">→</span></span>
+      <span class="keyhint">Tab <span class="key">Q</span><span class="key">E</span></span>
+      <span class="keyhint">Open <span class="key">↵</span></span>
+    </div>
+  </footer>
+  <p class="disclaimer">Fan-made grid and trade-matching tools for Cosmo collectors · not affiliated with or endorsed by MODHAUS or COSMO</p>
+</div>
+
+<script src="../shared/data.js"></script>
+<script src="../shared/common.js"></script>
+<script>
+  // A hand of five objekts that re-deals for each tool. Each layout is five
+  // [x%, y%, rotate, scale, opacity] slots, as a share of one card's size.
+  (() => {
+    const { cards } = window.SAMPLE;
+    const deck = document.querySelector("[data-deck]");
+    deck.innerHTML = Array.from({ length: 5 }, (_, i) => `<img class="deck-card" style="--i:${i}" alt="" width="582" height="900">`).join("");
+    const slots = [...deck.children];
+    const LAYOUT = {
+      // a fanned hand
+      collection: [[-118, 12, -14, 1, 1], [-60, 3, -7, 1, 1], [0, 0, 0, 1.04, 1], [60, 3, 7, 1, 1], [118, 12, 14, 1, 1]],
+      // two sides facing each other
+      match: [[-120, -6, -9, 0.92, 1], [-70, 8, -4, 0.98, 1], [0, 0, 0, 0.6, 0], [70, 8, 4, 0.98, 1], [120, -6, 9, 0.92, 1]],
+      // a tidy list, offset down the page
+      lists: [[-50, -34, 0, 0.8, 1], [-25, -17, 0, 0.85, 1], [0, 0, 0, 0.9, 1], [25, 17, 0, 0.95, 1], [50, 34, 0, 1, 1]],
+      // one card, front and centre
+      objektify: [[-12, 4, -6, 1.05, 0], [-6, 2, -3, 1.1, 0], [0, 0, 0, 1.3, 1], [6, 2, 3, 1.1, 0], [12, 4, 6, 1.05, 0]],
+      // a card held up to a photo
+      proofshot: [[-80, 10, -12, 0.9, 0.35], [0, 0, 8, 1.25, 1], [70, -8, 10, 0.9, 0], [-40, 20, -4, 0.9, 0], [60, 18, 14, 0.9, 0.35]],
+      // scattered, mid-draw
+      spin: [[-125, -18, -24, 0.9, 1], [-55, 24, 16, 0.95, 1], [0, -10, -5, 1.05, 1], [62, 22, -18, 0.95, 1], [128, -16, 22, 0.9, 1]],
+    };
+    let swap;
+    document.addEventListener("toolchange", ({ detail: { tool, first } }) => {
+      const layout = LAYOUT[tool.id];
+      slots.forEach((img, i) => {
+        const [x, y, r, s, o] = layout[i];
+        img.style.setProperty("--x", `${x}%`);
+        img.style.setProperty("--y", `${y}%`);
+        img.style.setProperty("--r", `${r}deg`);
+        img.style.setProperty("--s", String(s));
+        img.style.setProperty("--o", String(o));
+      });
+      // Swap the art mid-move, where the change is hardest to see.
+      clearTimeout(swap);
+      const apply = () => slots.forEach((img, i) => { img.src = cards[tool.deal[i]].img; });
+      if (first) apply();
+      else swap = setTimeout(apply, 220);
+    });
+  })();
+</script>
+<script src="../shared/home.js"></script>
+</body>
+</html>

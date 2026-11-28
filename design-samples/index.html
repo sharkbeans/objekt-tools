@@ -1,0 +1,264 @@
+<title>objekt.my Revamp Samples</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Barlow+Condensed:wght@600;700;800&family=Barlow+Semi+Condensed:wght@600&family=Barlow:wght@400;500&family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&family=Manrope:wght@700&display=swap">
+<style>
+  /* Layout: one column of three direction cards, each a specimen plus two
+     screenshots that open the live prototypes. Deliberately dark only, like
+     the site itself. */
+  :root {
+    color-scheme: dark;
+    --bg: #070707;
+    --surface: #101010;
+    --surface-2: #171717;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.2);
+    --fg: #f3f3f3;
+    --fg-2: #a8a8a8;
+    --fg-3: #6e6e6e;
+    --font-ui: "Inter", "Helvetica Neue", Arial, sans-serif;
+    --font-label: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 400 15px/1.55 var(--font-ui); -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  img { max-width: 100%; height: auto; display: block; }
+  :focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+  .page {
+    max-width: 1120px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 40px 64px;
+    display: flex; flex-direction: column; gap: 40px;
+  }
+  .label { margin: 0; font: 500 11.5px/1 var(--font-label); text-transform: uppercase; letter-spacing: 0.14em; color: var(--fg-3); }
+  header.intro { display: flex; flex-direction: column; gap: 14px; }
+  header.intro h1 { margin: 0; font: 600 clamp(30px, 5vw, 44px)/1.08 var(--font-ui); letter-spacing: -0.03em; text-wrap: balance; }
+  header.intro p { margin: 0; max-width: 64ch; color: var(--fg-2); font-size: 16px; }
+  .howto { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .howto span { font: 400 12.5px/1 var(--font-label); color: var(--fg-2); padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; }
+
+  .dir { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .dir-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 24px; padding: 26px 26px 22px; }
+  .dir-name { margin: 6px 0 10px; }
+  .dir-pitch { margin: 0; color: var(--fg-2); max-width: 46ch; }
+  .traits { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--fg-2); }
+  .traits li { display: flex; gap: 10px; }
+  .traits li::before { content: ""; flex: none; width: 5px; height: 5px; margin-top: 8px; background: var(--fg); }
+  .type { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; align-self: start; }
+  .type-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 14px; padding: 12px 14px; }
+  .type-row + .type-row { border-top: 1px solid var(--line); }
+  .type-role { font: 400 11px/1.3 var(--font-label); color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.08em; }
+  .type-role b { display: block; margin-top: 3px; color: var(--fg-2); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .type-sample { min-width: 0; overflow-wrap: anywhere; }
+  .shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .shot { position: relative; display: block; background: var(--surface-2); text-decoration: none; }
+  .shot img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; transition: opacity 0.2s; }
+  .shot:hover img { opacity: 0.85; }
+  .shot-cap {
+    position: absolute; left: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 999px; background: rgba(0, 0, 0, 0.82); border: 1px solid var(--line-strong);
+    font: 500 13px/1 var(--font-ui);
+  }
+  .shot-cap svg { width: 13px; height: 13px; }
+
+  /* Specimens, each in its own direction's faces */
+  .a-display { font: 800 34px/0.95 "Barlow Condensed", "Arial Narrow", sans-serif; text-transform: uppercase; }
+  .a-body { font: 400 16px/1.4 "Barlow", Arial, sans-serif; color: var(--fg-2); }
+  .a-mono { font: 700 13px/1.4 "JetBrains Mono", ui-monospace, monospace; }
+  .b-display { font: 600 32px/1.05 "Geist", "Inter", sans-serif; letter-spacing: -0.04em; }
+  .b-body { font: 400 15.5px/1.45 "Geist", "Inter", sans-serif; color: var(--fg-2); }
+  .b-mono { font: 500 13px/1.4 "Geist Mono", ui-monospace, monospace; }
+  .c-display { font: 800 27px/1 "Archivo", Arial, sans-serif; font-stretch: 125%; text-transform: uppercase; letter-spacing: -0.01em; }
+  .c-body { font: 400 15.5px/1.45 "Archivo", Arial, sans-serif; color: var(--fg-2); }
+  .c-mono { font: 500 13px/1.4 "IBM Plex Mono", ui-monospace, monospace; }
+
+  .f2-geist { font: 600 26px/1.1 "Geist", "Inter", sans-serif; letter-spacing: -0.035em; }
+  .f2-barlow { font: 600 27px/1.1 "Barlow Semi Condensed", "Barlow", sans-serif; }
+  .f2-manrope { font: 700 25px/1.1 "Manrope", "Inter", sans-serif; letter-spacing: -0.03em; }
+  .round { margin: 8px 0 -22px; font: 600 20px/1.2 var(--font-ui); letter-spacing: -0.02em; }
+  .round span { color: var(--fg-3); font-weight: 400; }
+  .dir.is-new { border-color: var(--line-strong); }
+
+  .rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .rule { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .rule h3 { margin: 0 0 6px; font: 600 15px/1.3 var(--font-ui); }
+  .rule p { margin: 0; color: var(--fg-2); font-size: 14px; }
+  .badges { display: inline-flex; gap: 6px; vertical-align: middle; margin-left: 4px; }
+  .bd { display: inline-block; padding: 2px 6px; border-radius: 3px; font: 700 11px/1.3 "JetBrains Mono", monospace; }
+  .bd-solid { background: var(--fg); color: #070707; }
+  .bd-hollow { box-shadow: inset 0 0 0 1px var(--fg); color: var(--fg); }
+  section > h2 { margin: 0 0 14px; font: 600 20px/1.2 var(--font-ui); letter-spacing: -0.02em; }
+  .next p { margin: 0; color: var(--fg-2); max-width: 66ch; }
+  .next p + p { margin-top: 10px; }
+  footer.note { color: var(--fg-3); font-size: 12.5px; }
+
+  @media (max-width: 760px) {
+    .page { padding-block: 28px 48px; gap: 32px; }
+    .dir-head { grid-template-columns: minmax(0, 1fr); padding: 20px 18px 18px; gap: 18px; }
+    .shots { grid-template-columns: minmax(0, 1fr); }
+    .type-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    .rules { grid-template-columns: minmax(0, 1fr); }
+    .a-display { font-size: 30px; } .b-display { font-size: 28px; } .c-display { font-size: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <header class="intro">
+    <p class="label">objekt.my · UI revamp</p>
+    <h1>Three monochrome directions for home and match</h1>
+    <p>Each direction restyles the same two pages: a home screen built like a game menu, and the Discord match desk. Tap a screenshot to open the live prototype. On a phone you get the mobile layout, and the screenshots show desktop. The cards and traders are sample data.</p>
+    <div class="howto" aria-label="How to try them">
+      <span>Home: hover or ← → moves, Enter opens</span>
+      <span>Phone: tap a tile, tap again to open</span>
+      <span>Match tile opens the match sample</span>
+      <span>Match: tap cards to filter the other side</span>
+    </div>
+  </header>
+
+  <h2 class="round">Round 3 <span>· picked</span></h2>
+  <article class="dir is-new" aria-labelledby="dir-a3">
+    <div class="dir-head">
+      <div>
+        <p class="label">Direction A3</p>
+        <h2 class="dir-name f2-manrope" id="dir-a3">Freemode 3</h2>
+        <p class="dir-pitch">Grids and Match keep the two big panels and Freemode's tilted table, in Manrope with heavier headlines. Each panel carries Expanded's oversized outlined word, and its cards move gently.</p>
+        <ul class="traits">
+          <li>Grids: six cards drift onto the table once when the page opens, then the two empty slots fade in</li>
+          <li>Match: about every six seconds, two cards rise a little and trade places</li>
+          <li>No chips, clock, keycap hints, square bullets or small monospace labels. Numbers use Manrope's own figures</li>
+        </ul>
+      </div>
+      <div class="type" aria-label="Typefaces">
+        <div class="type-row"><span class="type-role">Headlines<b>Manrope ExtraBold</b></span><span class="type-sample f2-manrope">Every grid, one screen</span></div>
+        <div class="type-row"><span class="type-role">Big word<b>Archivo Expanded</b></span><span class="type-sample c-display" style="color: transparent; -webkit-text-stroke: 1px var(--fg-2); font-size: 34px; font-weight: 900;">GRIDS</span></div>
+        <div class="type-row"><span class="type-role">Body<b>Manrope</b></span><span class="type-sample" style="font: 400 15.5px/1.45 'Manrope', sans-serif; color: var(--fg-2);">See every FCO you're missing for your next grid.</span></div>
+      </div>
+    </div>
+    <div class="shots">
+      <a class="shot" href="freemode-3/home.html"><img src="assets/shots/freemode-3-home.webp" alt="Freemode 3 home: a 4 by 2 grid with two empty slots on the left panel, the Match panel on the right, large outlined words behind both" width="1200" height="750"><span class="shot-cap">Home <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+      <a class="shot" href="freemode-3/match.html"><img src="assets/shots/freemode-3-match.webp" alt="Freemode 3 match desk with a large outlined MATCH behind the header" width="1200" height="750" loading="lazy"><span class="shot-cap">Match <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+    </div>
+  </article>
+
+  <h2 class="round">Round 2 <span>· from your notes</span></h2>
+  <article class="dir is-new" aria-labelledby="dir-a2">
+    <div class="dir-head">
+      <div>
+        <p class="label">Direction A2</p>
+        <h2 class="dir-name f2-geist" id="dir-a2">Freemode 2</h2>
+        <p class="dir-pitch">Freemode's tilted card table with the hero split in two: your grids on the left, Match on the right. Lists, Objektify, Proofshot and Spin move to a row of tiles underneath. Type is sentence case at a lighter weight.</p>
+        <ul class="traits">
+          <li>The grids panel lights six owned cards and leaves two dashed slots for the ones you're missing</li>
+          <li>Hovering a panel, or moving to it with the arrow keys, moves its camera and lifts its cards</li>
+          <li>The Font row at the top of the prototype switches between three calmer typefaces, and the match page follows your pick</li>
+        </ul>
+      </div>
+      <div class="type" aria-label="Font options">
+        <div class="type-row"><span class="type-role">Option 1<b>Geist</b></span><span class="type-sample f2-geist">Every grid, one screen</span></div>
+        <div class="type-row"><span class="type-role">Option 2<b>Barlow Semi Condensed</b></span><span class="type-sample f2-barlow">Every grid, one screen</span></div>
+        <div class="type-row"><span class="type-role">Option 3<b>Manrope</b></span><span class="type-sample f2-manrope">Every grid, one screen</span></div>
+      </div>
+    </div>
+    <div class="shots">
+      <a class="shot" href="freemode-2/home.html"><img src="assets/shots/freemode-2-home.webp" alt="Freemode 2 home: two tilted card tables side by side for grids and Match, four tool tiles below" width="1200" height="750"><span class="shot-cap">Home <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+      <a class="shot" href="freemode-2/match.html"><img src="assets/shots/freemode-2-match.webp" alt="Freemode 2 match desk in sentence-case type" width="1200" height="750" loading="lazy"><span class="shot-cap">Match <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+    </div>
+  </article>
+
+  <h2 class="round">Round 1</h2>
+  <article class="dir" aria-labelledby="dir-a">
+    <div class="dir-head">
+      <div>
+        <p class="label">Direction A</p>
+        <h2 class="dir-name a-display" id="dir-a">Freemode</h2>
+        <p class="dir-pitch">The closest to the GTA V Enhanced menu. Square corners, condensed caps, white tab boxes, and a thick white frame on whatever is selected.</p>
+        <ul class="traits">
+          <li>The hero is a table of objekts seen at an angle; each tile moves the camera and lights a few cards in colour</li>
+          <li>Tiles stay grey until selected, so the screen reads monochrome at rest</li>
+          <li>Keycap hints along the bottom, as on a console menu</li>
+        </ul>
+      </div>
+      <div class="type" aria-label="Typefaces">
+        <div class="type-row"><span class="type-role">Display<b>Barlow Condensed</b></span><span class="type-sample a-display">Find your next trade</span></div>
+        <div class="type-row"><span class="type-role">Body<b>Barlow</b></span><span class="type-sample a-body">See every FCO you're missing for your next grid.</span></div>
+        <div class="type-row"><span class="type-role">Data<b>JetBrains Mono</b></span><span class="type-sample a-mono">SeoYeon D2 501Z · 4W · KST 21:04</span></div>
+      </div>
+    </div>
+    <div class="shots">
+      <a class="shot" href="a-freemode/home.html"><img src="assets/shots/a-freemode-home.webp" alt="Freemode home screen: a tilted table of objekt cards behind the headline, six tool tiles below" width="1200" height="750"><span class="shot-cap">Home <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+      <a class="shot" href="a-freemode/match.html"><img src="assets/shots/a-freemode-match.webp" alt="Freemode match desk with WTT, WTB and WTS tabs and two card grids" width="1200" height="750" loading="lazy"><span class="shot-cap">Match <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+    </div>
+  </article>
+
+  <article class="dir" aria-labelledby="dir-b">
+    <div class="dir-head">
+      <div>
+        <p class="label">Direction B</p>
+        <h2 class="dir-name b-display" id="dir-b">Studio</h2>
+        <p class="dir-pitch">The calm one, nearest to what you like about Objekt Tracker without copying it. Pill navigation, soft radii, hairline borders, sentence case.</p>
+        <ul class="traits">
+          <li>The hero floats a screenshot of the selected tool, like a product page</li>
+          <li>Tiles carry captions underneath, so they still read at small sizes</li>
+          <li>Selection is a white ring with a gap, not a heavy frame</li>
+        </ul>
+      </div>
+      <div class="type" aria-label="Typefaces">
+        <div class="type-row"><span class="type-role">Display + body<b>Geist</b></span><span class="type-sample b-display">Find your next trade</span></div>
+        <div class="type-row"><span class="type-role">Body<b>Geist</b></span><span class="type-sample b-body">See every FCO you're missing for your next grid.</span></div>
+        <div class="type-row"><span class="type-role">Data<b>Geist Mono</b></span><span class="type-sample b-mono">SeoYeon D2 501Z · 4W · KST 21:04</span></div>
+      </div>
+    </div>
+    <div class="shots">
+      <a class="shot" href="b-studio/home.html"><img src="assets/shots/b-studio-home.webp" alt="Studio home screen: rounded hero with a tilted screenshot of the selected tool, captioned tiles below" width="1200" height="750" loading="lazy"><span class="shot-cap">Home <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+      <a class="shot" href="b-studio/match.html"><img src="assets/shots/b-studio-match.webp" alt="Studio match desk with a pill mode switch and rounded card grids" width="1200" height="750" loading="lazy"><span class="shot-cap">Match <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+    </div>
+  </article>
+
+  <article class="dir" aria-labelledby="dir-c">
+    <div class="dir-head">
+      <div>
+        <p class="label">Direction C</p>
+        <h2 class="dir-name c-display" id="dir-c">Expanded</h2>
+        <p class="dir-pitch">The loudest type. Wide, heavy caps against a plain mono for data, with no frame around the stage, and selection that flips to solid white.</p>
+        <ul class="traits">
+          <li>The hero deals a hand of five objekts that re-deals for each tool: a fan, two sides of a trade, a list</li>
+          <li>The tool's name runs huge and outlined behind everything</li>
+          <li>Trader results read as ledger rows: who, what, then actions</li>
+        </ul>
+      </div>
+      <div class="type" aria-label="Typefaces">
+        <div class="type-row"><span class="type-role">Display<b>Archivo Expanded</b></span><span class="type-sample c-display">Find your next trade</span></div>
+        <div class="type-row"><span class="type-role">Body<b>Archivo</b></span><span class="type-sample c-body">See every FCO you're missing for your next grid.</span></div>
+        <div class="type-row"><span class="type-role">Data<b>IBM Plex Mono</b></span><span class="type-sample c-mono">SeoYeon D2 501Z · 4W · KST 21:04</span></div>
+      </div>
+    </div>
+    <div class="shots">
+      <a class="shot" href="c-expanded/home.html"><img src="assets/shots/c-expanded-home.webp" alt="Expanded home screen: a fanned hand of objekt cards beside a wide uppercase headline" width="1200" height="750" loading="lazy"><span class="shot-cap">Home <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+      <a class="shot" href="c-expanded/match.html"><img src="assets/shots/c-expanded-match.webp" alt="Expanded match desk with a white summary bar and card grids" width="1200" height="750" loading="lazy"><span class="shot-cap">Match <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></span></a>
+    </div>
+  </article>
+
+  <section aria-labelledby="rules">
+    <h2 id="rules">What all three share</h2>
+    <div class="rules">
+      <div class="rule"><h3>White is the only accent</h3><p>Every surface, border and label is a true grey with no tint. Buttons, selection and focus are white on near-black.</p></div>
+      <div class="rule"><h3>Objekt art keeps its colour</h3><p>The cards are the content, so they stay in full colour. The interface around them stays out of the way.</p></div>
+      <div class="rule"><h3>Fill replaces colour on the desk</h3><p>Today the match desk uses green for your side and the primary colour for theirs. Here a solid badge means they want your card <span class="badges"><span class="bd bd-solid">4W</span></span> and an outlined one means they have it <span class="badges"><span class="bd bd-hollow">2H</span></span>.</p></div>
+      <div class="rule"><h3>Every face is free on Google Fonts</h3><p>Every family here is open source and loads through next/font. Each set includes a mono for serials, counts and Seoul time.</p></div>
+    </div>
+  </section>
+
+  <section class="next" aria-labelledby="next">
+    <h2 id="next">Next step</h2>
+    <p>Pick a direction, or mix them, for example A's home with B's match desk. I'll turn that into colour, type and radius tokens in globals.css, load the fonts through next/font, and roll it out to every page.</p>
+    <p>None of this touches the app yet. The files live in an untracked design-samples folder in the repo.</p>
+  </section>
+
+  <footer class="note">Card art: real Divine02 and ARTMS thumbnails. Traders, handles and prices are made up.</footer>
+</div>
