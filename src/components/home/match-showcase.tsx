@@ -31,8 +31,9 @@ function cellOf(k: number, side: "mine" | "theirs") {
 }
 
 // The order the facing pairs trade in: every row and every distance from
-// the lane, mixed, so no two trades in a row look alike.
-const TRADE_ORDER = [3, 4, 10, 1, 7, 8, 2, 5, 11, 0, 6, 9];
+// the lane, mixed, so no two trades in a row look alike. It opens on the
+// middle and bottom rows; the top row runs off the panel's edge.
+const TRADE_ORDER = [5, 10, 3, 4, 11, 1, 6, 8, 2, 7, 9, 0];
 
 // Turned only a little, so your side reads as left and theirs as right.
 const CAMERA = "rotateX(50deg) rotateZ(-9deg)";
@@ -76,7 +77,6 @@ export function MatchShowcase({
       ).map((k): [number, number] => [cellOf(k, "mine"), cellOf(k, "theirs")]),
     [mine, theirs],
   );
-  const [trading, setTrading] = useState(false);
   const cardRefs = useRef(new Map<number, HTMLSpanElement>());
   const settled = useRef<Animation[]>([]);
 
@@ -129,7 +129,6 @@ export function MatchShowcase({
           ],
           options,
         );
-      setTrading(true);
       const there = move(cardA, dx, -rise);
       const back = move(cardB, -dx, rise);
       Promise.all([there.finished, back.finished])
@@ -148,7 +147,6 @@ export function MatchShowcase({
         })
         .catch(() => {})
         .finally(() => {
-          setTrading(false);
           later(PAUSE_MS);
         });
     }
@@ -165,7 +163,7 @@ export function MatchShowcase({
     cells.push(
       <div key={`cell-${i}`} className={styles.cell}>
         {i === LANE_CELL && (
-          <span className={styles.laneMark} data-trading={trading || undefined}>
+          <span className={styles.laneMark}>
             <ArrowLeftRightIcon />
           </span>
         )}
@@ -183,12 +181,16 @@ export function MatchShowcase({
     );
   }
 
+  // Like the grid board, the table is placed against the step's text: its
+  // bottom row runs behind the heading, under the fade.
   return (
-    <div
-      className={cn(styles.plane, styles.handsPlane)}
-      style={{ "--cols": COLS, "--cam": CAMERA } as React.CSSProperties}
-    >
-      {cells}
+    <div className={styles.handsStage}>
+      <div
+        className={cn(styles.plane, styles.handsPlane)}
+        style={{ "--cols": COLS, "--cam": CAMERA } as React.CSSProperties}
+      >
+        {cells}
+      </div>
     </div>
   );
 }

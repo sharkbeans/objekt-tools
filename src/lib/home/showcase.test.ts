@@ -200,6 +200,12 @@ describe("pickShowcase", () => {
       }
       const ids = [...mine, ...theirs].map((c) => c.id);
       assert.equal(new Set(ids).size, 24);
+      // The table mirrors their side, so each card faces the one in the
+      // same spot on the other side, and only same-class cards trade.
+      assert.deepEqual(
+        mine.map((c) => c.class),
+        theirs.map((c) => c.class),
+      );
     }
   });
 

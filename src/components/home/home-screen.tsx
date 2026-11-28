@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Image, { type StaticImageData } from "next/image";
 import Link from "next/link";
 import type React from "react";
 import { useState, useSyncExternalStore } from "react";
@@ -14,7 +15,8 @@ import { MatchShowcase } from "./match-showcase";
 type LinkCopy = { label: string; href: string };
 
 export type HomeCopy = {
-  intro: { title: string; body: string };
+  /** The page's main heading, read by screen readers but not shown. */
+  intro: { title: string };
   grids: {
     word: string;
     title: string;
@@ -38,8 +40,8 @@ export type HomeTool = {
   label: string;
   description: string;
   href: string;
-  /** A lucide icon element; the tile sets its size and colour. */
-  icon: React.ReactNode;
+  /** A screenshot of the tool in use, imported so its URL is hashed. */
+  image: StaticImageData;
 };
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
@@ -112,10 +114,9 @@ export function HomeScreen({
 
   return (
     <div className={styles.screen}>
-      <header className={styles.intro}>
-        <h1 className={styles.introTitle}>{copy.intro.title}</h1>
-        <p className={styles.introBody}>{copy.intro.body}</p>
-      </header>
+      {/* No visible intro: the two steps say what the site does. The page
+          keeps its main heading for screen readers and search engines. */}
+      <h1 className="sr-only">{copy.intro.title}</h1>
 
       <div className={styles.showcase}>
         <section
@@ -211,9 +212,13 @@ export function HomeScreen({
       <nav className={styles.tiles} aria-label="More tools">
         {tools.map((tool) => (
           <Link key={tool.id} href={tool.href} className={styles.tile}>
-            <span className={styles.tileIcon} aria-hidden>
-              {tool.icon}
-            </span>
+            <Image
+              src={tool.image}
+              alt=""
+              fill
+              sizes="(min-width: 768px) 25vw, 50vw"
+              className={styles.tileImage}
+            />
             <span className={styles.tileText}>
               <span className={styles.tileLabel}>{tool.label}</span>
               <span className={styles.tileDesc}>{tool.description}</span>

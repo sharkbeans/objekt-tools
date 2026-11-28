@@ -13,7 +13,7 @@ const CAMERA = "rotateX(57deg) rotateZ(-24deg)";
 
 // The board starts part-done, as a real collection would be: these four
 // FCOs (101, 102, 105, 107) are already in, and the other four slots show
-// as empty frames until they fill, in this order.
+// only their dark platform until they fill, in this order.
 const OWNED_SLOTS = [0, 1, 4, 6];
 const FILL_ORDER = [2, 3, 5, 7];
 
@@ -94,7 +94,7 @@ export function GridShowcase({
         data-spent={step.gridded || undefined}
         style={offset}
       >
-        <span className={styles.slotFrame} />
+        <span className={styles.platform} />
         <TableCard card={card} lit />
       </div>
     );
@@ -105,7 +105,7 @@ export function GridShowcase({
       className={cn(styles.cell, styles.reward)}
       data-placed={step.gridded || undefined}
     >
-      <span className={styles.slotFrame} />
+      <span className={styles.platform} />
       <TableCard key={reward.id} card={reward} lit />
     </div>
   );

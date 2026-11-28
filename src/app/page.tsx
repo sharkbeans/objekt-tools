@@ -1,10 +1,15 @@
-import { BrushIcon, CameraIcon, DicesIcon, ListChecksIcon } from "lucide-react";
 import type { Metadata } from "next";
 import {
   type HomeCopy,
   HomeScreen,
   type HomeTool,
 } from "@/components/home/home-screen";
+// Screenshots of each tool in use. Imported, not served from public/, so
+// each gets a content-hashed URL and a replaced file is never cached stale.
+import listsTile from "@/components/home/tiles/lists.webp";
+import objektifyTile from "@/components/home/tiles/objektify.webp";
+import proofshotTile from "@/components/home/tiles/proofshot.webp";
+import spinTile from "@/components/home/tiles/spin.webp";
 import { rootUrl, sectionHref } from "@/lib/sections";
 
 const description =
@@ -37,12 +42,12 @@ const WEBSITE_JSON_LD = {
   url: `${rootUrl()}/`,
 };
 
-// What the site is, then the loop it's built around as two steps for someone
-// new: see what your grids are missing, then find who on Discord has it.
+// The loop the site is built around, as two steps for someone new: see what
+// your grids are missing, then find who on Discord has it. The intro title
+// is the page's heading for screen readers only.
 const copy: HomeCopy = {
   intro: {
     title: "Cosmo Tools for Collectors",
-    body: "Grids, trades and more for tripleS, ARTMS and idntt.",
   },
   grids: {
     word: "Grids",
@@ -68,28 +73,28 @@ const tools: HomeTool[] = [
     label: "Lists",
     description: "Turn a tradelist into a shareable page.",
     href: sectionHref("/list"),
-    icon: <ListChecksIcon />,
+    image: listsTile,
   },
   {
     id: "objektify",
     label: "Objektify",
     description: "Create custom objekt cards.",
     href: sectionHref("/objekt-maker"),
-    icon: <BrushIcon />,
+    image: objektifyTile,
   },
   {
     id: "proofshot",
     label: "Proofshot",
     description: "Generate proofshot images.",
     href: sectionHref("/proofshot"),
-    icon: <CameraIcon />,
+    image: proofshotTile,
   },
   {
     id: "spin",
     label: "Spin Simulator",
     description: "Try a Cosmo spin. Not a real draw.",
     href: sectionHref("/spin"),
-    icon: <DicesIcon />,
+    image: spinTile,
   },
 ];
 

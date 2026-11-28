@@ -1571,7 +1571,7 @@ export function MatchClient() {
       <header className="relative isolate flex flex-wrap items-end justify-between gap-3 pt-2">
         <p
           aria-hidden
-          className="pointer-events-none absolute right-0 -bottom-[0.16em] -z-10 select-none font-wide text-[clamp(4.5rem,12vw,12rem)] leading-[0.8] font-black tracking-[-0.02em] text-transparent [font-stretch:125%] [-webkit-text-stroke:1px_rgb(255_255_255/0.09)]"
+          className="pointer-events-none absolute right-0 -bottom-[0.16em] -z-10 select-none font-wide text-[clamp(4.5rem,12vw,12rem)] leading-[0.8] font-black tracking-[-0.02em] text-background [font-stretch:125%] [-webkit-text-stroke:2px_rgb(255_255_255/0.09)] [paint-order:stroke_fill]"
         >
           MATCH
         </p>
